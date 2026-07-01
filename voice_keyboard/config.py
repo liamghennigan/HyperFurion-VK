@@ -1,0 +1,110 @@
+import copy
+import os
+from pathlib import Path
+
+import tomllib
+
+DEFAULT_CONFIG: dict = {
+    "xai": {
+        "api_key": "",
+    },
+    "stt": {
+        "language": "en",
+        "interim_results": True,
+    },
+    "tts": {
+        "voice_id": "eve",
+        "language": "en",
+    },
+    "audio": {
+        "sample_rate": 16000,
+        "chunk_ms": 100,
+        "device_name": "default",
+    },
+    "daemon": {
+        "socket_path": "",
+    },
+    "hotkey": {
+        "enabled": True,
+        "key": "control+space",
+        "mode": "auto",
+    },
+}
+
+PLACEHOLDER_API_KEYS = {"xai-your-api-key-here"}
+
+
+def _config_dir() -> Path:
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    if xdg:
+        return Path(xdg) / "voice-keyboard"
+    return Path.home() / ".config" / "voice-keyboard"
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Deep-merge override into base; returns a fresh dict with no shared refs.
+
+    `copy.deepcopy` of `base` keeps nested dicts/DEFAULT_CONFIG pristine, and
+    nested overrides are themselves recursively merged so we never mutate the
+    input `override` dict either.
+    """
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def _default_config_with_paths() -> dict:
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["daemon"]["socket_path"] = str(_config_dir() / "socket")
+    return config
+
+
+def load_config() -> dict:
+    config = _default_config_with_paths()
+    config_path = _config_dir() / "config.toml"
+    if config_path.exists():
+        with open(config_path, "rb") as f:
+            user_config = tomllib.load(f)
+        config = _deep_merge(config, user_config)
+
+    # If the user left socket_path empty (or set an empty string), fall back.
+    if not config.get("daemon", {}).get("socket_path"):
+        config.setdefault("daemon", {})["socket_path"] = str(_config_dir() / "socket")
+    return config
+
+
+def validate_config(config: dict) -> None:
+    """Validate config and raise a clear RuntimeError on missing/invalid values."""
+    api_key = config.get("xai", {}).get("api_key", "")
+    if (
+        not isinstance(api_key, str)
+        or not api_key.strip()
+        or api_key.strip() in PLACEHOLDER_API_KEYS
+    ):
+        raise RuntimeError("xAI API key is not configured")
+
+    audio_cfg = config.get("audio", {})
+    sample_rate = audio_cfg.get("sample_rate", 0)
+    chunk_ms = audio_cfg.get("chunk_ms", 0)
+    if not isinstance(sample_rate, int) or isinstance(sample_rate, bool) or sample_rate <= 0:
+        raise RuntimeError("audio.sample_rate must be a positive integer")
+    if not isinstance(chunk_ms, int) or isinstance(chunk_ms, bool) or chunk_ms <= 0:
+        raise RuntimeError("audio.chunk_ms must be a positive integer")
+
+    if not config.get("daemon", {}).get("socket_path"):
+        raise RuntimeError("daemon.socket_path is not configured")
+
+    hotkey_cfg = config.get("hotkey", {})
+    enabled = hotkey_cfg.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise RuntimeError("hotkey.enabled must be a boolean")
+    key = hotkey_cfg.get("key", "")
+    if not isinstance(key, str) or not key.strip():
+        raise RuntimeError("hotkey.key must be a non-empty string")
+    mode = hotkey_cfg.get("mode", "auto")
+    if mode not in {"auto", "toggle", "hold", "disabled"}:
+        raise RuntimeError("hotkey.mode must be one of: auto, toggle, hold, disabled")

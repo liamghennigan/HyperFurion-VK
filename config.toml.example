@@ -1,0 +1,26 @@
+[xai]
+api_key = "xai-your-api-key-here"
+
+[stt]
+language = "en"
+interim_results = true
+
+[tts]
+voice_id = "eve"
+language = "en"
+
+[audio]
+sample_rate = 16000
+chunk_ms = 100
+device_name = "default"
+
+[hotkey]
+enabled = true
+key = "control+space"
+# "auto" = tap to toggle, or hold to record until release.
+# You can still force "toggle" or "hold" if you want only one gesture.
+mode = "auto"
+
+[daemon]
+# Defaults to ~/.config/voice-keyboard/socket if unset.
+# socket_path = "/run/user/1000/voice-keyboard.sock"
