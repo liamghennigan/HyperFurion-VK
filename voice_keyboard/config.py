@@ -142,14 +142,31 @@ def _active_provider_api_key(config: dict, provider: str) -> str:
     return api_key
 
 
+def _is_local_endpoint(url: str) -> bool:
+    """True for loopback / link-local / private-network hosts — the only
+    endpoints allowed to run keyless (a local Whisper/Kokoro server). A
+    remote authenticated gateway still needs a real key, so a placeholder
+    fails fast at startup instead of 401ing at runtime."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    if host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"} or host.endswith(".local"):
+        return True
+    return (
+        host.startswith("127.")
+        or host.startswith("10.")
+        or host.startswith("192.168.")
+        or any(host.startswith(f"172.{n}.") for n in range(16, 32))
+    )
+
+
 def _validate_api_key(config: dict, provider: str) -> None:
     if provider == "openai":
-        # A custom OpenAI-compatible endpoint (e.g. a local Whisper/Kokoro
-        # server) commonly runs without authentication.
+        # Only a LOCAL OpenAI-compatible endpoint may run without a key.
         base_url = str(
             config.get("providers", {}).get("openai", {}).get("base_url", "")
         ).strip()
-        if base_url:
+        if base_url and _is_local_endpoint(base_url):
             return
     api_key = _active_provider_api_key(config, provider)
     if (

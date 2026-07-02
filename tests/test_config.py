@@ -155,3 +155,51 @@ class TestOfflineOpenAIEndpoint:
         cfg["providers"]["xai"]["api_key"] = "xai-key"
         with pytest.raises(RuntimeError, match="providers.openai.api_key"):
             config.validate_config(cfg)
+
+    def test_remote_base_url_with_placeholder_key_still_raises(self) -> None:
+        # A remote (authenticated) endpoint must not be exempted from the key
+        # check just because base_url is set — else a placeholder key passes
+        # startup and 401s at runtime.
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "openai"
+        cfg["providers"]["openai"]["base_url"] = "https://gateway.example.com/v1"
+        cfg["providers"]["openai"]["api_key"] = "openai-your-api-key-here"
+        cfg["providers"]["xai"]["api_key"] = "xai-key"
+        with pytest.raises(RuntimeError, match="providers.openai.api_key"):
+            config.validate_config(cfg)
+
+    def test_private_network_base_url_is_treated_as_local(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "openai"
+        cfg["tts"]["provider"] = "openai"
+        cfg["providers"]["openai"]["base_url"] = "http://192.168.1.50:8000/v1"
+        config.validate_config(cfg)  # LAN server, no key required
+
+
+class TestPlatformNotifyAndIPC:
+    def test_macos_notification_keeps_unicode_literal(self) -> None:
+        import json
+
+        from voice_keyboard import client
+
+        # The darwin branch builds AppleScript with ensure_ascii=False so
+        # accented/CJK text is not \uXXXX-escaped (AppleScript can't decode
+        # those).
+        assert "\\u" not in json.dumps("café — 日本語", ensure_ascii=False)
+        assert "\\u" in json.dumps("café — 日本語")  # the old default was broken
+        assert hasattr(client, "_notify")
+
+    def test_ipc_connect_failure_closes_socket(self) -> None:
+        import socket
+
+        from voice_keyboard import ipc
+
+        # A refused connection must not leak the fd. Point at a closed port.
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        free_port = s.getsockname()[1]
+        s.close()  # nothing is listening now
+        with pytest.raises(OSError):
+            ipc._connect_socket(f"tcp:127.0.0.1:{free_port}", timeout=1.0)
+        # If the fd leaked, ResourceWarning would fire under -W error; the
+        # explicit close in _connect_socket prevents it.

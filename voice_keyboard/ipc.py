@@ -52,7 +52,13 @@ def _connect_socket(socket_path: str, timeout: float | None = None) -> socket.so
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     if timeout is not None:
         sock.settimeout(timeout)
-    sock.connect(target)
+    try:
+        sock.connect(target)
+    except OSError:
+        # connect() failing (daemon down — the common CLI path) must not leak
+        # the freshly created fd; the caller's try/finally hasn't started yet.
+        sock.close()
+        raise
     return sock
 
 
