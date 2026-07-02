@@ -327,6 +327,7 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 @media (pointer: coarse) {
   .cli, .config { font-size: 16px; }
   .stopbtn { padding: 9px 18px; min-height: 40px; }
+  .ttschip { font-size: 14px; padding: 10px 16px; }
 }
 .pill {
   display: inline-flex;
@@ -1448,6 +1449,35 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
   })();
 
   // ═══ TERMINAL — history, dictation line, and a real CLI ════════════════
+  // ═══ AUDIO OUT — mobile-safe playback for fetched speech ═══════════════
+  // Mobile browsers gate playback behind a user gesture. unlock() runs
+  // synchronously inside one (the Enter keystroke); after that, WebAudio
+  // can play fetched audio whenever it arrives. HTMLAudio is the fallback.
+  const AudioOut = (() => {
+    let actx = null;
+    function unlock() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!actx && AC) { try { actx = new AC(); } catch {} }
+      if (actx && actx.state === "suspended") actx.resume().catch(() => {});
+    }
+    async function play(blob) {
+      if (actx && actx.state === "running") {
+        const audio = await actx.decodeAudioData(await blob.arrayBuffer());
+        const src = actx.createBufferSource();
+        src.buffer = audio;
+        src.connect(actx.destination);
+        src.start();
+        await new Promise((res) => { src.onended = res; });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const au = new Audio(url);
+      au.onended = () => URL.revokeObjectURL(url);
+      await au.play();
+    }
+    return { unlock, play };
+  })();
+
   // ═══ DEMO — the hosted relay: real xAI engines, opt-in, always labeled ══
   // The page never touches the network on its own. Every request here
   // happens because you ran a command (`real`, `ask`, `say`, `demo`) or
@@ -1563,12 +1593,11 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
         synth.speak(new SpeechSynthesisUtterance(t));
         print("speaking with your browser's voice — type `real` first to hear the actual eve", "dim");
       };
+      AudioOut.unlock();  // synchronously, while we're still inside the keystroke
       const go = () => Demo.tts(t).then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const au = new Audio(url);
-        au.onended = () => URL.revokeObjectURL(url);
         print("▶ eve — xai grok tts, via the hosted demo", "dim");
-        au.play().catch(() => print("(autoplay blocked — click the page once and retry)", "dim"));
+        AudioOut.play(blob).catch(() =>
+          print("(playback blocked — tap the page once and retry)", "dim"));
       }).catch((e) => { print("hosted demo: " + e.message, "err"); browserVoice(); });
       if (Demo.armed()) go();
       else if (Demo.want) Demo.check().then((st) => (st.live ? go() : browserVoice()));
@@ -1594,7 +1623,9 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
           if (synth && sel && sel.toString().trim()) { TTS.speakSelection(); print("speaking selection…", "dim"); }
           else {
             print("tts reads the primary selection — select some text first, and keep it selected.", "dim");
-            print("tip: on this page, select a sentence and press ctrl+alt+t instead.", "dim");
+            print(coarse
+              ? "tip: on this page, select a sentence and tap the 🔊 chip that appears."
+              : "tip: on this page, select a sentence and press ctrl+alt+t instead.", "dim");
           }
           break;
         }
@@ -2058,12 +2089,19 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
     function speakSelection() {
       if (!synth) return;
       const sel = getSelection();
-      const text = sel ? sel.toString().trim() : "";
-      if (!text || sel.rangeCount === 0) return;
+      let raw = sel && sel.rangeCount ? sel.toString() : "";
+      let range = raw.trim() ? sel.getRangeAt(0).cloneRange() : null;
+      if (!range && chipRange) {
+        // touch: tapping the chip can collapse the selection first — the
+        // chip remembered what you had selected
+        range = chipRange;
+        raw = chipText;
+      }
+      if (!raw.trim() || !range) return;
       synth.cancel();
       clearHighlight();
-      const segs = textSegments(sel.getRangeAt(0).cloneRange());
-      const u = new SpeechSynthesisUtterance(sel.toString());
+      const segs = textSegments(range);
+      const u = new SpeechSynthesisUtterance(raw);
       u.rate = Config.cfg.rate;
       u.pitch = Config.cfg.pitch;
       if (Config.cfg.voice) u.voice = Config.cfg.voice;
@@ -2083,29 +2121,47 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
       synth.speak(u);
       removeChip();
     }
-    document.addEventListener("mouseup", () => {
-      setTimeout(() => {
-        removeChip();
-        if (!synth) return;
-        const sel = getSelection();
-        const text = sel ? sel.toString().trim() : "";
-        if (text.length < 3 || sel.rangeCount === 0) return;
-        const r = sel.getRangeAt(0).getBoundingClientRect();
-        if (!r.width && !r.height) return;
-        chip = document.createElement("button");
-        chip.className = "ttschip";
-        chip.type = "button";
-        chip.textContent = "🔊 voice-keyboard tts";
-        chip.style.left = Math.max(8, r.left + scrollX) + "px";
-        chip.style.top = (r.bottom + scrollY + 6) + "px";
-        chip.addEventListener("mousedown", (e) => e.preventDefault());
-        chip.addEventListener("click", speakSelection);
-        document.body.appendChild(chip);
-      }, 0);
-    });
+    function maybeShowChip() {
+      removeChip();
+      if (!synth) return;
+      const sel = getSelection();
+      const text = sel ? sel.toString().trim() : "";
+      if (text.length < 3 || sel.rangeCount === 0) return;
+      const r = sel.getRangeAt(0).getBoundingClientRect();
+      if (!r.width && !r.height) return;
+      chipRange = sel.getRangeAt(0).cloneRange();
+      chipText = sel.toString();
+      chip = document.createElement("button");
+      chip.className = "ttschip";
+      chip.type = "button";
+      chip.textContent = coarse ? "🔊 read aloud" : "🔊 voice-keyboard tts";
+      chip.style.left = Math.min(
+        Math.max(8, r.left + scrollX), scrollX + innerWidth - 170
+      ) + "px";
+      chip.style.top = (r.bottom + scrollY + (coarse ? 14 : 6)) + "px";
+      chip.addEventListener("mousedown", (e) => e.preventDefault());
+      chip.addEventListener("pointerdown", (e) => e.preventDefault());
+      chip.addEventListener("click", speakSelection);
+      document.body.appendChild(chip);
+    }
+    let chipRange = null, chipText = "", selT = 0;
+    document.addEventListener("mouseup", () => setTimeout(maybeShowChip, 0));
     document.addEventListener("selectionchange", () => {
       const sel = getSelection();
-      if (chip && (!sel || !sel.toString().trim())) removeChip();
+      if (!sel || !sel.toString().trim()) {
+        // grace period: on touch, tapping the chip collapses the selection
+        // a beat before the click lands — don't yank the chip out from
+        // under the finger
+        clearTimeout(selT);
+        selT = setTimeout(() => { removeChip(); chipRange = null; chipText = ""; }, 400);
+        return;
+      }
+      // touch selection never fires mouseup — show the chip once the
+      // selection handles settle
+      if (coarse) {
+        clearTimeout(selT);
+        selT = setTimeout(maybeShowChip, 350);
+      }
     });
     return { speakSelection, clearHighlight };
   })();
@@ -2182,7 +2238,9 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
         if (!Demo.want) add(" · or type <code>real</code> — the mic switches to the actual " +
             "xai engine this product ships with (hosted demo)");
       } else if (dictations === 2) {
-        add("select any text on this page and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> — " +
+        if (coarse) add("select any text on this page and tap the <b>🔊 read aloud</b> chip " +
+            "that appears — the other half of the product");
+        else add("select any text on this page and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> — " +
             "the other half of the product");
       } else if (dictations === 3) {
         add("edit the <a href='#config-h'>live config</a>: change the hotkey, the <code>language</code>, " +
