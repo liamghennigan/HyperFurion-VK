@@ -11,8 +11,8 @@ from voice_keyboard.config import load_config, validate_config
 from voice_keyboard.hotkey import HotkeyListener
 from voice_keyboard.injector import TextInjector
 from voice_keyboard.ipc import IPCServer, recv_all
-from voice_keyboard.stt import STTClient
-from voice_keyboard.tts import TTSClient
+from voice_keyboard.stt import create_stt_client
+from voice_keyboard.tts import TTSClient, create_tts_client
 
 logger = logging.getLogger(__name__)
 _TRANSCRIPT_WORD_RE = re.compile(r"[A-Za-z0-9']+")
@@ -148,13 +148,9 @@ class Daemon:
         self._socket_path = self._config["daemon"]["socket_path"]
         self._ipc_server = ipc_server if ipc_server is not None else IPCServer(self._socket_path)
         self._injector = injector if injector is not None else TextInjector()
-        self._tts_client = tts_client if tts_client is not None else TTSClient(
-            api_key=self._config["xai"]["api_key"],
-            voice_id=self._config["tts"]["voice_id"],
-            language=self._config["tts"]["language"],
-        )
+        self._tts_client = tts_client if tts_client is not None else create_tts_client(self._config)
         self._audio_capture: Optional[AudioCapture] = None
-        self._stt_client: Optional[STTClient] = None
+        self._stt_client = None
         self._recording = False
         self._send_task: Optional[asyncio.Task] = None
         self._receive_task: Optional[asyncio.Task] = None
@@ -312,7 +308,7 @@ class Daemon:
                         cleanup.result(timeout=5)
                         response = {
                             "status": "error",
-                            "message": "timed out connecting to xAI STT",
+                            "message": "timed out connecting to speech-to-text provider",
                         }
                     else:
                         response = {"status": "ok", "message": "recording started"}
@@ -380,10 +376,7 @@ class Daemon:
     async def _start_recording(self) -> None:
         if self._recording:
             return
-
-        api_key = self._config["xai"]["api_key"]
-        if not api_key:
-            raise RuntimeError("xAI API key not configured")
+        validate_config(self._config)
 
         self._audio_capture = AudioCapture(
             sample_rate=self._config["audio"]["sample_rate"],
@@ -396,11 +389,7 @@ class Daemon:
             self._audio_capture = None
             raise
 
-        self._stt_client = STTClient(
-            api_key=api_key,
-            language=self._config["stt"]["language"],
-            interim_results=self._config["stt"].get("interim_results", True),
-        )
+        self._stt_client = create_stt_client(self._config)
         try:
             await self._stt_client.connect(self._audio_capture.sample_rate)
         except Exception:

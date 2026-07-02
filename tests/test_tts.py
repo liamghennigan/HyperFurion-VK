@@ -13,6 +13,19 @@ def _mock_response(content: bytes = b"MP3DATA") -> mock.Mock:
 
 
 class TestTTSClient:
+    def test_create_tts_client_uses_provider_defaults(self) -> None:
+        cfg = {
+            "providers": {"openai": {"api_key": "openai-key"}},
+            "tts": {"provider": "openai", "voice_id": "eve", "language": "en"},
+        }
+
+        client = tts.create_tts_client(cfg)
+
+        assert client._provider == "openai"
+        assert client._api_key == "openai-key"
+        assert client._model == "gpt-4o-mini-tts"
+        assert client._voice_id == "coral"
+
     def test_synthesize_sends_expected_payload_and_returns_audio(self) -> None:
         client = tts.TTSClient(api_key="key", voice_id="bob", language="fr")
         session = mock.Mock()
@@ -31,6 +44,49 @@ class TestTTSClient:
         }
         assert kwargs["headers"]["Authorization"] == "Bearer key"
         assert kwargs["headers"]["Content-Type"] == "application/json"
+
+    def test_openai_tts_payload(self) -> None:
+        client = tts.TTSClient(
+            api_key="openai-key",
+            provider="openai",
+            model="gpt-4o-mini-tts",
+            voice_id="coral",
+        )
+        session = mock.Mock()
+        session.post = mock.Mock(return_value=_mock_response(b"MP3DATA"))
+        client._session = session
+
+        assert client.synthesize("hello") == b"MP3DATA"
+        args, kwargs = session.post.call_args
+        assert args[0] == tts.OPENAI_TTS_URL
+        assert kwargs["headers"]["Authorization"] == "Bearer openai-key"
+        assert kwargs["json"] == {
+            "model": "gpt-4o-mini-tts",
+            "input": "hello",
+            "voice": "coral",
+            "response_format": "mp3",
+        }
+
+    def test_elevenlabs_tts_payload(self) -> None:
+        client = tts.TTSClient(
+            api_key="eleven-key",
+            provider="elevenlabs",
+            model="eleven_multilingual_v2",
+            voice_id="voice123",
+        )
+        session = mock.Mock()
+        session.post = mock.Mock(return_value=_mock_response(b"MP3DATA"))
+        client._session = session
+
+        assert client.synthesize("hello") == b"MP3DATA"
+        args, kwargs = session.post.call_args
+        assert args[0] == "https://api.elevenlabs.io/v1/text-to-speech/voice123"
+        assert kwargs["headers"]["xi-api-key"] == "eleven-key"
+        assert kwargs["params"]["output_format"] == "mp3_44100_128"
+        assert kwargs["json"] == {
+            "text": "hello",
+            "model_id": "eleven_multilingual_v2",
+        }
 
     def test_session_is_reused_across_calls(self) -> None:
         client = tts.TTSClient(api_key="k")

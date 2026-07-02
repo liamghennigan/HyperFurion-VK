@@ -4,54 +4,165 @@ set -euo pipefail
 echo "=== voice-keyboard installer ==="
 echo ""
 
-config_has_real_api_key() {
-    CONFIG_PATH="$1" python3 - <<'PY'
+config_has_provider_api_key() {
+    CONFIG_PATH="$1" PROVIDER_NAME="$2" python3 - <<'PY'
 import os
 import tomllib
 from pathlib import Path
 
 path = Path(os.environ["CONFIG_PATH"])
+provider = os.environ["PROVIDER_NAME"]
 try:
     with path.open("rb") as f:
         config = tomllib.load(f)
 except FileNotFoundError:
     raise SystemExit(1)
 
-key = str(config.get("xai", {}).get("api_key", "")).strip()
-raise SystemExit(0 if key and key != "xai-your-api-key-here" else 1)
+key = str(config.get("providers", {}).get(provider, {}).get("api_key", "")).strip()
+if provider == "xai" and not key:
+    key = str(config.get("xai", {}).get("api_key", "")).strip()
+placeholders = {
+    "xai-your-api-key-here",
+    "openai-your-api-key-here",
+    "groq-your-api-key-here",
+    "deepgram-your-api-key-here",
+    "assemblyai-your-api-key-here",
+    "elevenlabs-your-api-key-here",
+}
+raise SystemExit(0 if key and key not in placeholders else 1)
 PY
 }
 
-write_api_key() {
-    CONFIG_PATH="$1" API_KEY_VALUE="$2" python3 - <<'PY'
+config_has_required_api_keys() {
+    config_has_provider_api_key "$1" "$2" && config_has_provider_api_key "$1" "$3"
+}
+
+write_provider_config() {
+    CONFIG_PATH="$1" STT_PROVIDER_VALUE="$2" TTS_PROVIDER_VALUE="$3" STT_API_KEY_VALUE="$4" TTS_API_KEY_VALUE="$5" python3 - <<'PY'
 import os
 import re
 from pathlib import Path
 
 path = Path(os.environ["CONFIG_PATH"])
-api_key = os.environ["API_KEY_VALUE"]
-escaped = api_key.replace("\\", "\\\\").replace('"', '\\"')
 text = path.read_text()
 
-pattern = re.compile(r'(?m)^(\s*api_key\s*=\s*)".*"')
-if pattern.search(text):
-    text = pattern.sub(lambda match: f'{match.group(1)}"{escaped}"', text, count=1)
-elif re.search(r'(?m)^\s*\[xai\]\s*$', text):
-    text = re.sub(
-        r'(?m)^(\s*\[xai\]\s*)$',
-        lambda match: f'{match.group(1)}\napi_key = "{escaped}"',
-        text,
-        count=1,
-    )
-else:
-    text = f'[xai]\napi_key = "{escaped}"\n\n{text}'
+def toml_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+def set_section_value(src: str, section: str, key: str, value: str) -> str:
+    section_header = f"[{section}]"
+    header_re = re.compile(rf"(?m)^\s*\[{re.escape(section)}\]\s*$")
+    match = header_re.search(src)
+    line = f"{key} = {toml_quote(value)}"
+    if not match:
+        suffix = "" if src.endswith("\n") else "\n"
+        return f"{src}{suffix}\n{section_header}\n{line}\n"
+
+    next_header = re.search(r"(?m)^\s*\[[^\]]+\]\s*$", src[match.end():])
+    section_end = match.end() + next_header.start() if next_header else len(src)
+    section_text = src[match.end():section_end]
+    key_re = re.compile(rf"(?m)^(\s*{re.escape(key)}\s*=\s*).*$")
+    if key_re.search(section_text):
+        section_text = key_re.sub(lambda item: f"{item.group(1)}{toml_quote(value)}", section_text, count=1)
+    else:
+        insertion = "" if section_text.startswith("\n") else "\n"
+        section_text = f"{insertion}{line}{section_text}"
+    return src[:match.end()] + section_text + src[section_end:]
+
+stt_provider = os.environ["STT_PROVIDER_VALUE"]
+tts_provider = os.environ["TTS_PROVIDER_VALUE"]
+text = set_section_value(text, "stt", "provider", stt_provider)
+text = set_section_value(text, "tts", "provider", tts_provider)
+
+stt_key = os.environ["STT_API_KEY_VALUE"]
+tts_key = os.environ["TTS_API_KEY_VALUE"]
+if stt_key:
+    text = set_section_value(text, f"providers.{stt_provider}", "api_key", stt_key)
+if tts_key:
+    text = set_section_value(text, f"providers.{tts_provider}", "api_key", tts_key)
 
 path.write_text(text)
 PY
 }
 
+provider_env_name() {
+    case "$1" in
+        xai) echo "XAI_API_KEY" ;;
+        openai) echo "OPENAI_API_KEY" ;;
+        groq) echo "GROQ_API_KEY" ;;
+        deepgram) echo "DEEPGRAM_API_KEY" ;;
+        assemblyai) echo "ASSEMBLYAI_API_KEY" ;;
+        elevenlabs) echo "ELEVENLABS_API_KEY" ;;
+        *) echo "" ;;
+    esac
+}
+
+is_choice() {
+    value="$1"
+    choices="$2"
+    for choice in $choices; do
+        [ "$value" = "$choice" ] && return 0
+    done
+    return 1
+}
+
+prompt_provider() {
+    label="$1"
+    default_value="$2"
+    choices="$3"
+    env_value="$4"
+    env_value="$(printf "%s" "$env_value" | tr '[:upper:]' '[:lower:]')"
+    if [ -n "$env_value" ] && is_choice "$env_value" "$choices"; then
+        echo "$env_value"
+        return
+    fi
+    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        echo "$default_value"
+        return
+    fi
+    printf "%s provider [%s] (default: %s): " "$label" "$choices" "$default_value" > /dev/tty
+    IFS= read -r answer < /dev/tty || answer=""
+    answer="$(printf "%s" "${answer:-$default_value}" | tr '[:upper:]' '[:lower:]')"
+    if is_choice "$answer" "$choices"; then
+        echo "$answer"
+    else
+        echo "Unknown provider '$answer'; using $default_value." > /dev/tty
+        echo "$default_value"
+    fi
+}
+
+provider_env_api_key() {
+    provider="$1"
+    env_name="$(provider_env_name "$provider")"
+    value=""
+    if [ -n "$env_name" ]; then
+        eval "value=\${$env_name:-}"
+    fi
+    if [ -z "$value" ]; then
+        value="${VOICE_KEYBOARD_API_KEY:-}"
+    fi
+    echo "$value"
+}
+
+prompt_api_key() {
+    provider="$1"
+    current_value="$(provider_env_api_key "$provider")"
+    if [ -n "$current_value" ]; then
+        echo "$current_value"
+        return
+    fi
+    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        echo ""
+        return
+    fi
+    printf "Enter %s API key (leave blank to skip for now): " "$provider" > /dev/tty
+    IFS= read -r -s answer < /dev/tty || answer=""
+    printf "\n" > /dev/tty
+    echo "$answer"
+}
+
 # ── System dependencies ──────────────────────────────────────────────
-echo "[1/5] Installing system dependencies..."
+echo "[1/6] Installing system dependencies..."
 if command -v apt-get &>/dev/null; then
     sudo apt-get update -qq
     sudo apt-get install -y portaudio19-dev python3-dev python3-pip python3-venv python3-tk libsndfile1 libnotify-bin wl-clipboard xclip
@@ -64,7 +175,7 @@ else
 fi
 
 # ── uinput setup ─────────────────────────────────────────────────────
-echo "[2/5] Configuring uinput..."
+echo "[2/6] Configuring uinput..."
 NEEDS_RELOGIN=0
 
 if ! lsmod | grep -q uinput; then
@@ -100,7 +211,7 @@ if ! id -nG | grep -q '\binput\b'; then
 fi
 
 # ── Python package (venv) ──────────────────────────────────────────────
-echo "[3/5] Installing Python package into venv..."
+echo "[3/6] Installing Python package into venv..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="${VOICE_KEYBOARD_VENV:-$HOME/.local/share/voice-keyboard-venv}"
 python3 -m venv "$VENV_DIR"
@@ -159,26 +270,33 @@ mkdir -p -m 700 "$CONFIG_DIR"
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
     cp "$SCRIPT_DIR/config.toml.example" "$CONFIG_DIR/config.toml"
     chmod 600 "$CONFIG_DIR/config.toml"
-    echo "Created $CONFIG_DIR/config.toml — edit it to add your xAI API key."
+    echo "Created $CONFIG_DIR/config.toml"
 else
     echo "Config already exists at $CONFIG_DIR/config.toml"
 fi
 
-if ! config_has_real_api_key "$CONFIG_DIR/config.toml"; then
-    API_KEY="${VOICE_KEYBOARD_API_KEY:-}"
-    if [ -z "$API_KEY" ] && [ -t 0 ]; then
-        printf "Enter xAI API key (leave blank to skip for now): "
-        IFS= read -r -s API_KEY
-        printf "\n"
-    fi
+STT_PROVIDER="$(prompt_provider "Speech-to-text" "xai" "xai openai groq deepgram assemblyai" "${VOICE_KEYBOARD_STT_PROVIDER:-}")"
+TTS_PROVIDER="$(prompt_provider "Text-to-speech" "xai" "xai openai elevenlabs" "${VOICE_KEYBOARD_TTS_PROVIDER:-}")"
+STT_API_KEY=""
+TTS_API_KEY=""
 
-    if [ -n "$API_KEY" ]; then
-        write_api_key "$CONFIG_DIR/config.toml" "$API_KEY"
-        chmod 600 "$CONFIG_DIR/config.toml"
-        echo "Saved API key to $CONFIG_DIR/config.toml"
+if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$STT_PROVIDER"; then
+    STT_API_KEY="$(prompt_api_key "$STT_PROVIDER")"
+fi
+if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$TTS_PROVIDER"; then
+    if [ "$TTS_PROVIDER" = "$STT_PROVIDER" ] && [ -n "$STT_API_KEY" ]; then
+        TTS_API_KEY="$STT_API_KEY"
     else
-        echo "No API key saved; daemon will not be started yet."
+        TTS_API_KEY="$(prompt_api_key "$TTS_PROVIDER")"
     fi
+fi
+
+write_provider_config "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER" "$STT_API_KEY" "$TTS_API_KEY"
+chmod 600 "$CONFIG_DIR/config.toml"
+echo "Configured STT provider: $STT_PROVIDER"
+echo "Configured TTS provider: $TTS_PROVIDER"
+if ! config_has_required_api_keys "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER"; then
+    echo "No complete API key setup saved; daemon will not be started yet."
 fi
 
 # ── systemd user service ──────────────────────────────────────────────
@@ -207,8 +325,8 @@ SERVICE
 systemctl --user daemon-reload
 systemctl --user enable voice-keyboard-daemon.service
 
-if ! config_has_real_api_key "$CONFIG_DIR/config.toml"; then
-    echo "Service enabled but not started: edit $CONFIG_DIR/config.toml with your xAI API key first."
+if ! config_has_required_api_keys "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER"; then
+    echo "Service enabled but not started: edit $CONFIG_DIR/config.toml with the selected provider API key(s) first."
 elif [ "$NEEDS_RELOGIN" -eq 1 ]; then
     echo "Service enabled but not started: log out and back in so 'input' group access applies."
 else

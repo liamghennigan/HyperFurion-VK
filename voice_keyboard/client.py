@@ -315,7 +315,7 @@ def _get_clipboard_text() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="voice-keyboard",
-        description="Universal Linux voice keyboard using xAI API",
+        description="Universal Linux voice keyboard with selectable speech providers",
     )
     parser.add_argument(
         "command",

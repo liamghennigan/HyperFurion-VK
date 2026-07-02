@@ -32,6 +32,7 @@ class TestConfigLoading:
         )
         cfg = config.load_config()
         assert cfg["xai"]["api_key"] == "test-key"
+        assert cfg["providers"]["xai"]["api_key"] == "test-key"
         assert cfg["audio"]["sample_rate"] == 48000
         assert cfg["audio"]["chunk_ms"] == 50
         assert cfg["stt"]["language"] == "es"
@@ -52,19 +53,19 @@ class TestConfigLoading:
 class TestConfigValidation:
     def test_missing_api_key_raises(self) -> None:
         cfg = config._default_config_with_paths()
-        with pytest.raises(RuntimeError, match="xAI API key is not configured"):
+        with pytest.raises(RuntimeError, match="providers.xai.api_key is not configured"):
             config.validate_config(cfg)
 
     def test_blank_api_key_raises(self) -> None:
         cfg = config._default_config_with_paths()
         cfg["xai"]["api_key"] = "   "
-        with pytest.raises(RuntimeError, match="xAI API key is not configured"):
+        with pytest.raises(RuntimeError, match="providers.xai.api_key is not configured"):
             config.validate_config(cfg)
 
     def test_placeholder_api_key_raises(self) -> None:
         cfg = config._default_config_with_paths()
         cfg["xai"]["api_key"] = "xai-your-api-key-here"
-        with pytest.raises(RuntimeError, match="xAI API key is not configured"):
+        with pytest.raises(RuntimeError, match="providers.xai.api_key is not configured"):
             config.validate_config(cfg)
 
     def test_invalid_sample_rate_raises(self) -> None:
@@ -80,6 +81,20 @@ class TestConfigValidation:
         cfg["audio"]["sample_rate"] = 16000
         cfg["audio"]["chunk_ms"] = 100
         config.validate_config(cfg)
+
+    def test_openai_provider_config_passes_with_openai_key(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "openai"
+        cfg["tts"]["provider"] = "openai"
+        cfg["providers"]["openai"]["api_key"] = "openai-key"
+        config.validate_config(cfg)
+
+    def test_invalid_stt_provider_raises(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "not-real"
+        cfg["providers"]["xai"]["api_key"] = "xai-key"
+        with pytest.raises(RuntimeError, match="stt.provider"):
+            config.validate_config(cfg)
 
     def test_invalid_hotkey_mode_raises(self) -> None:
         cfg = config._default_config_with_paths()

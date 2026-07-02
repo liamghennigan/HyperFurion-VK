@@ -8,7 +8,25 @@ import pytest
 from voice_keyboard import stt
 
 
+def _mock_json_response(payload: dict) -> mock.Mock:
+    resp = mock.Mock()
+    resp.json.return_value = payload
+    resp.raise_for_status = mock.Mock()
+    return resp
+
+
 class TestSTTClient:
+    def test_create_stt_client_returns_buffered_provider(self) -> None:
+        cfg = {
+            "providers": {"openai": {"api_key": "openai-key"}},
+            "stt": {"provider": "openai", "model": "gpt-4o-transcribe", "language": "en"},
+        }
+
+        client = stt.create_stt_client(cfg)
+
+        assert isinstance(client, stt.BufferedRESTSTTClient)
+        assert client._provider == "openai"
+
     def test_connect_sends_config_in_url_and_waits_for_ready(self) -> None:
         client = stt.STTClient(api_key="k", language="es", interim_results=False)
 
@@ -114,3 +132,58 @@ class TestSTTClient:
 
         events = asyncio.run(collect())
         assert events == [{"type": "transcript.done", "text": "hi"}]
+
+
+class TestBufferedRESTSTTClient:
+    def test_openai_compatible_provider_posts_wav_and_yields_done(self) -> None:
+        async def run() -> list[dict]:
+            client = stt.BufferedRESTSTTClient(
+                provider="openai",
+                api_key="openai-key",
+                model="gpt-4o-transcribe",
+                language="en",
+            )
+            session = mock.Mock()
+            session.post.return_value = _mock_json_response({"text": "hello from openai"})
+            client._session = session
+
+            await client.connect(sample_rate=16000)
+            await client.send_audio(b"\x00\x00" * 20)
+            await client.send_audio_done()
+            events = [event async for event in client.receive_events()]
+
+            args, kwargs = session.post.call_args
+            assert args[0] == stt.OPENAI_STT_URL
+            assert kwargs["headers"]["Authorization"] == "Bearer openai-key"
+            assert kwargs["data"]["model"] == "gpt-4o-transcribe"
+            assert kwargs["data"]["language"] == "en"
+            assert kwargs["files"]["file"][0] == "speech.wav"
+            assert kwargs["files"]["file"][2] == "audio/wav"
+            return events
+
+        assert asyncio.run(run()) == [
+            {"type": "transcript.done", "text": "hello from openai"}
+        ]
+
+    def test_deepgram_response_is_parsed(self) -> None:
+        client = stt.BufferedRESTSTTClient(
+            provider="deepgram",
+            api_key="deepgram-key",
+            model="nova-3",
+            language="en",
+        )
+        session = mock.Mock()
+        session.post.return_value = _mock_json_response({
+            "results": {
+                "channels": [
+                    {"alternatives": [{"transcript": "hello from deepgram"}]}
+                ]
+            }
+        })
+        client._session = session
+
+        assert client._transcribe_deepgram(b"RIFF") == "hello from deepgram"
+        args, kwargs = session.post.call_args
+        assert args[0] == stt.DEEPGRAM_STT_URL
+        assert kwargs["headers"]["Authorization"] == "Token deepgram-key"
+        assert kwargs["params"]["model"] == "nova-3"

@@ -84,7 +84,7 @@ class TestDaemonStateTransitions:
             audio_capture.running = True
 
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
-                 mock.patch("voice_keyboard.daemon.STTClient", return_value=stt_client):
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
                 assert daemon._recording is True
                 stt_client.connect.assert_awaited_once_with(16000)
@@ -123,7 +123,7 @@ class TestDaemonStateTransitions:
             audio_capture.running = True
 
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
-                 mock.patch("voice_keyboard.daemon.STTClient", return_value=stt_client):
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
                 for _ in range(100):
                     if daemon._final_text == "hello world":
@@ -148,7 +148,7 @@ class TestDaemonStateTransitions:
             audio_capture.running = True
 
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
-                 mock.patch("voice_keyboard.daemon.STTClient", return_value=stt_client):
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
                 for _ in range(100):
                     if daemon._final_text == "I started with this part and kept talking after that":
@@ -175,7 +175,7 @@ class TestDaemonStateTransitions:
             audio_capture.running = True
 
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
-                 mock.patch("voice_keyboard.daemon.STTClient", return_value=stt_client):
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
                 for _ in range(100):
                     if daemon._final_text == "This was already finalized and this arrived at the end":
@@ -220,7 +220,7 @@ class TestDaemonStateTransitions:
             audio_capture.running = True
 
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
-                 mock.patch("voice_keyboard.daemon.STTClient", return_value=stt_client):
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
                 for _ in range(100):
                     if daemon._final_text.endswith("it does."):
@@ -261,7 +261,7 @@ class TestDaemonStateTransitions:
             audio_capture.running = True
 
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
-                 mock.patch("voice_keyboard.daemon.STTClient", return_value=stt_client):
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
                 for _ in range(100):
                     if daemon._final_text == final_text:
@@ -281,7 +281,7 @@ class TestDaemonStateTransitions:
 
     def test_start_recording_without_api_key_raises(self, daemon: Daemon) -> None:
         daemon._config["xai"]["api_key"] = ""
-        with pytest.raises(RuntimeError, match="xAI API key not configured"):
+        with pytest.raises(RuntimeError, match="providers.xai.api_key is not configured"):
             asyncio.run(daemon._start_recording())
 
     def test_start_recording_cleans_up_on_stt_connect_failure(self, daemon: Daemon) -> None:
@@ -295,7 +295,7 @@ class TestDaemonStateTransitions:
             stt_client.connect = mock.AsyncMock(side_effect=RuntimeError("STT down"))
 
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
-                 mock.patch("voice_keyboard.daemon.STTClient", return_value=stt_client):
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 with pytest.raises(RuntimeError, match="STT down"):
                     await daemon._start_recording()
 

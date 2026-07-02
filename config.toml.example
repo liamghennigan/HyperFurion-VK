@@ -1,11 +1,44 @@
-[xai]
+[providers.xai]
 api_key = "xai-your-api-key-here"
 
+[providers.openai]
+api_key = "openai-your-api-key-here"
+
+[providers.groq]
+api_key = "groq-your-api-key-here"
+
+[providers.deepgram]
+api_key = "deepgram-your-api-key-here"
+
+[providers.assemblyai]
+api_key = "assemblyai-your-api-key-here"
+
+[providers.elevenlabs]
+api_key = "elevenlabs-your-api-key-here"
+
 [stt]
+# Choices: xai, openai, groq, deepgram, assemblyai
+provider = "xai"
+# Defaults by provider:
+# openai = "gpt-4o-transcribe"
+# groq = "whisper-large-v3-turbo"
+# deepgram = "nova-3"
+# assemblyai = provider default
+model = ""
 language = "en"
 interim_results = true
 
 [tts]
+# Choices: xai, openai, elevenlabs
+provider = "xai"
+# Defaults by provider:
+# openai = "gpt-4o-mini-tts"
+# elevenlabs = "eleven_multilingual_v2"
+model = ""
+# Defaults by provider:
+# xai = "eve"
+# openai = "coral"
+# elevenlabs = "JBFqnCBsd6RMkjVDRZzb"
 voice_id = "eve"
 language = "en"
 

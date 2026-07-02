@@ -4,16 +4,43 @@ from pathlib import Path
 
 import tomllib
 
+from voice_keyboard.stt import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS
+from voice_keyboard.tts import DEFAULT_TTS_MODELS, DEFAULT_TTS_VOICES, SUPPORTED_TTS_PROVIDERS
+
 DEFAULT_CONFIG: dict = {
     "xai": {
         "api_key": "",
     },
+    "providers": {
+        "xai": {
+            "api_key": "",
+        },
+        "openai": {
+            "api_key": "",
+        },
+        "groq": {
+            "api_key": "",
+        },
+        "deepgram": {
+            "api_key": "",
+        },
+        "assemblyai": {
+            "api_key": "",
+        },
+        "elevenlabs": {
+            "api_key": "",
+        },
+    },
     "stt": {
+        "provider": "xai",
+        "model": DEFAULT_STT_MODELS["xai"],
         "language": "en",
         "interim_results": True,
     },
     "tts": {
-        "voice_id": "eve",
+        "provider": "xai",
+        "model": DEFAULT_TTS_MODELS["xai"],
+        "voice_id": DEFAULT_TTS_VOICES["xai"],
         "language": "en",
     },
     "audio": {
@@ -31,7 +58,14 @@ DEFAULT_CONFIG: dict = {
     },
 }
 
-PLACEHOLDER_API_KEYS = {"xai-your-api-key-here"}
+PLACEHOLDER_API_KEYS = {
+    "xai-your-api-key-here",
+    "openai-your-api-key-here",
+    "groq-your-api-key-here",
+    "deepgram-your-api-key-here",
+    "assemblyai-your-api-key-here",
+    "elevenlabs-your-api-key-here",
+}
 
 
 def _config_dir() -> Path:
@@ -71,21 +105,52 @@ def load_config() -> dict:
             user_config = tomllib.load(f)
         config = _deep_merge(config, user_config)
 
+    legacy_xai_key = str(config.get("xai", {}).get("api_key", "")).strip()
+    providers = config.setdefault("providers", {})
+    xai_provider = providers.setdefault("xai", {})
+    if legacy_xai_key and not str(xai_provider.get("api_key", "")).strip():
+        xai_provider["api_key"] = legacy_xai_key
+
     # If the user left socket_path empty (or set an empty string), fall back.
     if not config.get("daemon", {}).get("socket_path"):
         config.setdefault("daemon", {})["socket_path"] = str(_config_dir() / "socket")
     return config
 
 
-def validate_config(config: dict) -> None:
-    """Validate config and raise a clear RuntimeError on missing/invalid values."""
-    api_key = config.get("xai", {}).get("api_key", "")
+def _active_provider_api_key(config: dict, provider: str) -> str:
+    providers = config.get("providers", {})
+    api_key = str(providers.get(provider, {}).get("api_key", "")).strip()
+    if provider == "xai" and not api_key:
+        api_key = str(config.get("xai", {}).get("api_key", "")).strip()
+    return api_key
+
+
+def _validate_api_key(config: dict, provider: str) -> None:
+    api_key = _active_provider_api_key(config, provider)
     if (
         not isinstance(api_key, str)
         or not api_key.strip()
         or api_key.strip() in PLACEHOLDER_API_KEYS
     ):
-        raise RuntimeError("xAI API key is not configured")
+        raise RuntimeError(f"providers.{provider}.api_key is not configured")
+
+
+def validate_config(config: dict) -> None:
+    """Validate config and raise a clear RuntimeError on missing/invalid values."""
+    stt_cfg = config.get("stt", {})
+    tts_cfg = config.get("tts", {})
+    stt_provider = str(stt_cfg.get("provider", "xai")).lower()
+    tts_provider = str(tts_cfg.get("provider", "xai")).lower()
+    if stt_provider not in SUPPORTED_STT_PROVIDERS:
+        raise RuntimeError(
+            f"stt.provider must be one of: {', '.join(sorted(SUPPORTED_STT_PROVIDERS))}"
+        )
+    if tts_provider not in SUPPORTED_TTS_PROVIDERS:
+        raise RuntimeError(
+            f"tts.provider must be one of: {', '.join(sorted(SUPPORTED_TTS_PROVIDERS))}"
+        )
+    _validate_api_key(config, stt_provider)
+    _validate_api_key(config, tts_provider)
 
     audio_cfg = config.get("audio", {})
     sample_rate = audio_cfg.get("sample_rate", 0)
