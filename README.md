@@ -3,8 +3,8 @@
 **Website:** <https://liamghennigan.github.io/HyperFurion-VK/>
 
 A Linux-first open-source voice keyboard with xAI STT/TTS as the default
-provider, selectable cloud speech providers, global hotkeys, desktop status
-feedback, and uinput keyboard injection.
+provider, selectable cloud or local speech providers, global hotkeys, desktop
+status feedback, and uinput keyboard injection.
 
 HyperFurion VK runs a local daemon. When you record speech, the daemon captures
 microphone audio, sends it to the configured speech-to-text provider, and types
@@ -28,8 +28,10 @@ returned audio locally.
 - **Core desktop support:** Linux desktop sessions with uinput access.
 - **Best overlay support:** GNOME Shell 50 on Wayland. Other desktops fall back
   to ordinary desktop notifications.
-- **Cloud required:** speech recognition and speech synthesis currently use
-  provider APIs. This is not an offline dictation engine.
+- **Cloud by default, offline if you want:** speech recognition and synthesis
+  use provider APIs out of the box — or point `providers.openai.base_url` at a
+  local OpenAI-compatible server (Whisper, Parakeet, Voxtral, Kokoro) and
+  nothing leaves your machine. See [Fully Offline](#fully-offline-local-models).
 
 ## What Gets Installed
 
@@ -266,6 +268,9 @@ api_key = "hfk-your-subscription-key-here"
 
 [providers.openai]
 api_key = "openai-your-api-key-here"
+# Point at any OpenAI-compatible server (a local Whisper/Kokoro server
+# makes dictation fully offline; no api_key needed then).
+# base_url = "http://localhost:8000/v1"
 
 [providers.groq]
 api_key = "groq-your-api-key-here"
@@ -355,6 +360,36 @@ without code changes.
 If you switch from xAI to OpenAI or ElevenLabs and leave `voice_id = "eve"`,
 the code uses that provider's default voice instead. Set `voice_id` explicitly
 when you want a specific voice.
+
+### Fully Offline (Local Models)
+
+The `openai` provider accepts a `base_url`, so any OpenAI-compatible server
+counts as a provider — including one on `localhost`. No API key is required
+when `base_url` is set, and nothing leaves your machine:
+
+```toml
+[providers.openai]
+base_url = "http://localhost:8000/v1"
+
+[stt]
+provider = "openai"
+# set model to whatever id your server exposes, e.g.
+# model = "Systran/faster-whisper-large-v3"
+
+[tts]
+provider = "openai"
+```
+
+The strongest open models to serve locally right now:
+
+| What | Why |
+| --- | --- |
+| [Speaches](https://github.com/speaches-ai/speaches) | Easiest single server: OpenAI-compatible STT **and** TTS in one process (faster-whisper + Kokoro). |
+| [Whisper large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo) | The default open STT workhorse; great accuracy/speed balance. |
+| [NVIDIA Parakeet TDT](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | Tops the [Open ASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard); extremely fast on a GPU. |
+| [Voxtral Mini 3B](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507) | Apache-2.0 speech model; vLLM serves it OpenAI-compatible. |
+| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | CPU-only and edge boxes; no GPU required. |
+| [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) | Small, high-quality open TTS voice (what Speaches serves). |
 
 ### The HyperFurion Subscription Provider
 
@@ -645,7 +680,8 @@ injection.
 ## Limitations
 
 - Linux only.
-- Cloud STT/TTS only.
+- No speech model ships in the box: bring a provider key, the subscription, or
+  a local OpenAI-compatible server (see Fully Offline above).
 - uinput injection is currently printable ASCII, newline, and tab only.
 - The built-in global hotkey requires readable Linux input devices.
 - The near-field overlay is GNOME Shell 50 Wayland specific.

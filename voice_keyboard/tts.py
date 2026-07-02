@@ -65,6 +65,13 @@ def create_tts_client(config: dict):
     voice_id = str(tts_cfg.get("voice_id", ""))
     if not voice_id or (provider != "xai" and voice_id == DEFAULT_TTS_VOICES["xai"]):
         voice_id = DEFAULT_TTS_VOICES.get(provider, DEFAULT_TTS_VOICES["xai"])
+    openai_base = ""
+    if provider == "openai":
+        # An OpenAI-compatible base_url (e.g. a local Kokoro/Piper server)
+        # keeps speech fully offline.
+        openai_base = str(
+            config.get("providers", {}).get("openai", {}).get("base_url", "")
+        ).strip()
     return TTSClient(
         api_key=_provider_api_key(config, provider),
         provider=provider,
@@ -72,6 +79,7 @@ def create_tts_client(config: dict):
         model=str(tts_cfg.get("model", "") or DEFAULT_TTS_MODELS.get(provider, "")),
         language=str(tts_cfg.get("language", "en")),
         hyperfurion_url=hyperfurion_tts_url(config) if provider == "hyperfurion" else "",
+        openai_base_url=openai_base,
     )
 
 
@@ -86,6 +94,7 @@ class TTSClient:
         provider: str = "xai",
         model: str = "",
         hyperfurion_url: str = "",
+        openai_base_url: str = "",
     ):
         self._api_key = api_key
         self._provider = provider
@@ -94,6 +103,9 @@ class TTSClient:
         self._timeout = timeout
         self._model = model or DEFAULT_TTS_MODELS.get(provider, "")
         self._hyperfurion_url = hyperfurion_url or f"{HYPERFURION_DEFAULT_BASE_URL}/v1/tts"
+        self._openai_url = (
+            f"{openai_base_url.rstrip('/')}/audio/speech" if openai_base_url else OPENAI_TTS_URL
+        )
         self._session: Optional[requests.Session] = None
 
     @property
@@ -179,7 +191,7 @@ class TTSClient:
             "response_format": "mp3",
         }
         resp = self.session.post(
-            OPENAI_TTS_URL, json=payload, headers=headers, timeout=self._timeout
+            self._openai_url, json=payload, headers=headers, timeout=self._timeout
         )
         resp.raise_for_status()
         return resp.content

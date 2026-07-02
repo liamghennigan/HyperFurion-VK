@@ -92,11 +92,20 @@ def create_stt_client(config: dict):
             ws_url=XAI_STT_WS_URL if provider == "xai" else hyperfurion_ws_url(config),
         )
 
+    base_url = ""
+    if provider == "openai":
+        # An OpenAI-compatible base_url (e.g. a local Whisper server such as
+        # Speaches or LocalAI) makes dictation fully offline.
+        base_url = str(
+            config.get("providers", {}).get("openai", {}).get("base_url", "")
+        ).strip()
+
     return BufferedRESTSTTClient(
         provider=provider,
         api_key=api_key,
         model=model,
         language=language,
+        base_url=base_url,
     )
 
 
@@ -223,9 +232,11 @@ class BufferedRESTSTTClient:
         timeout: float = 60.0,
         poll_interval: float = 1.0,
         max_poll_time: float = 120.0,
+        base_url: str = "",
     ):
         self._provider = provider
         self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
         self._model = model or DEFAULT_STT_MODELS.get(provider, "")
         self._language = language
         self._timeout = timeout
@@ -338,7 +349,8 @@ class BufferedRESTSTTClient:
 
     def _transcribe_wav(self, wav_data: bytes) -> str:
         if self._provider == "openai":
-            return self._transcribe_openai_compatible(OPENAI_STT_URL, wav_data)
+            url = f"{self._base_url}/audio/transcriptions" if self._base_url else OPENAI_STT_URL
+            return self._transcribe_openai_compatible(url, wav_data)
         if self._provider == "groq":
             return self._transcribe_openai_compatible(GROQ_STT_URL, wav_data)
         if self._provider == "deepgram":
