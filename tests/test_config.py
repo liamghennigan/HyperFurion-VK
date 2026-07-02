@@ -138,3 +138,20 @@ class TestHyperFurionProviderConfig:
         cfg["providers"]["xai"]["api_key"] = "xai-key"
         with pytest.raises(RuntimeError, match="providers.hyperfurion.api_key"):
             config.validate_config(cfg)
+
+
+class TestOfflineOpenAIEndpoint:
+    def test_local_base_url_needs_no_api_key(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "openai"
+        cfg["tts"]["provider"] = "openai"
+        cfg["providers"]["openai"]["base_url"] = "http://localhost:8000/v1"
+        config.validate_config(cfg)  # no key required for a local server
+
+    def test_hosted_openai_still_needs_a_key(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "openai"
+        cfg["providers"]["openai"]["base_url"] = ""
+        cfg["providers"]["xai"]["api_key"] = "xai-key"
+        with pytest.raises(RuntimeError, match="providers.openai.api_key"):
+            config.validate_config(cfg)

@@ -693,6 +693,30 @@ chmod +x install-hyperfurion-vk.sh
     in the terminal above, or get early access via
     <a href="https://github.com/sponsors/liamghennigan">sponsors</a>.</p>
 
+    <h3>Fully offline, if you want it</h3>
+    <p>The <code>openai</code> provider takes a <code>base_url</code>, so any
+    OpenAI-compatible server counts as a provider — including one on
+    <code>localhost</code>. No API key required, nothing leaves your machine:</p>
+<pre><code>[providers.openai]
+base_url = "http://localhost:8000/v1"  # a local server — no key needed
+
+[stt]
+provider = "openai"  # set stt.model to the model id your server exposes</code></pre>
+    <p>The strongest open models to serve locally right now:
+    <a href="https://github.com/speaches-ai/speaches">Speaches</a> is the
+    easiest single server — OpenAI-compatible STT <i>and</i> TTS, running
+    <a href="https://huggingface.co/openai/whisper-large-v3-turbo">Whisper
+    large-v3-turbo</a> for dictation and
+    <a href="https://huggingface.co/hexgrad/Kokoro-82M">Kokoro-82M</a> for
+    speech. <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">NVIDIA
+    Parakeet&nbsp;TDT</a> tops the
+    <a href="https://huggingface.co/spaces/hf-audio/open_asr_leaderboard">Open
+    ASR leaderboard</a> and is absurdly fast on a GPU;
+    <a href="https://huggingface.co/mistralai/Voxtral-Mini-3B-2507">Voxtral
+    Mini&nbsp;3B</a> (Apache-2.0) serves OpenAI-compatible via vLLM; and
+    <a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a> covers
+    CPU-only and edge boxes.</p>
+
     <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
     <code>en_us</code>.</p>
   </section>
@@ -803,7 +827,9 @@ pitch = 1.0</pre>
     <h2><span class="num" aria-hidden="true">06</span>Honest limitations</h2>
     <ul>
       <li>Linux only. Python 3.11+, systemd user services, uinput access.</li>
-      <li>Cloud STT/TTS — this is not an offline dictation engine.</li>
+      <li>Cloud by default; no speech model ships in the box. Fully offline is
+      one config line — point <code>providers.openai.base_url</code> at a local
+      OpenAI-compatible server (see Providers above).</li>
       <li>Injection is printable ASCII plus newline and tab. Accents, CJK, emoji are skipped with warnings in the journal.</li>
       <li>The near-field recording overlay is GNOME Shell 50 on Wayland; other desktops get ordinary notifications.</li>
       <li>Stop-to-text latency depends on your provider and connection.</li>

@@ -296,3 +296,34 @@ class TestHyperFurionSTTProvider:
         query = parse_qs(urlsplit(url).query)
         assert query["sample_rate"] == ["16000"]
         assert connect.call_args.kwargs["additional_headers"]["Authorization"] == "Bearer hfk_abc"
+
+
+class TestOpenAICompatibleBaseURL:
+    def test_base_url_reroutes_transcription(self) -> None:
+        cfg = {
+            "providers": {"openai": {"api_key": "", "base_url": "http://localhost:8000/v1/"}},
+            "stt": {"provider": "openai", "language": "en"},
+        }
+        client = stt.create_stt_client(cfg)
+        assert isinstance(client, stt.BufferedRESTSTTClient)
+
+        captured = {}
+
+        def fake_post(url, **kwargs):
+            captured["url"] = url
+            return _mock_json_response({"text": "offline transcript"})
+
+        client._session = mock.Mock()
+        client._session.post = fake_post
+        text = client._transcribe_wav(b"RIFFfake")
+
+        assert text == "offline transcript"
+        assert captured["url"] == "http://localhost:8000/v1/audio/transcriptions"
+
+    def test_without_base_url_openai_default_holds(self) -> None:
+        cfg = {
+            "providers": {"openai": {"api_key": "k"}},
+            "stt": {"provider": "openai"},
+        }
+        client = stt.create_stt_client(cfg)
+        assert client._base_url == ""

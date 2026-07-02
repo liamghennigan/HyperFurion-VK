@@ -164,3 +164,20 @@ class TestHyperFurionTTSProvider:
 
         with pytest.raises(RuntimeError, match="quota exceeded"):
             client.synthesize("hello")
+
+
+class TestOpenAICompatibleTTSBaseURL:
+    def test_base_url_reroutes_speech(self) -> None:
+        cfg = {
+            "providers": {"openai": {"api_key": "", "base_url": "http://localhost:8000/v1"}},
+            "tts": {"provider": "openai", "voice_id": "alloy", "language": "en"},
+        }
+        client = tts.create_tts_client(cfg)
+        session = mock.Mock()
+        session.post = mock.Mock(return_value=_mock_response(b"LOCALMP3"))
+        client._session = session
+
+        data = client.synthesize("hello")
+
+        assert data == b"LOCALMP3"
+        assert session.post.call_args.args[0] == "http://localhost:8000/v1/audio/speech"

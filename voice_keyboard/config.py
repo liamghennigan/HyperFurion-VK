@@ -22,6 +22,9 @@ DEFAULT_CONFIG: dict = {
         },
         "openai": {
             "api_key": "",
+            # Point at any OpenAI-compatible server (e.g. a local Whisper
+            # or Kokoro server) for fully offline dictation and speech.
+            "base_url": "",
         },
         "groq": {
             "api_key": "",
@@ -132,6 +135,14 @@ def _active_provider_api_key(config: dict, provider: str) -> str:
 
 
 def _validate_api_key(config: dict, provider: str) -> None:
+    if provider == "openai":
+        # A custom OpenAI-compatible endpoint (e.g. a local Whisper/Kokoro
+        # server) commonly runs without authentication.
+        base_url = str(
+            config.get("providers", {}).get("openai", {}).get("base_url", "")
+        ).strip()
+        if base_url:
+            return
     api_key = _active_provider_api_key(config, provider)
     if (
         not isinstance(api_key, str)
