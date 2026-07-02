@@ -78,28 +78,20 @@ class MacHotkeySpec:
 
 class MacHotkeyListener(HotkeyListener):
     def __init__(self, config: dict, *, on_toggle, on_hold_start, on_hold_stop):
-        # Mirrors the base initializer, minus evdev devices, plus the mac
-        # spec and flag tracking. Deliberately does not call super().
-        self._enabled = bool(config.get("enabled", True))
-        self._mode = str(config.get("mode", "auto")).lower()
-        self._hold_threshold_s = (
-            float(config.get("hold_threshold_ms", self.DEFAULT_HOLD_THRESHOLD_MS)) / 1000.0
+        # The shared tap/hold/auto state machine is initialized by the base;
+        # _make_spec swaps in the macOS keycode spec. Only the event-source
+        # fields are added here.
+        super().__init__(
+            config,
+            on_toggle=on_toggle,
+            on_hold_start=on_hold_start,
+            on_hold_stop=on_hold_stop,
         )
-        self._spec = MacHotkeySpec(str(config.get("key", "control+alt+v")))
-        self._on_toggle = on_toggle
-        self._on_hold_start = on_hold_start
-        self._on_hold_stop = on_hold_stop
-        self._pressed: set[int] = set()
-        self._combo_latched = False
-        self._auto_combo_pending = False
-        self._hold_active = False
-        self._auto_hold_timer = None
-        self._devices: list = []
-        self._thread = None
-        self._stop_event = threading.Event()
-        self._lock = threading.Lock()
         self._mod_down: set[int] = set()
         self._runloop = None
+
+    def _make_spec(self, key: str):
+        return MacHotkeySpec(key)
 
     def start(self) -> None:
         if not self._enabled or self._mode == "disabled":

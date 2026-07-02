@@ -143,7 +143,10 @@ class HotkeyListener:
         self._hold_threshold_s = (
             float(config.get("hold_threshold_ms", self.DEFAULT_HOLD_THRESHOLD_MS)) / 1000.0
         )
-        self._spec = HotkeySpec(str(config.get("key", "control+alt+v")))
+        # Subclasses override _make_spec to parse the combo into their
+        # platform's keycodes; everything else — the tap/hold/auto state
+        # machine — is shared, so they can call super().__init__().
+        self._spec = self._make_spec(str(config.get("key", "control+alt+v")))
         self._on_toggle = on_toggle
         self._on_hold_start = on_hold_start
         self._on_hold_stop = on_hold_stop
@@ -152,10 +155,14 @@ class HotkeyListener:
         self._auto_combo_pending = False
         self._hold_active = False
         self._auto_hold_timer: Optional[threading.Timer] = None
-        self._devices: list[InputDevice] = []
+        self._devices: list = []
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+
+    def _make_spec(self, key: str):
+        """The Linux (evdev) spec. macOS/Windows backends override this."""
+        return HotkeySpec(key)
 
     def start(self) -> None:
         if not self._enabled or self._mode == "disabled":
