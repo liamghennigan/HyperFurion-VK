@@ -358,13 +358,16 @@ when you want a specific voice.
 
 ### The HyperFurion Subscription Provider
 
-`hyperfurion` is the no-setup option: a single `hfk_` subscription key
-instead of a provider account, with xAI STT/TTS behind a metered relay. It
-speaks the same streaming protocol as `xai`, so behavior is identical from
-the daemon's side. Audio for this provider transits the relay on its way to
-xAI; it is held in memory only and never written to disk. The relay is in
-`relay/` and is fully self-hostable — see `relay/README.md` for tiers,
-quotas, and deployment.
+`hyperfurion` buys convenience, not capability. Every feature of
+HyperFurion VK is open source and free forever — with your own provider
+API key you have all of it, and paying unlocks nothing. The subscription
+is a single `hfk_` key instead of a provider account, with xAI STT/TTS
+behind a metered relay; what's left over after upstream costs funds the
+project's development. It speaks the same streaming protocol as `xai`, so
+behavior is identical from the daemon's side. Audio for this provider
+transits the relay on its way to xAI; it is held in memory only and never
+written to disk. The relay is in `relay/` and is fully self-hostable —
+see `relay/README.md` for tiers, quotas, and deployment.
 
 ## Hotkeys
 

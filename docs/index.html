@@ -679,16 +679,18 @@ chmod +x install-hyperfurion-vk.sh
     </div>
 
     <h3>The subscription, plainly</h3>
-    <p><code>provider = "hyperfurion"</code> is the no-setup option: <b>$5/month</b>
-    for one key that covers both lanes — 20 hours of streaming dictation and
-    250k spoken characters a month, hard-capped so nobody can run up a bill
-    ($10/month buys 60 h and 1M). Your audio takes the same path as the
-    default provider&rsquo;s, through a metered relay to xAI; it is held in
-    memory, never written to disk. The relay is
+    <p><code>provider = "hyperfurion"</code> buys convenience, not capability.
+    Every feature of this product is open source and free forever — bring your
+    own API key and you have all of it; paying unlocks nothing. What
+    <b>$5/month</b> gets you is one key instead of provider accounts (20 hours
+    of streaming dictation and 250k spoken characters a month, hard-capped so
+    nobody can run up a bill; $10/month buys 60 h and 1M) — and what&rsquo;s
+    left over funds this project&rsquo;s development. Your audio takes the same
+    path as the default provider&rsquo;s, through a metered relay to xAI; it is
+    held in memory, never written to disk. The relay itself is
     <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay">open
-    source and self-hostable</a>, and the bring-your-own-key path stays
-    first-class forever. Launching soon — type <code>subscribe</code> in the
-    terminal above, or get early access via
+    source and self-hostable</a>. Launching soon — type <code>subscribe</code>
+    in the terminal above, or get early access via
     <a href="https://github.com/sponsors/liamghennigan">sponsors</a>.</p>
 
     <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
@@ -1449,6 +1451,8 @@ chmod +x install-hyperfurion-vk.sh
           break;
         case "subscribe":
           print("hosted tier — $5/mo: one hfk_ key, no provider accounts, hard quotas", "dim");
+          print("convenience + supporting the project — you gain no abilities by paying;", "dim");
+          print("everything is open source, free forever with your own key", "dim");
           print("launching soon · early access via sponsors: github.com/sponsors/liamghennigan", "dim");
           break;
         case "real": case "real on":
