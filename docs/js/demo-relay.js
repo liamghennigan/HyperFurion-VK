@@ -3,7 +3,7 @@
 // synchronously inside one (the Enter keystroke); after that, WebAudio
 // can play fetched audio whenever it arrives. HTMLAudio is the fallback.
 export const AudioOut = (() => {
-  let actx = null;
+  let actx = null, analyser = null, abuf = null;
   function unlock() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!actx && AC) { try { actx = new AC(); } catch {} }
@@ -14,7 +14,15 @@ export const AudioOut = (() => {
       const audio = await actx.decodeAudioData(await blob.arrayBuffer());
       const src = actx.createBufferSource();
       src.buffer = audio;
-      src.connect(actx.destination);
+      // tap the playback through an analyser so the field can react to the
+      // real eve voice the same way it reacts to the microphone
+      if (!analyser) {
+        analyser = actx.createAnalyser();
+        analyser.fftSize = 512;
+        abuf = new Uint8Array(analyser.fftSize);
+        analyser.connect(actx.destination);
+      }
+      src.connect(analyser);
       src.start();
       await new Promise((res) => { src.onended = res; });
       return;
@@ -24,7 +32,15 @@ export const AudioOut = (() => {
     au.onended = () => URL.revokeObjectURL(url);
     await au.play();
   }
-  return { unlock, play };
+  // instantaneous playback loudness 0..1 (0 when nothing is playing)
+  function level() {
+    if (!analyser) return 0;
+    analyser.getByteTimeDomainData(abuf);
+    let peak = 0;
+    for (let i = 0; i < abuf.length; i++) peak = Math.max(peak, Math.abs(abuf[i] - 128) / 128);
+    return Math.min(1, peak * 1.6);
+  }
+  return { unlock, play, level };
 })();
 
 // ═══ DEMO — the hosted relay: real xAI engines, opt-in, always labeled ═════

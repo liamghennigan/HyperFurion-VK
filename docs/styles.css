@@ -88,8 +88,20 @@ body {
   margin: 0;
   font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   color: var(--text);
-  background: var(--bg);
+  /* no body background: the html paints the page color, so the fixed
+     z-index:-1 field canvas can live between it and the content */
 }
+
+/* ═══ THE FIELD — voice as a physical medium (canvas added by JS) ═══════ */
+#field {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+@media print { #field { display: none !important; } }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; text-decoration-style: wavy; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 p, ul, ol { margin: 12px 0; }

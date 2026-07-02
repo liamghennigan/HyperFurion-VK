@@ -57,8 +57,23 @@ export const Signal = (() => {
     cached = { peak, fft: simFft, live: false };
     return cached;
   }
+  // log-spaced band energies for the field: 8 values 0..1, bass → sibilance.
+  // Works identically on the live analyser and the synthetic spectrum, so
+  // the field's ambient mode costs nothing extra.
+  const bandBuf = new Float32Array(8);
+  function bands() {
+    const f = frame().fft, n = f.length;
+    for (let b = 0; b < 8; b++) {
+      const lo = Math.max(1, Math.floor(Math.pow(n, b / 8)));
+      const hi = Math.max(lo + 1, Math.floor(Math.pow(n, (b + 1) / 8)));
+      let s = 0;
+      for (let i = lo; i < hi && i < n; i++) s = Math.max(s, f[i]);
+      bandBuf[b] = s / 255;
+    }
+    return bandBuf;
+  }
   return {
-    start, stop, frame,
+    start, stop, frame, bands,
     isLive: () => !!a.analyser,
     // the relay dictation path taps the same mic acquisition
     audio: () => ({ ctx: a.ctx, stream: a.stream }),

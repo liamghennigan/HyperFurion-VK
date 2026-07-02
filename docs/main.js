@@ -41,6 +41,7 @@ import "./js/pipeline.js";
 import "./js/tts.js";
 import "./js/hotkeys.js";
 import { Hints } from "./js/hints.js";
+import { Field } from "./js/field.js";
 
 // ═══ REVEAL — sections develop as they enter the viewport ═══════════════
 // The class is only ever added by script, so the no-JS document is
@@ -60,6 +61,11 @@ if (!reduced && "IntersectionObserver" in window) {
 
 // ═══ BOOT ════════════════════════════════════════════════════════════════
 window.__vk.demo = Demo;         // the proof harness steers the demo layer
+window.__vk.field = Field;
+// the field succeeds the 2D trace; hiding the hero canvas also parks its
+// draw (the ticker skips subscribers whose element left the viewport).
+// Without WebGL2 — or with reduced motion — the old instrument stays on.
+if (Field.active) $("hero-canvas").style.display = "none";
 $("hero-live").hidden = false;   // the claim is only true with JS running
 $("cfg-live-note").hidden = $("page-note").hidden = false;
 cfgEl.contentEditable = "plaintext-only";

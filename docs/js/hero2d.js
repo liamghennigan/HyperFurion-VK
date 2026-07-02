@@ -73,8 +73,11 @@ export const Hero = (() => {
     // mode is only ever "rec" after boot, so Dictation exists by then
     const relayTag = mode === "rec" && Dictation.engine === "relay"
       ? " · engine: xai grok stt (hosted demo)" : "";
+    // when the field has taken over, this canvas is hidden and the signal
+    // paints the particles instead of a waterfall — say so
+    const gauge = heroCanvas.style.display === "none" ? "driving the field" : "spectrogram";
     heroCap.textContent = mode === "rec"
-      ? (Signal.isLive() ? "signal: live microphone — spectrogram" + relayTag
+      ? (Signal.isLive() ? "signal: live microphone — " + gauge + relayTag
                          : "signal: synthetic (mic not granted)")
       : "signal: test pattern";
   }
