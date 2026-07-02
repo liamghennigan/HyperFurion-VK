@@ -125,3 +125,42 @@ class TestPlayPygameMixerGuard:
             with pytest.raises(RuntimeError, match="no mixer"):
                 client._play_pygame("/tmp/does-not-exist.mp3")
         m_quit.assert_not_called()
+
+
+class TestHyperFurionTTSProvider:
+    def _client(self) -> "tts.TTSClient":
+        cfg = {
+            "providers": {
+                "hyperfurion": {"api_key": "hfk_abc", "base_url": "http://relay.local"}
+            },
+            "tts": {"provider": "hyperfurion", "voice_id": "eve", "language": "en"},
+        }
+        return tts.create_tts_client(cfg)
+
+    def test_synthesize_posts_xai_payload_to_relay(self) -> None:
+        client = self._client()
+        resp = _mock_response(b"MP3DATA")
+        resp.status_code = 200
+        session = mock.Mock()
+        session.post = mock.Mock(return_value=resp)
+        client._session = session
+
+        data = client.synthesize("hello")
+
+        assert data == b"MP3DATA"
+        args, kwargs = session.post.call_args
+        assert args[0] == "http://relay.local/v1/tts"
+        assert kwargs["json"] == {"text": "hello", "voice_id": "eve", "language": "en"}
+        assert kwargs["headers"]["Authorization"] == "Bearer hfk_abc"
+
+    def test_relay_error_detail_is_surfaced(self) -> None:
+        client = self._client()
+        resp = mock.Mock()
+        resp.status_code = 429
+        resp.json.return_value = {"error": "HyperFurion TTS quota exceeded — resets 2026-08-01"}
+        session = mock.Mock()
+        session.post = mock.Mock(return_value=resp)
+        client._session = session
+
+        with pytest.raises(RuntimeError, match="quota exceeded"):
+            client.synthesize("hello")

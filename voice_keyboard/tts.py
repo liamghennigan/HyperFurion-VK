@@ -12,17 +12,20 @@ logger = logging.getLogger(__name__)
 XAI_TTS_URL = "https://api.x.ai/v1/tts"
 OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
 ELEVENLABS_TTS_URL_TEMPLATE = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+HYPERFURION_DEFAULT_BASE_URL = "https://api.hyperfurion.com"
 
-SUPPORTED_TTS_PROVIDERS = {"xai", "openai", "elevenlabs"}
+SUPPORTED_TTS_PROVIDERS = {"xai", "hyperfurion", "openai", "elevenlabs"}
 
 DEFAULT_TTS_MODELS = {
     "xai": "",
+    "hyperfurion": "",
     "openai": "gpt-4o-mini-tts",
     "elevenlabs": "eleven_multilingual_v2",
 }
 
 DEFAULT_TTS_VOICES = {
     "xai": "eve",
+    "hyperfurion": "eve",
     "openai": "coral",
     "elevenlabs": "JBFqnCBsd6RMkjVDRZzb",
 }
@@ -49,6 +52,13 @@ def _provider_api_key(config: dict, provider: str) -> str:
     return key
 
 
+def hyperfurion_tts_url(config: dict) -> str:
+    providers = config.get("providers", {})
+    base = str(providers.get("hyperfurion", {}).get("base_url", "")).strip()
+    base = (base or HYPERFURION_DEFAULT_BASE_URL).rstrip("/")
+    return f"{base}/v1/tts"
+
+
 def create_tts_client(config: dict):
     tts_cfg = config.get("tts", {})
     provider = str(tts_cfg.get("provider", "xai")).lower()
@@ -61,6 +71,7 @@ def create_tts_client(config: dict):
         voice_id=voice_id,
         model=str(tts_cfg.get("model", "") or DEFAULT_TTS_MODELS.get(provider, "")),
         language=str(tts_cfg.get("language", "en")),
+        hyperfurion_url=hyperfurion_tts_url(config) if provider == "hyperfurion" else "",
     )
 
 
@@ -74,6 +85,7 @@ class TTSClient:
         *,
         provider: str = "xai",
         model: str = "",
+        hyperfurion_url: str = "",
     ):
         self._api_key = api_key
         self._provider = provider
@@ -81,6 +93,7 @@ class TTSClient:
         self._language = language
         self._timeout = timeout
         self._model = model or DEFAULT_TTS_MODELS.get(provider, "")
+        self._hyperfurion_url = hyperfurion_url or f"{HYPERFURION_DEFAULT_BASE_URL}/v1/tts"
         self._session: Optional[requests.Session] = None
 
     @property
@@ -97,6 +110,8 @@ class TTSClient:
     def synthesize(self, text: str) -> bytes:
         if self._provider == "xai":
             audio = self._synthesize_xai(text)
+        elif self._provider == "hyperfurion":
+            audio = self._synthesize_hyperfurion(text)
         elif self._provider == "openai":
             audio = self._synthesize_openai(text)
         elif self._provider == "elevenlabs":
@@ -120,6 +135,36 @@ class TTSClient:
             XAI_TTS_URL, json=payload, headers=headers, timeout=self._timeout
         )
         resp.raise_for_status()
+        return resp.content
+
+    def _synthesize_hyperfurion(self, text: str) -> bytes:
+        """Same request shape as xAI TTS, but sent to the HyperFurion relay.
+
+        The relay returns structured JSON errors (invalid key, quota
+        exceeded), so those are surfaced verbatim instead of a bare
+        HTTP status.
+        """
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "text": text,
+            "voice_id": self._voice_id,
+            "language": self._language,
+        }
+        resp = self.session.post(
+            self._hyperfurion_url, json=payload, headers=headers, timeout=self._timeout
+        )
+        if resp.status_code >= 400:
+            detail = ""
+            try:
+                detail = str(resp.json().get("error", ""))
+            except ValueError:
+                pass
+            if detail:
+                raise RuntimeError(f"HyperFurion TTS: {detail}")
+            resp.raise_for_status()
         return resp.content
 
     def _synthesize_openai(self, text: str) -> bytes:

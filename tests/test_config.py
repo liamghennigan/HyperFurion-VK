@@ -121,3 +121,20 @@ class TestConfigValidation:
 def test_config_dir(monkeypatch: pytest.MonkeyPatch, xdg: str, expected: Path) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", xdg)
     assert config._config_dir() == expected
+
+
+class TestHyperFurionProviderConfig:
+    def test_hyperfurion_config_passes_with_subscription_key(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "hyperfurion"
+        cfg["tts"]["provider"] = "hyperfurion"
+        cfg["providers"]["hyperfurion"]["api_key"] = "hfk_0123456789abcdef"
+        config.validate_config(cfg)
+
+    def test_hyperfurion_placeholder_key_raises(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "hyperfurion"
+        cfg["providers"]["hyperfurion"]["api_key"] = "hfk-your-subscription-key-here"
+        cfg["providers"]["xai"]["api_key"] = "xai-key"
+        with pytest.raises(RuntimeError, match="providers.hyperfurion.api_key"):
+            config.validate_config(cfg)

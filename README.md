@@ -258,6 +258,12 @@ The installed config starts from `config.toml.example`. The default config is:
 [providers.xai]
 api_key = "xai-your-api-key-here"
 
+# Hosted subscription — one key, no provider accounts. See relay/README.md.
+[providers.hyperfurion]
+api_key = "hfk-your-subscription-key-here"
+# Only set base_url if you run your own relay.
+# base_url = "https://api.hyperfurion.com"
+
 [providers.openai]
 api_key = "openai-your-api-key-here"
 
@@ -274,7 +280,7 @@ api_key = "assemblyai-your-api-key-here"
 api_key = "elevenlabs-your-api-key-here"
 
 [stt]
-# Choices: xai, openai, groq, deepgram, assemblyai
+# Choices: xai, hyperfurion, openai, groq, deepgram, assemblyai
 provider = "xai"
 # Leave empty for the provider default.
 model = ""
@@ -282,7 +288,7 @@ language = "en"
 interim_results = true
 
 [tts]
-# Choices: xai, openai, elevenlabs
+# Choices: xai, hyperfurion, openai, elevenlabs
 provider = "xai"
 # Leave empty for the provider default.
 model = ""
@@ -328,6 +334,7 @@ without code changes.
 | Provider | Config value | Default model |
 | --- | --- | --- |
 | xAI (default) | `xai` | Provider default. |
+| HyperFurion (subscription) | `hyperfurion` | Provider default. |
 | OpenAI | `openai` | `gpt-4o-transcribe` |
 | Groq | `groq` | `whisper-large-v3-turbo` |
 | Deepgram | `deepgram` | `nova-3` |
@@ -341,12 +348,23 @@ without code changes.
 | Provider | Config value | Default model | Default voice |
 | --- | --- | --- | --- |
 | xAI (default) | `xai` | Provider default. | `eve` |
+| HyperFurion (subscription) | `hyperfurion` | Provider default. | `eve` |
 | OpenAI | `openai` | `gpt-4o-mini-tts` | `coral` |
 | ElevenLabs | `elevenlabs` | `eleven_multilingual_v2` | `JBFqnCBsd6RMkjVDRZzb` |
 
 If you switch from xAI to OpenAI or ElevenLabs and leave `voice_id = "eve"`,
 the code uses that provider's default voice instead. Set `voice_id` explicitly
 when you want a specific voice.
+
+### The HyperFurion Subscription Provider
+
+`hyperfurion` is the no-setup option: a single `hfk_` subscription key
+instead of a provider account, with xAI STT/TTS behind a metered relay. It
+speaks the same streaming protocol as `xai`, so behavior is identical from
+the daemon's side. Audio for this provider transits the relay on its way to
+xAI; it is held in memory only and never written to disk. The relay is in
+`relay/` and is fully self-hostable — see `relay/README.md` for tiers,
+quotas, and deployment.
 
 ## Hotkeys
 

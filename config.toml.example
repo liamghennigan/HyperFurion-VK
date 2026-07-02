@@ -1,6 +1,12 @@
 [providers.xai]
 api_key = "xai-your-api-key-here"
 
+# Hosted subscription — one key, no provider accounts. See relay/README.md.
+[providers.hyperfurion]
+api_key = "hfk-your-subscription-key-here"
+# Only set base_url if you run your own relay.
+# base_url = "https://api.hyperfurion.com"
+
 [providers.openai]
 api_key = "openai-your-api-key-here"
 
@@ -17,7 +23,7 @@ api_key = "assemblyai-your-api-key-here"
 api_key = "elevenlabs-your-api-key-here"
 
 [stt]
-# Choices: xai, openai, groq, deepgram, assemblyai
+# Choices: xai, hyperfurion, openai, groq, deepgram, assemblyai
 provider = "xai"
 # Defaults by provider:
 # openai = "gpt-4o-transcribe"
@@ -29,7 +35,7 @@ language = "en"
 interim_results = true
 
 [tts]
-# Choices: xai, openai, elevenlabs
+# Choices: xai, hyperfurion, openai, elevenlabs
 provider = "xai"
 # Defaults by provider:
 # openai = "gpt-4o-mini-tts"

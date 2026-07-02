@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hyperfurion-relay"
+version = "0.1.0"
+description = "Metered subscription relay in front of xAI STT/TTS for HyperFurion VK"
+requires-python = ">=3.11"
+authors = [{name = "Liam Hennigan"}]
+dependencies = [
+    "aiohttp>=3.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+hyperfurion-relay = "hyperfurion_relay.app:main"
+hyperfurion-relay-admin = "hyperfurion_relay.admin:main"
+
+[tool.setuptools.packages.find]
+include = ["hyperfurion_relay*"]
