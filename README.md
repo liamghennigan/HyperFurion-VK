@@ -2,9 +2,9 @@
 
 **Website:** <https://liamghennigan.github.io/HyperFurion-VK/>
 
-A Linux-first open-source voice keyboard with native xAI STT/TTS support,
-selectable cloud speech providers, global hotkeys, desktop status feedback, and
-uinput keyboard injection.
+A Linux-first open-source voice keyboard with xAI STT/TTS as the default
+provider, selectable cloud speech providers, global hotkeys, desktop status
+feedback, and uinput keyboard injection.
 
 HyperFurion VK runs a local daemon. When you record speech, the daemon captures
 microphone audio, sends it to the configured speech-to-text provider, and types
@@ -317,30 +317,32 @@ systemctl --user restart voice-keyboard-daemon
 
 ## Providers
 
-HyperFurion VK is provider-selectable and model-configurable. Model IDs are
-plain config values, so a compatible provider model can be changed without code
-changes.
+**xAI is the default provider** for both speech-to-text and text-to-speech —
+it is what HyperFurion VK is built and daily-driven on. Any provider below
+works: HyperFurion VK is provider-selectable and model-configurable, and model
+IDs are plain config values, so a compatible provider model can be changed
+without code changes.
 
 ### Speech-To-Text
 
-| Provider | Config value | Behavior | Default model |
-| --- | --- | --- | --- |
-| xAI | `xai` | Streaming WebSocket. Audio is sent while you speak and transcript events arrive during the session. | Provider default. |
-| OpenAI | `openai` | Buffered REST. Audio is recorded locally, then submitted as a WAV after you stop. | `gpt-4o-transcribe` |
-| Groq | `groq` | Buffered REST using an OpenAI-compatible transcription endpoint. | `whisper-large-v3-turbo` |
-| Deepgram | `deepgram` | Buffered REST. | `nova-3` |
-| AssemblyAI | `assemblyai` | Buffered upload plus polling. Usually the slowest stop/finalization path. | Provider default. |
+| Provider | Config value | Default model |
+| --- | --- | --- |
+| xAI (default) | `xai` | Provider default. |
+| OpenAI | `openai` | `gpt-4o-transcribe` |
+| Groq | `groq` | `whisper-large-v3-turbo` |
+| Deepgram | `deepgram` | `nova-3` |
+| AssemblyAI | `assemblyai` | Provider default. |
 
 `stt.language` is sent to each provider. For AssemblyAI, `en` is sent as
-`en_us`. `stt.interim_results` currently affects xAI only.
+`en_us`.
 
 ### Text-To-Speech
 
-| Provider | Config value | Request shape | Default model | Default voice |
-| --- | --- | --- | --- | --- |
-| xAI | `xai` | Sends `text`, `voice_id`, and `language`. | Provider default. | `eve` |
-| OpenAI | `openai` | Sends `model`, `input`, `voice`, and MP3 response format. | `gpt-4o-mini-tts` | `coral` |
-| ElevenLabs | `elevenlabs` | Sends `text`, `model_id`, and `voice_id`. | `eleven_multilingual_v2` | `JBFqnCBsd6RMkjVDRZzb` |
+| Provider | Config value | Default model | Default voice |
+| --- | --- | --- | --- |
+| xAI (default) | `xai` | Provider default. | `eve` |
+| OpenAI | `openai` | `gpt-4o-mini-tts` | `coral` |
+| ElevenLabs | `elevenlabs` | `eleven_multilingual_v2` | `JBFqnCBsd6RMkjVDRZzb` |
 
 If you switch from xAI to OpenAI or ElevenLabs and leave `voice_id = "eve"`,
 the code uses that provider's default voice instead. Set `voice_id` explicitly
@@ -510,9 +512,12 @@ and other non-ASCII characters are skipped with warnings in the journal.
 
 ### Stop Takes A While
 
-xAI is the only streaming STT path. OpenAI, Groq, Deepgram, and AssemblyAI
-buffer audio locally and submit it after you stop recording. AssemblyAI also
-uploads and polls for completion, so it can take noticeably longer.
+Stop-to-text latency depends on the selected provider and your connection.
+Check the journal for provider errors if it seems stuck:
+
+```bash
+journalctl --user -u voice-keyboard-daemon -n 100 --no-pager
+```
 
 ### `voice-keyboard tts` Says No Selected Text
 
@@ -602,8 +607,8 @@ injection.
 
 - Provider APIs receive the audio you dictate for STT.
 - Provider APIs receive selected text when you run TTS.
-- The REST STT clients buffer recorded audio in memory and submit a WAV after
-  recording stops. xAI STT streams audio over a WebSocket while recording.
+- Recorded audio is held in memory while it is being transcribed; it is not
+  written to disk.
 - TTS audio is written to a temporary MP3 file for playback, then deleted.
 - API keys live in `~/.config/voice-keyboard/config.toml`; keep it mode `600`.
 - The daemon socket is created with mode `600` under your config directory by
@@ -625,8 +630,7 @@ injection.
 - The near-field overlay is GNOME Shell 50 Wayland specific.
 - Other desktops use notification fallback unless they implement the same D-Bus
   overlay interface.
-- REST STT providers finalize only after recording stops, so they feel less
-  live than xAI streaming STT.
+- Stop-to-text latency depends on the selected provider.
 - IPC commands are handled one at a time. A long TTS request or slow provider
   finalization can delay another simultaneous command.
 
