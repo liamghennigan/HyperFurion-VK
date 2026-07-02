@@ -1,0 +1,32 @@
+name: Create release on tag
+
+# Push a tag like v1.1.0 and this cuts the GitHub Release, stamps the
+# bootstrap installer so its pinned default matches the tag, and attaches
+# it as the `install-hyperfurion-vk.sh` asset that
+# /releases/latest/download/... serves.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin the bootstrap installer to this tag
+        run: |
+          sed -i "s|^VERSION=.*|VERSION=\"\${HYPERFURION_VK_VERSION:-${GITHUB_REF_NAME}}\"|" \
+            packaging/install-hyperfurion-vk.sh
+          grep '^VERSION=' packaging/install-hyperfurion-vk.sh
+      - name: Create the release with the installer asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            packaging/install-hyperfurion-vk.sh \
+            --title "HyperFurion VK $GITHUB_REF_NAME" \
+            --generate-notes

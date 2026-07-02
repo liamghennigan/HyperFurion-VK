@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import socket
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -21,10 +22,38 @@ def _config_dir() -> Path:
 
 
 def _default_socket_path() -> str:
+    if sys.platform == "win32":
+        # Windows Python has no AF_UNIX; loopback TCP is the IPC transport.
+        return "tcp:127.0.0.1:48765"
     return str(_config_dir() / "socket")
 
 
 DEFAULT_SOCKET_PATH = _default_socket_path()
+
+
+def parse_endpoint(socket_path: str) -> tuple[str, object]:
+    """Resolve a socket_path into ("unix", path) or ("inet", (host, port)).
+
+    Unix sockets are the default. `tcp:HOST:PORT` selects loopback TCP —
+    the only option on Windows, where Python has no AF_UNIX.
+    """
+    if socket_path.startswith("tcp:"):
+        rest = socket_path[len("tcp:"):]
+        host, _, port = rest.rpartition(":")
+        return "inet", (host or "127.0.0.1", int(port))
+    return "unix", socket_path
+
+
+def _connect_socket(socket_path: str, timeout: float | None = None) -> socket.socket:
+    kind, target = parse_endpoint(socket_path)
+    if kind == "inet":
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    else:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    if timeout is not None:
+        sock.settimeout(timeout)
+    sock.connect(target)
+    return sock
 
 
 def recv_all(conn: socket.socket) -> bytes:
@@ -44,6 +73,16 @@ class IPCServer:
         self._sock: Optional[socket.socket] = None
 
     def start(self) -> None:
+        kind, target = parse_endpoint(self._socket_path)
+        if kind == "inet":
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._sock.bind(target)
+            self._sock.listen(5)
+            self._sock.setblocking(True)
+            logger.info("IPC server listening on %s", self._socket_path)
+            return
+
         socket_path = Path(self._socket_path)
         if socket_path.exists():
             try:
@@ -78,6 +117,9 @@ class IPCServer:
         if self._sock is not None:
             self._sock.close()
             self._sock = None
+        if parse_endpoint(self._socket_path)[0] == "inet":
+            logger.info("IPC server stopped")
+            return
         socket_path = Path(self._socket_path)
         if socket_path.exists():
             try:
@@ -105,10 +147,10 @@ class IPCClient:
         msg = {"command": command}
         if payload is not None:
             msg["payload"] = payload
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock = _connect_socket(
+            self._socket_path, timeout if timeout is not None else self._timeout
+        )
         try:
-            sock.settimeout(timeout if timeout is not None else self._timeout)
-            sock.connect(self._socket_path)
             sock.sendall(json.dumps(msg).encode("utf-8"))
             sock.shutdown(socket.SHUT_WR)
             response_data = recv_all(sock)

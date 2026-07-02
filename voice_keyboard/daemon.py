@@ -8,8 +8,8 @@ from typing import Optional
 
 from voice_keyboard.audio_capture import AudioCapture
 from voice_keyboard.config import load_config, validate_config
-from voice_keyboard.hotkey import HotkeyListener
-from voice_keyboard.injector import TextInjector
+from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener
+from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
 from voice_keyboard.stt import create_stt_client
 from voice_keyboard.tts import TTSClient, create_tts_client
@@ -147,7 +147,7 @@ class Daemon:
         validate_config(self._config)
         self._socket_path = self._config["daemon"]["socket_path"]
         self._ipc_server = ipc_server if ipc_server is not None else IPCServer(self._socket_path)
-        self._injector = injector if injector is not None else TextInjector()
+        self._injector = injector if injector is not None else create_injector()
         self._tts_client = tts_client if tts_client is not None else create_tts_client(self._config)
         self._audio_capture: Optional[AudioCapture] = None
         self._stt_client = None
@@ -179,7 +179,12 @@ class Daemon:
             stop_event.set()
 
         for sig in (signal.SIGINT, signal.SIGTERM):
-            self._loop.add_signal_handler(sig, _signal_handler)
+            try:
+                self._loop.add_signal_handler(sig, _signal_handler)
+            except NotImplementedError:
+                # Windows event loops can't add signal handlers; Ctrl+C still
+                # raises KeyboardInterrupt in the main thread.
+                signal.signal(sig, lambda *_: _signal_handler())
 
         await stop_event.wait()
         await self._shutdown()
@@ -196,7 +201,7 @@ class Daemon:
 
     def _start_hotkey_listener(self) -> None:
         try:
-            self._hotkey_listener = HotkeyListener(
+            self._hotkey_listener = create_hotkey_listener(
                 self._config.get("hotkey", {}),
                 on_toggle=lambda: self._schedule_hotkey_action("toggle"),
                 on_hold_start=lambda: self._schedule_hotkey_action("start"),

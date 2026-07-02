@@ -1,5 +1,6 @@
 import copy
 import os
+import sys
 from pathlib import Path
 
 import tomllib
@@ -100,9 +101,16 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _default_socket_path() -> str:
+    if sys.platform == "win32":
+        # Windows Python has no AF_UNIX; loopback TCP is the IPC transport.
+        return "tcp:127.0.0.1:48765"
+    return str(_config_dir() / "socket")
+
+
 def _default_config_with_paths() -> dict:
     config = copy.deepcopy(DEFAULT_CONFIG)
-    config["daemon"]["socket_path"] = str(_config_dir() / "socket")
+    config["daemon"]["socket_path"] = _default_socket_path()
     return config
 
 
@@ -122,7 +130,7 @@ def load_config() -> dict:
 
     # If the user left socket_path empty (or set an empty string), fall back.
     if not config.get("daemon", {}).get("socket_path"):
-        config.setdefault("daemon", {})["socket_path"] = str(_config_dir() / "socket")
+        config.setdefault("daemon", {})["socket_path"] = _default_socket_path()
     return config
 
 

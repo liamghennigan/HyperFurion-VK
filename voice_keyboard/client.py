@@ -180,6 +180,19 @@ def _notify(
     urgency: str = "normal",
     timeout_ms: int = 4000,
 ) -> None:
+    if sys.platform == "darwin":
+        script = (
+            f"display notification {json.dumps(body or summary)}"
+            f" with title {json.dumps(summary)}"
+        )
+        try:
+            subprocess.run(["osascript", "-e", script], timeout=3, check=False)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        return
+    if sys.platform == "win32":
+        _notify_windows_toast(summary, body)
+        return
     command = [
         "notify-send",
         "-a",
@@ -273,6 +286,42 @@ def _stop_overlay() -> None:
     _call_shell_overlay("Hide", timeout=0.4)
 
 
+def _notify_windows_toast(summary: str, body: str) -> None:
+    """Notification-center toast via WinRT from PowerShell — no extra deps.
+
+    The script is passed -EncodedCommand (UTF-16LE base64) so message text
+    never meets shell quoting.
+    """
+    import base64
+
+    def ps_quote(text: str) -> str:
+        return "'" + text.replace("'", "''") + "'"
+
+    script = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications,"
+        " ContentType=WindowsRuntime] > $null;"
+        "$t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent("
+        "[Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+        "$x=$t.GetElementsByTagName('text');"
+        f"$x.Item(0).AppendChild($t.CreateTextNode({ps_quote(summary)})) > $null;"
+        f"$x.Item(1).AppendChild($t.CreateTextNode({ps_quote(body)})) > $null;"
+        "$n=[Windows.UI.Notifications.ToastNotification]::new($t);"
+        "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("
+        "'HyperFurion VK').Show($n);"
+    )
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode()
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-EncodedCommand", encoded],
+            timeout=5,
+            check=False,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+
 def _show_overlay(
     state: str,
     *,
@@ -285,6 +334,24 @@ def _show_overlay(
 
 
 def _get_clipboard_text() -> str:
+    # No primary selection exists off Linux; the clipboard is the selection.
+    if sys.platform == "darwin":
+        try:
+            result = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=2)
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return ""
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return ""
     try:
         result = subprocess.run(
             ["wl-paste", "--primary"],

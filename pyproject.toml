@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voice-keyboard"
-version = "1.0.1"
+version = "1.1.0"
 description = "Universal Linux voice keyboard with selectable speech providers"
 requires-python = ">=3.11"
 authors = [{name = "Liam Hennigan"}]
 license = {file = "LICENSE"}
 dependencies = [
-    "evdev>=1.6",
+    "evdev>=1.6; sys_platform == 'linux'",
+    "pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'",
     "pyaudio>=0.2",
     "requests>=2.28",
     "websockets>=12.0",
