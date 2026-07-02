@@ -2,9 +2,10 @@
 
 **Website:** <https://liamghennigan.github.io/HyperFurion-VK/>
 
-A Linux-first open-source voice keyboard with xAI STT/TTS as the default
-provider, selectable cloud or local speech providers, global hotkeys, desktop
-status feedback, and uinput keyboard injection.
+A Linux-first open-source voice keyboard — with beta macOS and Windows
+support — using xAI STT/TTS as the default provider, selectable cloud or
+local speech providers, global hotkeys, desktop status feedback, and native
+keystroke injection (uinput, Quartz, SendInput).
 
 HyperFurion VK runs a local daemon. When you record speech, the daemon captures
 microphone audio, sends it to the configured speech-to-text provider, and types
@@ -26,6 +27,8 @@ returned audio locally.
 - **Config file:** `~/.config/voice-keyboard/config.toml`.
 - **Logs:** `journalctl --user -u voice-keyboard-daemon -f`.
 - **Core desktop support:** Linux desktop sessions with uinput access.
+- **macOS (beta):** Quartz keystroke injection + event-tap hotkeys —
+  `./packaging/macos/install-macos.sh` from a checkout. See [macOS](#macos-beta).
 - **Best overlay support:** GNOME Shell 50 on Wayland. Other desktops fall back
   to ordinary desktop notifications.
 - **Cloud by default, offline if you want:** speech recognition and synthesis
@@ -136,6 +139,56 @@ Supported installer environment variables:
 
 When env vars are missing, `install.sh` prompts through `/dev/tty`, so prompts
 still work when it is launched by the release installer.
+
+## macOS (Beta)
+
+The daemon runs on macOS with native backends: keystroke injection uses
+Quartz CGEvents (full Unicode — accents, CJK, emoji, which the Linux uinput
+backend cannot do), the global hotkey uses a listen-only keyboard event tap,
+and the daemon runs as a launchd agent. From a checkout:
+
+```bash
+git clone https://github.com/liamghennigan/HyperFurion-VK
+cd HyperFurion-VK
+./packaging/macos/install-macos.sh
+```
+
+macOS will require two permissions for your Python binary under
+System Settings → Privacy & Security: **Accessibility** (hotkeys and
+typing) and **Microphone**. There is no GNOME-style overlay; status
+arrives as notification-center toasts.
+
+Beta means beta: the platform layer is unit-tested, but it has not had the
+months of daily driving the Linux build has. Issues welcome.
+
+## Windows (Beta)
+
+Also native, also pure standard library: injection uses `SendInput` with
+Unicode events (again, better than the Linux ASCII limit), the hotkey uses a
+low-level keyboard hook (so hold-to-talk works, and the daemon's own typing
+can never re-trigger it), IPC runs on loopback TCP (`127.0.0.1:48765` —
+Windows Python has no Unix sockets), and status arrives as toasts. From a
+checkout, in PowerShell:
+
+```powershell
+git clone https://github.com/liamghennigan/HyperFurion-VK
+cd HyperFurion-VK
+powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1
+```
+
+That installs to your user site, writes a starter config, and adds a
+Startup-folder launcher (no admin required). Same beta caveat as macOS.
+
+## iOS — Why Not (Yet)
+
+Honestly: a system-wide voice keyboard **cannot exist on iOS**. Apps are
+sandboxed away from other apps' input; there is no uinput, no SendInput, no
+event taps. The only sanctioned path is a **custom keyboard extension** — a
+separate Swift app distributed through the App Store, which is a different
+product with a different codebase, not a port of this daemon. It's a
+plausible future project (the relay and hosted tier would slot right in as
+its backend); it is not a checkbox. Nothing on this page will claim iOS
+support until that app exists.
 
 ## First Run Checklist
 
@@ -679,11 +732,14 @@ injection.
 
 ## Limitations
 
-- Linux only.
+- Linux is the primary, battle-tested platform; macOS and Windows support is
+  beta. iOS is not possible as a system-wide keyboard (see iOS — Why Not).
 - No speech model ships in the box: bring a provider key, the subscription, or
   a local OpenAI-compatible server (see Fully Offline above).
-- uinput injection is currently printable ASCII, newline, and tab only.
-- The built-in global hotkey requires readable Linux input devices.
+- uinput injection on Linux is printable ASCII, newline, and tab only (the
+  macOS and Windows backends type full Unicode).
+- The built-in global hotkey requires readable Linux input devices (Linux),
+  Accessibility permission (macOS), or a keyboard hook (Windows).
 - The near-field overlay is GNOME Shell 50 Wayland specific.
 - Other desktops use notification fallback unless they implement the same D-Bus
   overlay interface.

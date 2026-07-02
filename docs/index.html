@@ -21,7 +21,7 @@
   "name": "HyperFurion VK",
   "operatingSystem": "Linux",
   "applicationCategory": "UtilitiesApplication",
-  "softwareVersion": "1.0.1",
+  "softwareVersion": "1.1.0",
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://liamghennigan.github.io/HyperFurion-VK/",
   "description": "A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app through a uinput virtual keyboard. Select text and hear it read aloud."
@@ -164,7 +164,7 @@ section.demo { margin-top: 28px; }
 h1 {
   font-family: var(--serif);
   font-weight: 600;
-  font-size: clamp(56px, 11vw, 128px);
+  font-size: clamp(38px, 11vw, 128px);
   line-height: 1.02;
   letter-spacing: -.02em;
   margin: 10px 0 18px;
@@ -297,12 +297,36 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 .term-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 8px 14px;
   border-bottom: 1px solid #1c1c23;
   font: 12px var(--mono);
   color: #8a8a95;
+}
+.term-title { flex: 1; min-width: 120px; }
+.stopbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 11px var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #ffd7d9;
+  background: rgba(229,72,77,.16);
+  border: 1px solid rgba(229,72,77,.6);
+  border-radius: 999px;
+  padding: 7px 16px;
+  min-height: 32px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.stopbtn::before { content: ""; width: 9px; height: 9px; border-radius: 2px; background: #e5484d; }
+.stopbtn:hover { background: rgba(229,72,77,.32); }
+/* touch: bigger inputs so iOS doesn't zoom the whole page on focus */
+@media (pointer: coarse) {
+  .cli, .config { font-size: 16px; }
+  .stopbtn { padding: 9px 18px; min-height: 40px; }
 }
 .pill {
   display: inline-flex;
@@ -622,8 +646,9 @@ chmod +x install-hyperfurion-vk.sh
         <span class="scope-label" id="scope-label">signal</span>
       </div>
       <div class="term-bar">
-        <span>the focused app — bash</span>
+        <span class="term-title">the focused app — bash</span>
         <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
+        <button class="stopbtn" id="stopbtn" hidden>stop</button>
       </div>
       <div class="term-body" id="tbody" aria-live="polite"></div>
     </div>
@@ -906,7 +931,11 @@ pitch = 1.0</pre>
   <section class="prose" id="limits">
     <h2><span class="num" aria-hidden="true">06</span>Honest limitations</h2>
     <ul>
-      <li>Linux only. Python 3.11+, systemd user services, uinput access.</li>
+      <li>Linux first — Python 3.11+, systemd user services, uinput access.
+      macOS and Windows are <b>beta</b> (native Quartz/SendInput backends; see the
+      <a href="https://github.com/liamghennigan/HyperFurion-VK#macos-beta">README</a>).
+      iOS can&rsquo;t host a system-wide keyboard, and this page won&rsquo;t pretend
+      otherwise.</li>
       <li>Cloud by default; no speech model ships in the box. Fully offline is
       one config line — point <code>providers.openai.base_url</code> at a local
       OpenAI-compatible server (see Providers above).</li>
@@ -984,11 +1013,13 @@ chmod +x install-hyperfurion-vk.sh
 
   const $ = (id) => document.getElementById(id);
   const term = $("term"), tbody = $("tbody"), pill = $("pill"), mic = $("mic"), hint = $("hint");
+  const stopBtn = $("stopbtn");
   const cfgEl = $("config"), cfgStatus = $("cfgstatus");
   const scope = $("scope"), scopeLabel = $("scope-label");
   const heroCanvas = $("hero-canvas"), heroCap = $("hero-cap");
   const favicon = $("favicon");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const coarse = matchMedia("(pointer: coarse)").matches;  // touch-first device
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const synth = window.speechSynthesis;
   const baseTitle = document.title;
@@ -1550,7 +1581,7 @@ chmod +x install-hyperfurion-vk.sh
           }
           break;
         }
-        case "version": print("voice-keyboard 1.0.1", "dim"); break;
+        case "version": print("voice-keyboard 1.1.0", "dim"); break;
         case "sponsor": case "donate":
           print("free, MIT — if it earns its keystrokes:", "dim");
           print("https://github.com/sponsors/liamghennigan", "dim");
@@ -1643,6 +1674,7 @@ chmod +x install-hyperfurion-vk.sh
     function setRecording(on) {
       D.recording = on;
       pill.hidden = !on;
+      stopBtn.hidden = !on;
       mic.classList.toggle("live", on);
       mic.setAttribute("aria-pressed", String(on));
       document.title = on ? "● recording — " + baseTitle : baseTitle;
@@ -1866,6 +1898,9 @@ chmod +x install-hyperfurion-vk.sh
     pill.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); stop(); }
     });
+    // and an unmissable stop button lives in the terminal bar
+    stopBtn.setAttribute("aria-label", "stop recording");
+    stopBtn.addEventListener("click", () => stop());
     return D;
   })();
   let dictations = 0;
@@ -2115,14 +2150,17 @@ chmod +x install-hyperfurion-vk.sh
       hint.replaceChildren();
       const add = (html) => hint.insertAdjacentHTML("beforeend", html);
       if (dictations === 0) {
-        add("this terminal is the focused app — tap the mic up top or press " +
+        if (coarse) add("this terminal is the focused app — tap the mic up top, <b>speak</b>, " +
+            "then hit the red <b>stop</b> button on the terminal");
+        else add("this terminal is the focused app — tap the mic up top or press " +
             kbd(Config.cfg.keyLabel) + ", <b>speak</b>, then tap or press again to stop");
         if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
                     "browser's speech engine, the way the daemon sends audio to its provider");
         else add(" · no speech engine in this browser, so it will improvise");
       } else if (dictations === 1) {
         add("the strip above the terminal froze your sentence's <i>waveform</i> — drawn from the " +
-            "signal, then let go. now <b>hold</b> the hotkey and release to stop; <code>hold_threshold_ms = " +
+            "signal, then let go");
+        if (!coarse) add(". now <b>hold</b> the hotkey and release to stop; <code>hold_threshold_ms = " +
             Config.cfg.holdMs + "</code> below is real, like everything else in that config");
         if (!Demo.want) add(" · or type <code>real</code> — the mic switches to the actual " +
             "xai engine this product ships with (hosted demo)");
@@ -2138,8 +2176,10 @@ chmod +x install-hyperfurion-vk.sh
       }
     }
     function listening() {
-      hint.innerHTML = '<span class="engine-live">listening</span> — speak, then press ' +
-        kbd(Config.cfg.keyLabel) + ", click the red <b>recording</b> pill, or hit <kbd>Esc</kbd> to stop";
+      hint.innerHTML = coarse
+        ? '<span class="engine-live">listening</span> — speak, then hit the red <b>stop</b> button'
+        : '<span class="engine-live">listening</span> — speak, then press ' +
+          kbd(Config.cfg.keyLabel) + ", hit the <b>stop</b> button, or press <kbd>Esc</kbd>";
     }
     bus.on("cfg:change", set);
     bus.on("rec:start", listening);

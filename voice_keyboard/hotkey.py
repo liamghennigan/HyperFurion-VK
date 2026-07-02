@@ -1,29 +1,74 @@
 import logging
 import select
+import sys
 import threading
 from collections.abc import Callable
 from typing import Optional
 
-from evdev import InputDevice, ecodes as e, list_devices
+try:
+    from evdev import InputDevice, ecodes as e, list_devices
+except ImportError:  # non-Linux: create_hotkey_listener() picks the mac backend
+    InputDevice = None
+    e = None
+    list_devices = None
 
 logger = logging.getLogger(__name__)
 
-MODIFIER_ALIASES = {
-    "control": {e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL},
-    "ctrl": {e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL},
-    "shift": {e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT},
-    "alt": {e.KEY_LEFTALT, e.KEY_RIGHTALT},
-    "super": {e.KEY_LEFTMETA, e.KEY_RIGHTMETA},
-    "meta": {e.KEY_LEFTMETA, e.KEY_RIGHTMETA},
-}
+if e is not None:
+    MODIFIER_ALIASES = {
+        "control": {e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL},
+        "ctrl": {e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL},
+        "shift": {e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT},
+        "alt": {e.KEY_LEFTALT, e.KEY_RIGHTALT},
+        "super": {e.KEY_LEFTMETA, e.KEY_RIGHTMETA},
+        "meta": {e.KEY_LEFTMETA, e.KEY_RIGHTMETA},
+    }
 
-KEY_ALIASES = {
-    "space": e.KEY_SPACE,
-    "spacebar": e.KEY_SPACE,
-    "enter": e.KEY_ENTER,
-    "return": e.KEY_ENTER,
-    "tab": e.KEY_TAB,
-}
+    KEY_ALIASES = {
+        "space": e.KEY_SPACE,
+        "spacebar": e.KEY_SPACE,
+        "enter": e.KEY_ENTER,
+        "return": e.KEY_ENTER,
+        "tab": e.KEY_TAB,
+    }
+else:
+    MODIFIER_ALIASES = {}
+    KEY_ALIASES = {}
+
+
+def create_hotkey_listener(
+    config: dict,
+    *,
+    on_toggle: Callable[[], None],
+    on_hold_start: Callable[[], None],
+    on_hold_stop: Callable[[], None],
+):
+    """Platform factory: evdev on Linux, a Quartz event tap on macOS, a
+    low-level keyboard hook on Windows."""
+    if sys.platform == "darwin":
+        from voice_keyboard.macos.hotkey import MacHotkeyListener
+
+        return MacHotkeyListener(
+            config,
+            on_toggle=on_toggle,
+            on_hold_start=on_hold_start,
+            on_hold_stop=on_hold_stop,
+        )
+    if sys.platform == "win32":
+        from voice_keyboard.windows.hotkey import WinHotkeyListener
+
+        return WinHotkeyListener(
+            config,
+            on_toggle=on_toggle,
+            on_hold_start=on_hold_start,
+            on_hold_stop=on_hold_stop,
+        )
+    return HotkeyListener(
+        config,
+        on_toggle=on_toggle,
+        on_hold_start=on_hold_start,
+        on_hold_stop=on_hold_stop,
+    )
 
 IGNORED_DEVICE_NAMES = {"voice-keyboard"}
 

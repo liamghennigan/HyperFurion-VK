@@ -1,8 +1,13 @@
 import logging
+import sys
 import time
 from typing import Optional
 
-from evdev import UInput, ecodes as e
+try:
+    from evdev import UInput, ecodes as e
+except ImportError:  # non-Linux: create_injector() picks the mac backend
+    UInput = None
+    e = None
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +19,7 @@ SHIFT_MAP = {
     "~": "`",
 }
 
-CHAR_TO_KEY = {
+CHAR_TO_KEY = {} if e is None else {
     "a": e.KEY_A, "b": e.KEY_B, "c": e.KEY_C, "d": e.KEY_D,
     "e": e.KEY_E, "f": e.KEY_F, "g": e.KEY_G, "h": e.KEY_H,
     "i": e.KEY_I, "j": e.KEY_J, "k": e.KEY_K, "l": e.KEY_L,
@@ -34,11 +39,29 @@ CHAR_TO_KEY = {
 }
 
 
+def create_injector():
+    """Platform factory: uinput on Linux, Quartz on macOS, SendInput on Windows."""
+    if sys.platform == "darwin":
+        from voice_keyboard.macos.injector import MacTextInjector
+
+        return MacTextInjector()
+    if sys.platform == "win32":
+        from voice_keyboard.windows.injector import WinTextInjector
+
+        return WinTextInjector()
+    return TextInjector()
+
+
 class TextInjector:
     def __init__(self):
-        self._ui: Optional[UInput] = None
+        self._ui: Optional["UInput"] = None
 
     def start(self) -> None:
+        if UInput is None:
+            raise RuntimeError(
+                "uinput injection is Linux-only; use create_injector() to get"
+                " the platform backend"
+            )
         caps = {
             e.EV_KEY: [
                 e.KEY_A, e.KEY_B, e.KEY_C, e.KEY_D, e.KEY_E,
