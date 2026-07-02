@@ -181,9 +181,13 @@ def _notify(
     timeout_ms: int = 4000,
 ) -> None:
     if sys.platform == "darwin":
+        # ensure_ascii=False keeps non-ASCII text literal (json.dumps still
+        # escapes the quotes/backslashes AppleScript needs); with the default
+        # ensure_ascii=True, 'café' becomes "café" and osascript prints
+        # the literal escape.
         script = (
-            f"display notification {json.dumps(body or summary)}"
-            f" with title {json.dumps(summary)}"
+            f"display notification {json.dumps(body or summary, ensure_ascii=False)}"
+            f" with title {json.dumps(summary, ensure_ascii=False)}"
         )
         try:
             subprocess.run(["osascript", "-e", script], timeout=3, check=False)

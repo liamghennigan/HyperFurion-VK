@@ -1782,6 +1782,9 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
     async function startRelay(sigP) {
       try {
         await sigP;
+        // The user may have hit stop while the mic permission prompt was up:
+        // release the now-arrived stream and never open the socket.
+        if (!D.recording) { Signal.stop(); return; }
         const au = Signal.audio();
         if (!au.stream || !au.ctx) throw new Error("microphone not granted");
         const rate = Math.round(au.ctx.sampleRate);
@@ -1863,8 +1866,9 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
       Hints.advance();
     }
     function relayFail(msg) {
-      if (!relay) return;
-      relayCleanup();
+      // NB: relay may be null here — a failure before the socket/nodes were
+      // assigned (mic denied, WebSocket ctor threw). Clean up only if built.
+      if (relay) relayCleanup();
       clearTimeout(relayT);
       Terminal.print("hosted demo: " + msg, "err");
       if (D.recording) {
@@ -1895,9 +1899,19 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
       dictations++;
       bus.emit("rec:stop", {});
       if (engine === "relay") {
-        // the socket outlives the mic: flush audio.done, then settle on
-        // transcript.done (or the timeout)
-        if (relay) relayFinish();
+        if (relay) {
+          // the socket outlives the mic: flush audio.done, then settle on
+          // transcript.done (or the timeout)
+          relayFinish();
+        } else {
+          // startRelay never opened a socket (mic still pending, or it
+          // failed before assigning relay) — settle the line here so the
+          // terminal never hangs
+          const settled = Terminal.commitCurrent();
+          if (settled) { done(settled); }
+          else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+          Hints.advance();
+        }
         return;
       }
       // give a final result a beat to arrive, then settle the line
