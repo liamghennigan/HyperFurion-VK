@@ -37,7 +37,7 @@ class TestConfigLoading:
         assert cfg["audio"]["chunk_ms"] == 50
         assert cfg["stt"]["language"] == "es"
         assert cfg["stt"]["interim_results"] is False
-        assert cfg["hotkey"]["key"] == "control+space"
+        assert cfg["hotkey"]["key"] == "control+alt+v"
         assert cfg["hotkey"]["mode"] == "auto"
         assert cfg["daemon"]["socket_path"] == str(cfg_dir / "socket")
 

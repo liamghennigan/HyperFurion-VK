@@ -15,9 +15,9 @@ returned audio locally.
 
 ## Fast Answer
 
-- **Start or stop dictation:** press `Ctrl+Space`, or run `voice-keyboard`
+- **Start or stop dictation:** press `Ctrl+Alt+V`, or run `voice-keyboard`
   / `voice-keyboard toggle`.
-- **Hold-to-talk:** hold `Ctrl+Space`; release it to stop.
+- **Hold-to-talk:** hold `Ctrl+Alt+V`; release it to stop.
 - **Read selected text aloud:** select text in any app, then run
   `voice-keyboard tts`. You can bind this to `Ctrl+Alt+T` in your desktop.
 - **Check whether the daemon is recording:** `voice-keyboard status`.
@@ -180,9 +180,9 @@ still work when it is launched by the release installer.
 
 The daemon listens for the configured hotkey. By default:
 
-- Tap `Ctrl+Space` once to start recording.
-- Tap `Ctrl+Space` again to stop recording, transcribe, and type the result.
-- Hold `Ctrl+Space` for hold-to-talk. Recording starts after the hold threshold
+- Tap `Ctrl+Alt+V` once to start recording.
+- Tap `Ctrl+Alt+V` again to stop recording, transcribe, and type the result.
+- Hold `Ctrl+Alt+V` for hold-to-talk. Recording starts after the hold threshold
   and stops when you release the keys.
 
 Equivalent CLI commands:
@@ -296,7 +296,7 @@ device_name = "default"
 
 [hotkey]
 enabled = true
-key = "control+space"
+key = "control+alt+v"
 # auto = tap to toggle, or hold to record until release
 # Other choices: toggle, hold, disabled
 mode = "auto"
@@ -357,7 +357,7 @@ Config:
 ```toml
 [hotkey]
 enabled = true
-key = "control+space"
+key = "control+alt+v"
 mode = "auto"
 hold_threshold_ms = 280
 ```
@@ -475,7 +475,7 @@ This is expected when the installer cannot safely start the daemon yet.
 - If `input` group access is not effective, log out and back in.
 - Then run `systemctl --user start voice-keyboard-daemon`.
 
-### `Ctrl+Space` Does Nothing
+### `Ctrl+Alt+V` Does Nothing
 
 Check the daemon and logs first:
 
@@ -488,7 +488,7 @@ If logs say no readable keyboard devices were found, your current session
 probably lacks access to `/dev/input/event*`. Log out and back in after the
 installer adds your user to the `input` group.
 
-Also check whether your desktop or focused app already captures `Ctrl+Space`.
+Also check whether your desktop or focused app already captures `Ctrl+Alt+V`.
 You can change the hotkey in config or use manual commands:
 
 ```bash

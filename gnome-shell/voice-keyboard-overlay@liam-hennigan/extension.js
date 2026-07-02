@@ -32,7 +32,7 @@ const STATE_STYLES = {
     },
     listening: {
         label: 'LISTENING',
-        detail: 'Press Ctrl+Space again to stop',
+        detail: 'Press Ctrl+Alt+V again to stop',
         bg: '#7f1d1d',
         accent: '#f87171',
     },

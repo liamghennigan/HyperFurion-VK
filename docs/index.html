@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HyperFurion VK</title>
-<meta name="description" content="A Linux voice keyboard. Press Ctrl+Space, speak, and it types into the focused app. This page is a working instance: it listens, types, reads aloud, and its config file is live.">
+<meta name="description" content="A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app. This page is a working instance: it listens, types, reads aloud, and its config file is live.">
 <meta property="og:title" content="HyperFurion VK">
-<meta property="og:description" content="A Linux voice keyboard. Press Ctrl+Space, speak, and it types into the focused app. Try it on this page — it actually listens.">
+<meta property="og:description" content="A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app. Try it on this page — it actually listens.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/">
 <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/">
@@ -208,7 +208,7 @@
   <div class="hero">
     <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">🎙️</button>
     <h1>HyperFurion VK</h1>
-    <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Space</code>, speak,
+    <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Alt+V</code>, speak,
     and it types into whatever app has focus.</p>
 
     <div class="term" id="term" hidden>
@@ -242,7 +242,7 @@ chmod +x install-hyperfurion-vk.sh
 
   <h2>Usage</h2>
   <pre><code># tap to toggle dictation, or hold to talk
-Ctrl+Space
+Ctrl+Alt+V
 
 # equivalent CLI
 voice-keyboard toggle
@@ -258,9 +258,6 @@ voice-keyboard tts</code></pre>
   threshold — then try it.</span></p>
   <div class="config-wrap">
 <pre class="config" id="config" spellcheck="false">[hotkey]
-# the daemon defaults to control+space; browsers
-# already use space for scrolling, so this page
-# binds control+alt+v instead
 key = "control+alt+v"
 # auto = tap to toggle, hold to talk
 # other choices: toggle, hold
@@ -324,9 +321,6 @@ pitch = 1.0</pre>
   if (synth) $("tts-note").hidden = false;
 
   // ---- live config ----
-  // page default is control+alt+v, not the daemon's control+space:
-  // browsers treat space as page-scroll, and if space lands before ctrl
-  // the scroll fires before the hotkey can preventDefault it
   const cfg = { mods: { ctrl: true, alt: true, shift: false, meta: false }, code: "KeyV",
                 keyLabel: "control+alt+v", mode: "auto", holdMs: 280, rate: 1, pitch: 1 };
 
@@ -426,8 +420,7 @@ pitch = 1.0</pre>
     const add = (html) => hint.insertAdjacentHTML("beforeend", html);
     if (dictations === 0) {
       add("this page has focus — press <kbd>" + cfg.keyLabel.replaceAll("+", "</kbd>+<kbd>") +
-          "</kbd> or tap the mic and <b>speak</b> <span class=\"muted\">(the daemon defaults to " +
-          "Ctrl+Space; browsers use Space to scroll, so this page binds differently)</span>");
+          "</kbd> or tap the mic and <b>speak</b>");
       if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
                   "browser's speech engine, the way the daemon streams to its provider");
       else add(" · no speech engine in this browser, so it will improvise");

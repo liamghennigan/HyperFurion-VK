@@ -98,7 +98,7 @@ class HotkeyListener:
         self._hold_threshold_s = (
             float(config.get("hold_threshold_ms", self.DEFAULT_HOLD_THRESHOLD_MS)) / 1000.0
         )
-        self._spec = HotkeySpec(str(config.get("key", "control+space")))
+        self._spec = HotkeySpec(str(config.get("key", "control+alt+v")))
         self._on_toggle = on_toggle
         self._on_hold_start = on_hold_start
         self._on_hold_stop = on_hold_stop
