@@ -1,9 +1,35 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   PHOSPHOR & PAPER
-   dark  = a CRT oscilloscope at night: near-black, phosphor cyan, afterglow
+   PHOSPHOR & PAPER → VOICE MADE VISIBLE
+   dark  = a CRT oscilloscope at night: near-black, phosphor afterglow —
+           the single cyan now opens into a spectral ramp (bass = indigo,
+           sibilants = hot white) that the particle field paints with
    light = a mid-century chart recorder: warm paper, ink strokes, graph grid
    One signal feeds many gauges. Honesty labels are part of the UI.
    ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── type: self-hosted, subsetted, OFL — nothing fetched from anyone ──── */
+@font-face {
+  font-family: "Fraunces";
+  src: url("./fonts/fraunces-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  /* metric-matched stand-in so the h1 doesn't shift when Fraunces arrives */
+  font-family: "Fraunces-fallback";
+  src: local("Georgia"), local("Times New Roman");
+  size-adjust: 106%;
+  ascent-override: 98%;
+  descent-override: 25.5%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-var.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
 :root {
   --bg: #faf9f6;
   --text: #1a1a1f;
@@ -18,8 +44,16 @@
   --glow: rgba(8, 145, 178, .16);
   --grid: rgba(26, 26, 31, .055);
   --grid-major: rgba(26, 26, 31, .09);
-  --serif: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --serif: "Fraunces", "Fraunces-fallback", ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* the spectral ramp: what the field paints frequency with (bass → sibilance).
+     light scheme = the same ramp collapsed toward ink on paper */
+  --spec-1: #3730a3;
+  --spec-2: #6d28d9;
+  --spec-3: #0891b2;
+  --spec-4: #059669;
+  --spec-5: #05323f;
+  --field-alpha: .30;   /* ink stipple: present, never shouting */
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -35,6 +69,12 @@
     --glow: rgba(34, 211, 238, .22);
     --grid: rgba(34, 211, 238, .045);
     --grid-major: rgba(34, 211, 238, .08);
+    --spec-1: #312e81;
+    --spec-2: #7c3aed;
+    --spec-3: #22d3ee;
+    --spec-4: #86efac;
+    --spec-5: #eafcff;
+    --field-alpha: .85;   /* phosphor: luminous against near-black */
   }
 }
 * { box-sizing: border-box; }
