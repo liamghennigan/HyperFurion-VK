@@ -23,7 +23,7 @@ from urllib.parse import urlencode
 import aiohttp
 from aiohttp import WSMsgType, web
 
-from . import stripe_webhook
+from . import demo, stripe_webhook
 from .db import PERIOD_SECONDS, Store
 from .tiers import TIERS, tier_named
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_UPSTREAM_STT_URL = "wss://api.x.ai/v1/stt"
 DEFAULT_UPSTREAM_TTS_URL = "https://api.x.ai/v1/tts"
+DEFAULT_UPSTREAM_CHAT_URL = "https://api.x.ai/v1/chat/completions"
 
 # Only these reach upstream; everything else a client sends is dropped.
 STT_QUERY_PARAMS = ("sample_rate", "encoding", "interim_results", "language")
@@ -51,7 +52,10 @@ def _config_from_env() -> dict:
         "db_path": os.environ.get("RELAY_DB", "relay.db"),
         "upstream_stt_url": os.environ.get("UPSTREAM_STT_URL", DEFAULT_UPSTREAM_STT_URL),
         "upstream_tts_url": os.environ.get("UPSTREAM_TTS_URL", DEFAULT_UPSTREAM_TTS_URL),
+        "upstream_chat_url": os.environ.get("UPSTREAM_CHAT_URL", DEFAULT_UPSTREAM_CHAT_URL),
         "stripe_webhook_secret": os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
+        "demo_daily_budget_usd": float(os.environ.get("DEMO_DAILY_BUDGET_USD", "1.0")),
+        "demo_chat_model": os.environ.get("DEMO_CHAT_MODEL", "grok-4-fast"),
     }
 
 
@@ -355,6 +359,7 @@ def make_app(overrides: dict | None = None) -> web.Application:
     app.router.add_get("/v1/usage", usage)
     app.router.add_post("/stripe/webhook", stripe_events)
     app.router.add_get("/welcome", welcome)
+    demo.register(app)
     return app
 
 

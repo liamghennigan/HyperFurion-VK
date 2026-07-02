@@ -62,7 +62,7 @@ class TestDaemonSTTThroughRelay:
                     break
             await client.close()
 
-            assert {"type": "transcript.text", "text": "received 32000 bytes"} in events
+            assert {"type": "transcript.done", "text": "received 32000 bytes"} in events
             await wait_until(
                 lambda: rig.store.lookup_key(key)["stt_seconds_used"] > 0
             )
