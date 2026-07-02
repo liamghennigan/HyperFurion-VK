@@ -97,7 +97,9 @@ b { font-weight: 600; }
 /* ── layout: prose column 640, instrument panels 800 ─────────────────── */
 .prose { max-width: 640px; margin: 0 auto; padding: 0 20px; }
 .wide  { max-width: 800px; margin: 0 auto; padding: 0 20px; }
-section { margin: 96px 0; }
+/* class selectors above would zero out an element-level section margin,
+   so the rhythm is stated at equal specificity */
+section.prose, section.wide { margin-top: 96px; margin-bottom: 96px; }
 section.demo { margin-top: 28px; }
 
 /* ── the engraved-label voice: every honesty caption uses this ────────── */
@@ -183,6 +185,11 @@ h1 {
   border-radius: 8px;
   padding: 8px 12px;
   margin: 0 0 18px;
+}
+.hero-live {
+  font: 13px var(--mono);
+  color: var(--wave);
+  margin: -14px auto 28px;
 }
 .scrolldown {
   position: absolute;
@@ -341,6 +348,7 @@ canvas.scope { display: block; width: 100%; height: 64px; }
   outline: none;
   caret-color: #e8e8ec;
 }
+.tcur .cli::placeholder { color: #494954; opacity: 1; }
 .caret {
   display: inline-block;
   width: 7px;
@@ -377,57 +385,7 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 .pl-rain text { font: 11px var(--mono); fill: var(--wave); }
 .pl-cap { margin: 8px 4px 6px; display: block; }
 
-/* ═══ 02 / SESSION LOG — voiceprint gallery ════════════════════════════ */
-.gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
-  margin: 18px 0 10px;
-}
-.vpcard {
-  display: block;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  color: var(--text);
-  background: var(--code-bg);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px 9px;
-  cursor: pointer;
-}
-.vpcard:hover { border-color: var(--wave); }
-.vpcard canvas { display: block; width: 100%; height: 36px; margin-bottom: 6px; }
-.vpcard .vptext {
-  font: 12px var(--mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-bottom: 4px;
-}
-.vpcard .vpmeta { display: flex; gap: 8px; }
-.vpbadge {
-  font: 9.5px var(--mono);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 1px 7px;
-}
-.vpbadge.live { color: var(--wave); border-color: var(--wave); }
-.vpclear {
-  font: 11px var(--mono);
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-.vpclear:hover { color: var(--text); }
-
-/* ═══ 03 / PROVIDERS — tables + latency theater ════════════════════════ */
+/* ═══ 02 / PROVIDERS — tables + latency theater ════════════════════════ */
 .tblwrap { overflow-x: auto; margin: 16px 0; }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 th {
@@ -582,7 +540,7 @@ footer .sigcap { display: block; margin-bottom: 10px; }
   }
   .hero { min-height: 0; padding: 40px 20px; background: none; }
   .hero canvas, .mic, .scrolldown, .hero-cap, .nojs,
-  #app, .ttschip, .vpclear, .cfgstatus { display: none !important; }
+  #app, .ttschip, .cfgstatus { display: none !important; }
   h1 { font-size: 40px; }
   section { margin: 36px 0; break-inside: avoid-page; }
   h2 { break-after: avoid; }
@@ -611,6 +569,8 @@ footer .sigcap { display: block; margin-bottom: 10px; }
     <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Alt+V</code>, speak,
     and it types into whatever app has focus. The reverse too: select text
     anywhere and hear it read aloud.</p>
+    <p class="hero-live" id="hero-live" hidden>this page is a working instance —
+    <b>tap the mic, speak, tap again</b> · it listens, and it types</p>
     <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
 ./install-hyperfurion-vk.sh</code></pre>
@@ -620,7 +580,7 @@ chmod +x install-hyperfurion-vk.sh
       <a href="https://github.com/liamghennigan/HyperFurion-VK#quick-install">Docs</a>
     </nav>
     <span class="sigcap hero-cap" id="hero-cap" hidden>signal: test pattern</span>
-    <a class="scrolldown" href="#path" aria-hidden="true" tabindex="-1">↓</a>
+    <a class="scrolldown" href="#app" aria-hidden="true" tabindex="-1">↓</a>
   </header>
 
   <!-- ═══ THE FOCUSED APP — a working instance, scaled to one tab ═══════ -->
@@ -730,24 +690,9 @@ chmod +x install-hyperfurion-vk.sh
     </div>
   </section>
 
-  <!-- ═══ 02 / SESSION LOG ══════════════════════════════════════════════ -->
-  <section class="wide" id="log">
-    <div class="prose" style="padding:0">
-    <h2><span class="num" aria-hidden="true">02</span>Session log</h2>
-    <p>Every dictation you finish on this page freezes into a
-    <b>voiceprint</b> — the loudness envelope of the sentence, drawn above the
-    text it became. <span id="log-note">They collect here for this session
-    only. Nothing is stored; reload and they are gone.</span></p>
-    </div>
-    <div class="gallery" id="gallery"></div>
-    <p class="muted" id="log-empty">No dictations yet. Tap the mic at the top —
-    each sentence you speak will leave its print here.</p>
-    <button class="vpclear" id="vpclear" type="button" hidden>clear session log</button>
-  </section>
-
-  <!-- ═══ 03 / PROVIDERS ════════════════════════════════════════════════ -->
+  <!-- ═══ 02 / PROVIDERS ════════════════════════════════════════════════ -->
   <section class="prose" id="providers">
-    <h2><span class="num" aria-hidden="true">03</span>Providers</h2>
+    <h2><span class="num" aria-hidden="true">02</span>Providers</h2>
     <p>Bring your own API key. Switch providers with one line in the config;
     model IDs are plain config values.</p>
 
@@ -800,7 +745,7 @@ chmod +x install-hyperfurion-vk.sh
         <span class="sigcap k-fin">finalize</span>
         <span class="sigcap k-poll">upload + poll</span>
       </div>
-      <p class="sigcap" id="lat-cap" style="margin:10px 0 2px">shapes are the real behavior · <span id="lat-cap-live">dictate on this page and the recording phase runs on your clock; interim ticks are real events on the streaming row</span> · finalize durations illustrative</p>
+      <p class="sigcap" id="lat-cap" style="margin:10px 0 2px">shapes are the real behavior · <span id="lat-cap-live">dictate on this page and the recording phase runs on your clock; ticks on the streaming row are real transcript events (your browser&rsquo;s engine standing in for xAI)</span> · finalize durations illustrative</p>
     </div>
 
     <p class="muted">Only xAI streams; the rest finalize after you stop.
@@ -808,9 +753,9 @@ chmod +x install-hyperfurion-vk.sh
     <code>language = "en"</code> is sent as <code>en_us</code>.</p>
   </section>
 
-  <!-- ═══ 04 / CONFIGURATION ════════════════════════════════════════════ -->
+  <!-- ═══ 03 / CONFIGURATION ════════════════════════════════════════════ -->
   <section class="prose" id="config-h">
-    <h2><span class="num" aria-hidden="true">04</span>Configuration</h2>
+    <h2><span class="num" aria-hidden="true">03</span>Configuration</h2>
     <p>The real config lives at <code>~/.config/voice-keyboard/config.toml</code>
     (mode 600 — it holds your API keys).
     <span id="cfg-live-note" hidden>The copy below is <b>live</b>: edit it and this
@@ -825,16 +770,19 @@ mode = "auto"
 hold_threshold_ms = 280
 
 [stt]
-# on the desktop: xai, openai, groq, deepgram, assemblyai
+# the daemon also takes provider = "xai" | "openai" | "groq"
+#   | "deepgram" | "assemblyai" — this page has one provider,
+#   your browser's speech engine, so only these two apply:
 language = "en"
 interim_results = true
 
 [tts]
-# on the desktop: xai, openai, elevenlabs
-# here: matched against your browser's voices
+# the daemon also takes provider = "xai" | "openai"
+#   | "elevenlabs"; here voice_id is matched against
+#   your browser's installed voices instead
 voice_id = "eve"
-# rate and pitch are page-only knobs; the daemon's
-# real keys are provider, model, voice_id, language
+# rate and pitch are page-only knobs (the daemon's real
+# keys are provider, model, voice_id, language)
 rate = 1.0
 pitch = 1.0</pre>
       <p class="cfgstatus" id="cfgstatus" hidden></p>
@@ -843,9 +791,9 @@ pitch = 1.0</pre>
     <code>systemctl --user restart voice-keyboard-daemon</code>.</p>
   </section>
 
-  <!-- ═══ 05 / SHORTCUTS & MODES ════════════════════════════════════════ -->
+  <!-- ═══ 04 / SHORTCUTS & MODES ════════════════════════════════════════ -->
   <section class="prose" id="keys">
-    <h2><span class="num" aria-hidden="true">05</span>Shortcuts &amp; modes</h2>
+    <h2><span class="num" aria-hidden="true">04</span>Shortcuts &amp; modes</h2>
     <div class="tblwrap">
     <table>
       <thead><tr><th scope="col">Input</th><th scope="col">What happens</th><th scope="col">CLI equivalent</th></tr></thead>
@@ -874,9 +822,9 @@ pitch = 1.0</pre>
     you log out and back in once after install.</p>
   </section>
 
-  <!-- ═══ 06 / WHAT LEAVES YOUR MACHINE ═════════════════════════════════ -->
+  <!-- ═══ 05 / WHAT LEAVES YOUR MACHINE ═════════════════════════════════ -->
   <section class="prose" id="trust-h">
-    <h2><span class="num" aria-hidden="true">06</span>What leaves your machine</h2>
+    <h2><span class="num" aria-hidden="true">05</span>What leaves your machine</h2>
     <div class="trust">
       <div>
         <h3>The daemon</h3>
@@ -896,15 +844,15 @@ pitch = 1.0</pre>
           <li>TTS uses your browser&rsquo;s speech synthesis.</li>
           <li>One file, no scripts loaded, no analytics, no cookies, no storage.</li>
           <li>Nothing is loaded, stored, or sent. Works offline once loaded.</li>
-          <li>Voiceprints and transcripts live in page memory and die on reload.</li>
+          <li>Transcripts exist only on your screen and die on reload.</li>
         </ul>
       </div>
     </div>
   </section>
 
-  <!-- ═══ 07 / HONEST LIMITATIONS ═══════════════════════════════════════ -->
+  <!-- ═══ 06 / HONEST LIMITATIONS ═══════════════════════════════════════ -->
   <section class="prose" id="limits">
-    <h2><span class="num" aria-hidden="true">07</span>Honest limitations</h2>
+    <h2><span class="num" aria-hidden="true">06</span>Honest limitations</h2>
     <ul>
       <li>Linux only. Python 3.11+, systemd user services, uinput access.</li>
       <li>Cloud STT/TTS — this is not an offline dictation engine.</li>
@@ -918,9 +866,9 @@ pitch = 1.0</pre>
     </ul>
   </section>
 
-  <!-- ═══ 08 / INSTALL ══════════════════════════════════════════════════ -->
+  <!-- ═══ 07 / INSTALL ══════════════════════════════════════════════════ -->
   <section class="prose" id="install">
-    <h2><span class="num" aria-hidden="true">08</span>Install</h2>
+    <h2><span class="num" aria-hidden="true">07</span>Install</h2>
     <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
 ./install-hyperfurion-vk.sh</code></pre>
@@ -953,12 +901,12 @@ chmod +x install-hyperfurion-vk.sh
   // One signal feeds many gauges: a single microphone analyser drives the
   // full-viewport hero (idle: a synthetic test pattern; recording: a real
   // spectrogram of your voice), the scope strip, the VU meter, the signal-
-  // path diagram, and the session log's voiceprints — simultaneously.
+  // path diagram, and the scope's frozen waveform — simultaneously.
   //
   //   dictation  -> the browser's speech engine types into the terminal,
   //                 the pipeline lights up, the streaming row of the
   //                 latency strip ticks on real interim results, and the
-  //                 finished sentence freezes into a voiceprint card
+  //                 sentence's loudness envelope freezes onto the scope
   //   tts        -> select text, Ctrl+Alt+T speaks it; where the browser
   //                 supports the CSS Custom Highlight API, each word
   //                 lights up as it is read; the reverse lane glows
@@ -1100,7 +1048,7 @@ chmod +x install-hyperfurion-vk.sh
     return { start, stop, frame, isLive: () => !!a.analyser };
   })();
 
-  // ═══ shared envelope renderer (scope + voiceprint cards) ═══════════════
+  // ═══ envelope renderer (the scope's frozen waveform) ═══════════════════
   function paintEnvelope(ctx2, w, h, values, alpha, color) {
     const step = 3, n = Math.floor(w / step), mid = h / 2;
     ctx2.fillStyle = color;
@@ -1217,7 +1165,7 @@ chmod +x install-hyperfurion-vk.sh
     const sctx = scope.getContext("2d");
     let W = 0, H = 0;
     const hist = [];
-    let voiceprint = null;
+    let frozen = null;
 
     function size() {
       const dpr = devicePixelRatio || 1;
@@ -1239,7 +1187,7 @@ chmod +x install-hyperfurion-vk.sh
     }
     function drawIdle() {
       sctx.clearRect(0, 0, W, H);
-      if (voiceprint) { paintEnvelope(sctx, W, H, voiceprint, .45, waveColor()); return; }
+      if (frozen) { paintEnvelope(sctx, W, H, frozen, .45, waveColor()); return; }
       sctx.fillStyle = waveColor();
       sctx.globalAlpha = .35;
       sctx.fillRect(0, H / 2 - .5, W, 1);
@@ -1261,22 +1209,21 @@ chmod +x install-hyperfurion-vk.sh
     function tick() {
       if (!Dictation.recording) return;
       sctx.clearRect(0, 0, W, H);
-      if (voiceprint) paintEnvelope(sctx, W, H, voiceprint, .10, waveColor());
+      if (frozen) paintEnvelope(sctx, W, H, frozen, .10, waveColor());
       drawBars(hist.slice(-Math.floor(W / 3)), .9);
     }
     function freeze() {
-      if (!hist.length) return null;
+      if (!hist.length) return;
       const n = Math.max(24, Math.floor(W / 3));
       const print = new Array(n).fill(0);
       for (let i = 0; i < hist.length; i++) {
         const b = Math.floor(i * n / hist.length);
         print[b] = Math.max(print[b], hist[i]);
       }
-      voiceprint = print;
+      frozen = print;
       hist.length = 0;
       drawIdle();
-      scopeLabel.textContent = "voiceprint";
-      return print;
+      scopeLabel.textContent = "waveform";
     }
     size();
     drawIdle();
@@ -1289,8 +1236,6 @@ chmod +x install-hyperfurion-vk.sh
     return {
       freeze,
       push(peak) { hist.push(peak); },
-      setPrint(p) { voiceprint = p; drawIdle(); scopeLabel.textContent = "voiceprint"; },
-      histLen: () => hist.length,
     };
   })();
 
@@ -1398,6 +1343,7 @@ chmod +x install-hyperfurion-vk.sh
     const cli = document.createElement("input");
     cli.className = "cli"; cli.type = "text";
     cli.autocomplete = "off"; cli.autocapitalize = "off"; cli.spellcheck = false;
+    cli.placeholder = "type a command — try --help";
     cli.setAttribute("aria-label", "terminal — type voice-keyboard commands, or dictate");
     const caret = document.createElement("span");
     caret.className = "caret"; caret.hidden = true;
@@ -1485,8 +1431,7 @@ chmod +x install-hyperfurion-vk.sh
       "note to self: cancel the RSI appointment",
     ];
     const D = { recording: false };
-    let engine = "none", rec = null, typeTimer = 0, simIdx = 0, t0 = 0, redSample = 0;
-    let pending = null; // {print, ms, engine} awaiting the settled transcript
+    let engine = "none", rec = null, typeTimer = 0, simIdx = 0, redSample = 0;
 
     function setRecording(on) {
       D.recording = on;
@@ -1502,11 +1447,10 @@ chmod +x install-hyperfurion-vk.sh
       clearInterval(typeTimer);
       Terminal.setLine("", "");
       setRecording(true);
-      t0 = performance.now();
       Signal.start();
       Ticker.wake();
       if (reduced) {
-        // no animation loop runs, but the voiceprint still needs data
+        // no animation loop runs, but the frozen waveform still needs data
         redSample = setInterval(() => Scope.push(Signal.frame().peak), 250);
       }
       bus.emit("rec:start", { engine });
@@ -1542,43 +1486,56 @@ chmod +x install-hyperfurion-vk.sh
       setRecording(false);
       clearInterval(redSample);
       Signal.stop();
-      const print = Scope.freeze();
-      const ms = performance.now() - t0;
+      Scope.freeze();
       if (rec) { try { rec.stop(); } catch {} rec = null; }
       dictations++;
-      pending = { print, ms };
       bus.emit("rec:stop", {});
       // give a final result a beat to arrive, then settle the line
       setTimeout(() => {
         const settled = Terminal.commitCurrent();
-        if (settled) { done(settled, engine === "live" ? "live" : "sim"); }
+        if (settled) { done(settled); }
         else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
         Hints.advance();
       }, engine === "live" || engine === "trying" ? 350 : 0);
     }
     function typeSim(text) {
-      if (reduced) { Terminal.setLine(text, ""); Terminal.commitCurrent(); done(text, "sim"); return; }
+      if (reduced) { Terminal.setLine(text, ""); Terminal.commitCurrent(); done(text); return; }
       let n = 0;
       typeTimer = setInterval(() => {
         Terminal.setLine(text.slice(0, ++n), "");
         if (n >= text.length) {
           clearInterval(typeTimer);
           Terminal.commitCurrent();
-          done(text, "sim");
+          done(text);
         }
       }, 40);
     }
-    function done(text, eng) {
+    function done(text) {
       bus.emit("type:text", { text });
-      if (pending) {
-        bus.emit("dictation:done", { ...pending, text, engine: eng });
-        pending = null;
-      }
       engine = "none";
     }
     D.start = start; D.stop = stop;
     D.toggle = () => (D.recording ? stop() : start());
-    mic.addEventListener("click", D.toggle);
+    // starting from the hero mic: bring the terminal into view so you can
+    // watch your words get typed — the whole point of the demo
+    mic.addEventListener("click", () => {
+      const starting = !D.recording;
+      D.toggle();
+      if (starting) {
+        const r = term.getBoundingClientRect();
+        if (r.top > innerHeight - 120 || r.bottom < 80)
+          term.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+      }
+    });
+    // the recording pill doubles as the stop control next to the terminal
+    pill.setAttribute("role", "button");
+    pill.setAttribute("tabindex", "0");
+    pill.title = "stop recording";
+    pill.style.cursor = "pointer";
+    pill.addEventListener("click", () => stop());
+    pill.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); stop(); }
+    });
     return D;
   })();
   let dictations = 0;
@@ -1667,66 +1624,7 @@ chmod +x install-hyperfurion-vk.sh
     });
   })();
 
-  // ═══ GALLERY — 02 / session log of voiceprints ═════════════════════════
-  const Gallery = (() => {
-    const wrap = $("gallery"), empty = $("log-empty"), clearBtn = $("vpclear");
-    const items = [];
-    function add(d) {
-      items.push(d);
-      empty.hidden = true;
-      clearBtn.hidden = false;
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "vpcard";
-      const secs = (d.ms / 1000).toFixed(1);
-      const engLabel = d.engine === "live" ? "live mic" : "simulated";
-      card.setAttribute("aria-label",
-        `Dictation ${items.length}: "${d.text.slice(0, 60)}", ${secs} seconds, ${engLabel}. Replay.`);
-      const cv = document.createElement("canvas");
-      cv.setAttribute("aria-hidden", "true");
-      const txt = document.createElement("div");
-      txt.className = "vptext"; txt.textContent = d.text;
-      const meta = document.createElement("div");
-      meta.className = "vpmeta";
-      const b1 = document.createElement("span");
-      b1.className = "vpbadge" + (d.engine === "live" ? " live" : "");
-      b1.textContent = engLabel;
-      const b2 = document.createElement("span");
-      b2.className = "vpbadge"; b2.textContent = secs + "s";
-      meta.append(b1, b2);
-      card.append(cv, txt, meta);
-      wrap.appendChild(card);
-      requestAnimationFrame(() => {
-        const dpr = devicePixelRatio || 1;
-        cv.width = cv.clientWidth * dpr; cv.height = cv.clientHeight * dpr;
-        const c2 = cv.getContext("2d");
-        c2.setTransform(dpr, 0, 0, dpr, 0, 0);
-        if (d.print) paintEnvelope(c2, cv.clientWidth, cv.clientHeight, d.print, .9, waveColor());
-      });
-      card.addEventListener("click", () => {
-        if (d.print) Scope.setPrint(d.print);
-        if (synth) {
-          synth.cancel();
-          const u = new SpeechSynthesisUtterance(d.text);
-          u.rate = Config.cfg.rate; u.pitch = Config.cfg.pitch;
-          if (Config.cfg.voice) u.voice = Config.cfg.voice;
-          u.onstart = () => bus.emit("tts:start");
-          u.onend = () => bus.emit("tts:end");
-          synth.speak(u);
-        }
-        Terminal.print("replay — re-synthesized; the audio was never kept", "dim");
-      });
-    }
-    clearBtn.addEventListener("click", () => {
-      items.length = 0;
-      wrap.replaceChildren();
-      empty.hidden = false;
-      clearBtn.hidden = true;
-    });
-    bus.on("dictation:done", add);
-  })();
-
-  // ═══ LATENCY — 03 / real events on the streaming row ═══════════════════
+  // ═══ LATENCY — 02 / real events on the streaming row ═══════════════════
   const Latency = (() => {
     const panel = $("latency");
     if (reduced) return;            // the static shapes are the rendering
@@ -1936,33 +1834,41 @@ chmod +x install-hyperfurion-vk.sh
       return "<kbd>" + label.replaceAll("+", "</kbd>+<kbd>") + "</kbd>";
     }
     function set() {
+      if (Dictation.recording) { listening(); return; }
       hint.replaceChildren();
       const add = (html) => hint.insertAdjacentHTML("beforeend", html);
       if (dictations === 0) {
-        add("this page has focus — press " + kbd(Config.cfg.keyLabel) + " or tap the mic and <b>speak</b>");
+        add("this terminal is the focused app — tap the mic up top or press " +
+            kbd(Config.cfg.keyLabel) + ", <b>speak</b>, then tap or press again to stop");
         if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
                     "browser's speech engine, the way the daemon streams to its provider");
         else add(" · no speech engine in this browser, so it will improvise");
       } else if (dictations === 1) {
-        add("the strip above the terminal is your sentence as sound — its <i>voiceprint</i>. " +
-            "now <b>hold</b> the hotkey and release to stop; <code>hold_threshold_ms = " +
+        add("the strip above the terminal froze your sentence's <i>waveform</i> — drawn from the " +
+            "signal, then let go. now <b>hold</b> the hotkey and release to stop; <code>hold_threshold_ms = " +
             Config.cfg.holdMs + "</code> below is real, like everything else in that config");
       } else if (dictations === 2) {
         add("select any text on this page and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> — " +
             "the other half of the product");
       } else if (dictations === 3) {
-        add("your dictations are collecting in the <a href='#log'>session log</a> — " +
-            "or edit the <a href='#config-h'>live config</a>: change <code>language</code>, pick a <code>voice_id</code>");
+        add("edit the <a href='#config-h'>live config</a>: change the hotkey, the <code>language</code>, " +
+            "or pick a <code>voice_id</code> — the page re-binds itself");
       } else {
         add("type <code>voice-keyboard --help</code> into the terminal above · " +
             "this whole page is one file — view source");
       }
     }
+    function listening() {
+      hint.innerHTML = '<span class="engine-live">listening</span> — speak, then press ' +
+        kbd(Config.cfg.keyLabel) + ", click the red <b>recording</b> pill, or hit <kbd>Esc</kbd> to stop";
+    }
     bus.on("cfg:change", set);
+    bus.on("rec:start", listening);
     return { advance: set, set };
   })();
 
   // ═══ BOOT ═══════════════════════════════════════════════════════════════
+  $("hero-live").hidden = false;   // the claim is only true with JS running
   $("cfg-live-note").hidden = $("page-note").hidden = false;
   cfgEl.contentEditable = "plaintext-only";
   if (cfgEl.contentEditable !== "plaintext-only") cfgEl.contentEditable = "true";
