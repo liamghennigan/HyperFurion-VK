@@ -1,5 +1,7 @@
 # HyperFurion VK
 
+**Website:** <https://liamghennigan.github.io/HyperFurion-VK/>
+
 A Linux-first open-source voice keyboard with native xAI STT/TTS support,
 selectable cloud speech providers, global hotkeys, desktop status feedback, and
 uinput keyboard injection.
