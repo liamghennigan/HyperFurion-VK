@@ -578,6 +578,7 @@ chmod +x install-hyperfurion-vk.sh
       <a href="https://github.com/liamghennigan/HyperFurion-VK">GitHub</a>
       <a href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest">Releases</a>
       <a href="https://github.com/liamghennigan/HyperFurion-VK#quick-install">Docs</a>
+      <a href="https://github.com/sponsors/liamghennigan">Sponsor</a>
     </nav>
     <span class="sigcap hero-cap" id="hero-cap" hidden>signal: test pattern</span>
     <a class="scrolldown" href="#app" aria-hidden="true" tabindex="-1">↓</a>
@@ -884,6 +885,8 @@ chmod +x install-hyperfurion-vk.sh
     <code>dnf</code>, and <code>pacman</code>. Full walkthrough, non-interactive
     install, and troubleshooting live in the
     <a href="https://github.com/liamghennigan/HyperFurion-VK#quick-install">README</a>.</p>
+    <p>Free and MIT-licensed. If it earns a place in your keymap,
+    <a href="https://github.com/sponsors/liamghennigan">sponsoring</a> keeps it maintained.</p>
   </section>
 
 </main>
@@ -891,7 +894,8 @@ chmod +x install-hyperfurion-vk.sh
 <footer id="foot">
   <span class="sigcap"><span id="bytes">one file · zero dependencies · zero requests after load</span> · works offline once loaded</span>
   MIT License · <a href="https://github.com/liamghennigan/HyperFurion-VK">liamghennigan/HyperFurion-VK</a> ·
-  <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/docs/index.html">view source</a>
+  <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/docs/index.html">view source</a> ·
+  <a href="https://github.com/sponsors/liamghennigan">sponsor</a>
 </footer>
 
 <script>
@@ -1381,7 +1385,7 @@ chmod +x install-hyperfurion-vk.sh
     const HELP = [
       ["usage: voice-keyboard [command]", "dim"],
       ["  toggle (default) · start · stop · status · tts · version", "dim"],
-      ["  page-only: help · clear", "dim"],
+      ["  page-only: help · clear · sponsor", "dim"],
     ];
     function run(raw) {
       const echoed = raw.trim();
@@ -1404,6 +1408,10 @@ chmod +x install-hyperfurion-vk.sh
           break;
         }
         case "version": print("voice-keyboard 1.0.1", "dim"); break;
+        case "sponsor": case "donate":
+          print("free, MIT — if it earns its keystrokes:", "dim");
+          print("https://github.com/sponsors/liamghennigan", "dim");
+          break;
         case "help": case "--help": case "-h": HELP.forEach(([t, c]) => print(t, c)); break;
         case "clear": history.length = 0; render(); break;
         default: print("vk: " + cmd.split(/\s/)[0] + ": command not found — try --help", "err");
