@@ -31,10 +31,11 @@ returned audio locally.
   `./packaging/macos/install-macos.sh` from a checkout. See [macOS](#macos-beta).
 - **Best overlay support:** GNOME Shell 50 on Wayland. Other desktops fall back
   to ordinary desktop notifications.
-- **Cloud by default, offline if you want:** speech recognition and synthesis
-  use provider APIs out of the box — or point `providers.openai.base_url` at a
-  local OpenAI-compatible server (Whisper, Parakeet, Voxtral, Kokoro) and
-  nothing leaves your machine. See [Fully Offline](#fully-offline-local-models).
+- **Works fully offline** — bring your own local provider. A cloud provider
+  is the default, but point `providers.openai.base_url` at any local
+  OpenAI-compatible server (Whisper, Parakeet, Voxtral, Kokoro) and speech
+  recognition and synthesis run entirely on your machine, no key and no
+  network required. See [Fully Offline](#fully-offline-local-models).
 
 ## What Gets Installed
 
