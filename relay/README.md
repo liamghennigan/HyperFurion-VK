@@ -166,6 +166,11 @@ checkout→welcome→working-key flow, and 30-day quota rollover.
 
 ## Operator's honesty notes
 
+- The subscription sells convenience and funds the project — nothing
+  else. Subscribers gain no abilities over bring-your-own-key users;
+  every capability is open source and free forever. Say this plainly
+  wherever the tier is sold (the landing page and README already do).
+
 - Subscriber audio transits this relay to xAI. It is never written to
   disk, but you become a data processor — say so wherever you sell this,
   and publish a privacy statement before charging strangers.
