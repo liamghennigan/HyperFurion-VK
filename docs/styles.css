@@ -654,6 +654,74 @@ pre.config:focus { border-color: var(--wave); }
   box-shadow: 0 2px 10px rgba(0,0,0,.12);
 }
 
+/* ═══ 04 / THREE WAYS TO RUN IT — free first; that is the brand ═════════ */
+.plans {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1fr;
+  gap: 16px;
+  margin: 26px 0 10px;
+  align-items: start;
+}
+@media (max-width: 820px) { .plans { grid-template-columns: 1fr; } }
+.plan {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--code-bg);
+  padding: 18px 20px 16px;
+}
+.plan h3 { margin: 0 0 2px; }
+.plan-price { font: 600 26px/1.2 var(--serif); margin: 2px 0 10px; }
+.plan-price span { font: 13px var(--mono); color: var(--muted); }
+.plan ul { padding-left: 18px; margin: 10px 0; }
+.plan li { font-size: 13.5px; margin: 6px 0; }
+.plan pre { font-size: 12px; margin: 12px 0 2px; }
+.plan-cap, .plan-badge { display: block; }
+.plan-cap { margin-top: 12px; }
+.plan-badge { color: var(--wave); margin-bottom: 10px; }
+.plan.hosted {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--code-bg), var(--code-bg)) padding-box,
+    linear-gradient(135deg, var(--spec-1), var(--spec-2), var(--spec-3), var(--spec-4)) border-box;
+}
+
+/* copy-on-click: the install command is the primary CTA */
+.prewrap { position: relative; }
+.hero .prewrap { max-width: 100%; }
+.copybtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font: 600 10px var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.copybtn:hover { color: var(--wave); border-color: var(--wave); }
+.copybtn.ok { color: var(--ok); border-color: var(--ok); }
+.copybtn.inline { position: static; }
+
+/* the funnel card: appears once, after your first line types itself */
+.funnel-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--code-bg);
+  font-size: 13.5px;
+}
+.funnel-card span { flex: 1; min-width: 220px; }
+.funnel-card a { font: 12px var(--mono); white-space: nowrap; }
+
 /* ═══ 07 / HONEST LIMITATIONS — a brand asset, weighted like one ════════ */
 .limits-cap { color: var(--wave); margin: -8px 0 14px; }
 #limits h2 .num { opacity: .11; }

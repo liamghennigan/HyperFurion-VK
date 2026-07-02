@@ -25,7 +25,12 @@
   "softwareVersion": "1.1.0",
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://liamghennigan.github.io/HyperFurion-VK/",
-  "description": "A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app through a uinput virtual keyboard. Select text and hear it read aloud."
+  "description": "A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app through a uinput virtual keyboard. Select text and hear it read aloud.",
+  "offers": [
+    { "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" },
+    { "@type": "Offer", "name": "Hosted — 20 h dictation + 250k spoken characters / month", "price": "5.00", "priceCurrency": "USD" },
+    { "@type": "Offer", "name": "Hosted — 60 h dictation + 1M spoken characters / month", "price": "10.00", "priceCurrency": "USD" }
+  ]
 }
 </script>
 <link rel="preload" href="./fonts/fraunces-var.woff2" as="font" type="font/woff2" crossorigin>
@@ -55,7 +60,7 @@
     The reverse too: select text anywhere and hear it read aloud.</p>
     <p class="hero-live" id="hero-live" hidden>this page is a working instance —
     <b>tap the mic, speak, tap again</b> · it listens, and it types</p>
-    <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
+    <pre data-copy id="install-cmd"><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
 ./install-hyperfurion-vk.sh</code></pre>
     <nav aria-label="Project links">
@@ -119,6 +124,12 @@ chmod +x install-hyperfurion-vk.sh
     </div>
     <div class="saychips" id="saychips" hidden></div>
     <p class="hint" id="hint" hidden></p>
+    <div class="funnel-card" id="funnel-card" hidden>
+      <span>that just typed itself — voice, to keystrokes. the desktop version
+      does this in every app you own.</span>
+      <button class="copybtn inline" id="funnel-copy" type="button">copy the install command</button>
+      <a href="#install">install notes →</a>
+    </div>
   </section>
 
   <!-- ═══ 01 / SIGNAL PATH ══════════════════════════════════════════════ -->
@@ -286,40 +297,64 @@ chmod +x install-hyperfurion-vk.sh
   </section>
 
   <!-- ═══ 04 / THREE WAYS TO RUN IT ════════════════════════════════════ -->
-  <section class="prose" id="pricing">
+  <section class="wide" id="pricing">
+    <div class="prose" style="padding:0">
     <h2><span class="num" aria-hidden="true">04</span>Three ways to run it</h2>
     <p>All three run the same product. Nothing on this page is feature-gated,
     and nothing below changes that.</p>
+    </div>
 
-    <h3>Your own key — free, forever</h3>
-    <p>Bring an API key from any provider above and you have every feature this
-    product will ever ship. One line in the config. Paying unlocks nothing —
-    that is the point.</p>
+    <div class="plans">
+      <div class="plan">
+        <h3>Your own key</h3>
+        <p class="plan-price">$0 <span>forever</span></p>
+        <ul>
+          <li>every feature, every provider above</li>
+          <li>one line in the config</li>
+          <li>your key, your bill, your business</li>
+        </ul>
+        <p class="sigcap plan-cap">paying unlocks nothing — that is the point</p>
+      </div>
 
-    <h3>Hosted — $5 or $10 a month</h3>
-    <p><code>provider = "hyperfurion"</code> buys convenience, not capability.
-    Every feature of this product is open source and free forever — bring your
-    own API key and you have all of it; paying unlocks nothing. What
-    <b>$5/month</b> gets you is one key instead of provider accounts (20 hours
-    of streaming dictation and 250k spoken characters a month, hard-capped so
-    nobody can run up a bill; $10/month buys 60 h and 1M) — and what&rsquo;s
-    left over funds this project&rsquo;s development. Your audio takes the same
-    path as the default provider&rsquo;s, through a metered relay to xAI; it is
-    held in memory, never written to disk. The relay itself is
-    <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay">open
-    source and self-hostable</a>. Launching soon — type <code>subscribe</code>
-    in the terminal above, or get early access via
-    <a href="https://github.com/sponsors/liamghennigan">sponsors</a>.</p>
+      <div class="plan hosted">
+        <p class="sigcap plan-badge">hosted · one hfk_ key, no provider accounts</p>
+        <h3>Hosted</h3>
+        <p class="plan-price">$5 <span>or</span> $10 <span>/ month</span></p>
+        <ul>
+          <li><b>$5</b> — 20 hours of dictation + 250k spoken characters</li>
+          <li><b>$10</b> — 60 hours + 1M characters</li>
+          <li>hard-capped, so nobody can run up a bill</li>
+          <li>same path as the default provider: a metered relay to xAI —
+              audio held in memory, never written to disk</li>
+          <li>the relay is <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay">open
+              source and self-hostable</a></li>
+          <li>what&rsquo;s left over funds this project</li>
+        </ul>
+        <p class="sigcap plan-cap">launching soon — type <code>subscribe</code> in the terminal above,
+        or <a href="https://github.com/sponsors/liamghennigan">early access via sponsors</a></p>
+      </div>
 
-    <h3>Fully offline, if you want it</h3>
-    <p>The <code>openai</code> provider takes a <code>base_url</code>, so any
-    OpenAI-compatible server counts as a provider — including one on
-    <code>localhost</code>. No API key required, nothing leaves your machine:</p>
-<pre><code>[providers.openai]
-base_url = "http://localhost:8000/v1"  # a local server — no key needed
+      <div class="plan">
+        <h3>Fully offline</h3>
+        <p class="plan-price">$0 <span>+ your hardware</span></p>
+        <ul>
+          <li>any OpenAI-compatible server counts as a provider — including one
+              on <code>localhost</code></li>
+          <li>no API key, nothing leaves your machine</li>
+        </ul>
+<pre data-copy><code>[providers.openai]
+base_url = "http://localhost:8000/v1"
 
 [stt]
-provider = "openai"  # set stt.model to the model id your server exposes</code></pre>
+provider = "openai"</code></pre>
+      </div>
+    </div>
+
+    <div class="prose" style="padding:0">
+    <p class="muted">It buys convenience, not capability: every feature is open
+    source and free forever with your own key. The hosted tier exists for
+    people who want one key instead of provider accounts — and to keep this
+    project maintained.</p>
     <p>The strongest open models to serve locally right now:
     <a href="https://github.com/speaches-ai/speaches">Speaches</a> is the
     easiest single server — OpenAI-compatible STT <i>and</i> TTS, running
@@ -334,6 +369,7 @@ provider = "openai"  # set stt.model to the model id your server exposes</code><
     Mini&nbsp;3B</a> (Apache-2.0) serves OpenAI-compatible via vLLM; and
     <a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a> covers
     CPU-only and edge boxes.</p>
+    </div>
   </section>
 
   <!-- ═══ 05 / CONFIGURATION ════════════════════════════════════════════ -->
@@ -435,7 +471,7 @@ pitch = 1.0</pre>
   <section class="prose" id="install">
     <h2><span class="num" aria-hidden="true">08</span>Install</h2>
     <h3>Linux</h3>
-    <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
+    <pre data-copy><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
 ./install-hyperfurion-vk.sh</code></pre>
     <h3>First run (Linux)</h3>
@@ -446,7 +482,7 @@ chmod +x install-hyperfurion-vk.sh
       <li><code>voice-keyboard status</code> — it prints <code>idle</code> or <code>recording</code>.</li>
     </ol>
     <h3>macOS — beta</h3>
-    <pre><code>git clone https://github.com/liamghennigan/HyperFurion-VK
+    <pre data-copy><code>git clone https://github.com/liamghennigan/HyperFurion-VK
 cd HyperFurion-VK
 ./packaging/macos/install-macos.sh</code></pre>
     <p class="muted">Native Quartz injection (full Unicode) and event-tap hotkeys,
@@ -454,7 +490,7 @@ cd HyperFurion-VK
     <b>Accessibility</b> and <b>Microphone</b> — the installer walks you through
     both. Status arrives as notification-center toasts.</p>
     <h3>Windows — beta</h3>
-    <pre><code>git clone https://github.com/liamghennigan/HyperFurion-VK
+    <pre data-copy><code>git clone https://github.com/liamghennigan/HyperFurion-VK
 cd HyperFurion-VK
 powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</code></pre>
     <p class="muted">Native <code>SendInput</code> injection (full Unicode) and a

@@ -45,6 +45,7 @@ import { Desktop } from "./js/desktop.js";
 import { Autopilot } from "./js/autopilot.js";
 import { Field } from "./js/field.js";
 import "./js/scrollfx.js";
+import "./js/cta.js";
 
 // ═══ BOOT ════════════════════════════════════════════════════════════════
 window.__vk.demo = Demo;         // the proof harness steers the demo layer
