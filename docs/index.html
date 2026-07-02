@@ -10,6 +10,9 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/">
 <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8E%99%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --text: #1a1a1a;
@@ -17,6 +20,7 @@
     --line: #e5e5e5;
     --code-bg: #f6f6f6;
     --link: #0969da;
+    --rec: #e5484d;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -29,6 +33,7 @@
     html { background: #0d0d0d; }
   }
   * { box-sizing: border-box; }
+  ::selection { background: rgba(9,105,218,.18); }
   body {
     margin: 0;
     font: 16px/1.6 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -39,9 +44,23 @@
   a:hover { text-decoration: underline; }
 
   .hero { text-align: center; padding: 96px 0 24px; }
-  .hero .mic { font-size: 40px; }
+  .mic {
+    font: inherit;
+    font-size: 40px;
+    line-height: 1;
+    background: none;
+    border: 0;
+    padding: 8px;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .mic.live { animation: micpulse 1.2s ease-in-out infinite; }
+  @keyframes micpulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(229,72,77,0); }
+    50% { box-shadow: 0 0 0 8px rgba(229,72,77,.25); }
+  }
   h1 { font-size: 28px; margin: 16px 0 8px; }
-  .tagline { color: var(--muted); margin: 0 auto 32px; max-width: 34em; }
+  .tagline { color: var(--muted); margin: 0 auto 24px; max-width: 34em; }
   .hero nav { margin-top: 20px; }
   .hero nav a { margin: 0 12px; }
 
@@ -62,6 +81,67 @@
     border-radius: 4px;
     padding: 1px 5px;
     font-size: 13px;
+  }
+
+  /* dictation demo */
+  .demo {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 0 0 10px;
+    text-align: left;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    min-height: 51px;
+  }
+  .demo .prompt { color: var(--muted); user-select: none; }
+  .demo .out { overflow-wrap: anywhere; }
+  .caret {
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    background: var(--text);
+    vertical-align: -2px;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  .pill {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--rec);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .pill i {
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--rec);
+    animation: bar .9s ease-in-out infinite;
+  }
+  .pill i:nth-child(2) { animation-delay: -.3s; }
+  .pill i:nth-child(3) { animation-delay: -.6s; }
+  .pill i:nth-child(4) { animation-delay: -.15s; }
+  @keyframes bar { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+  @keyframes blink { 50% { opacity: 0; } }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 28px; }
+  .hint kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .caret, .pill i, .mic.live { animation: none; }
   }
 
   h2 {
@@ -90,10 +170,18 @@
 <main>
 
   <div class="hero">
-    <div class="mic" aria-hidden="true">🎙️</div>
+    <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Try the dictation demo">🎙️</button>
     <h1>HyperFurion VK</h1>
     <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Space</code>, speak,
     and it types into whatever app has focus.</p>
+
+    <div class="demo" id="demo" hidden>
+      <span class="prompt">$</span><span class="out" id="out" aria-live="polite"></span><span class="caret" aria-hidden="true"></span>
+      <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
+    </div>
+    <p class="hint" id="hint" hidden>this page has focus — press <kbd>Ctrl</kbd>+<kbd>Space</kbd> or tap the mic
+    <span class="muted">(simulated; no microphone involved)</span></p>
+
     <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
 ./install-hyperfurion-vk.sh</code></pre>
@@ -144,6 +232,93 @@ voice-keyboard tts</code></pre>
 <footer>
   MIT License · <a href="https://github.com/liamghennigan/HyperFurion-VK">liamghennigan/HyperFurion-VK</a>
 </footer>
+
+<script>
+(() => {
+  // Simulated dictation. Mirrors the daemon's "auto" hotkey mode:
+  // tap Ctrl+Space to toggle, hold ≥280 ms to talk and release to stop
+  // (280 is the daemon's default hold_threshold_ms).
+  const HOLD_MS = 280;
+  const LINES = [
+    "dictated, not typed — this sentence never touched a keyboard",
+    "git commit -m 'wrote this one out loud'",
+    "works in terminals, editors, and this text box",
+    "note to self: cancel the RSI appointment",
+  ];
+
+  const demo = document.getElementById("demo");
+  const out = document.getElementById("out");
+  const pill = document.getElementById("pill");
+  const mic = document.getElementById("mic");
+  const hint = document.getElementById("hint");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  demo.hidden = false;
+  hint.hidden = false;
+
+  let recording = false;
+  let line = 0;
+  let typeTimer = 0;
+  let dictations = 0;
+
+  function start() {
+    clearInterval(typeTimer);
+    out.textContent = "";
+    recording = true;
+    pill.hidden = false;
+    mic.classList.add("live");
+    mic.setAttribute("aria-pressed", "true");
+  }
+
+  function stop() {
+    if (!recording) return;
+    recording = false;
+    pill.hidden = true;
+    mic.classList.remove("live");
+    mic.setAttribute("aria-pressed", "false");
+    type(LINES[line++ % LINES.length]);
+    if (++dictations === 1) {
+      hint.innerHTML = "now try holding <kbd>Ctrl</kbd>+<kbd>Space</kbd> and releasing to stop — " +
+        "same 280&thinsp;ms hold threshold as the daemon's <code>auto</code> mode";
+    }
+  }
+
+  function type(text) {
+    if (reduced) { out.textContent = text; return; }
+    let n = 0;
+    typeTimer = setInterval(() => {
+      out.textContent = text.slice(0, ++n);
+      if (n >= text.length) clearInterval(typeTimer);
+    }, 40);
+  }
+
+  const toggle = () => (recording ? stop() : start());
+  mic.addEventListener("click", toggle);
+
+  let spaceDown = false;
+  let holdStarted = false;
+  let holdTimer = 0;
+
+  addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey && e.code === "Space")) return;
+    e.preventDefault();
+    if (e.repeat || spaceDown) return;
+    spaceDown = true;
+    holdStarted = false;
+    holdTimer = setTimeout(() => {
+      if (spaceDown && !recording) { holdStarted = true; start(); }
+    }, HOLD_MS);
+  });
+
+  addEventListener("keyup", (e) => {
+    if (e.code !== "Space" || !spaceDown) return;
+    spaceDown = false;
+    clearTimeout(holdTimer);
+    if (holdStarted) stop();
+    else toggle();
+  });
+})();
+</script>
 
 </body>
 </html>
