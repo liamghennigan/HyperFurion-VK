@@ -1126,17 +1126,16 @@ chmod +x install-hyperfurion-vk.sh
       W = heroCanvas.width = Math.round(heroCanvas.clientWidth * dpr);
       H = heroCanvas.height = Math.round(heroCanvas.clientHeight * dpr);
     }
-    function bg() {
-      return getComputedStyle(document.body).backgroundColor || "#0a0a0d";
-    }
     function hot() {
       return getComputedStyle(document.documentElement).getPropertyValue("--hot").trim() || "#eafcff";
     }
+    // trails decay toward transparent so the CSS backdrop (paper grid /
+    // phosphor glow) stays visible beneath the signal
     function fade(alpha) {
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = bg();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "rgba(0,0,0," + alpha + ")";
       ctx.fillRect(0, 0, W, H);
-      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
     }
     function trace(t) {
       fade(.09);
@@ -1161,16 +1160,19 @@ chmod +x install-hyperfurion-vk.sh
     }
     function waterfall() {
       const f = Signal.frame();
+      fade(.02);                      // phosphor decay: old rows dissolve as they rise
       ctx.drawImage(heroCanvas, 0, -2 * dpr);
-      ctx.fillStyle = bg();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.globalAlpha = 1;
       ctx.fillRect(0, H - 2 * dpr, W, 2 * dpr);
+      ctx.globalCompositeOperation = "source-over";
       const wv = waveColor(), ht = hot(), bins = f.fft.length;
       for (let x = 0; x < W; x += 3 * dpr) {
         const bin = Math.floor(Math.pow(x / W, 1.7) * (bins - 1));
         const v = f.fft[bin] / 255;
-        if (v < .04) continue;
+        if (v < .05) continue;
         ctx.fillStyle = v > .85 ? ht : wv;
-        ctx.globalAlpha = Math.min(1, v * 1.1);
+        ctx.globalAlpha = Math.min(.95, v * .9);
         ctx.fillRect(x, H - 2 * dpr, 2 * dpr, 2 * dpr);
       }
       ctx.globalAlpha = 1;
@@ -1200,7 +1202,12 @@ chmod +x install-hyperfurion-vk.sh
     }
     let rz = 0;
     addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { size(); if (reduced) trace(2.2); }, 150); });
-    bus.on("rec:start", () => { mode = "rec"; phase += 1.7; caption(); if (reduced) meterOn(); });
+    bus.on("rec:start", () => {
+      mode = "rec"; phase += 1.7;
+      ctx.clearRect(0, 0, W, H);   // clean slate for the spectrogram
+      caption();
+      if (reduced) meterOn();
+    });
     bus.on("rec:stop", () => { mode = "idle"; caption(); if (reduced) meterOff(); });
     return { caption };
   })();
@@ -1427,13 +1434,8 @@ chmod +x install-hyperfurion-vk.sh
     // — the CLI —
     const HELP = [
       ["usage: voice-keyboard [command]", "dim"],
-      ["  toggle    start or stop dictation (default)", "dim"],
-      ["  start     start recording", "dim"],
-      ["  stop      stop recording and type the transcript", "dim"],
-      ["  status    print idle or recording", "dim"],
-      ["  tts       read the selected text aloud", "dim"],
-      ["  version   print the version", "dim"],
-      ["page-only: help, clear", "dim"],
+      ["  toggle (default) · start · stop · status · tts · version", "dim"],
+      ["  page-only: help · clear", "dim"],
     ];
     function run(raw) {
       const echoed = raw.trim();
