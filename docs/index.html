@@ -954,19 +954,36 @@ pitch = 1.0</pre>
   <!-- ═══ 07 / INSTALL ══════════════════════════════════════════════════ -->
   <section class="prose" id="install">
     <h2><span class="num" aria-hidden="true">07</span>Install</h2>
+    <h3>Linux</h3>
     <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
 ./install-hyperfurion-vk.sh</code></pre>
-    <h3>First run</h3>
+    <h3>First run (Linux)</h3>
     <ol>
       <li>Make sure <code>~/.local/bin</code> is on your <code>PATH</code>: <code>command -v voice-keyboard</code></li>
       <li>Log out and back in once, so <code>input</code>-group access takes effect.</li>
       <li><code>systemctl --user restart voice-keyboard-daemon</code></li>
       <li><code>voice-keyboard status</code> — it prints <code>idle</code> or <code>recording</code>.</li>
     </ol>
-    <p class="muted">Requires Linux with the <code>uinput</code> module, Python 3.11+,
-    and systemd user services. The installer supports <code>apt-get</code>,
-    <code>dnf</code>, and <code>pacman</code>. Full walkthrough, non-interactive
+    <h3>macOS — beta</h3>
+    <pre><code>git clone https://github.com/liamghennigan/HyperFurion-VK
+cd HyperFurion-VK
+./packaging/macos/install-macos.sh</code></pre>
+    <p class="muted">Native Quartz injection (full Unicode) and event-tap hotkeys,
+    running as a launchd agent. macOS will ask for two permissions —
+    <b>Accessibility</b> and <b>Microphone</b> — the installer walks you through
+    both. Status arrives as notification-center toasts.</p>
+    <h3>Windows — beta</h3>
+    <pre><code>git clone https://github.com/liamghennigan/HyperFurion-VK
+cd HyperFurion-VK
+powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</code></pre>
+    <p class="muted">Native <code>SendInput</code> injection (full Unicode) and a
+    low-level keyboard hook, started at login from your Startup folder — no
+    admin required. Beta on both platforms means exactly that: unit-tested,
+    honest about being young.</p>
+    <p class="muted">Linux needs the <code>uinput</code> module, Python 3.11+, and
+    systemd user services; the installer supports <code>apt-get</code>,
+    <code>dnf</code>, and <code>pacman</code>. Full walkthroughs, non-interactive
     install, and troubleshooting live in the
     <a href="https://github.com/liamghennigan/HyperFurion-VK#quick-install">README</a>.</p>
     <p>Free and MIT-licensed. If it earns a place in your keymap,
