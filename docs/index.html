@@ -385,7 +385,7 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 .pl-rain text { font: 11px var(--mono); fill: var(--wave); }
 .pl-cap { margin: 8px 4px 6px; display: block; }
 
-/* ═══ 02 / PROVIDERS — tables + latency theater ════════════════════════ */
+/* ═══ 02 / PROVIDERS — tables ══════════════════════════════════════════ */
 .tblwrap { overflow-x: auto; margin: 16px 0; }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 th {
@@ -398,61 +398,17 @@ th {
 th, td { border-bottom: 1px solid var(--line); padding: 8px 14px 8px 0; vertical-align: top; }
 td:first-child { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
 
-.latency {
-  background: var(--code-bg);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 16px 16px 10px;
-  margin: 20px 0 6px;
+.default-badge {
+  font: 9.5px var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--wave);
+  border: 1px solid var(--wave);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: 1px;
 }
-.lat-row {
-  display: grid;
-  grid-template-columns: 96px 1fr;
-  align-items: center;
-  gap: 12px;
-  margin: 10px 0;
-}
-.lat-name { font: 12px var(--mono); color: var(--text); }
-.lat-track {
-  position: relative;
-  display: flex;
-  height: 18px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: linear-gradient(var(--grid) 0 0) padding-box;
-  border: 1px dashed var(--line);
-}
-.lat-seg { height: 100%; }
-.lat-seg.rec-seg {
-  width: var(--w, 55%);
-  background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--glow) 4px 8px);
-  border-right: 1px solid var(--line);
-  position: relative;
-}
-.lat-seg.fin { width: var(--w, 14%); background: var(--wave); opacity: .75; }
-.lat-seg.up  { width: var(--w, 11%); background: var(--wave); opacity: .45; }
-.lat-seg.poll { width: var(--w, 17%); background: repeating-linear-gradient(90deg, var(--wave) 0 6px, transparent 6px 12px); opacity: .55; }
-.lat-tick {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  background: var(--wave);
-}
-.lat-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
-.lat-legend .sigcap::before {
-  content: "";
-  display: inline-block;
-  width: 14px;
-  height: 9px;
-  margin-right: 5px;
-  vertical-align: -1px;
-  border: 1px solid var(--line);
-}
-.lat-legend .k-rec::before { background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--glow) 4px 8px); }
-.lat-legend .k-fin::before { background: var(--wave); opacity: .75; border: 0; }
-.lat-legend .k-tick::before { width: 2px; background: var(--wave); border: 0; }
-.lat-legend .k-poll::before { background: repeating-linear-gradient(90deg, var(--wave) 0 4px, transparent 4px 8px); border: 0; }
 
 /* ═══ 04 / CONFIGURATION — the live config ═════════════════════════════ */
 pre.config { outline: none; }
@@ -510,11 +466,6 @@ footer .sigcap { display: block; margin-bottom: 10px; }
 .pipeline.speak .pl-edge.t-sel, .pipeline.speak .pl-edge.t-out { stroke: var(--wave); opacity: 1; }
 .pipeline.speak .pl-edge.t-out.word { stroke-width: 2.4; }
 .pl-rain text { will-change: transform, opacity; }
-.latency .lat-seg.fin, .latency .lat-seg.up, .latency .lat-seg.poll { transition: none; }
-.latency.live .lat-seg.fin, .latency.live .lat-seg.up, .latency.live .lat-seg.poll { width: 0; }
-.latency.live .lat-seg.fin.go { width: var(--w, 14%); transition: width var(--dur, 1s) ease-out; }
-.latency.live .lat-seg.up.go { width: var(--w, 11%); transition: width 1s ease-out; }
-.latency.live .lat-seg.poll.go { width: var(--w, 17%); transition: width 1.6s steps(8); }
 
 /* ═══ REDUCED MOTION — stillness is a valid rendering ══════════════════ */
 @media (prefers-reduced-motion: reduce) {
@@ -527,8 +478,7 @@ footer .sigcap { display: block; margin-bottom: 10px; }
   .pl-node-label, .pl-node-sub, .pl-lane { fill: CanvasText; }
   .pl-edge { stroke: CanvasText; }
   .pl-arrow { fill: CanvasText; }
-  .lat-seg.fin, .lat-seg.up, .lat-tick { background: CanvasText; }
-  .vpbadge, .lat-track, .trust > div { border-color: CanvasText; }
+  .default-badge, .trust > div { border-color: CanvasText; color: CanvasText; }
 }
 
 /* ═══ PRINT — the page prints as a lab report ══════════════════════════ */
@@ -544,7 +494,7 @@ footer .sigcap { display: block; margin-bottom: 10px; }
   h1 { font-size: 40px; }
   section { margin: 36px 0; break-inside: avoid-page; }
   h2 { break-after: avoid; }
-  pre, .pipeline, .latency, .trust > div { border: 1px solid #bbb; box-shadow: none; }
+  pre, .pipeline, .trust > div { border: 1px solid #bbb; box-shadow: none; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 11px; color: #555; }
   footer { border-top-color: #bbb; }
 }
@@ -694,19 +644,21 @@ chmod +x install-hyperfurion-vk.sh
   <!-- ═══ 02 / PROVIDERS ════════════════════════════════════════════════ -->
   <section class="prose" id="providers">
     <h2><span class="num" aria-hidden="true">02</span>Providers</h2>
-    <p>Bring your own API key. Switch providers with one line in the config;
-    model IDs are plain config values.</p>
+    <p><b>xAI is the default</b>, for speech-to-text and text-to-speech both —
+    it&rsquo;s what this project is built and daily-driven on. Any provider below
+    works: bring your own API key and switch with one line in the config.
+    Model IDs are plain config values.</p>
 
     <h3>Speech-to-text</h3>
     <div class="tblwrap">
     <table>
-      <thead><tr><th scope="col">Provider</th><th scope="col">Behavior</th><th scope="col">Default model</th></tr></thead>
+      <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th></tr></thead>
       <tbody>
-        <tr><td>xai</td><td>Streaming WebSocket — transcript events arrive while you speak.</td><td>provider default</td></tr>
-        <tr><td>openai</td><td>Buffered REST — audio submitted as WAV after you stop.</td><td><code>gpt-4o-transcribe</code></td></tr>
-        <tr><td>groq</td><td>Buffered REST, OpenAI-compatible endpoint.</td><td><code>whisper-large-v3-turbo</code></td></tr>
-        <tr><td>deepgram</td><td>Buffered REST.</td><td><code>nova-3</code></td></tr>
-        <tr><td>assemblyai</td><td>Buffered upload plus polling — usually the slowest stop path.</td><td>provider default</td></tr>
+        <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td></tr>
+        <tr><td>openai</td><td><code>gpt-4o-transcribe</code></td></tr>
+        <tr><td>groq</td><td><code>whisper-large-v3-turbo</code></td></tr>
+        <tr><td>deepgram</td><td><code>nova-3</code></td></tr>
+        <tr><td>assemblyai</td><td>provider default</td></tr>
       </tbody>
     </table>
     </div>
@@ -716,42 +668,15 @@ chmod +x install-hyperfurion-vk.sh
     <table>
       <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th><th scope="col">Default voice</th></tr></thead>
       <tbody>
-        <tr><td>xai</td><td>provider default</td><td><code>eve</code></td></tr>
+        <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td><td><code>eve</code></td></tr>
         <tr><td>openai</td><td><code>gpt-4o-mini-tts</code></td><td><code>coral</code></td></tr>
         <tr><td>elevenlabs</td><td><code>eleven_multilingual_v2</code></td><td><code>JBFqnCBsd6RMkjVDRZzb</code></td></tr>
       </tbody>
     </table>
     </div>
 
-    <h3>What &ldquo;streaming&rdquo; buys you</h3>
-    <div class="latency wide" id="latency" style="padding-left:16px;padding-right:16px">
-      <div class="lat-row"><span class="lat-name">xai</span>
-        <span class="lat-track" data-shape="stream"><span class="lat-seg rec-seg" id="lat-rec-xai"><span class="lat-tick" style="left:18%"></span><span class="lat-tick" style="left:39%"></span><span class="lat-tick" style="left:62%"></span><span class="lat-tick" style="left:84%"></span></span><span class="lat-seg fin" style="--w:6%"></span></span>
-      </div>
-      <div class="lat-row"><span class="lat-name">openai</span>
-        <span class="lat-track" data-shape="buffer"><span class="lat-seg rec-seg" id="lat-rec-openai"></span><span class="lat-seg fin" id="lat-fin-openai" style="--w:15%"></span></span>
-      </div>
-      <div class="lat-row"><span class="lat-name">groq</span>
-        <span class="lat-track" data-shape="buffer"><span class="lat-seg rec-seg" id="lat-rec-groq"></span><span class="lat-seg fin" id="lat-fin-groq" style="--w:11%"></span></span>
-      </div>
-      <div class="lat-row"><span class="lat-name">deepgram</span>
-        <span class="lat-track" data-shape="buffer"><span class="lat-seg rec-seg" id="lat-rec-deepgram"></span><span class="lat-seg fin" id="lat-fin-deepgram" style="--w:12%"></span></span>
-      </div>
-      <div class="lat-row"><span class="lat-name">assemblyai</span>
-        <span class="lat-track" data-shape="poll"><span class="lat-seg rec-seg" id="lat-rec-assemblyai" style="--w:48%"></span><span class="lat-seg up" id="lat-up-assemblyai"></span><span class="lat-seg poll" id="lat-poll-assemblyai"></span></span>
-      </div>
-      <div class="lat-legend">
-        <span class="sigcap k-rec">recording</span>
-        <span class="sigcap k-tick">interim transcript event</span>
-        <span class="sigcap k-fin">finalize</span>
-        <span class="sigcap k-poll">upload + poll</span>
-      </div>
-      <p class="sigcap" id="lat-cap" style="margin:10px 0 2px">shapes are the real behavior · <span id="lat-cap-live">dictate on this page and the recording phase runs on your clock; ticks on the streaming row are real transcript events (your browser&rsquo;s engine standing in for xAI)</span> · finalize durations illustrative</p>
-    </div>
-
-    <p class="muted">Only xAI streams; the rest finalize after you stop.
-    <code>stt.interim_results</code> currently affects xAI only. For AssemblyAI,
-    <code>language = "en"</code> is sent as <code>en_us</code>.</p>
+    <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
+    <code>en_us</code>.</p>
   </section>
 
   <!-- ═══ 03 / CONFIGURATION ════════════════════════════════════════════ -->
@@ -771,16 +696,17 @@ mode = "auto"
 hold_threshold_ms = 280
 
 [stt]
-# the daemon also takes provider = "xai" | "openai" | "groq"
-#   | "deepgram" | "assemblyai" — this page has one provider,
-#   your browser's speech engine, so only these two apply:
+# the daemon also takes provider = "xai" (the default)
+#   | "openai" | "groq" | "deepgram" | "assemblyai" — this
+#   page's provider is your browser's speech engine, so
+#   only these two apply:
 language = "en"
 interim_results = true
 
 [tts]
-# the daemon also takes provider = "xai" | "openai"
-#   | "elevenlabs"; here voice_id is matched against
-#   your browser's installed voices instead
+# the daemon also takes provider = "xai" (the default)
+#   | "openai" | "elevenlabs"; here voice_id is matched
+#   against your browser's installed voices instead
 voice_id = "eve"
 # rate and pitch are page-only knobs (the daemon's real
 # keys are provider, model, voice_id, language)
@@ -831,7 +757,7 @@ pitch = 1.0</pre>
         <h3>The daemon</h3>
         <ul>
           <li>Dictated audio goes to your chosen STT provider; selected text goes to your TTS provider. Nothing else.</li>
-          <li>REST providers buffer audio in memory and submit one WAV after you stop; xAI streams over a WebSocket while you speak.</li>
+          <li>Recorded audio is held in memory while it is being transcribed — not written to disk.</li>
           <li>TTS audio is a temporary MP3, deleted after playback.</li>
           <li>API keys sit in <code>config.toml</code>, mode 600. The IPC socket is mode 600.</li>
           <li>Default logs record state and transcript <i>lengths</i>, not transcript text.</li>
@@ -841,7 +767,7 @@ pitch = 1.0</pre>
       <div>
         <h3>This page</h3>
         <ul>
-          <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon streams to its provider.</li>
+          <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon sends audio to its provider.</li>
           <li>TTS uses your browser&rsquo;s speech synthesis.</li>
           <li>One file, no scripts loaded, no analytics, no cookies, no storage.</li>
           <li>Nothing is loaded, stored, or sent. Works offline once loaded.</li>
@@ -859,7 +785,7 @@ pitch = 1.0</pre>
       <li>Cloud STT/TTS — this is not an offline dictation engine.</li>
       <li>Injection is printable ASCII plus newline and tab. Accents, CJK, emoji are skipped with warnings in the journal.</li>
       <li>The near-field recording overlay is GNOME Shell 50 on Wayland; other desktops get ordinary notifications.</li>
-      <li>REST providers finalize only after you stop — they feel less live than xAI streaming.</li>
+      <li>Stop-to-text latency depends on your provider and connection.</li>
       <li>IPC commands are handled one at a time; a slow TTS request can delay the next command.</li>
       <li id="page-note" hidden>This page runs on your browser&rsquo;s speech engines, the same
       way the daemon runs on its providers. When the browser has no speech engine
@@ -908,9 +834,8 @@ chmod +x install-hyperfurion-vk.sh
   // path diagram, and the scope's frozen waveform — simultaneously.
   //
   //   dictation  -> the browser's speech engine types into the terminal,
-  //                 the pipeline lights up, the streaming row of the
-  //                 latency strip ticks on real interim results, and the
-  //                 sentence's loudness envelope freezes onto the scope
+  //                 the pipeline lights up, and the sentence's loudness
+  //                 envelope freezes onto the scope
   //   tts        -> select text, Ctrl+Alt+T speaks it; where the browser
   //                 supports the CSS Custom Highlight API, each word
   //                 lights up as it is read; the reverse lane glows
@@ -1605,7 +1530,7 @@ chmod +x install-hyperfurion-vk.sh
       status.textContent = "capturing audio";
     });
     bus.on("rec:interim", () => {
-      status.textContent = "streaming transcript";
+      status.textContent = "transcript arriving";
       if (!reduced && packets.length < 4) {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("r", "3.2"); c.setAttribute("class", "pl-packet");
@@ -1629,60 +1554,6 @@ chmod +x install-hyperfurion-vk.sh
       out.classList.add("word");
       clearTimeout(wordT);
       wordT = setTimeout(() => out.classList.remove("word"), 120);
-    });
-  })();
-
-  // ═══ LATENCY — 02 / real events on the streaming row ═══════════════════
-  const Latency = (() => {
-    const panel = $("latency");
-    if (reduced) return;            // the static shapes are the rendering
-    const rows = {
-      xai: $("lat-rec-xai"), openai: $("lat-rec-openai"), groq: $("lat-rec-groq"),
-      deepgram: $("lat-rec-deepgram"), assemblyai: $("lat-rec-assemblyai"),
-    };
-    const fins = [
-      [panel.querySelector('[data-shape="stream"] .fin'), ".3s"],
-      [$("lat-fin-openai"), "1.2s"], [$("lat-fin-groq"), ".8s"], [$("lat-fin-deepgram"), ".9s"],
-    ];
-    const up = $("lat-up-assemblyai"), poll = $("lat-poll-assemblyai");
-    const savedTicks = rows.xai.innerHTML;
-    let t0 = 0, resetT = 0;
-
-    function tick() {
-      if (!panel.classList.contains("live") || !Dictation.recording) return;
-      const el = (performance.now() - t0) / 1000;
-      const pct = Math.min(76, 10 + el * 6.5);
-      for (const k of ["xai", "openai", "groq", "deepgram"]) rows[k].style.width = pct + "%";
-      rows.assemblyai.style.width = Math.min(48, 6 + el * 4) + "%";
-    }
-    Ticker.add({ el: panel, fn: tick });
-
-    bus.on("rec:start", () => {
-      clearTimeout(resetT);
-      panel.classList.add("live");
-      rows.xai.innerHTML = "";
-      for (const k in rows) rows[k].style.width = k === "assemblyai" ? "6%" : "10%";
-      for (const [f] of fins) f.classList.remove("go");
-      up.classList.remove("go"); poll.classList.remove("go");
-      t0 = performance.now();
-    });
-    bus.on("rec:interim", () => {
-      if (!panel.classList.contains("live")) return;
-      const w = parseFloat(rows.xai.style.width) || 10;
-      const tk = document.createElement("span");
-      tk.className = "lat-tick";
-      tk.style.left = Math.min(96, w - 2) + "%";
-      rows.xai.appendChild(tk);
-    });
-    bus.on("rec:stop", () => {
-      for (const [f, dur] of fins) { f.style.setProperty("--dur", dur); f.classList.add("go"); }
-      setTimeout(() => up.classList.add("go"), 150);
-      setTimeout(() => poll.classList.add("go"), 1150);
-      resetT = setTimeout(() => {
-        panel.classList.remove("live");
-        rows.xai.innerHTML = savedTicks;
-        for (const k in rows) rows[k].style.width = "";
-      }, 6500);
     });
   })();
 
@@ -1849,7 +1720,7 @@ chmod +x install-hyperfurion-vk.sh
         add("this terminal is the focused app — tap the mic up top or press " +
             kbd(Config.cfg.keyLabel) + ", <b>speak</b>, then tap or press again to stop");
         if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
-                    "browser's speech engine, the way the daemon streams to its provider");
+                    "browser's speech engine, the way the daemon sends audio to its provider");
         else add(" · no speech engine in this browser, so it will improvise");
       } else if (dictations === 1) {
         add("the strip above the terminal froze your sentence's <i>waveform</i> — drawn from the " +
