@@ -62,32 +62,50 @@ cfgEl.contentEditable = "plaintext-only";
 if (cfgEl.contentEditable !== "plaintext-only") cfgEl.contentEditable = "true";
 Hints.set();
 // colophon: the real size, measured, not claimed — and counted up like
-// a meter settling, when motion is welcome
+// a meter settling, when motion is welcome. If you opted into the hosted
+// demo before scrolling here, its requests are counted and said out loud.
 try {
   const nav = performance.getEntriesByType("navigation")[0];
-  const bytes = (nav && nav.decodedBodySize) ||
+  const htmlBytes = (nav && (nav.transferSize || nav.decodedBodySize)) ||
     ("<!doctype html>" + document.documentElement.outerHTML).length;
-  const kb = Math.round(bytes / 1024);
   const bytesEl = $("bytes");
-  const label = (n) =>
-    "one file · zero dependencies · " + n + " KB · zero requests after load";
-  if (kb) {
-    if (reduced || !("IntersectionObserver" in window)) {
-      bytesEl.textContent = label(kb);
-    } else {
-      bytesEl.textContent = label(0);
-      const mio = new IntersectionObserver((es) => {
-        if (!es.some((e) => e.isIntersecting)) return;
-        mio.disconnect();
-        const t0 = performance.now();
-        const step = (t) => {
-          const k = Math.min(1, (t - t0) / 900);
-          bytesEl.textContent = label(Math.round(kb * k * (2 - k)));
-          if (k < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      });
-      mio.observe(bytesEl);
+  const measure = () => {
+    const res = performance.getEntriesByType("resource");
+    let own = 0, ownBytes = 0, foreign = 0;
+    for (const r of res) {
+      try {
+        if (new URL(r.name).origin === location.origin) {
+          own++; ownBytes += r.transferSize || r.decodedBodySize || 0;
+        } else foreign++;
+      } catch {}
     }
+    return {
+      files: own + 1,
+      kb: Math.round((htmlBytes + ownBytes) / 1024),
+      foreign,
+    };
+  };
+  const label = (m, kb) =>
+    m.files + " files · " + kb + " KB · all self-hosted · " +
+    (m.foreign ? m.foreign + " opt-in request" + (m.foreign > 1 ? "s" : "") + " (you asked)"
+               : "zero third-party requests") +
+    " · zero analytics";
+  if (reduced || !("IntersectionObserver" in window)) {
+    const m = measure();
+    bytesEl.textContent = label(m, m.kb);
+  } else {
+    const mio = new IntersectionObserver((es) => {
+      if (!es.some((e) => e.isIntersecting)) return;
+      mio.disconnect();
+      const m = measure();
+      const t0 = performance.now();
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / 900);
+        bytesEl.textContent = label(m, Math.round(m.kb * k * (2 - k)));
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+    mio.observe(bytesEl);
   }
 } catch {}

@@ -6,9 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>document.documentElement.className = "js";</script>
 <title>HyperFurion VK — a voice keyboard for Linux</title>
-<meta name="description" content="A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app. This page is a working instrument: it listens, types, reads aloud, and its config file is live.">
-<meta property="og:title" content="HyperFurion VK">
-<meta property="og:description" content="A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app. Try it on this page — it actually listens.">
+<meta name="description" content="Speak. It types. A Linux voice keyboard: press Ctrl+Alt+V and your words land in whatever app has focus, as real keystrokes. This page is a working instance — dictate into its editor, chat, and terminal, and its config file is live.">
+<meta property="og:title" content="HyperFurion VK — Speak. It types.">
+<meta property="og:description" content="A voice keyboard for Linux. Press Ctrl+Alt+V, speak, and it types into whatever app has focus. Try it on this page — it actually listens, or let the autopilot show you.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/">
 <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/">
@@ -44,9 +44,11 @@
 <main>
 
   <!-- ═══ HERO — the master gauge ═══════════════════════════════════════
-       The canvas behind this header draws a synthetic test pattern while
-       idle and a real spectrogram of your microphone while you dictate.
-       The caption at the lower left always says which one you are seeing.
+       Behind everything: the field, a WebGL particle system driven by the
+       same signal as every other gauge — synthetic while idle, your live
+       microphone while you dictate. Without WebGL2 this canvas draws the
+       2D trace/spectrogram instead. The caption at the lower left always
+       says which signal you are seeing.
   ════════════════════════════════════════════════════════════════════ -->
   <header class="hero" id="hero">
     <canvas id="hero-canvas" aria-hidden="true"></canvas>
@@ -509,9 +511,9 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</
 </main>
 
 <footer id="foot">
-  <span class="sigcap"><span id="bytes">one file · zero dependencies · zero requests after load</span> · works offline once loaded · the hosted demo speaks only when spoken to</span>
+  <span class="sigcap"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · works offline once loaded · the hosted demo speaks only when spoken to</span>
   MIT License · <a href="https://github.com/liamghennigan/HyperFurion-VK">liamghennigan/HyperFurion-VK</a> ·
-  <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/docs/index.html">view source</a> ·
+  <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/docs">view source — it&rsquo;s all readable</a> ·
   <a href="https://github.com/sponsors/liamghennigan">sponsor</a>
 </footer>
 
