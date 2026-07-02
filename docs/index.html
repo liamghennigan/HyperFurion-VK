@@ -11,42 +11,44 @@
 <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/">
 <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8E%99%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#0a0a0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8E%99%3C/text%3E%3C/svg%3E">
 <style>
   :root {
-    --text: #1a1a1a;
-    --muted: #666;
-    --line: #e5e5e5;
-    --code-bg: #f6f6f6;
+    --text: #17171c;
+    --muted: #6a6a74;
+    --line: #e6e6ea;
+    --code-bg: #f6f6f8;
     --link: #0969da;
     --rec: #e5484d;
-    --ok: #2da44e;
-    --interim: #999;
+    --wave: #0891b2;
+    --serif: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --text: #e6e6e6;
-      --muted: #999;
-      --line: #2a2a2a;
-      --code-bg: #161616;
+      --text: #e8e8ec;
+      --muted: #94949e;
+      --line: #26262e;
+      --code-bg: #141419;
       --link: #58a6ff;
-      --ok: #3fb950;
-      --interim: #777;
+      --wave: #22d3ee;
     }
-    html { background: #0d0d0d; }
+    html { background: #0a0a0d; }
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  ::selection { background: rgba(9,105,218,.18); }
+  ::selection { background: rgba(34, 211, 238, .25); }
+  ::highlight(vk-tts) { background: rgba(34, 211, 238, .35); }
+  :focus-visible { outline: 2px solid var(--wave); outline-offset: 2px; }
   body {
     margin: 0;
-    font: 16px/1.6 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
     color: var(--text);
   }
   main { max-width: 640px; margin: 0 auto; padding: 0 20px 80px; }
   a { color: var(--link); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  a:hover { text-decoration: underline; text-decoration-style: wavy; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 
   .hero { text-align: center; padding: 84px 0 24px; }
   .mic {
@@ -64,22 +66,28 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(229,72,77,0); }
     50% { box-shadow: 0 0 0 8px rgba(229,72,77,.25); }
   }
-  h1 { font-size: 28px; margin: 16px 0 8px; }
-  .tagline { color: var(--muted); margin: 0 auto 24px; max-width: 34em; }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 46px;
+    letter-spacing: -.015em;
+    margin: 14px 0 10px;
+  }
+  .tagline { color: var(--muted); margin: 0 auto 26px; max-width: 34em; font-size: 17px; }
   .hero nav { margin-top: 20px; }
-  .hero nav a { margin: 0 12px; }
+  .hero nav a { margin: 0 12px; font-family: var(--mono); font-size: 14px; }
 
   pre {
     background: var(--code-bg);
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 14px 16px;
     overflow-x: auto;
     text-align: left;
     font-size: 13px;
     line-height: 1.7;
   }
-  code, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code, kbd { font-family: var(--mono); }
   p code, li code {
     background: var(--code-bg);
     border: 1px solid var(--line);
@@ -96,14 +104,28 @@
     padding: 1px 5px;
   }
 
-  /* the focused app */
+  /* the focused app: always a dark terminal, in both color schemes */
   .term {
-    background: var(--code-bg);
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    position: relative;
+    background: #0c0c11;
+    border: 1px solid #26262e;
+    border-radius: 10px;
     margin: 0 0 10px;
     text-align: left;
     overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,.18);
+  }
+  .scope-wrap { position: relative; border-bottom: 1px solid #1c1c23; }
+  canvas.scope { display: block; width: 100%; height: 56px; }
+  .scope-label {
+    position: absolute;
+    right: 10px;
+    bottom: 6px;
+    font: 10px var(--mono);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #4b4b58;
+    pointer-events: none;
   }
   .term-bar {
     display: flex;
@@ -111,9 +133,9 @@
     justify-content: space-between;
     gap: 10px;
     padding: 8px 14px;
-    border-bottom: 1px solid var(--line);
-    font-size: 12px;
-    color: var(--muted);
+    border-bottom: 1px solid #1c1c23;
+    font: 12px var(--mono);
+    color: #8a8a95;
   }
   .pill {
     display: inline-flex;
@@ -128,45 +150,47 @@
     border-radius: 2px;
     background: var(--rec);
     animation: bar .9s ease-in-out infinite;
+    transform-origin: center;
   }
+  .pill.real i { animation: none; }
   .pill i:nth-child(2) { animation-delay: -.3s; }
   .pill i:nth-child(3) { animation-delay: -.6s; }
   .pill i:nth-child(4) { animation-delay: -.15s; }
   @keyframes bar { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
   .term-body {
     padding: 12px 16px 14px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--mono);
     font-size: 13px;
     line-height: 1.8;
     min-height: 100px;
+    color: #e8e8ec;
   }
   .term-body .tline { overflow-wrap: anywhere; }
-  .term-body .dim { color: var(--muted); }
-  .term-body .interim { color: var(--interim); }
+  .term-body .dim { color: #8a8a95; }
+  .term-body .interim { color: #6f6f7c; }
   .caret {
     display: inline-block;
     width: 7px;
     height: 14px;
-    background: var(--text);
+    background: #e8e8ec;
     vertical-align: -2px;
     animation: blink 1.1s steps(1) infinite;
   }
   @keyframes blink { 50% { opacity: 0; } }
   .hint { color: var(--muted); font-size: 13px; margin: 0 0 28px; }
-  .hint .engine-live { color: var(--ok); }
+  .hint .engine-live { color: var(--wave); }
 
   /* live config */
-  .config-wrap { position: relative; }
   pre.config { outline: none; }
-  pre.config:focus { border-color: var(--link); }
-  .cfgstatus { color: var(--muted); font-size: 13px; margin: 8px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre.config:focus { border-color: var(--wave); }
+  .cfgstatus { color: var(--muted); font-size: 13px; margin: 8px 0 0; font-family: var(--mono); }
   .cfgstatus.err { color: var(--rec); }
 
   /* tts chip */
   .ttschip {
     position: absolute;
     z-index: 5;
-    font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 12px var(--mono);
     color: var(--text);
     background: var(--code-bg);
     border: 1px solid var(--line);
@@ -180,11 +204,22 @@
     .caret, .pill i, .mic.live { animation: none; }
   }
 
+  /* section headers: mono overlines with a waveform rule */
   h2 {
-    font-size: 16px;
-    margin: 48px 0 12px;
-    padding-top: 24px;
-    border-top: 1px solid var(--line);
+    font: 600 12px/1 var(--mono);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 56px 0 14px;
+  }
+  h2::after {
+    content: "";
+    display: block;
+    height: 7px;
+    margin-top: 10px;
+    background: var(--line);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='7' viewBox='0 0 28 7'%3E%3Cpath d='M0 3.5 Q 3.5 0, 7 3.5 T 14 3.5 T 21 3.5 T 28 3.5' fill='none' stroke='black' stroke-width='1.4'/%3E%3C/svg%3E") repeat-x left center / 28px 7px;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='7' viewBox='0 0 28 7'%3E%3Cpath d='M0 3.5 Q 3.5 0, 7 3.5 T 14 3.5 T 21 3.5 T 28 3.5' fill='none' stroke='black' stroke-width='1.4'/%3E%3C/svg%3E") repeat-x left center / 28px 7px;
   }
   p, ul { margin: 12px 0; }
   ul { padding-left: 22px; }
@@ -212,6 +247,10 @@
     and it types into whatever app has focus.</p>
 
     <div class="term" id="term" hidden>
+      <div class="scope-wrap">
+        <canvas class="scope" id="scope" aria-hidden="true"></canvas>
+        <span class="scope-label" id="scope-label">signal</span>
+      </div>
       <div class="term-bar">
         <span>the focused app — bash</span>
         <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
@@ -298,20 +337,29 @@ pitch = 1.0</pre>
 (() => {
   "use strict";
   // This page is a working instance of the product, scaled to one tab:
-  //   dictation  -> the browser's speech engine types into the terminal above
-  //   tts        -> select text, Ctrl+Alt+T speaks it via speechSynthesis
+  //   dictation  -> the browser's speech engine types into the terminal above,
+  //                 while the scope strip draws your actual microphone signal;
+  //                 when you stop, the sentence's envelope freezes into a
+  //                 "voiceprint" above the text it became
+  //   tts        -> select text, Ctrl+Alt+T speaks it; where the browser
+  //                 supports the CSS Custom Highlight API, each word lights
+  //                 up as it is read
   //   config     -> the config.toml on the page is parsed live and re-binds
   //                 the hotkey, mode, hold threshold, and tts voice settings
   // When the browser has no speech engine or denies the mic, dictation falls
-  // back to canned transcripts so the interaction still demonstrates the flow.
+  // back to canned transcripts and a synthesized signal, and says so.
 
   const $ = (id) => document.getElementById(id);
   const term = $("term"), tbody = $("tbody"), pill = $("pill"), mic = $("mic"), hint = $("hint");
   const cfgEl = $("config"), cfgStatus = $("cfgstatus");
+  const scope = $("scope"), scopeLabel = $("scope-label");
+  const favicon = $("favicon");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const synth = window.speechSynthesis;
   const baseTitle = document.title;
+  const FAV_IDLE = favicon.href;
+  const FAV_REC = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='34' fill='%23e5484d'/%3E%3C/svg%3E";
 
   // ---- reveal the interactive parts (page stays static without JS) ----
   term.hidden = hint.hidden = false;
@@ -407,6 +455,127 @@ pitch = 1.0</pre>
   history.push({ text: "$ voice-keyboard status" }, { text: "idle", dim: true });
   renderTerm();
 
+  // ---- the scope: your voice, drawn ----
+  const sctx = scope.getContext("2d");
+  let scopeW = 0, scopeH = 0;
+  const hist = [];          // per-frame peaks for the current recording
+  let voiceprint = null;    // frozen envelope of the last dictation
+  let rafId = 0, simT = 0;
+
+  function sizeScope() {
+    const dpr = devicePixelRatio || 1;
+    scopeW = scope.clientWidth;
+    scopeH = scope.clientHeight;
+    scope.width = Math.round(scopeW * dpr);
+    scope.height = Math.round(scopeH * dpr);
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function waveColor() {
+    return getComputedStyle(document.documentElement).getPropertyValue("--wave").trim() || "#22d3ee";
+  }
+  function drawBars(values, alpha) {
+    const step = 3, mid = scopeH / 2;
+    sctx.fillStyle = waveColor();
+    sctx.globalAlpha = alpha;
+    for (let i = 0; i < values.length; i++) {
+      const v = Math.max(values[i], .02);
+      const h = Math.max(1.5, v * (scopeH - 8));
+      sctx.fillRect(scopeW - (values.length - i) * step, mid - h / 2, 2, h);
+    }
+    sctx.globalAlpha = 1;
+  }
+  function drawPrintAcross(print, alpha) {
+    const step = 3, n = Math.floor(scopeW / step), mid = scopeH / 2;
+    sctx.fillStyle = waveColor();
+    sctx.globalAlpha = alpha;
+    for (let i = 0; i < n; i++) {
+      const v = print[Math.floor(i * print.length / n)] || 0;
+      const h = Math.max(1.5, v * (scopeH - 8));
+      sctx.fillRect(i * step, mid - h / 2, 2, h);
+    }
+    sctx.globalAlpha = 1;
+  }
+  function drawIdle() {
+    sctx.clearRect(0, 0, scopeW, scopeH);
+    if (voiceprint) { drawPrintAcross(voiceprint, .45); return; }
+    sctx.fillStyle = waveColor();
+    sctx.globalAlpha = .35;
+    sctx.fillRect(0, scopeH / 2 - .5, scopeW, 1);
+    sctx.globalAlpha = 1;
+  }
+  function currentPeak() {
+    if (audio.analyser) {
+      audio.analyser.getByteTimeDomainData(audio.buf);
+      let peak = 0;
+      for (let i = 0; i < audio.buf.length; i++) peak = Math.max(peak, Math.abs(audio.buf[i] - 128) / 128);
+      return Math.min(1, peak * 1.6);
+    }
+    // synthesized signal for the no-mic fallback: speech-like bursts
+    simT += 1 / 60;
+    const talking = Math.sin(simT * 1.9) > -0.3 ? 1 : 0.08;
+    return Math.min(1, (Math.abs(Math.sin(simT * 9)) * .5 + Math.abs(Math.sin(simT * 23)) * .25 +
+      Math.random() * .18) * talking * .8);
+  }
+  function drawLive() {
+    if (!recording) return;
+    rafId = requestAnimationFrame(drawLive);
+    const peak = currentPeak();
+    hist.push(peak);
+    sctx.clearRect(0, 0, scopeW, scopeH);
+    if (voiceprint) drawPrintAcross(voiceprint, .10);
+    drawBars(hist.slice(-Math.floor(scopeW / 3)), .9);
+    // real VU on the recording pill
+    if (audio.analyser) {
+      audio.analyser.getByteFrequencyData(audio.fbuf);
+      const bands = [2, 8, 24, 64];
+      pill.querySelectorAll("i").forEach((bar, i) => {
+        const v = audio.fbuf[bands[i]] / 255;
+        bar.style.transform = "scaleY(" + Math.max(.2, v).toFixed(2) + ")";
+      });
+    }
+  }
+  function freezePrint() {
+    if (!hist.length) return;
+    const n = Math.max(24, Math.floor(scopeW / 3));
+    const print = new Array(n).fill(0);
+    for (let i = 0; i < hist.length; i++) {
+      const b = Math.floor(i * n / hist.length);
+      print[b] = Math.max(print[b], hist[i]);
+    }
+    voiceprint = print;
+    hist.length = 0;
+    drawIdle();
+    scopeLabel.textContent = "voiceprint";
+  }
+  sizeScope();
+  drawIdle();
+  addEventListener("resize", () => { sizeScope(); drawIdle(); });
+
+  // ---- microphone (for the scope + VU; recognition opens its own) ----
+  const audio = { ctx: null, analyser: null, stream: null, buf: null, fbuf: null };
+  async function startAudio() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    try {
+      audio.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!audio.ctx) audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.ctx.state === "suspended") await audio.ctx.resume();
+      const src = audio.ctx.createMediaStreamSource(audio.stream);
+      audio.analyser = audio.ctx.createAnalyser();
+      audio.analyser.fftSize = 1024;
+      audio.buf = new Uint8Array(audio.analyser.fftSize);
+      audio.fbuf = new Uint8Array(audio.analyser.frequencyBinCount);
+      src.connect(audio.analyser);
+      pill.classList.add("real");
+    } catch { /* scope falls back to the synthesized signal */ }
+  }
+  function stopAudio() {
+    if (audio.stream) audio.stream.getTracks().forEach(t => t.stop());
+    audio.stream = null;
+    audio.analyser = null;
+    pill.classList.remove("real");
+    pill.querySelectorAll("i").forEach(b => { b.style.transform = ""; });
+  }
+
   // ---- dictation ----
   let recording = false, engine = "none", rec = null, typeTimer = 0, simIdx = 0, dictations = 0;
   const SIM_LINES = [
@@ -425,7 +594,8 @@ pitch = 1.0</pre>
                   "browser's speech engine, the way the daemon streams to its provider");
       else add(" · no speech engine in this browser, so it will improvise");
     } else if (dictations === 1) {
-      add("now hold it and release to stop — the <code>hold_threshold_ms = " + cfg.holdMs +
+      add("the strip above the terminal is your sentence as sound — its <i>voiceprint</i>. " +
+          "now hold the hotkey and release to stop; <code>hold_threshold_ms = " + cfg.holdMs +
           "</code> below is real, like everything else in that config");
     } else {
       add("select any text on this page and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> — " +
@@ -440,6 +610,7 @@ pitch = 1.0</pre>
     mic.classList.toggle("live", on);
     mic.setAttribute("aria-pressed", String(on));
     document.title = on ? "● recording — " + baseTitle : baseTitle;
+    favicon.href = on ? FAV_REC : FAV_IDLE;
   }
 
   function start() {
@@ -448,6 +619,10 @@ pitch = 1.0</pre>
     committed = interim = "";
     renderTerm();
     setRecording(true);
+    scopeLabel.textContent = "signal";
+    hist.length = 0;
+    startAudio();
+    if (!reduced) { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(drawLive); }
     if (SR) {
       try {
         rec = new SR();
@@ -477,6 +652,9 @@ pitch = 1.0</pre>
   function stop() {
     if (!recording) return;
     setRecording(false);
+    cancelAnimationFrame(rafId);
+    stopAudio();
+    freezePrint();
     if (rec) { try { rec.stop(); } catch {} rec = null; }
     dictations++;
     // give a final result a beat to arrive, then settle the line
@@ -515,7 +693,11 @@ pitch = 1.0</pre>
       speakSelection();
       return;
     }
-    if (e.code === "Escape") { if (recording) stop(); if (synth) synth.cancel(); return; }
+    if (e.code === "Escape") {
+      if (recording) stop();
+      if (synth) { synth.cancel(); clearTtsHighlight(); }
+      return;
+    }
     if (!comboDown(e) || inEditor(e)) return;
     e.preventDefault();
     if (e.repeat || keyDown) return;
@@ -538,18 +720,69 @@ pitch = 1.0</pre>
     if (cfg.mode === "auto") toggle();
   });
 
-  // ---- tts on selection (the other half of the product) ----
+  // ---- tts on selection, with word-by-word highlight where supported ----
   let chip = null;
   function removeChip() { if (chip) { chip.remove(); chip = null; } }
+  function clearTtsHighlight() {
+    if (window.Highlight && CSS.highlights) CSS.highlights.delete("vk-tts");
+  }
+  function textSegments(range) {
+    // map absolute offsets in range.toString() -> positions in the live DOM
+    const segs = [];
+    let abs = 0;
+    const root = range.commonAncestorContainer.nodeType === 3
+      ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      if (!range.intersectsNode(n)) continue;
+      let s = 0, e = n.data.length;
+      if (n === range.startContainer) s = range.startOffset;
+      if (n === range.endContainer) e = range.endOffset;
+      if (e > s) { segs.push({ node: n, s, abs, len: e - s }); abs += e - s; }
+    }
+    return segs;
+  }
+  function highlightWord(segs, from, to) {
+    if (!window.Highlight || !CSS.highlights) return;
+    try {
+      const r = document.createRange();
+      let started = false;
+      for (const g of segs) {
+        const gEnd = g.abs + g.len;
+        if (!started && from >= g.abs && from < gEnd) {
+          r.setStart(g.node, g.s + (from - g.abs));
+          started = true;
+        }
+        if (started && to > g.abs && to <= gEnd) {
+          r.setEnd(g.node, g.s + (to - g.abs));
+          CSS.highlights.set("vk-tts", new Highlight(r));
+          return;
+        }
+      }
+    } catch { /* highlight is garnish; never let it break speech */ }
+  }
   function speakSelection() {
     if (!synth) return;
     const sel = getSelection();
     const text = sel ? sel.toString().trim() : "";
-    if (!text) return;
+    if (!text || sel.rangeCount === 0) return;
     synth.cancel();
-    const u = new SpeechSynthesisUtterance(text);
+    clearTtsHighlight();
+    const segs = textSegments(sel.getRangeAt(0).cloneRange());
+    const u = new SpeechSynthesisUtterance(sel.toString());
     u.rate = cfg.rate;
     u.pitch = cfg.pitch;
+    u.onboundary = (ev) => {
+      if (ev.name && ev.name !== "word") return;
+      const rest = u.text.slice(ev.charIndex);
+      const m = rest.match(/^\s*\S+/);
+      if (!m) return;
+      const lead = m[0].length - m[0].trimStart().length;
+      highlightWord(segs, ev.charIndex + lead, ev.charIndex + m[0].length);
+    };
+    u.onend = clearTtsHighlight;
+    u.onerror = clearTtsHighlight;
     synth.speak(u);
     removeChip();
   }
