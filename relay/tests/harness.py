@@ -21,6 +21,9 @@ class Rig:
     def __init__(self, relay_server: TestServer, relay_app, fake_app) -> None:
         self.store = relay_app["store"]
         self.fake = fake_app["state"]
+        # Live cfg dict — handlers read request.app["cfg"], so mutating this
+        # mid-test (e.g. to point an upstream at a dead port) takes effect.
+        self.relay_cfg = relay_app["cfg"]
         self.http_base = f"http://127.0.0.1:{relay_server.port}"
         self.ws_base = f"ws://127.0.0.1:{relay_server.port}"
 

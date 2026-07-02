@@ -81,23 +81,43 @@ answer isn't in these facts, say so and point to the README."""
 
 
 def _client_ip(request: web.Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # X-Forwarded-For is client-supplied and trivially spoofable, so it is
+    # only honored when the operator has declared a trusted reverse proxy
+    # (DEMO_TRUST_FORWARDED=1). Otherwise the peer address is authoritative.
+    # Never returns "" (which is the reserved global-aggregate key).
+    if request.app["cfg"].get("demo_trust_forwarded"):
+        first = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        if first:
+            return first
     return request.remote or "unknown"
+
+
+def _demo_error(status: int, message: str) -> web.Response:
+    return web.json_response({"error": message}, status=status, headers=CORS_HEADERS)
+
+
+def _safe_content_type(raw: str | None, default: str) -> str:
+    # aiohttp's web.Response rejects a content_type carrying a charset/param;
+    # keep only the media type.
+    return (raw or default).split(";")[0].strip() or default
 
 
 def _budget_left(store: Store, budget_usd: float) -> float:
     return budget_usd - store.demo_counts("")["spent_usd"]
 
 
-def _refusal(store: Store, cfg: dict, ip: str, kind: str) -> str:
-    """Why this demo request can't run right now ('' = it can)."""
+def _reserve(store: Store, cfg: dict, ip: str, kind: str, usd: float) -> str:
+    """Atomically admit a demo request, reserving `usd` against the budget +
+    per-IP cap. Returns "" if admitted (and charged), else a user-facing
+    refusal. STT reserves its max cost here and reconciles at close."""
     if not cfg["master_key"]:
         return "hosted demo is not configured"
-    if _budget_left(store, cfg["demo_daily_budget_usd"]) <= 0:
+    outcome = store.demo_try_charge(
+        ip, kind, usd, IP_DAILY_CAPS[kind], cfg["demo_daily_budget_usd"]
+    )
+    if outcome == "budget":
         return "hosted demo budget is spent for today — back tomorrow"
-    if store.demo_counts(ip)[kind] >= IP_DAILY_CAPS[kind]:
+    if outcome == "ip-cap":
         return "daily demo limit reached for your address — back tomorrow"
     return ""
 
@@ -136,7 +156,11 @@ async def demo_stt(request: web.Request) -> web.WebSocketResponse:
     store: Store = request.app["store"]
     ip = _client_ip(request)
 
-    refusal = _refusal(store, cfg, ip, "dictations")
+    # Reserve the session's MAX possible cost up front so concurrent sessions
+    # cannot each pass a stale budget check; reconcile down to actual duration
+    # at close.
+    max_usd = MAX_DICTATION_SECONDS * STT_USD_PER_SECOND
+    refusal = _reserve(store, cfg, ip, "dictations", max_usd)
     if refusal:
         await ws.send_str(json.dumps({"type": "error", "message": refusal}))
         await ws.close(code=4429)
@@ -215,9 +239,10 @@ async def demo_stt(request: web.Request) -> web.WebSocketResponse:
                 json.dumps({"type": "error", "message": f"upstream STT connection failed: {exc}"})
             )
     finally:
-        if audio_bytes > 0:
-            seconds = min(audio_bytes / bytes_per_second, MAX_DICTATION_SECONDS)
-            store.demo_record(ip, "dictations", seconds * STT_USD_PER_SECOND)
+        # Refund the unused portion of the reserved max (the count already
+        # landed at admission; only the spend is reconciled here).
+        seconds = min(audio_bytes / bytes_per_second, MAX_DICTATION_SECONDS)
+        store.demo_adjust_spend(ip, seconds * STT_USD_PER_SECOND - max_usd)
     if not ws.closed:
         await ws.close()
     return ws
@@ -228,17 +253,20 @@ async def demo_tts(request: web.Request) -> web.Response:
     store: Store = request.app["store"]
     ip = _client_ip(request)
 
-    refusal = _refusal(store, cfg, ip, "tts")
-    if refusal:
-        return web.json_response({"error": refusal}, status=429, headers=CORS_HEADERS)
-
+    if not cfg["master_key"]:
+        return _demo_error(503, "hosted demo is not configured")
     try:
         payload = await request.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
-        return web.json_response({"error": "request body must be JSON"}, status=400, headers=CORS_HEADERS)
+        return _demo_error(400, "request body must be JSON")
     text = str(payload.get("text", "")).strip()[:MAX_TTS_CHARS]
     if not text:
-        return web.json_response({"error": "text is required"}, status=400, headers=CORS_HEADERS)
+        return _demo_error(400, "text is required")
+
+    usd = len(text) * TTS_USD_PER_CHAR
+    refusal = _reserve(store, cfg, ip, "tts", usd)  # charges before upstream
+    if refusal:
+        return _demo_error(429, refusal)
 
     forward = {"text": text, "voice_id": "eve", "language": "en"}
     headers = {"Authorization": f"Bearer {cfg['master_key']}"}
@@ -248,17 +276,14 @@ async def demo_tts(request: web.Request) -> web.Response:
             body = await resp.read()
             if resp.status >= 400:
                 logger.warning("demo TTS upstream returned %d", resp.status)
-                return web.json_response(
-                    {"error": "upstream TTS failed"}, status=502, headers=CORS_HEADERS
-                )
-            content_type = resp.headers.get("Content-Type", "audio/mpeg")
+                store.demo_adjust_spend(ip, -usd)  # refund a failed synthesis
+                return _demo_error(502, "upstream TTS failed")
+            content_type = _safe_content_type(resp.headers.get("Content-Type"), "audio/mpeg")
     except aiohttp.ClientError as exc:
         logger.warning("demo TTS upstream failed: %s", exc)
-        return web.json_response(
-            {"error": f"upstream TTS request failed: {exc}"}, status=502, headers=CORS_HEADERS
-        )
+        store.demo_adjust_spend(ip, -usd)
+        return _demo_error(502, f"upstream TTS request failed: {exc}")
 
-    store.demo_record(ip, "tts", len(text) * TTS_USD_PER_CHAR)
     return web.Response(body=body, content_type=content_type, headers=CORS_HEADERS)
 
 
@@ -267,17 +292,19 @@ async def demo_ask(request: web.Request) -> web.Response:
     store: Store = request.app["store"]
     ip = _client_ip(request)
 
-    refusal = _refusal(store, cfg, ip, "asks")
-    if refusal:
-        return web.json_response({"error": refusal}, status=429, headers=CORS_HEADERS)
-
+    if not cfg["master_key"]:
+        return _demo_error(503, "hosted demo is not configured")
     try:
         payload = await request.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
-        return web.json_response({"error": "request body must be JSON"}, status=400, headers=CORS_HEADERS)
+        return _demo_error(400, "request body must be JSON")
     question = str(payload.get("question", "")).strip()[:MAX_ASK_CHARS]
     if not question:
-        return web.json_response({"error": "question is required"}, status=400, headers=CORS_HEADERS)
+        return _demo_error(400, "question is required")
+
+    refusal = _reserve(store, cfg, ip, "asks", ASK_USD_FLAT)
+    if refusal:
+        return _demo_error(429, refusal)
 
     body = {
         "model": cfg["demo_chat_model"],
@@ -295,23 +322,19 @@ async def demo_ask(request: web.Request) -> web.Response:
             data = await resp.json(content_type=None)
             if resp.status >= 400:
                 logger.warning("demo ask upstream returned %d", resp.status)
-                return web.json_response(
-                    {"error": "upstream chat failed"}, status=502, headers=CORS_HEADERS
-                )
+                store.demo_adjust_spend(ip, -ASK_USD_FLAT)
+                return _demo_error(502, "upstream chat failed")
     except (aiohttp.ClientError, json.JSONDecodeError) as exc:
         logger.warning("demo ask upstream failed: %s", exc)
-        return web.json_response(
-            {"error": f"upstream chat request failed: {exc}"}, status=502, headers=CORS_HEADERS
-        )
+        store.demo_adjust_spend(ip, -ASK_USD_FLAT)
+        return _demo_error(502, f"upstream chat request failed: {exc}")
 
     try:
         answer = str(data["choices"][0]["message"]["content"]).strip()
     except (KeyError, IndexError, TypeError):
-        return web.json_response(
-            {"error": "upstream chat response was malformed"}, status=502, headers=CORS_HEADERS
-        )
+        store.demo_adjust_spend(ip, -ASK_USD_FLAT)
+        return _demo_error(502, "upstream chat response was malformed")
 
-    store.demo_record(ip, "asks", ASK_USD_FLAT)
     return web.json_response({"answer": answer}, headers=CORS_HEADERS)
 
 

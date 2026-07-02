@@ -56,6 +56,9 @@ def _config_from_env() -> dict:
         "stripe_webhook_secret": os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
         "demo_daily_budget_usd": float(os.environ.get("DEMO_DAILY_BUDGET_USD", "1.0")),
         "demo_chat_model": os.environ.get("DEMO_CHAT_MODEL", "grok-4-fast"),
+        # Only honor X-Forwarded-For when a trusted reverse proxy sets it;
+        # otherwise clients could spoof it to evade per-IP demo caps.
+        "demo_trust_forwarded": os.environ.get("DEMO_TRUST_FORWARDED", "") not in ("", "0", "false"),
     }
 
 
@@ -124,6 +127,18 @@ async def stt_websocket(request: web.Request) -> web.WebSocketResponse:
             WS_CLOSE_QUOTA,
         )
 
+    # One live STT session per key. The per-session cutoff bounds a single
+    # stream, but two concurrent sessions would each snapshot the full
+    # remaining budget and could together exceed the tier cap; this guard
+    # (single aiohttp process, in-memory set) closes that cross-session race.
+    uid = int(user["id"])
+    active: set = request.app["active_stt"]
+    if uid in active:
+        return await _ws_refuse(
+            ws, "another dictation session is already active for this key", WS_CLOSE_QUOTA
+        )
+    active.add(uid)
+
     try:
         sample_rate = int(request.query.get("sample_rate", "16000"))
     except ValueError:
@@ -185,9 +200,10 @@ async def stt_websocket(request: web.Request) -> web.WebSocketResponse:
         logger.warning("upstream STT connection failed: %s", exc)
         await _ws_refuse(ws, f"upstream STT connection failed: {exc}", WS_CLOSE_UPSTREAM)
     finally:
+        active.discard(uid)
         seconds = min(audio_bytes / bytes_per_second, max(budget_seconds, 0.0))
         if seconds > 0:
-            store.add_usage(int(user["id"]), stt_seconds=seconds)
+            store.add_usage(uid, stt_seconds=seconds)
     if not ws.closed:
         await ws.close()
     return ws
@@ -230,7 +246,9 @@ async def tts(request: web.Request) -> web.Response:
     try:
         async with session.post(cfg["upstream_tts_url"], json=forward, headers=headers) as resp:
             body = await resp.read()
-            content_type = resp.headers.get("Content-Type", "application/octet-stream")
+            # Strip any charset/param — web.Response rejects it in content_type.
+            raw_ct = resp.headers.get("Content-Type", "application/octet-stream")
+            content_type = raw_ct.split(";")[0].strip() or "application/octet-stream"
             if resp.status >= 400:
                 return web.Response(status=resp.status, body=body, content_type=content_type)
     except aiohttp.ClientError as exc:
@@ -341,6 +359,7 @@ def make_app(overrides: dict | None = None) -> web.Application:
     app = web.Application()
     app["cfg"] = cfg
     app["store"] = Store(cfg["db_path"])
+    app["active_stt"] = set()  # user_ids with a live STT session (concurrency guard)
 
     async def _startup(app: web.Application) -> None:
         app["http"] = aiohttp.ClientSession()

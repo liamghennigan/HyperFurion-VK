@@ -169,6 +169,56 @@ class TestTTSProxy:
 
         run_rig(scenario)
 
+    def test_upstream_charset_error_does_not_crash_handler(self) -> None:
+        # xAI errors carry 'application/json; charset=utf-8'; the handler must
+        # pass the status through, not raise ValueError on content_type.
+        async def scenario(rig):
+            _, key = rig.store.create_user("basic")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{rig.http_base}/v1/tts",
+                    json={"text": "charsetfail please"},
+                    headers=_auth(key),
+                ) as resp:
+                    assert resp.status == 400  # upstream status, not a 500
+                    assert resp.headers["Content-Type"].startswith("application/json")
+
+        run_rig(scenario)
+
+    def test_upstream_charset_success_is_delivered(self) -> None:
+        async def scenario(rig):
+            _, key = rig.store.create_user("basic")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{rig.http_base}/v1/tts",
+                    json={"text": "charsetok"},
+                    headers=_auth(key),
+                ) as resp:
+                    assert resp.status == 200
+                    assert resp.headers["Content-Type"] == "audio/mpeg"
+                    assert await resp.read() == b"FAKE-MP3-BYTES"
+
+        run_rig(scenario)
+
+    def test_second_concurrent_stt_session_is_refused(self) -> None:
+        async def scenario(rig):
+            _, key = rig.store.create_user("basic")
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(
+                    f"{rig.ws_base}/v1/stt?sample_rate=16000", headers=_auth(key)
+                ) as first:
+                    assert json.loads((await first.receive()).data)["type"] == "transcript.created"
+                    # a second socket for the same key while the first is open
+                    async with session.ws_connect(
+                        f"{rig.ws_base}/v1/stt?sample_rate=16000", headers=_auth(key)
+                    ) as second:
+                        event = json.loads((await second.receive()).data)
+                        assert event["type"] == "error"
+                        assert "already active" in event["message"]
+                        assert (await second.receive()).type == aiohttp.WSMsgType.CLOSE
+
+        run_rig(scenario)
+
     def test_revoked_key_is_403(self) -> None:
         async def scenario(rig):
             user_id, key = rig.store.create_user("basic")

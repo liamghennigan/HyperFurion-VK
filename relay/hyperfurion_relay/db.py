@@ -196,11 +196,16 @@ class Store:
             return {"dictations": 0, "tts": 0, "asks": 0, "spent_usd": 0.0}
         return dict(row)
 
+    def _demo_rows(self, ip: str) -> tuple[str, ...]:
+        # The per-IP row plus the global-aggregate (ip="") row, deduped so a
+        # request whose resolved ip is itself "" can never double-apply.
+        return tuple(dict.fromkeys((ip, "")))
+
     def demo_record(self, ip: str, kind: str, usd: float) -> None:
         assert kind in {"dictations", "tts", "asks"}
         day = self.demo_day()
         with self._lock:
-            for row_ip in (ip, ""):
+            for row_ip in self._demo_rows(ip):
                 self._conn.execute(
                     "INSERT INTO demo_usage (day, ip) VALUES (?, ?)"
                     " ON CONFLICT(day, ip) DO NOTHING",
@@ -210,6 +215,56 @@ class Store:
                     f"UPDATE demo_usage SET {kind} = {kind} + 1,"
                     " spent_usd = spent_usd + ? WHERE day = ? AND ip = ?",
                     (usd, day, row_ip),
+                )
+            self._conn.commit()
+
+    def demo_try_charge(
+        self, ip: str, kind: str, usd: float, ip_cap: int, budget_usd: float
+    ) -> str:
+        """Atomically check the global budget + per-IP cap and, if both pass,
+        record the charge. Returns "" on success, or a short refusal reason
+        ("budget" | "ip-cap"). The whole check-and-record runs under one lock
+        acquisition, so concurrent requests cannot each pass a stale check and
+        collectively overshoot (the demo half of the quota-race fix)."""
+        assert kind in {"dictations", "tts", "asks"}
+        day = self.demo_day()
+        with self._lock:
+            grow = self._conn.execute(
+                "SELECT spent_usd FROM demo_usage WHERE day = ? AND ip = ''", (day,)
+            ).fetchone()
+            spent = grow["spent_usd"] if grow else 0.0
+            if spent + usd > budget_usd:
+                return "budget"
+            irow = self._conn.execute(
+                f"SELECT {kind} AS c FROM demo_usage WHERE day = ? AND ip = ?", (day, ip)
+            ).fetchone()
+            if (irow["c"] if irow else 0) >= ip_cap:
+                return "ip-cap"
+            for row_ip in self._demo_rows(ip):
+                self._conn.execute(
+                    "INSERT INTO demo_usage (day, ip) VALUES (?, ?)"
+                    " ON CONFLICT(day, ip) DO NOTHING",
+                    (day, row_ip),
+                )
+                self._conn.execute(
+                    f"UPDATE demo_usage SET {kind} = {kind} + 1,"
+                    " spent_usd = spent_usd + ? WHERE day = ? AND ip = ?",
+                    (usd, day, row_ip),
+                )
+            self._conn.commit()
+            return ""
+
+    def demo_adjust_spend(self, ip: str, usd_delta: float) -> None:
+        """Add usd_delta (may be negative) to the spend counters without
+        touching the request counts. Used to reconcile an STT session's
+        reserved (max) charge down to actual duration at close."""
+        day = self.demo_day()
+        with self._lock:
+            for row_ip in self._demo_rows(ip):
+                self._conn.execute(
+                    "UPDATE demo_usage SET spent_usd = MAX(0, spent_usd + ?)"
+                    " WHERE day = ? AND ip = ?",
+                    (usd_delta, day, row_ip),
                 )
             self._conn.commit()
 

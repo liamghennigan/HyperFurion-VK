@@ -178,3 +178,52 @@ class TestDemoAsk:
             assert rig.fake["chat"] == []
 
         run_rig(scenario)
+
+
+class TestDemoAntiAbuse:
+    def test_spoofed_xff_does_not_bypass_ip_cap_by_default(self) -> None:
+        # X-Forwarded-For is not trusted unless the operator opts in, so a
+        # varying XFF cannot evade the per-IP cap (all requests share the
+        # peer address).
+        async def scenario(rig):
+            for _ in range(demo.IP_DAILY_CAPS["asks"]):
+                rig.store.demo_record("127.0.0.1", "asks", 0.0001)
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{rig.http_base}/v1/demo/ask",
+                    json={"question": "hi"},
+                    headers={"X-Forwarded-For": "9.9.9.9"},
+                ) as resp:
+                    assert resp.status == 429  # cap still applies to the peer ip
+            assert rig.fake["chat"] == []
+
+        run_rig(scenario)
+
+    def test_empty_forwarded_token_cannot_double_count_global(self) -> None:
+        # Even if a resolved ip were "", demo_record/try_charge must not apply
+        # the charge twice to the reserved global-aggregate row.
+        async def scenario(rig):
+            before = rig.store.demo_counts("")["spent_usd"]
+            rig.store.demo_record("", "asks", 0.01)
+            after = rig.store.demo_counts("")["spent_usd"]
+            assert after - before == pytest.approx(0.01)  # once, not twice
+
+        run_rig(scenario)
+
+    def test_reserve_is_atomic_and_refunds_failed_tts(self) -> None:
+        # A failed upstream synthesis leaves spend unchanged (reserved then
+        # refunded), while the request count stands as a rate-limit slot.
+        async def scenario(rig):
+            # point the relay's TTS upstream at a dead port so it errors
+            rig.relay_cfg["upstream_tts_url"] = "http://127.0.0.1:1/v1/tts"
+            spent_before = rig.store.demo_counts("")["spent_usd"]
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{rig.http_base}/v1/demo/tts", json={"text": "hello"}
+                ) as resp:
+                    assert resp.status == 502
+            counts = rig.store.demo_counts("")
+            assert counts["spent_usd"] == pytest.approx(spent_before)  # fully refunded
+            assert counts["tts"] == 1  # the attempt still counted
+
+        run_rig(scenario)

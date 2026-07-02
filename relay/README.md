@@ -106,6 +106,7 @@ subscribers is a few requests per second at peak.
 | `UPSTREAM_CHAT_URL` | `https://api.x.ai/v1/chat/completions` | for the demo `ask` |
 | `DEMO_DAILY_BUDGET_USD` | `1.0` | global daily cap on demo spend |
 | `DEMO_CHAT_MODEL` | `grok-4-fast` | model behind the demo `ask` |
+| `DEMO_TRUST_FORWARDED` | `` (off) | set to `1` only behind a trusted reverse proxy — then per-IP demo caps read `X-Forwarded-For`; otherwise the peer address is used so the header can't be spoofed to evade caps |
 | `RELAY_HOST` / `RELAY_PORT` | `0.0.0.0` / `8787` | bind address |
 
 ## Selling subscriptions
