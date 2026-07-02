@@ -61,13 +61,24 @@ def make_fake_xai(master_key: str) -> web.Application:
         return ws
 
     async def tts(request: web.Request) -> web.Response:
-        record = {
-            "auth": request.headers.get("Authorization", ""),
-            "payload": await request.json(),
-        }
+        payload = await request.json()
+        record = {"auth": request.headers.get("Authorization", ""), "payload": payload}
         state["tts"].append(record)
         if record["auth"] != f"Bearer {master_key}":
             return web.json_response({"error": "bad upstream key"}, status=401)
+        text = str(payload.get("text", ""))
+        # Sentinels: exercise upstream Content-Type headers that carry a
+        # charset parameter (which web.Response(content_type=...) rejects).
+        if "charsetfail" in text:
+            return web.Response(
+                status=400, body=b'{"error":"bad"}',
+                headers={"Content-Type": "application/json; charset=utf-8"},
+            )
+        if "charsetok" in text:
+            return web.Response(
+                body=b"FAKE-MP3-BYTES",
+                headers={"Content-Type": "audio/mpeg; charset=binary"},
+            )
         return web.Response(body=b"FAKE-MP3-BYTES", content_type="audio/mpeg")
 
     async def chat(request: web.Request) -> web.Response:
