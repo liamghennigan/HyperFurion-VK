@@ -258,7 +258,10 @@ voice-keyboard tts</code></pre>
   threshold — then try it.</span></p>
   <div class="config-wrap">
 <pre class="config" id="config" spellcheck="false">[hotkey]
-key = "control+space"
+# the daemon defaults to control+space; browsers
+# already use space for scrolling, so this page
+# binds control+alt+v instead
+key = "control+alt+v"
 # auto = tap to toggle, hold to talk
 # other choices: toggle, hold
 mode = "auto"
@@ -321,8 +324,11 @@ pitch = 1.0</pre>
   if (synth) $("tts-note").hidden = false;
 
   // ---- live config ----
-  const cfg = { mods: { ctrl: true, alt: false, shift: false, meta: false }, code: "Space",
-                keyLabel: "control+space", mode: "auto", holdMs: 280, rate: 1, pitch: 1 };
+  // page default is control+alt+v, not the daemon's control+space:
+  // browsers treat space as page-scroll, and if space lands before ctrl
+  // the scroll fires before the hotkey can preventDefault it
+  const cfg = { mods: { ctrl: true, alt: true, shift: false, meta: false }, code: "KeyV",
+                keyLabel: "control+alt+v", mode: "auto", holdMs: 280, rate: 1, pitch: 1 };
 
   const CODE_MAP = { space: "Space", enter: "Enter", return: "Enter", tab: "Tab" };
   function parseKeyCombo(str) {
@@ -420,7 +426,8 @@ pitch = 1.0</pre>
     const add = (html) => hint.insertAdjacentHTML("beforeend", html);
     if (dictations === 0) {
       add("this page has focus — press <kbd>" + cfg.keyLabel.replaceAll("+", "</kbd>+<kbd>") +
-          "</kbd> or tap the mic and <b>speak</b>");
+          "</kbd> or tap the mic and <b>speak</b> <span class=\"muted\">(the daemon defaults to " +
+          "Ctrl+Space; browsers use Space to scroll, so this page binds differently)</span>");
       if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
                   "browser's speech engine, the way the daemon streams to its provider");
       else add(" · no speech engine in this browser, so it will improvise");
