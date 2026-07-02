@@ -709,9 +709,13 @@ If STT and TTS use different providers, configure both keys.
 
 ### Can I Use This Offline?
 
-Not currently. Audio transcription and speech synthesis are provider-backed.
-The local parts are capture, hotkeys, status UI, IPC, playback, and keyboard
-injection.
+Yes — bring your own local provider. By default STT/TTS are cloud-backed, but
+the `openai` provider accepts a `base_url`, so pointing it at any local
+OpenAI-compatible server (Whisper, Parakeet, Voxtral, Kokoro; e.g. via
+[Speaches](https://github.com/speaches-ai/speaches)) keeps everything on your
+machine — no API key and no network required. See
+[Fully Offline (Local Models)](#fully-offline-local-models). Capture, hotkeys,
+status UI, IPC, playback, and keyboard injection are already local.
 
 ## Security And Privacy
 
