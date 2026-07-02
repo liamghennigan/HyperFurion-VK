@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>document.documentElement.className = "js";</script>
 <title>HyperFurion VK — a voice keyboard for Linux</title>
 <meta name="description" content="A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app. This page is a working instrument: it listens, types, reads aloud, and its config file is live.">
 <meta property="og:title" content="HyperFurion VK">
@@ -467,6 +468,82 @@ footer .sigcap { display: block; margin-bottom: 10px; }
 .pipeline.speak .pl-edge.t-out.word { stroke-width: 2.4; }
 .pl-rain text { will-change: transform, opacity; }
 
+/* ═══ MOTION PASS — the page powers on like an instrument ══════════════ */
+/* Every animation here lives behind prefers-reduced-motion: no-preference;
+   stillness stays a first-class rendering. Entrance states are gated on
+   html.js so the no-script document is complete and visible. */
+
+.tape {
+  overflow: hidden;
+  white-space: nowrap;
+  border-block: 1px solid var(--line);
+  padding: 7px 0;
+  font: 10.5px var(--mono);
+  letter-spacing: .18em;
+  color: var(--muted);
+  opacity: .75;
+  user-select: none;
+  -webkit-mask: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.tape span { display: inline-block; will-change: transform; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* hero warm-up: the instruments power on in sequence */
+  .js .hero .mic       { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .05s; }
+  .js .hero h1         { animation: warmup 1.05s cubic-bezier(.2,.7,.2,1) both .15s; }
+  .js .hero .tagline   { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .38s; }
+  .js .hero .hero-live { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .52s; }
+  .js .hero pre        { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .64s; }
+  .js .hero nav        { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .78s; }
+
+  /* the idle mic breathes, inviting the tap */
+  .mic:not(.live) { animation: breathe 3.4s ease-in-out infinite 2s; }
+
+  /* sections develop as they enter the viewport (class added by JS only) */
+  .reveal { opacity: 0; transform: translateY(22px); }
+  .reveal.in {
+    opacity: 1; transform: none;
+    transition: opacity .8s ease, transform .8s cubic-bezier(.2,.7,.2,1);
+  }
+  .reveal h2 .num { opacity: 0; transform: translateX(-16px); }
+  .reveal.in h2 .num {
+    opacity: .07; transform: none;
+    transition: opacity .9s ease .25s, transform .9s cubic-bezier(.2,.7,.2,1) .25s;
+  }
+
+  /* the waveform rule under every heading drifts, slowly */
+  h2::after { animation: ruledrift 26s linear infinite; }
+
+  /* instrument tape */
+  .tape span { animation: tapescroll 38s linear infinite; }
+
+  /* pipeline: a faint signal drifts through the lanes even at rest */
+  .pipeline:not(.rec):not(.speak) .pl-edge.sttlane { animation: dashdrift 9s linear infinite; }
+
+  /* freshly committed terminal lines flash like phosphor */
+  .term-body > div:first-child > .tline:last-child { animation: phosflash .55s ease-out; }
+
+  /* tables warm under the pointer */
+  table tbody tr { transition: background-color .25s; }
+  table tbody tr:hover { background: color-mix(in srgb, var(--wave) 7%, transparent); }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes warmup {
+  0% { opacity: 0; transform: translateY(10px) scale(.985); filter: blur(7px); }
+  62% { filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--wave) 12%, transparent),
+                    0 0 34px 4px color-mix(in srgb, var(--wave) 10%, transparent); }
+}
+@keyframes ruledrift { to { -webkit-mask-position: -280px center; mask-position: -280px center; } }
+@keyframes tapescroll { to { transform: translateX(-50%); } }
+@keyframes dashdrift { to { stroke-dashoffset: -110; } }
+@keyframes phosflash { from { color: var(--wave); text-shadow: 0 0 12px currentColor; } }
+
 /* ═══ REDUCED MOTION — stillness is a valid rendering ══════════════════ */
 @media (prefers-reduced-motion: reduce) {
   .caret, .pill i, .mic.live, .scrolldown { animation: none; }
@@ -490,7 +567,8 @@ footer .sigcap { display: block; margin-bottom: 10px; }
   }
   .hero { min-height: 0; padding: 40px 20px; background: none; }
   .hero canvas, .mic, .scrolldown, .hero-cap, .nojs,
-  #app, .ttschip, .cfgstatus { display: none !important; }
+  #app, .ttschip, .cfgstatus, .tape { display: none !important; }
+  .reveal { opacity: 1 !important; transform: none !important; }
   h1 { font-size: 40px; }
   section { margin: 36px 0; break-inside: avoid-page; }
   h2 { break-after: avoid; }
@@ -533,6 +611,8 @@ chmod +x install-hyperfurion-vk.sh
     <span class="sigcap hero-cap" id="hero-cap" hidden>signal: test pattern</span>
     <a class="scrolldown" href="#app" aria-hidden="true" tabindex="-1">↓</a>
   </header>
+
+  <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · speak · it types · one file · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · speak · it types · one file · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; </span></div>
 
   <!-- ═══ THE FOCUSED APP — a working instance, scaled to one tab ═══════ -->
   <section class="wide demo" id="app" aria-label="Live demo terminal">
@@ -1524,8 +1604,26 @@ chmod +x install-hyperfurion-vk.sh
       if (!Dictation.recording && (!sel || sel.isCollapsed)) cli.focus({ preventScroll: true });
     });
 
-    print("$ voice-keyboard status");
-    print("idle", "dim");
+    // boot: the status check types itself, like someone just ran it
+    if (reduced) {
+      print("$ voice-keyboard status");
+      print("idle", "dim");
+    } else {
+      const bootCmd = "voice-keyboard status";
+      let bi = 0;
+      const bt = setInterval(() => {
+        if (Dictation.recording) { clearInterval(bt); return; }  // the mic wins
+        setLine(bootCmd.slice(0, ++bi), "");
+        if (bi >= bootCmd.length) {
+          clearInterval(bt);
+          setTimeout(() => {
+            if (Dictation.recording || committed !== bootCmd) return;
+            commitCurrent();
+            print("idle", "dim");
+          }, 200);
+        }
+      }, 26);
+    }
     render();
     return { print, setLine, commitCurrent, recMode, render };
   })();
@@ -2048,6 +2146,22 @@ chmod +x install-hyperfurion-vk.sh
     return { advance: set, set };
   })();
 
+  // ═══ REVEAL — sections develop as they enter the viewport ══════════════
+  // The class is only ever added by script, so the no-JS document is
+  // complete and visible; reduced motion never hides anything.
+  if (!reduced && "IntersectionObserver" in window) {
+    const ro = new IntersectionObserver((es) => {
+      for (const e of es)
+        if (e.isIntersecting) { e.target.classList.add("in"); ro.unobserve(e.target); }
+    }, { rootMargin: "0px 0px -8% 0px" });
+    for (const s of document.querySelectorAll("main > section:not(.demo), footer")) {
+      if (s.getBoundingClientRect().top > innerHeight * .85) {
+        s.classList.add("reveal");
+        ro.observe(s);
+      }
+    }
+  }
+
   // ═══ BOOT ═══════════════════════════════════════════════════════════════
   window.__vk.demo = Demo;         // the proof harness steers the demo layer
   $("hero-live").hidden = false;   // the claim is only true with JS running
@@ -2055,14 +2169,35 @@ chmod +x install-hyperfurion-vk.sh
   cfgEl.contentEditable = "plaintext-only";
   if (cfgEl.contentEditable !== "plaintext-only") cfgEl.contentEditable = "true";
   Hints.set();
-  // colophon: the real size, measured, not claimed
+  // colophon: the real size, measured, not claimed — and counted up like
+  // a meter settling, when motion is welcome
   try {
     const nav = performance.getEntriesByType("navigation")[0];
     const bytes = (nav && nav.decodedBodySize) ||
       ("<!doctype html>" + document.documentElement.outerHTML).length;
     const kb = Math.round(bytes / 1024);
-    if (kb) $("bytes").textContent =
-      "one file · zero dependencies · " + kb + " KB · zero requests after load";
+    const bytesEl = $("bytes");
+    const label = (n) =>
+      "one file · zero dependencies · " + n + " KB · zero requests after load";
+    if (kb) {
+      if (reduced || !("IntersectionObserver" in window)) {
+        bytesEl.textContent = label(kb);
+      } else {
+        bytesEl.textContent = label(0);
+        const mio = new IntersectionObserver((es) => {
+          if (!es.some((e) => e.isIntersecting)) return;
+          mio.disconnect();
+          const t0 = performance.now();
+          const step = (t) => {
+            const k = Math.min(1, (t - t0) / 900);
+            bytesEl.textContent = label(Math.round(kb * k * (2 - k)));
+            if (k < 1) requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        });
+        mio.observe(bytesEl);
+      }
+    }
   } catch {}
 })();
 </script>
