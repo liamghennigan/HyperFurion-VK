@@ -8,6 +8,11 @@ name: Create release on tag
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create and release (e.g. v1.1.0)"
+        required: true
 
 permissions:
   contents: write
@@ -17,16 +22,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve the release tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "releasing $TAG at $GITHUB_SHA"
       - name: Pin the bootstrap installer to this tag
         run: |
-          sed -i "s|^VERSION=.*|VERSION=\"\${HYPERFURION_VK_VERSION:-${GITHUB_REF_NAME}}\"|" \
+          sed -i "s|^VERSION=.*|VERSION=\"\${HYPERFURION_VK_VERSION:-${RELEASE_TAG}}\"|" \
             packaging/install-hyperfurion-vk.sh
           grep '^VERSION=' packaging/install-hyperfurion-vk.sh
       - name: Create the release with the installer asset
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          # On workflow_dispatch the tag may not exist yet; --target makes
+          # gh create it at this commit.
+          gh release create "$RELEASE_TAG" \
             packaging/install-hyperfurion-vk.sh \
-            --title "HyperFurion VK $GITHUB_REF_NAME" \
+            --target "$GITHUB_SHA" \
+            --title "HyperFurion VK $RELEASE_TAG" \
             --generate-notes
