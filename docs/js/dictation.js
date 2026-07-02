@@ -1,5 +1,5 @@
 // ═══ DICTATION — the product's forward lane ═══════════════════════════════
-import { term, pill, mic, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC } from "./env.js";
+import { desktop, pill, mic, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
 import { Ticker } from "./ticker.js";
@@ -9,6 +9,7 @@ import { Hero } from "./hero2d.js";
 import { Config } from "./config.js";
 import { Demo } from "./demo-relay.js";
 import { Terminal } from "./terminal.js";
+import { Desktop } from "./desktop.js";
 import { Hints } from "./hints.js";
 
 export const Dictation = (() => {
@@ -31,12 +32,12 @@ export const Dictation = (() => {
     mic.setAttribute("aria-pressed", String(on));
     document.title = on ? "● recording — " + baseTitle : baseTitle;
     favicon.href = on ? FAV_REC : FAV_IDLE;
-    Terminal.recMode(on);
+    Desktop.recMode(on);
   }
   function start() {
     if (D.recording) return;
     clearInterval(typeTimer);
-    Terminal.setLine("", "");
+    Desktop.setLine("", "");
     setRecording(true);
     const sigP = Signal.start();
     Ticker.wake();
@@ -69,7 +70,7 @@ export const Dictation = (() => {
             else interim += r[0].transcript;
           }
           engine = "live";
-          Terminal.setLine(committed, interim);
+          Desktop.setLine(committed, interim);
           bus.emit("rec:interim", { text: interim });
         };
         rec.onerror = () => { if (D.recording && engine !== "live") engine = "sim"; };
@@ -129,16 +130,16 @@ export const Dictation = (() => {
     if (ev.type === "transcript.partial") {
       if (ev.is_final && ev.text) {
         relay.committed = relay.committed ? relay.committed + " " + ev.text : ev.text;
-        Terminal.setLine(relay.committed, "");
+        Desktop.setLine(relay.committed, "");
         bus.emit("rec:final", { text: ev.text });
       } else {
-        Terminal.setLine(relay.committed, ev.text || "");
+        Desktop.setLine(relay.committed, ev.text || "");
         bus.emit("rec:interim", { text: ev.text || "" });
       }
     } else if (ev.type === "transcript.done") {
       const t = String(ev.text || "");
       if (t.length >= relay.committed.length) relay.committed = t;
-      Terminal.setLine(relay.committed, "");
+      Desktop.setLine(relay.committed, "");
       relay.done = true;
       if (D.recording) stop();  // the demo cap finalized for us
       else relaySettle();
@@ -164,7 +165,7 @@ export const Dictation = (() => {
     if (!relay) return;
     clearTimeout(relayT);
     relayCleanup();
-    const settled = Terminal.commitCurrent();
+    const settled = Desktop.commit();
     if (settled) { done(settled); funnel(); }
     else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
     Hints.advance();
@@ -181,7 +182,7 @@ export const Dictation = (() => {
       startBrowser();
       Hero.caption();
     } else {
-      const settled = Terminal.commitCurrent();
+      const settled = Desktop.commit();
       if (settled) done(settled);
       else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
       Hints.advance();
@@ -211,7 +212,7 @@ export const Dictation = (() => {
         // startRelay never opened a socket (mic still pending, or it
         // failed before assigning relay) — settle the line here so the
         // terminal never hangs
-        const settled = Terminal.commitCurrent();
+        const settled = Desktop.commit();
         if (settled) { done(settled); }
         else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
         Hints.advance();
@@ -220,20 +221,20 @@ export const Dictation = (() => {
     }
     // give a final result a beat to arrive, then settle the line
     setTimeout(() => {
-      const settled = Terminal.commitCurrent();
+      const settled = Desktop.commit();
       if (settled) { done(settled); }
       else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
       Hints.advance();
     }, engine === "live" || engine === "trying" ? 350 : 0);
   }
   function typeSim(text) {
-    if (reduced) { Terminal.setLine(text, ""); Terminal.commitCurrent(); done(text); return; }
+    if (reduced) { Desktop.setLine(text, ""); Desktop.commit(); done(text); return; }
     let n = 0;
     typeTimer = setInterval(() => {
-      Terminal.setLine(text.slice(0, ++n), "");
+      Desktop.setLine(text.slice(0, ++n), "");
       if (n >= text.length) {
         clearInterval(typeTimer);
-        Terminal.commitCurrent();
+        Desktop.commit();
         done(text);
       }
     }, 40);
@@ -244,15 +245,18 @@ export const Dictation = (() => {
   }
   D.start = start; D.stop = stop;
   D.toggle = () => (D.recording ? stop() : start());
+  // scripted typing into the focused window — the try-saying chips and the
+  // autopilot use this; it ends in the same type:text event real dictation does
+  D.simulate = (text) => { if (!D.recording) typeSim(String(text)); };
   // starting from the hero mic: bring the terminal into view so you can
   // watch your words get typed — the whole point of the demo
   mic.addEventListener("click", () => {
     const starting = !D.recording;
     D.toggle();
     if (starting) {
-      const r = term.getBoundingClientRect();
+      const r = desktop.getBoundingClientRect();
       if (r.top > innerHeight - 120 || r.bottom < 80)
-        term.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+        desktop.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
     }
   });
   // the recording pill doubles as the stop control next to the terminal

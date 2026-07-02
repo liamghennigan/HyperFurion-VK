@@ -41,12 +41,16 @@ import "./js/pipeline.js";
 import "./js/tts.js";
 import "./js/hotkeys.js";
 import { Hints } from "./js/hints.js";
+import { Desktop } from "./js/desktop.js";
+import { Autopilot } from "./js/autopilot.js";
 import { Field } from "./js/field.js";
 import "./js/scrollfx.js";
 
 // ═══ BOOT ════════════════════════════════════════════════════════════════
 window.__vk.demo = Demo;         // the proof harness steers the demo layer
 window.__vk.field = Field;
+window.__vk.desktop = Desktop;
+window.__vk.autopilot = Autopilot;
 // the field succeeds the 2D trace; hiding the hero canvas also parks its
 // draw (the ticker skips subscribers whose element left the viewport).
 // Without WebGL2 — or with reduced motion — the old instrument stays on.

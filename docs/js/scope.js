@@ -81,5 +81,7 @@ export const Scope = (() => {
   return {
     freeze,
     push(peak) { hist.push(peak); },
+    // the strip docks into whichever window has focus; remeasure after a move
+    resize() { size(); if (!Dictation.recording) drawIdle(); },
   };
 })();

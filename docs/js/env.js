@@ -1,7 +1,7 @@
 // ═══ ENV — shared DOM handles and capability flags ═══════════════════════
 // Every instrument reads these; nothing here has behavior of its own.
 export const $ = (id) => document.getElementById(id);
-export const term = $("term"), tbody = $("tbody"), pill = $("pill"), mic = $("mic"), hint = $("hint");
+export const desktop = $("desktop"), tbody = $("tbody"), pill = $("pill"), mic = $("mic"), hint = $("hint");
 export const stopBtn = $("stopbtn");
 export const cfgEl = $("config"), cfgStatus = $("cfgstatus");
 export const scope = $("scope"), scopeLabel = $("scope-label");
@@ -18,4 +18,4 @@ export const FAV_SPK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 
 // reveal the interactive parts before any instrument measures its canvas
 // (the page stays static without JS)
-term.hidden = hint.hidden = false;
+desktop.hidden = hint.hidden = false;

@@ -15,16 +15,18 @@ export const Hints = (() => {
     hint.replaceChildren();
     const add = (html) => hint.insertAdjacentHTML("beforeend", html);
     if (state.dictations === 0) {
-      if (coarse) add("this terminal is the focused app — tap the mic up top, <b>speak</b>, " +
-          "then hit the red <b>stop</b> button on the terminal");
-      else add("this terminal is the focused app — tap the mic up top or press " +
-          kbd(Config.cfg.keyLabel) + ", <b>speak</b>, then tap or press again to stop");
+      const focused = state.focusedApp || "editor";
+      if (coarse) add("three windows, one focus — the <b>" + focused + "</b> has it. tap the mic up top, " +
+          "<b>speak</b>, then hit the red <b>stop</b> button");
+      else add("three windows, one focus — the <b>" + focused + "</b> has it. tap the mic up top or press " +
+          kbd(Config.cfg.keyLabel) + ", <b>speak</b>, and your words land there");
       if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
                   "browser's speech engine, the way the daemon sends audio to its provider");
-      else add(" · no speech engine in this browser, so it will improvise");
+      else add(' · no speech engine in this browser — hit <b>▶ watch it work</b> up top ' +
+               "and the page will drive itself, honestly labeled");
     } else if (state.dictations === 1) {
-      add("the strip above the terminal froze your sentence's <i>waveform</i> — drawn from the " +
-          "signal, then let go");
+      add("the strip in the focused window froze your sentence's <i>waveform</i> — drawn from the " +
+          "signal, then let go. <b>alt+tab</b> (or click) moves focus — dictate into the chat next");
       if (!coarse) add(". now <b>hold</b> the hotkey and release to stop; <code>hold_threshold_ms = " +
           Config.cfg.holdMs + "</code> below is real, like everything else in that config");
       if (!Demo.want) add(" · or type <code>real</code> — the mic switches to the actual " +
@@ -50,5 +52,6 @@ export const Hints = (() => {
   }
   bus.on("cfg:change", set);
   bus.on("rec:start", listening);
+  bus.on("desk:focus", () => { if (state.dictations === 0) set(); });
   return { advance: set, set };
 })();

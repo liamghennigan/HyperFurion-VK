@@ -47,6 +47,7 @@
     <canvas id="hero-canvas" aria-hidden="true"></canvas>
     <noscript><p class="nojs">The demos on this page need JavaScript; everything below is the real documentation.</p></noscript>
     <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">🎙️</button>
+    <button class="watchbtn" id="watch" type="button" hidden>▶ watch it work</button>
     <h1>HyperFurion&nbsp;VK</h1>
     <p class="lede">Speak. It types.</p>
     <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Alt+V</code>,
@@ -69,20 +70,54 @@ chmod +x install-hyperfurion-vk.sh
 
   <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; </span></div>
 
-  <!-- ═══ THE FOCUSED APP — a working instance, scaled to one tab ═══════ -->
-  <section class="wide demo" id="app" aria-label="Live demo terminal">
-    <div class="term" id="term" hidden>
-      <div class="scope-wrap">
-        <canvas class="scope" id="scope" aria-hidden="true"></canvas>
-        <span class="scope-label" id="scope-label">signal</span>
+  <!-- ═══ 00 / THE FOCUSED APP — a working desktop, scaled to one tab ═══
+       Three windows, one focus. Dictation lands in whichever window has
+       it — the whole pitch, acted out. The terminal is real (a CLI); the
+       editor and chat are honest stand-ins that show where keystrokes go.
+  ════════════════════════════════════════════════════════════════════ -->
+  <section class="wide demo" id="app" aria-label="Live demo — a working desktop that really types">
+    <div class="desktop" id="desktop" hidden>
+      <div class="dswitch" id="dswitch" role="tablist" aria-label="Demo windows"></div>
+
+      <div class="dwin" id="win-editor" data-app="editor">
+        <div class="dwin-bar">
+          <span class="dwin-title">release-notes.md — editor</span>
+          <span class="dwin-dockbar"></span>
+        </div>
+        <div class="dwin-scope"></div>
+        <div class="dwin-body ebody" id="ebody" aria-live="polite"></div>
       </div>
-      <div class="term-bar">
-        <span class="term-title">the focused app — bash</span>
+
+      <div class="dwin" id="win-chat" data-app="chat">
+        <div class="dwin-bar">
+          <span class="dwin-title">#audio-team — chat</span>
+          <span class="dwin-dockbar"></span>
+        </div>
+        <div class="dwin-scope"></div>
+        <div class="dwin-body cbody" id="cbody" aria-live="polite"></div>
+      </div>
+
+      <div class="dwin term" id="win-term" data-app="terminal">
+        <div class="dwin-bar term-bar">
+          <span class="dwin-title term-title">the focused app — bash</span>
+          <span class="dwin-dockbar"></span>
+        </div>
+        <div class="dwin-scope">
+          <div class="scope-wrap">
+            <canvas class="scope" id="scope" aria-hidden="true"></canvas>
+            <span class="scope-label" id="scope-label">signal</span>
+          </div>
+        </div>
+        <div class="term-body" id="tbody" aria-live="polite"></div>
+      </div>
+
+      <!-- the recording controls dock into whichever window has focus -->
+      <span class="demo-live" id="demo-live">
         <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
         <button class="stopbtn" id="stopbtn" hidden>stop</button>
-      </div>
-      <div class="term-body" id="tbody" aria-live="polite"></div>
+      </span>
     </div>
+    <div class="saychips" id="saychips" hidden></div>
     <p class="hint" id="hint" hidden></p>
   </section>
 
