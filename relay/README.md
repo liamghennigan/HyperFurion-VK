@@ -41,6 +41,29 @@ run up your bill. Edit `hyperfurion_relay/tiers.py` to change the numbers.
 Auth everywhere: `Authorization: Bearer hfk_…`. Keys are stored as SHA-256
 hashes; the plaintext exists only in the moment it is issued.
 
+## Landing-page demo endpoints
+
+The landing page's terminal (`real`, `say`, `ask`, `demo` commands) uses a
+keyless demo surface — real xAI engines, defended in depth instead of
+authenticated:
+
+- `WS /v1/demo/stt` — streaming Grok STT, hard-capped at 20 s per
+  dictation (finalized mid-stream at the cap, not dropped)
+- `POST /v1/demo/tts` — Grok `eve`, text truncated to 220 chars, the
+  voice is not client-selectable
+- `POST /v1/demo/ask` — docs-grounded Q&A via Grok chat, bounded
+  completion
+- `GET /v1/demo/status` — liveness, caps, and served-today counts (the
+  page's `demo` command shows these as live telemetry)
+
+Three layers keep it un-abusable: a **global daily budget** in USD
+(`DEMO_DAILY_BUDGET_USD`, default $1 — worst case ≈ $30/month, period),
+per-IP daily counters (8 dictations / 12 voice lines / 15 questions), and
+the per-request size caps above. When the budget is spent, everything
+refuses with a reason and the page falls back to the browser's engines,
+labeled honestly. Demo responses send `Access-Control-Allow-Origin: *` —
+they are public and rate-limited by design.
+
 ## Run it
 
 ```bash
@@ -80,6 +103,9 @@ subscribers is a few requests per second at peak.
 | `STRIPE_WEBHOOK_SECRET` | *(empty)* | webhook signature secret |
 | `UPSTREAM_STT_URL` | `wss://api.x.ai/v1/stt` | override for tests/self-host |
 | `UPSTREAM_TTS_URL` | `https://api.x.ai/v1/tts` | override for tests/self-host |
+| `UPSTREAM_CHAT_URL` | `https://api.x.ai/v1/chat/completions` | for the demo `ask` |
+| `DEMO_DAILY_BUDGET_USD` | `1.0` | global daily cap on demo spend |
+| `DEMO_CHAT_MODEL` | `grok-4-fast` | model behind the demo `ask` |
 | `RELAY_HOST` / `RELAY_PORT` | `0.0.0.0` / `8787` | bind address |
 
 ## Selling subscriptions

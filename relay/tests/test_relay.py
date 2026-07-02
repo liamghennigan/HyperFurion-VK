@@ -59,13 +59,13 @@ class TestSTTProxy:
                     await ws.send_bytes(b"\x00" * 64000)  # 2.0 s @ 16 kHz 16-bit
                     await ws.send_bytes(b"\x00" * 32000)  # 1.0 s
                     await ws.send_str(json.dumps({"type": "audio.done"}))
-                    text_event = json.loads((await ws.receive()).data)
-                    assert text_event == {
-                        "type": "transcript.text",
+                    partial = json.loads((await ws.receive()).data)
+                    assert partial["type"] == "transcript.partial"
+                    done_event = json.loads((await ws.receive()).data)
+                    assert done_event == {
+                        "type": "transcript.done",
                         "text": "received 96000 bytes",
                     }
-                    done_event = json.loads((await ws.receive()).data)
-                    assert done_event["type"] == "transcript.done"
 
             await wait_until(
                 lambda: rig.store.lookup_key(key)["stt_seconds_used"] > 0

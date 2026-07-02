@@ -770,7 +770,10 @@ pitch = 1.0</pre>
           <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon sends audio to its provider.</li>
           <li>TTS uses your browser&rsquo;s speech synthesis.</li>
           <li>One file, no scripts loaded, no analytics, no cookies, no storage.</li>
-          <li>Nothing is loaded, stored, or sent. Works offline once loaded.</li>
+          <li>Nothing is loaded, stored, or sent — until you opt in: the terminal&rsquo;s
+          <code>real</code>, <code>ask</code>, <code>say</code>, and <code>demo</code> commands
+          talk to <code>api.hyperfurion.com</code> (real xAI engines, rate-limited, labeled in
+          place). Nothing else on this page touches the network, ever.</li>
           <li>Transcripts exist only on your screen and die on reload.</li>
         </ul>
       </div>
@@ -789,7 +792,9 @@ pitch = 1.0</pre>
       <li>IPC commands are handled one at a time; a slow TTS request can delay the next command.</li>
       <li id="page-note" hidden>This page runs on your browser&rsquo;s speech engines, the same
       way the daemon runs on its providers. When the browser has no speech engine
-      or you deny the mic, the page says so and improvises — honestly labeled.</li>
+      or you deny the mic, the page says so and improvises — honestly labeled.
+      Type <code>real</code> in the terminal to switch the mic to the actual xAI
+      engine via the hosted demo — opt-in, rate-limited, and labeled while it runs.</li>
     </ul>
   </section>
 
@@ -818,7 +823,7 @@ chmod +x install-hyperfurion-vk.sh
 </main>
 
 <footer id="foot">
-  <span class="sigcap"><span id="bytes">one file · zero dependencies · zero requests after load</span> · works offline once loaded</span>
+  <span class="sigcap"><span id="bytes">one file · zero dependencies · zero requests after load</span> · works offline once loaded · the hosted demo speaks only when spoken to</span>
   MIT License · <a href="https://github.com/liamghennigan/HyperFurion-VK">liamghennigan/HyperFurion-VK</a> ·
   <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/docs/index.html">view source</a> ·
   <a href="https://github.com/sponsors/liamghennigan">sponsor</a>
@@ -844,6 +849,10 @@ chmod +x install-hyperfurion-vk.sh
   //                 interim rendering, and the tts voice/rate/pitch
   //   terminal   -> the prompt is real: voice-keyboard toggle | start |
   //                 stop | status | tts | version | --help
+  //   hosted demo-> `real` reroutes the mic to actual xai grok stt through
+  //                 a rate-limited relay; `say` plays the real eve voice;
+  //                 `ask` answers questions via grok — all opt-in, all
+  //                 labeled, all budget-capped server-side
   //
   // When the browser has no speech engine or denies the mic, dictation
   // falls back to canned transcripts and a synthesized signal — and every
@@ -974,7 +983,12 @@ chmod +x install-hyperfurion-vk.sh
       cached = { peak, fft: simFft, live: false };
       return cached;
     }
-    return { start, stop, frame, isLive: () => !!a.analyser };
+    return {
+      start, stop, frame,
+      isLive: () => !!a.analyser,
+      // the relay dictation path taps the same mic acquisition
+      audio: () => ({ ctx: a.ctx, stream: a.stream }),
+    };
   })();
 
   // ═══ envelope renderer (the scope's frozen waveform) ═══════════════════
@@ -1056,8 +1070,12 @@ chmod +x install-hyperfurion-vk.sh
     }
     function caption() {
       heroCap.hidden = false;
+      // mode is only ever "rec" after boot, so Dictation exists by then
+      const relayTag = mode === "rec" && Dictation.engine === "relay"
+        ? " · engine: xai grok stt (hosted demo)" : "";
       heroCap.textContent = mode === "rec"
-        ? (Signal.isLive() ? "signal: live microphone — spectrogram" : "signal: synthetic (mic not granted)")
+        ? (Signal.isLive() ? "signal: live microphone — spectrogram" + relayTag
+                           : "signal: synthetic (mic not granted)")
         : "signal: test pattern";
     }
     // reduced-motion recording readout: a state change, not motion
@@ -1258,6 +1276,45 @@ chmod +x install-hyperfurion-vk.sh
   })();
 
   // ═══ TERMINAL — history, dictation line, and a real CLI ════════════════
+  // ═══ DEMO — the hosted relay: real xAI engines, opt-in, always labeled ══
+  // The page never touches the network on its own. Every request here
+  // happens because you ran a command (`real`, `ask`, `say`, `demo`) or
+  // tapped the mic with `real` armed — and only ever to the relay host
+  // below. `?relay=http://…` overrides the host (used by the test rig).
+  const Demo = (() => {
+    const base = new URLSearchParams(location.search).get("relay") || "https://api.hyperfurion.com";
+    const D = { want: false, status: null, base, wsBase: base.replace(/^http/, "ws") };
+    D.check = async () => {
+      try {
+        const r = await fetch(base + "/v1/demo/status", { signal: AbortSignal.timeout(4000) });
+        D.status = await r.json();
+      } catch { D.status = { live: false, reason: "relay unreachable" }; }
+      return D.status;
+    };
+    D.armed = () => D.want && !!(D.status && D.status.live);
+    D.tts = async (text) => {
+      const r = await fetch(base + "/v1/demo/tts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || "upstream " + r.status);
+      }
+      return r.blob();
+    };
+    D.ask = async (question) => {
+      const r = await fetch(base + "/v1/demo/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const e = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(e.error || "upstream " + r.status);
+      return String(e.answer || "");
+    };
+    return D;
+  })();
+
   const Terminal = (() => {
     const history = [];
     let committed = "", interim = "";
@@ -1310,14 +1367,51 @@ chmod +x install-hyperfurion-vk.sh
     const HELP = [
       ["usage: voice-keyboard [command]", "dim"],
       ["  toggle (default) · start · stop · status · tts · version", "dim"],
-      ["  page-only: help · clear · sponsor", "dim"],
+      ["  page-only: help · clear · sponsor · subscribe", "dim"],
+      ["  hosted demo (real xai): real · ask <q> · say <text> · demo", "dim"],
     ];
+    function doAsk(q) {
+      if (!q) { print("usage: ask <a question about the product>", "dim"); return; }
+      const go = () => {
+        print("thinking…", "dim");
+        Demo.ask(q).then((a) => {
+          a.split("\n").forEach((line) => { if (line.trim()) print(line.trim()); });
+          print("· grok, via the hosted demo", "dim");
+        }).catch((e) => print("hosted demo: " + e.message, "err"));
+      };
+      if (Demo.status && Demo.status.live) go();
+      else Demo.check().then((st) => st.live ? go() :
+        print("hosted demo offline (" + (st.reason || "unreachable") +
+              ") — the README has answers: github.com/liamghennigan/HyperFurion-VK", "dim"));
+    }
+    function doSay(text) {
+      const t = (text || "This is eve — the voice this keyboard ships with.").slice(0, 220);
+      const browserVoice = () => {
+        if (!synth) { print("no speech engine in this browser", "dim"); return; }
+        synth.speak(new SpeechSynthesisUtterance(t));
+        print("speaking with your browser's voice — type `real` first to hear the actual eve", "dim");
+      };
+      const go = () => Demo.tts(t).then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const au = new Audio(url);
+        au.onended = () => URL.revokeObjectURL(url);
+        print("▶ eve — xai grok tts, via the hosted demo", "dim");
+        au.play().catch(() => print("(autoplay blocked — click the page once and retry)", "dim"));
+      }).catch((e) => { print("hosted demo: " + e.message, "err"); browserVoice(); });
+      if (Demo.armed()) go();
+      else if (Demo.want) Demo.check().then((st) => (st.live ? go() : browserVoice()));
+      else browserVoice();
+    }
     function run(raw) {
       const echoed = raw.trim();
       print("$ " + echoed);
       let cmd = echoed.replace(/^voice-keyboard\s*/, "").replace(/^vk\s+/, "").trim();
       if (echoed === "") return;
       if (cmd === "" ) cmd = "toggle";           // `voice-keyboard` alone toggles
+      const verb = cmd.split(/\s+/)[0];
+      const arg = cmd.slice(verb.length).trim();
+      if (verb === "ask") { doAsk(arg); return; }
+      if (verb === "say") { doSay(arg); return; }
       switch (cmd) {
         case "toggle": Dictation.toggle(); break;
         case "start": Dictation.start(); break;
@@ -1336,6 +1430,40 @@ chmod +x install-hyperfurion-vk.sh
         case "sponsor": case "donate":
           print("free, MIT — if it earns its keystrokes:", "dim");
           print("https://github.com/sponsors/liamghennigan", "dim");
+          break;
+        case "subscribe":
+          print("hosted tier — $5/mo: one hfk_ key, no provider accounts, hard quotas", "dim");
+          print("launching soon · early access via sponsors: github.com/sponsors/liamghennigan", "dim");
+          break;
+        case "real": case "real on":
+          Demo.want = true;
+          print("checking the hosted demo…", "dim");
+          Demo.check().then((st) => {
+            if (st.live) {
+              print("hosted demo live — the mic now streams to xai grok stt, the engine this product ships with", "dim");
+              print("(talks to " + Demo.base.replace(/^https?:\/\//, "") +
+                    " — nothing else on this page does · `real off` reverts)", "dim");
+            } else {
+              print("hosted demo offline (" + (st.reason || "unreachable") +
+                    ") — your browser's engine stays in charge", "dim");
+            }
+            Hints.set();
+          });
+          break;
+        case "real off":
+          Demo.want = false;
+          print("mic back on your browser's engine", "dim");
+          break;
+        case "demo": case "demo status":
+          print("checking…", "dim");
+          Demo.check().then((st) => {
+            if (st.live) {
+              const s = st.served_today || {};
+              print("hosted demo: live · served today: " + (s.dictations | 0) + " dictations · " +
+                    (s.tts | 0) + " voice lines · " + (s.asks | 0) + " questions", "dim");
+              print("caps: " + st.caps.dictation_seconds + " s per dictation, budget-limited per day — real xai, honestly rationed", "dim");
+            } else print("hosted demo: offline (" + (st.reason || "unreachable") + ")", "dim");
+          });
           break;
         case "help": case "--help": case "-h": HELP.forEach(([t, c]) => print(t, c)); break;
         case "clear": history.length = 0; render(); break;
@@ -1365,6 +1493,8 @@ chmod +x install-hyperfurion-vk.sh
     ];
     const D = { recording: false };
     let engine = "none", rec = null, typeTimer = 0, simIdx = 0, redSample = 0;
+    let relay = null, relayT = 0, funneled = false;
+    Object.defineProperty(D, "engine", { get: () => engine });
 
     function setRecording(on) {
       D.recording = on;
@@ -1380,13 +1510,22 @@ chmod +x install-hyperfurion-vk.sh
       clearInterval(typeTimer);
       Terminal.setLine("", "");
       setRecording(true);
-      Signal.start();
+      const sigP = Signal.start();
       Ticker.wake();
       if (reduced) {
         // no animation loop runs, but the frozen waveform still needs data
         redSample = setInterval(() => Scope.push(Signal.frame().peak), 250);
       }
+      if (Demo.armed()) {
+        engine = "relay";
+        bus.emit("rec:start", { engine });
+        startRelay(sigP);
+        return;
+      }
       bus.emit("rec:start", { engine });
+      startBrowser();
+    }
+    function startBrowser() {
       if (SR) {
         try {
           rec = new SR();
@@ -1414,6 +1553,114 @@ chmod +x install-hyperfurion-vk.sh
       }
       engine = "sim";
     }
+
+    // — the hosted-relay dictation path: mic PCM → relay → xai grok stt —
+    async function startRelay(sigP) {
+      try {
+        await sigP;
+        const au = Signal.audio();
+        if (!au.stream || !au.ctx) throw new Error("microphone not granted");
+        const rate = Math.round(au.ctx.sampleRate);
+        const ws = new WebSocket(Demo.wsBase + "/v1/demo/stt?sample_rate=" + rate +
+          "&encoding=pcm&interim_results=true&language=" + encodeURIComponent(Config.cfg.lang || "en"));
+        ws.binaryType = "arraybuffer";
+        const src = au.ctx.createMediaStreamSource(au.stream);
+        const proc = au.ctx.createScriptProcessor(4096, 1, 1);
+        const sink = au.ctx.createGain();
+        sink.gain.value = 0;  // the processor needs a destination, not an echo
+        relay = { ws, src, proc, sink, committed: "", done: false };
+        proc.onaudioprocess = (e) => {
+          if (!relay || ws.readyState !== 1) return;
+          const f = e.inputBuffer.getChannelData(0);
+          const pcm = new Int16Array(f.length);
+          for (let i = 0; i < f.length; i++) {
+            const s = Math.max(-1, Math.min(1, f[i]));
+            pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+          }
+          ws.send(pcm.buffer);
+        };
+        ws.onopen = () => { src.connect(proc); proc.connect(sink); sink.connect(au.ctx.destination); };
+        ws.onmessage = relayEvent;
+        ws.onerror = () => relayFail("connection failed");
+        ws.onclose = () => {
+          if (!relay) return;
+          if (D.recording) relayFail("connection closed");
+          else relaySettle();  // audio.done sent; no more events are coming
+        };
+        Hero.caption();
+      } catch (err) {
+        relayFail(err && err.message ? err.message : "unavailable");
+      }
+    }
+    function relayEvent(m) {
+      if (!relay) return;
+      let ev; try { ev = JSON.parse(m.data); } catch { return; }
+      if (ev.type === "transcript.partial") {
+        if (ev.is_final && ev.text) {
+          relay.committed = relay.committed ? relay.committed + " " + ev.text : ev.text;
+          Terminal.setLine(relay.committed, "");
+          bus.emit("rec:final", { text: ev.text });
+        } else {
+          Terminal.setLine(relay.committed, ev.text || "");
+          bus.emit("rec:interim", { text: ev.text || "" });
+        }
+      } else if (ev.type === "transcript.done") {
+        const t = String(ev.text || "");
+        if (t.length >= relay.committed.length) relay.committed = t;
+        Terminal.setLine(relay.committed, "");
+        relay.done = true;
+        if (D.recording) stop();  // the demo cap finalized for us
+        else relaySettle();
+      } else if (ev.type === "demo.limit") {
+        Terminal.print("· " + ev.message, "dim");
+      } else if (ev.type === "error") {
+        relayFail(ev.message || "error");
+      }
+    }
+    function relayCleanup() {
+      if (!relay) return;
+      try { relay.proc.disconnect(); relay.src.disconnect(); relay.sink.disconnect(); } catch {}
+      try { relay.ws.onclose = null; relay.ws.onmessage = null; relay.ws.close(); } catch {}
+      relay = null;
+    }
+    function relayFinish() {
+      try { relay.proc.disconnect(); } catch {}
+      if (relay.done) { relaySettle(); return; }
+      try { relay.ws.send(JSON.stringify({ type: "audio.done" })); } catch { relaySettle(); return; }
+      relayT = setTimeout(relaySettle, 6000);  // deadline for the final transcript
+    }
+    function relaySettle() {
+      if (!relay) return;
+      clearTimeout(relayT);
+      relayCleanup();
+      const settled = Terminal.commitCurrent();
+      if (settled) { done(settled); funnel(); }
+      else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+      Hints.advance();
+    }
+    function relayFail(msg) {
+      if (!relay) return;
+      relayCleanup();
+      clearTimeout(relayT);
+      Terminal.print("hosted demo: " + msg, "err");
+      if (D.recording) {
+        engine = "none";
+        Terminal.print("falling back to your browser's engine", "dim");
+        startBrowser();
+        Hero.caption();
+      } else {
+        const settled = Terminal.commitCurrent();
+        if (settled) done(settled);
+        else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+        Hints.advance();
+      }
+    }
+    function funnel() {
+      if (funneled) return;
+      funneled = true;
+      Terminal.print("· that came through xai grok stt — the hosted tier. $5/mo, one key: type subscribe", "dim");
+    }
+
     function stop() {
       if (!D.recording) return;
       setRecording(false);
@@ -1423,6 +1670,12 @@ chmod +x install-hyperfurion-vk.sh
       if (rec) { try { rec.stop(); } catch {} rec = null; }
       dictations++;
       bus.emit("rec:stop", {});
+      if (engine === "relay") {
+        // the socket outlives the mic: flush audio.done, then settle on
+        // transcript.done (or the timeout)
+        if (relay) relayFinish();
+        return;
+      }
       // give a final result a beat to arrive, then settle the line
       setTimeout(() => {
         const settled = Terminal.commitCurrent();
@@ -1526,7 +1779,8 @@ chmod +x install-hyperfurion-vk.sh
 
     bus.on("rec:start", () => {
       fig.classList.add("rec");
-      engineSub.textContent = "browser speech engine";
+      engineSub.textContent = Dictation.engine === "relay"
+        ? "xai grok stt (hosted)" : "browser speech engine";
       status.textContent = "capturing audio";
     });
     bus.on("rec:interim", () => {
@@ -1726,6 +1980,8 @@ chmod +x install-hyperfurion-vk.sh
         add("the strip above the terminal froze your sentence's <i>waveform</i> — drawn from the " +
             "signal, then let go. now <b>hold</b> the hotkey and release to stop; <code>hold_threshold_ms = " +
             Config.cfg.holdMs + "</code> below is real, like everything else in that config");
+        if (!Demo.want) add(" · or type <code>real</code> — the mic switches to the actual " +
+            "xai engine this product ships with (hosted demo)");
       } else if (dictations === 2) {
         add("select any text on this page and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> — " +
             "the other half of the product");
@@ -1747,6 +2003,7 @@ chmod +x install-hyperfurion-vk.sh
   })();
 
   // ═══ BOOT ═══════════════════════════════════════════════════════════════
+  window.__vk.demo = Demo;         // the proof harness steers the demo layer
   $("hero-live").hidden = false;   // the claim is only true with JS running
   $("cfg-live-note").hidden = $("page-note").hidden = false;
   cfgEl.contentEditable = "plaintext-only";

@@ -35,6 +35,15 @@ CREATE TABLE IF NOT EXISTS pending_keys (
     api_key TEXT NOT NULL,
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS demo_usage (
+    day TEXT NOT NULL,
+    ip TEXT NOT NULL,
+    dictations INTEGER NOT NULL DEFAULT 0,
+    tts INTEGER NOT NULL DEFAULT 0,
+    asks INTEGER NOT NULL DEFAULT 0,
+    spent_usd REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, ip)
+);
 """
 
 
@@ -167,6 +176,42 @@ class Store:
                 " stt_seconds_used, tts_chars_used, created_at FROM users ORDER BY id"
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # -- anonymous landing-page demo metering ------------------------------
+    # Rows are keyed (day, ip); the ip='' row aggregates the whole day and
+    # is what the global budget reads.
+
+    def demo_day(self) -> str:
+        return time.strftime("%Y-%m-%d", time.gmtime(self._clock()))
+
+    def demo_counts(self, ip: str) -> dict:
+        day = self.demo_day()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT dictations, tts, asks, spent_usd FROM demo_usage"
+                " WHERE day = ? AND ip = ?",
+                (day, ip),
+            ).fetchone()
+        if row is None:
+            return {"dictations": 0, "tts": 0, "asks": 0, "spent_usd": 0.0}
+        return dict(row)
+
+    def demo_record(self, ip: str, kind: str, usd: float) -> None:
+        assert kind in {"dictations", "tts", "asks"}
+        day = self.demo_day()
+        with self._lock:
+            for row_ip in (ip, ""):
+                self._conn.execute(
+                    "INSERT INTO demo_usage (day, ip) VALUES (?, ?)"
+                    " ON CONFLICT(day, ip) DO NOTHING",
+                    (day, row_ip),
+                )
+                self._conn.execute(
+                    f"UPDATE demo_usage SET {kind} = {kind} + 1,"
+                    " spent_usd = spent_usd + ? WHERE day = ? AND ip = ?",
+                    (usd, day, row_ip),
+                )
+            self._conn.commit()
 
     # -- one-time key pickup after Stripe checkout ------------------------
 

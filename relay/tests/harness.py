@@ -35,7 +35,10 @@ async def _with_rig(scenario) -> None:
             "db_path": ":memory:",
             "upstream_stt_url": f"ws://127.0.0.1:{fake_server.port}/v1/stt",
             "upstream_tts_url": f"http://127.0.0.1:{fake_server.port}/v1/tts",
+            "upstream_chat_url": f"http://127.0.0.1:{fake_server.port}/v1/chat/completions",
             "stripe_webhook_secret": WEBHOOK_SECRET,
+            "demo_daily_budget_usd": 1.0,
+            "demo_chat_model": "grok-test",
         }
     )
     relay_server = TestServer(relay_app)
