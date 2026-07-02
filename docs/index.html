@@ -48,9 +48,10 @@
     <noscript><p class="nojs">The demos on this page need JavaScript; everything below is the real documentation.</p></noscript>
     <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">🎙️</button>
     <h1>HyperFurion&nbsp;VK</h1>
-    <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Alt+V</code>, speak,
-    and it types into whatever app has focus. The reverse too: select text
-    anywhere and hear it read aloud.</p>
+    <p class="lede">Speak. It types.</p>
+    <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Alt+V</code>,
+    say the thing, and it lands in whatever app has focus — as real keystrokes.
+    The reverse too: select text anywhere and hear it read aloud.</p>
     <p class="hero-live" id="hero-live" hidden>this page is a working instance —
     <b>tap the mic, speak, tap again</b> · it listens, and it types</p>
     <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
@@ -66,7 +67,7 @@ chmod +x install-hyperfurion-vk.sh
     <a class="scrolldown" href="#app" aria-hidden="true" tabindex="-1">↓</a>
   </header>
 
-  <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · speak · it types · one file · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · speak · it types · one file · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; </span></div>
+  <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; </span></div>
 
   <!-- ═══ THE FOCUSED APP — a working instance, scaled to one tab ═══════ -->
   <section class="wide demo" id="app" aria-label="Live demo terminal">
@@ -176,14 +177,46 @@ chmod +x install-hyperfurion-vk.sh
     </div>
   </section>
 
-  <!-- ═══ 02 / PROVIDERS ════════════════════════════════════════════════ -->
+  <!-- ═══ 02 / WHAT LEAVES YOUR MACHINE ═════════════════════════════════ -->
+  <section class="prose" id="trust-h">
+    <h2><span class="num" aria-hidden="true">02</span>What leaves your machine</h2>
+    <p>If you tried the demo, you just spoke into a web page — a fair moment
+    to ask where that went. Both halves of the answer are short.</p>
+    <div class="trust">
+      <div>
+        <h3>The daemon</h3>
+        <ul>
+          <li>Dictated audio goes to your chosen STT provider; selected text goes to your TTS provider. Nothing else.</li>
+          <li>Recorded audio is held in memory while it is being transcribed — not written to disk.</li>
+          <li>TTS audio is a temporary MP3, deleted after playback.</li>
+          <li>API keys sit in <code>config.toml</code>, mode 600. The IPC socket is mode 600.</li>
+          <li>Default logs record state and transcript <i>lengths</i>, not transcript text.</li>
+          <li><code>input</code>-group membership is broad input access — that is the honest price of global hotkeys.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>This page</h3>
+        <ul>
+          <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon sends audio to its provider.</li>
+          <li>TTS uses your browser&rsquo;s speech synthesis.</li>
+          <li>One file, no scripts loaded, no analytics, no cookies, no storage.</li>
+          <li>Nothing is loaded, stored, or sent — until you opt in: the terminal&rsquo;s
+          <code>real</code>, <code>ask</code>, <code>say</code>, and <code>demo</code> commands
+          talk to <code>api.hyperfurion.com</code> (real xAI engines, rate-limited, labeled in
+          place). Nothing else on this page touches the network, ever.</li>
+          <li>Transcripts exist only on your screen and die on reload.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 03 / PROVIDERS ════════════════════════════════════════════════ -->
   <section class="prose" id="providers">
-    <h2><span class="num" aria-hidden="true">02</span>Providers</h2>
+    <h2><span class="num" aria-hidden="true">03</span>Providers</h2>
     <p><b>xAI is the default</b>, for speech-to-text and text-to-speech both —
-    it&rsquo;s what this project is built and daily-driven on. Two ways to run it:
-    <b>bring your own API key</b> (free, any provider below, one line in the
-    config) or the <b>hosted subscription</b> — one <code>hfk_</code> key, no
-    provider accounts, xAI underneath. Model IDs are plain config values.</p>
+    it&rsquo;s what this project is built and daily-driven on. Every provider
+    below is one line of config; model IDs are plain config values. How you
+    pay for one — or don&rsquo;t — is the next section.</p>
 
     <h3>Speech-to-text</h3>
     <div class="tblwrap">
@@ -213,7 +246,22 @@ chmod +x install-hyperfurion-vk.sh
     </table>
     </div>
 
-    <h3>The subscription, plainly</h3>
+    <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
+    <code>en_us</code>.</p>
+  </section>
+
+  <!-- ═══ 04 / THREE WAYS TO RUN IT ════════════════════════════════════ -->
+  <section class="prose" id="pricing">
+    <h2><span class="num" aria-hidden="true">04</span>Three ways to run it</h2>
+    <p>All three run the same product. Nothing on this page is feature-gated,
+    and nothing below changes that.</p>
+
+    <h3>Your own key — free, forever</h3>
+    <p>Bring an API key from any provider above and you have every feature this
+    product will ever ship. One line in the config. Paying unlocks nothing —
+    that is the point.</p>
+
+    <h3>Hosted — $5 or $10 a month</h3>
     <p><code>provider = "hyperfurion"</code> buys convenience, not capability.
     Every feature of this product is open source and free forever — bring your
     own API key and you have all of it; paying unlocks nothing. What
@@ -251,14 +299,11 @@ provider = "openai"  # set stt.model to the model id your server exposes</code><
     Mini&nbsp;3B</a> (Apache-2.0) serves OpenAI-compatible via vLLM; and
     <a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a> covers
     CPU-only and edge boxes.</p>
-
-    <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
-    <code>en_us</code>.</p>
   </section>
 
-  <!-- ═══ 03 / CONFIGURATION ════════════════════════════════════════════ -->
+  <!-- ═══ 05 / CONFIGURATION ════════════════════════════════════════════ -->
   <section class="prose" id="config-h">
-    <h2><span class="num" aria-hidden="true">03</span>Configuration</h2>
+    <h2><span class="num" aria-hidden="true">05</span>Configuration</h2>
     <p>The real config lives at <code>~/.config/voice-keyboard/config.toml</code>
     (mode 600 — it holds your API keys).
     <span id="cfg-live-note" hidden>The copy below is <b>live</b>: edit it and this
@@ -295,9 +340,9 @@ pitch = 1.0</pre>
     <code>systemctl --user restart voice-keyboard-daemon</code>.</p>
   </section>
 
-  <!-- ═══ 04 / SHORTCUTS & MODES ════════════════════════════════════════ -->
+  <!-- ═══ 06 / SHORTCUTS & MODES ════════════════════════════════════════ -->
   <section class="prose" id="keys">
-    <h2><span class="num" aria-hidden="true">04</span>Shortcuts &amp; modes</h2>
+    <h2><span class="num" aria-hidden="true">06</span>Shortcuts &amp; modes</h2>
     <div class="tblwrap">
     <table>
       <thead><tr><th scope="col">Input</th><th scope="col">What happens</th><th scope="col">CLI equivalent</th></tr></thead>
@@ -326,40 +371,10 @@ pitch = 1.0</pre>
     you log out and back in once after install.</p>
   </section>
 
-  <!-- ═══ 05 / WHAT LEAVES YOUR MACHINE ═════════════════════════════════ -->
-  <section class="prose" id="trust-h">
-    <h2><span class="num" aria-hidden="true">05</span>What leaves your machine</h2>
-    <div class="trust">
-      <div>
-        <h3>The daemon</h3>
-        <ul>
-          <li>Dictated audio goes to your chosen STT provider; selected text goes to your TTS provider. Nothing else.</li>
-          <li>Recorded audio is held in memory while it is being transcribed — not written to disk.</li>
-          <li>TTS audio is a temporary MP3, deleted after playback.</li>
-          <li>API keys sit in <code>config.toml</code>, mode 600. The IPC socket is mode 600.</li>
-          <li>Default logs record state and transcript <i>lengths</i>, not transcript text.</li>
-          <li><code>input</code>-group membership is broad input access — that is the honest price of global hotkeys.</li>
-        </ul>
-      </div>
-      <div>
-        <h3>This page</h3>
-        <ul>
-          <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon sends audio to its provider.</li>
-          <li>TTS uses your browser&rsquo;s speech synthesis.</li>
-          <li>One file, no scripts loaded, no analytics, no cookies, no storage.</li>
-          <li>Nothing is loaded, stored, or sent — until you opt in: the terminal&rsquo;s
-          <code>real</code>, <code>ask</code>, <code>say</code>, and <code>demo</code> commands
-          talk to <code>api.hyperfurion.com</code> (real xAI engines, rate-limited, labeled in
-          place). Nothing else on this page touches the network, ever.</li>
-          <li>Transcripts exist only on your screen and die on reload.</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ 06 / HONEST LIMITATIONS ═══════════════════════════════════════ -->
+  <!-- ═══ 07 / HONEST LIMITATIONS ═══════════════════════════════════════ -->
   <section class="prose" id="limits">
-    <h2><span class="num" aria-hidden="true">06</span>Honest limitations</h2>
+    <h2><span class="num" aria-hidden="true">07</span>Honest limitations</h2>
+    <p class="sigcap limits-cap">known limits — stated, not hidden</p>
     <ul>
       <li>Linux first — Python 3.11+, systemd user services, uinput access.
       macOS and Windows are <b>beta</b> (native Quartz/SendInput backends; see the
@@ -381,9 +396,9 @@ pitch = 1.0</pre>
     </ul>
   </section>
 
-  <!-- ═══ 07 / INSTALL ══════════════════════════════════════════════════ -->
+  <!-- ═══ 08 / INSTALL ══════════════════════════════════════════════════ -->
   <section class="prose" id="install">
-    <h2><span class="num" aria-hidden="true">07</span>Install</h2>
+    <h2><span class="num" aria-hidden="true">08</span>Install</h2>
     <h3>Linux</h3>
     <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh

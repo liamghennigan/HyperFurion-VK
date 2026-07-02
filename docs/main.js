@@ -42,22 +42,7 @@ import "./js/tts.js";
 import "./js/hotkeys.js";
 import { Hints } from "./js/hints.js";
 import { Field } from "./js/field.js";
-
-// ═══ REVEAL — sections develop as they enter the viewport ═══════════════
-// The class is only ever added by script, so the no-JS document is
-// complete and visible; reduced motion never hides anything.
-if (!reduced && "IntersectionObserver" in window) {
-  const ro = new IntersectionObserver((es) => {
-    for (const e of es)
-      if (e.isIntersecting) { e.target.classList.add("in"); ro.unobserve(e.target); }
-  }, { rootMargin: "0px 0px -8% 0px" });
-  for (const s of document.querySelectorAll("main > section:not(.demo), footer")) {
-    if (s.getBoundingClientRect().top > innerHeight * .85) {
-      s.classList.add("reveal");
-      ro.observe(s);
-    }
-  }
-}
+import "./js/scrollfx.js";
 
 // ═══ BOOT ════════════════════════════════════════════════════════════════
 window.__vk.demo = Demo;         // the proof harness steers the demo layer

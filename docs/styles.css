@@ -192,6 +192,11 @@ h1 {
   margin: 10px 0 18px;
   text-wrap: balance;
 }
+.lede {
+  font: 500 clamp(20px, 3vw, 30px)/1.2 var(--serif);
+  letter-spacing: -.01em;
+  margin: 2px 0 14px;
+}
 .tagline {
   color: var(--muted);
   margin: 0 auto 30px;
@@ -495,6 +500,10 @@ pre.config:focus { border-color: var(--wave); }
   box-shadow: 0 2px 10px rgba(0,0,0,.12);
 }
 
+/* ═══ 07 / HONEST LIMITATIONS — a brand asset, weighted like one ════════ */
+.limits-cap { color: var(--wave); margin: -8px 0 14px; }
+#limits h2 .num { opacity: .11; }
+
 /* ═══ COLOPHON ═════════════════════════════════════════════════════════ */
 footer {
   max-width: 640px;
@@ -539,10 +548,31 @@ footer .sigcap { display: block; margin-bottom: 10px; }
   /* hero warm-up: the instruments power on in sequence */
   .js .hero .mic       { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .05s; }
   .js .hero h1         { animation: warmup 1.05s cubic-bezier(.2,.7,.2,1) both .15s; }
-  .js .hero .tagline   { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .38s; }
-  .js .hero .hero-live { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .52s; }
-  .js .hero pre        { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .64s; }
-  .js .hero nav        { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .78s; }
+  .js .hero .lede      { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .3s; }
+  .js .hero .tagline   { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .42s; }
+  .js .hero .hero-live { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .54s; }
+  .js .hero pre        { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .66s; }
+  .js .hero nav        { animation: rise .7s cubic-bezier(.2,.7,.2,1) both .8s; }
+
+  /* ── scroll choreography (scrollfx.js writes --p per section, 0→1 as the
+     section crosses the viewport). translate/scale stay clear of the
+     transform-based reveal transitions above. ─────────────────────────── */
+  .js h2 .num { translate: 0 calc((.5 - var(--p, .5)) * -34px); }
+  .js h2::after {
+    scale: clamp(.001, calc(var(--p, 1) * 2.4), 1) 1;
+    transform-origin: left center;
+  }
+  /* the hero exhales as you leave it; the field remains */
+  .js .hero { opacity: clamp(0, calc((.95 - var(--p, .5)) * 3), 1); }
+
+  /* keyboard glyphs light up when the real keys go down (hotkeys.js) */
+  kbd { transition: background-color .12s, border-color .12s, box-shadow .12s, translate .12s; }
+  kbd.down {
+    background: color-mix(in srgb, var(--wave) 20%, var(--code-bg));
+    border-color: var(--wave);
+    box-shadow: 0 0 12px var(--glow);
+    translate: 0 1px;
+  }
 
   /* the idle mic breathes, inviting the tap */
   .mic:not(.live) { animation: breathe 3.4s ease-in-out infinite 2s; }

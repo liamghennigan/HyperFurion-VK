@@ -39,7 +39,7 @@ export const Hints = (() => {
           "or pick a <code>voice_id</code> — the page re-binds itself");
     } else {
       add("type <code>voice-keyboard --help</code> into the terminal above · " +
-          "this whole page is one file — view source");
+          "every line of this page is readable — view source");
     }
   }
   function listening() {

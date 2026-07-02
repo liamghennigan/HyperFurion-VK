@@ -1,5 +1,5 @@
 // ═══ HOTKEYS — honors the live config ═════════════════════════════════════
-import { cfgEl, synth } from "./env.js";
+import { cfgEl, synth, reduced } from "./env.js";
 import { bus } from "./bus.js";
 import { Config } from "./config.js";
 import { Dictation } from "./dictation.js";
@@ -49,4 +49,30 @@ import { TTS } from "./tts.js";
     if (holdStarted) { Dictation.stop(); return; }
     if (cfg.mode === "auto") Dictation.toggle();
   });
+})();
+
+// ═══ the kbd glyphs on the page light up under your real fingers ══════════
+// A small, honest delight: hold Ctrl and every <kbd>Ctrl</kbd> on screen
+// presses itself — the page teaching its own hotkey.
+(() => {
+  if (reduced) return;
+  const NAME = {
+    Control: ["ctrl", "control"], Alt: ["alt"], Shift: ["shift"],
+    Meta: ["meta", "super"], Escape: ["esc", "escape"],
+  };
+  const pressed = new Set();
+  let kbds = null;
+  function labels(e, on) {
+    const l = NAME[e.key] || (/^Key[A-Z]$/.test(e.code) ? [e.code.slice(3).toLowerCase()] : null);
+    if (!l) return false;
+    for (const n of l) on ? pressed.add(n) : pressed.delete(n);
+    return true;
+  }
+  function paint() {
+    kbds = kbds || document.querySelectorAll("kbd");
+    for (const k of kbds) k.classList.toggle("down", pressed.has(k.textContent.trim().toLowerCase()));
+  }
+  addEventListener("keydown", (e) => { if (labels(e, true)) { kbds = null; paint(); } }, true);
+  addEventListener("keyup", (e) => { if (labels(e, false)) paint(); }, true);
+  addEventListener("blur", () => { pressed.clear(); if (kbds) paint(); });
 })();
