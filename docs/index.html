@@ -645,9 +645,10 @@ chmod +x install-hyperfurion-vk.sh
   <section class="prose" id="providers">
     <h2><span class="num" aria-hidden="true">02</span>Providers</h2>
     <p><b>xAI is the default</b>, for speech-to-text and text-to-speech both —
-    it&rsquo;s what this project is built and daily-driven on. Any provider below
-    works: bring your own API key and switch with one line in the config.
-    Model IDs are plain config values.</p>
+    it&rsquo;s what this project is built and daily-driven on. Two ways to run it:
+    <b>bring your own API key</b> (free, any provider below, one line in the
+    config) or the <b>hosted subscription</b> — one <code>hfk_</code> key, no
+    provider accounts, xAI underneath. Model IDs are plain config values.</p>
 
     <h3>Speech-to-text</h3>
     <div class="tblwrap">
@@ -655,6 +656,7 @@ chmod +x install-hyperfurion-vk.sh
       <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th></tr></thead>
       <tbody>
         <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td></tr>
+        <tr><td>hyperfurion <span class="default-badge">subscription</span></td><td>provider default (xAI)</td></tr>
         <tr><td>openai</td><td><code>gpt-4o-transcribe</code></td></tr>
         <tr><td>groq</td><td><code>whisper-large-v3-turbo</code></td></tr>
         <tr><td>deepgram</td><td><code>nova-3</code></td></tr>
@@ -669,11 +671,25 @@ chmod +x install-hyperfurion-vk.sh
       <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th><th scope="col">Default voice</th></tr></thead>
       <tbody>
         <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td><td><code>eve</code></td></tr>
+        <tr><td>hyperfurion <span class="default-badge">subscription</span></td><td>provider default (xAI)</td><td><code>eve</code></td></tr>
         <tr><td>openai</td><td><code>gpt-4o-mini-tts</code></td><td><code>coral</code></td></tr>
         <tr><td>elevenlabs</td><td><code>eleven_multilingual_v2</code></td><td><code>JBFqnCBsd6RMkjVDRZzb</code></td></tr>
       </tbody>
     </table>
     </div>
+
+    <h3>The subscription, plainly</h3>
+    <p><code>provider = "hyperfurion"</code> is the no-setup option: <b>$5/month</b>
+    for one key that covers both lanes — 20 hours of streaming dictation and
+    250k spoken characters a month, hard-capped so nobody can run up a bill
+    ($10/month buys 60 h and 1M). Your audio takes the same path as the
+    default provider&rsquo;s, through a metered relay to xAI; it is held in
+    memory, never written to disk. The relay is
+    <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay">open
+    source and self-hostable</a>, and the bring-your-own-key path stays
+    first-class forever. Launching soon — type <code>subscribe</code> in the
+    terminal above, or get early access via
+    <a href="https://github.com/sponsors/liamghennigan">sponsors</a>.</p>
 
     <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
     <code>en_us</code>.</p>
@@ -697,9 +713,9 @@ hold_threshold_ms = 280
 
 [stt]
 # the daemon also takes provider = "xai" (the default)
-#   | "openai" | "groq" | "deepgram" | "assemblyai" — this
-#   page's provider is your browser's speech engine, so
-#   only these two apply:
+#   | "hyperfurion" (subscription) | "openai" | "groq"
+#   | "deepgram" | "assemblyai" — this page's provider is
+#   your browser's speech engine, so only these two apply:
 language = "en"
 interim_results = true
 
