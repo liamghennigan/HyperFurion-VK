@@ -251,11 +251,11 @@ class Daemon:
             return
         mode = self._config.get("hotkey", {}).get("mode", "auto")
         if hold_to_talk or mode == "hold":
-            listening_detail = "Release Ctrl+Space to stop"
+            listening_detail = "Release Ctrl+Alt+V to stop"
         elif mode == "auto":
-            listening_detail = "Tap Ctrl+Space again to stop; hold to talk"
+            listening_detail = "Tap Ctrl+Alt+V again to stop; hold to talk"
         else:
-            listening_detail = "Press Ctrl+Space again to stop"
+            listening_detail = "Press Ctrl+Alt+V again to stop"
         await self._show_hotkey_overlay("starting")
         await self._start_recording()
         await self._show_hotkey_overlay("listening", detail=listening_detail)

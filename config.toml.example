@@ -49,7 +49,7 @@ device_name = "default"
 
 [hotkey]
 enabled = true
-key = "control+space"
+key = "control+alt+v"
 # "auto" = tap to toggle, or hold to record until release.
 # You can still force "toggle" or "hold" if you want only one gesture.
 mode = "auto"

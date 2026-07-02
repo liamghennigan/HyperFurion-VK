@@ -53,7 +53,7 @@ DEFAULT_CONFIG: dict = {
     },
     "hotkey": {
         "enabled": True,
-        "key": "control+space",
+        "key": "control+alt+v",
         "mode": "auto",
     },
 }

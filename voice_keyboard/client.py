@@ -419,7 +419,7 @@ def main() -> None:
                 _show_overlay("listening")
                 _notify(
                     "Voice Keyboard",
-                    "Listening... press Ctrl+Space again to stop",
+                    "Listening... press Ctrl+Alt+V again to stop",
                     timeout_ms=5000,
                 )
                 print("Recording started...")

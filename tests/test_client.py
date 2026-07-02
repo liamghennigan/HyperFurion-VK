@@ -85,7 +85,7 @@ class TestToggleCommand:
         ]
         notify.assert_called_once_with(
             "Voice Keyboard",
-            "Listening... press Ctrl+Space again to stop",
+            "Listening... press Ctrl+Alt+V again to stop",
             timeout_ms=5000,
         )
 
