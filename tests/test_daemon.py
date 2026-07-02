@@ -274,6 +274,58 @@ class TestDaemonStateTransitions:
 
         asyncio.run(run())
 
+    def test_stt_error_event_raises_and_does_not_inject(self, daemon: Daemon) -> None:
+        async def run() -> None:
+            async def fake_receive_events():
+                yield {"type": "error", "message": "openai STT transcription failed: bad key"}
+
+            stt_client = mock.AsyncMock()
+            stt_client.receive_events = fake_receive_events
+            audio_capture = mock.Mock()
+            audio_capture.read_chunk = mock.Mock(side_effect=[b"audio", RuntimeError("done")])
+            audio_capture.sample_rate = 16000
+            audio_capture.running = True
+
+            with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
+                await daemon._start_recording()
+                for _ in range(100):
+                    if daemon._stt_error:
+                        break
+                    await asyncio.sleep(0.005)
+
+                with pytest.raises(RuntimeError, match="bad key"):
+                    await daemon._stop_recording()
+
+                daemon._injector.type_text.assert_not_called()
+
+        asyncio.run(run())
+
+    def test_stop_recording_timeout_raises_and_does_not_inject(self, daemon: Daemon) -> None:
+        async def run() -> None:
+            async def fake_receive_events():
+                await asyncio.sleep(10)
+                yield {"type": "transcript.done", "text": "late text"}
+
+            stt_client = mock.AsyncMock()
+            stt_client.receive_events = fake_receive_events
+            audio_capture = mock.Mock()
+            audio_capture.read_chunk = mock.Mock(side_effect=[b"audio", RuntimeError("done")])
+            audio_capture.sample_rate = 16000
+            audio_capture.running = True
+
+            with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
+                 mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client), \
+                 mock.patch.object(daemon, "_stt_completion_timeout", return_value=0.01):
+                await daemon._start_recording()
+
+                with pytest.raises(RuntimeError, match="timed out waiting"):
+                    await daemon._stop_recording()
+
+                daemon._injector.type_text.assert_not_called()
+
+        asyncio.run(run())
+
     def test_tts_calls_synthesize_and_play(self, daemon: Daemon) -> None:
         daemon._tts_client.synthesize_and_play = mock.Mock()
         asyncio.run(daemon._run_tts("read this"))
@@ -315,6 +367,13 @@ class TestDaemonStateTransitions:
         asyncio.run(daemon._cleanup_after_failed_start())  # second call must not raise
         assert daemon._audio_capture is None
         assert daemon._stt_client is None
+
+    def test_stop_recording_ipc_timeout_tracks_stt_completion_timeout(
+        self,
+        daemon: Daemon,
+    ) -> None:
+        daemon._stt_client = mock.Mock(completion_timeout=65.0)
+        assert daemon._stop_recording_ipc_timeout() == 75.0
 
     def test_shutdown_stops_recording_and_cleanup(self, daemon: Daemon) -> None:
         daemon._recording = True

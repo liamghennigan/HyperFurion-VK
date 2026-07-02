@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="${HYPERFURION_VK_REPO:-liamghennigan/HyperFurion-VK}"
-VERSION="${HYPERFURION_VK_VERSION:-v1}"
+VERSION="${HYPERFURION_VK_VERSION:-v1.0.1}"
 ARCHIVE_URL="${HYPERFURION_VK_ARCHIVE_URL:-https://github.com/$REPO/archive/refs/tags/$VERSION.tar.gz}"
 INSTALL_CACHE="${HYPERFURION_VK_INSTALL_CACHE:-$HOME/.cache/hyperfurion-vk-installer}"
 

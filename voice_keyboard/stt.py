@@ -2,8 +2,10 @@ import asyncio
 import io
 import json
 import logging
+import threading
 import time
 import wave
+from collections import deque
 from typing import AsyncIterator, Optional
 from urllib.parse import urlencode
 
@@ -80,6 +82,8 @@ def create_stt_client(config: dict):
 
 class STTClient:
     """Streaming xAI STT client."""
+
+    completion_timeout = 5.0
 
     def __init__(
         self,
@@ -207,8 +211,18 @@ class BufferedRESTSTTClient:
         self._max_poll_time = max_poll_time
         self._sample_rate = 16000
         self._chunks: list[bytes] = []
-        self._queue: Optional[asyncio.Queue[dict]] = None
         self._session: Optional[requests.Session] = None
+        self._events: deque[dict] = deque()
+        self._event_lock = threading.Lock()
+        self._worker_thread: Optional[threading.Thread] = None
+        self._connected = False
+        self._closed = False
+
+    @property
+    def completion_timeout(self) -> float:
+        if self._provider == "assemblyai":
+            return (self._timeout * 2) + self._max_poll_time + 5.0
+        return self._timeout + 5.0
 
     @property
     def session(self) -> requests.Session:
@@ -219,38 +233,76 @@ class BufferedRESTSTTClient:
     async def connect(self, sample_rate: int) -> None:
         self._sample_rate = sample_rate
         self._chunks = []
-        self._queue = asyncio.Queue()
+        self._events.clear()
+        self._worker_thread = None
+        self._connected = True
+        self._closed = False
         logger.info("Buffered STT client ready: %s", self._provider)
 
     async def send_audio(self, data: bytes) -> None:
         self._chunks.append(bytes(data))
 
     async def send_audio_done(self) -> None:
-        if self._queue is None:
+        if not self._connected:
             raise RuntimeError("Not connected")
+        if self._worker_thread is not None:
+            return
         wav_data = self._wav_bytes()
+        self._worker_thread = threading.Thread(
+            target=self._transcribe_in_worker,
+            args=(wav_data,),
+            name=f"voice-keyboard-{self._provider}-stt",
+            daemon=True,
+        )
+        self._worker_thread.start()
+
+    def _transcribe_in_worker(self, wav_data: bytes) -> None:
         try:
             text = self._transcribe_wav(wav_data)
         except Exception as exc:
             logger.exception("%s STT transcription failed", self._provider)
-            await self._queue.put({"type": "error", "message": str(exc)})
+            self._emit_worker_event(
+                {
+                    "type": "error",
+                    "message": f"{self._provider} STT transcription failed: {exc}",
+                }
+            )
             return
-        await self._queue.put({"type": "transcript.done", "text": text})
+        self._emit_worker_event({"type": "transcript.done", "text": text})
+
+    def _emit_worker_event(self, event: dict) -> None:
+        if self._closed or not self._connected:
+            return
+        with self._event_lock:
+            self._events.append(event)
 
     async def receive_events(self) -> AsyncIterator[dict]:
-        if self._queue is None:
+        if not self._connected:
             raise RuntimeError("Not connected")
         while True:
-            event = await self._queue.get()
+            event = await self._next_event()
             yield event
             if event.get("type") in {"transcript.done", "error"}:
                 break
 
+    async def _next_event(self) -> dict:
+        while True:
+            with self._event_lock:
+                if self._events:
+                    return self._events.popleft()
+            if not self._connected:
+                raise RuntimeError("Not connected")
+            await asyncio.sleep(0.01)
+
     async def close(self) -> None:
+        self._closed = True
+        self._connected = False
         if self._session is not None:
             self._session.close()
             self._session = None
         self._chunks = []
+        with self._event_lock:
+            self._events.clear()
 
     def _wav_bytes(self) -> bytes:
         raw_audio = b"".join(self._chunks)

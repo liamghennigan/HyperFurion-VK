@@ -44,6 +44,21 @@ class TestGetClipboardText:
             assert client._get_clipboard_text() == ""
 
 
+class TestCommandTimeouts:
+    @pytest.mark.parametrize(
+        ("provider", "expected"),
+        [
+            ("xai", 20.0),
+            ("openai", 90.0),
+            ("groq", 90.0),
+            ("deepgram", 90.0),
+            ("assemblyai", 270.0),
+        ],
+    )
+    def test_stop_timeout_follows_stt_provider(self, provider: str, expected: float) -> None:
+        assert client._stop_timeout_for_config({"stt": {"provider": provider}}) == expected
+
+
 class TestToggleCommand:
     def test_toggle_starts_when_idle(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Avoid argparse reading sys.argv from the test runner.

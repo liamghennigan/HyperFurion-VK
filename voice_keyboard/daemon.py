@@ -156,6 +156,7 @@ class Daemon:
         self._receive_task: Optional[asyncio.Task] = None
         self._final_text: str = ""
         self._interim_text: str = ""
+        self._stt_error: Optional[str] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._hotkey_listener: Optional[HotkeyListener] = None
         self._hotkey_lock: Optional[asyncio.Lock] = None
@@ -314,11 +315,12 @@ class Daemon:
                         response = {"status": "ok", "message": "recording started"}
 
                 elif command == "stop":
+                    stop_timeout = self._stop_recording_ipc_timeout()
                     future = asyncio.run_coroutine_threadsafe(
                         self._stop_recording(), self._loop
                     )
                     try:
-                        result = future.result(timeout=18)
+                        result = future.result(timeout=stop_timeout)
                     except TimeoutError:
                         response = {
                             "status": "error",
@@ -373,6 +375,16 @@ class Daemon:
                 except OSError:
                     pass
 
+    def _stt_completion_timeout(self) -> float:
+        try:
+            timeout = float(getattr(self._stt_client, "completion_timeout", 5.0))
+        except (TypeError, ValueError):
+            timeout = 5.0
+        return max(5.0, timeout)
+
+    def _stop_recording_ipc_timeout(self) -> float:
+        return max(18.0, self._stt_completion_timeout() + 10.0)
+
     async def _start_recording(self) -> None:
         if self._recording:
             return
@@ -400,6 +412,7 @@ class Daemon:
 
         self._final_text = ""
         self._interim_text = ""
+        self._stt_error = None
         self._recording = True
 
         self._receive_task = asyncio.create_task(self._receive_events())
@@ -428,6 +441,7 @@ class Daemon:
             self._stt_client = None
         self._final_text = ""
         self._interim_text = ""
+        self._stt_error = None
 
     async def _stop_recording(self) -> str:
         if not self._recording:
@@ -460,13 +474,19 @@ class Daemon:
         if self._stt_client:
             try:
                 await self._stt_client.send_audio_done()
-            except Exception:
+            except Exception as exc:
                 logger.exception("Error sending audio.done")
+                self._stt_error = f"failed to finalize audio: {exc}"
 
             if self._receive_task:
+                receive_timeout = self._stt_completion_timeout()
                 try:
-                    await asyncio.wait_for(self._receive_task, timeout=5.0)
+                    await asyncio.wait_for(self._receive_task, timeout=receive_timeout)
                 except asyncio.TimeoutError:
+                    self._stt_error = (
+                        "timed out waiting for speech-to-text provider "
+                        f"after {receive_timeout:g}s"
+                    )
                     self._receive_task.cancel()
                     try:
                         await self._receive_task
@@ -481,6 +501,9 @@ class Daemon:
             except Exception:
                 pass
             self._stt_client = None
+
+        if self._stt_error:
+            raise RuntimeError(self._stt_error)
 
         final = _dedupe_repeated_transcript_text(
             _merge_transcript_text(self._final_text, self._interim_text)
@@ -530,11 +553,14 @@ class Daemon:
                     logger.debug("Final transcript received")
                     break
                 elif event_type == "error":
-                    logger.error("STT error event: %s", event.get("message", event))
+                    self._stt_error = str(
+                        event.get("message") or "speech-to-text provider failed"
+                    )
+                    logger.error("STT error event: %s", self._stt_error)
                     break
-        except Exception:
-            if self._recording:
-                logger.exception("Error receiving STT events")
+        except Exception as exc:
+            self._stt_error = str(exc) or exc.__class__.__name__
+            logger.exception("Error receiving STT events")
 
     async def _run_tts(self, text: str) -> None:
         await asyncio.to_thread(self._tts_client.synthesize_and_play, text)

@@ -312,6 +312,15 @@ def _get_clipboard_text() -> str:
     return ""
 
 
+def _stop_timeout_for_config(config: dict) -> float:
+    provider = str(config.get("stt", {}).get("provider", "xai")).lower()
+    if provider == "assemblyai":
+        return 270.0
+    if provider in {"openai", "groq", "deepgram"}:
+        return 90.0
+    return 20.0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="voice-keyboard",
@@ -396,9 +405,9 @@ def main() -> None:
         command = args.command
 
     try:
-        # `start` must complete STT connect (≤11s budget) within the client
-        # window; `stop` must flush final transcript and type it.
-        send_timeout = 15.0 if command == "start" else 20.0
+        # `start` must complete STT connect within the client window; `stop`
+        # may wait on a provider-backed transcription result.
+        send_timeout = 15.0 if command == "start" else _stop_timeout_for_config(config)
         if command == "start":
             _show_overlay("starting")
         elif command == "stop":
