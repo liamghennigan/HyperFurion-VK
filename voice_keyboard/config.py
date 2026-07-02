@@ -15,6 +15,11 @@ DEFAULT_CONFIG: dict = {
         "xai": {
             "api_key": "",
         },
+        "hyperfurion": {
+            "api_key": "",
+            # Hosted HyperFurion relay; override for self-hosted relays.
+            "base_url": "",
+        },
         "openai": {
             "api_key": "",
         },
@@ -60,6 +65,7 @@ DEFAULT_CONFIG: dict = {
 
 PLACEHOLDER_API_KEYS = {
     "xai-your-api-key-here",
+    "hfk-your-subscription-key-here",
     "openai-your-api-key-here",
     "groq-your-api-key-here",
     "deepgram-your-api-key-here",

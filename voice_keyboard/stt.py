@@ -18,18 +18,20 @@ from urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 XAI_STT_WS_URL = "wss://api.x.ai/v1/stt"
+HYPERFURION_DEFAULT_BASE_URL = "https://api.hyperfurion.com"
 OPENAI_STT_URL = "https://api.openai.com/v1/audio/transcriptions"
 GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEEPGRAM_STT_URL = "https://api.deepgram.com/v1/listen"
 ASSEMBLYAI_UPLOAD_URL = "https://api.assemblyai.com/v2/upload"
 ASSEMBLYAI_TRANSCRIPT_URL = "https://api.assemblyai.com/v2/transcript"
 
-SUPPORTED_STT_PROVIDERS = {"xai", "openai", "groq", "deepgram", "assemblyai"}
+SUPPORTED_STT_PROVIDERS = {"xai", "hyperfurion", "openai", "groq", "deepgram", "assemblyai"}
 MAX_CONNECT_RETRIES = 2
 CONNECT_BACKOFF_BASE = 0.5
 
 DEFAULT_STT_MODELS = {
     "xai": "",
+    "hyperfurion": "",
     "openai": "gpt-4o-transcribe",
     "groq": "whisper-large-v3-turbo",
     "deepgram": "nova-3",
@@ -58,6 +60,23 @@ def _provider_api_key(config: dict, provider: str) -> str:
     return key
 
 
+def hyperfurion_ws_url(config: dict) -> str:
+    """WebSocket STT endpoint for the hosted HyperFurion relay.
+
+    The relay speaks the same wire protocol as xAI STT, so the streaming
+    client is reused as-is with a different endpoint and the user's
+    subscription key instead of a raw provider key.
+    """
+    providers = config.get("providers", {})
+    base = str(providers.get("hyperfurion", {}).get("base_url", "")).strip()
+    base = (base or HYPERFURION_DEFAULT_BASE_URL).rstrip("/")
+    if base.startswith("https://"):
+        base = "wss://" + base[len("https://"):]
+    elif base.startswith("http://"):
+        base = "ws://" + base[len("http://"):]
+    return f"{base}/v1/stt"
+
+
 def create_stt_client(config: dict):
     stt_cfg = config.get("stt", {})
     provider = str(stt_cfg.get("provider", "xai")).lower()
@@ -65,11 +84,12 @@ def create_stt_client(config: dict):
     language = str(stt_cfg.get("language", "en"))
     model = str(stt_cfg.get("model", "") or DEFAULT_STT_MODELS.get(provider, ""))
 
-    if provider == "xai":
+    if provider in {"xai", "hyperfurion"}:
         return STTClient(
             api_key=api_key,
             language=language,
             interim_results=bool(stt_cfg.get("interim_results", True)),
+            ws_url=XAI_STT_WS_URL if provider == "xai" else hyperfurion_ws_url(config),
         )
 
     return BufferedRESTSTTClient(
@@ -81,7 +101,7 @@ def create_stt_client(config: dict):
 
 
 class STTClient:
-    """Streaming xAI STT client."""
+    """Streaming STT client for the xAI wire protocol (xAI or a HyperFurion relay)."""
 
     completion_timeout = 5.0
 
@@ -91,11 +111,13 @@ class STTClient:
         language: str = "en",
         interim_results: bool = True,
         connect_timeout: float = 5.0,
+        ws_url: str = XAI_STT_WS_URL,
     ):
         self._api_key = api_key
         self._language = language
         self._interim_results = interim_results
         self._connect_timeout = connect_timeout
+        self._ws_url = ws_url
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
 
     def _url_for_sample_rate(self, sample_rate: int) -> str:
@@ -106,7 +128,7 @@ class STTClient:
         }
         if self._language:
             query["language"] = self._language
-        return f"{XAI_STT_WS_URL}?{urlencode(query)}"
+        return f"{self._ws_url}?{urlencode(query)}"
 
     async def connect(self, sample_rate: int) -> None:
         headers = {"Authorization": f"Bearer {self._api_key}"}

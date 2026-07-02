@@ -247,3 +247,52 @@ class TestBufferedRESTSTTClient:
         assert args[0] == stt.DEEPGRAM_STT_URL
         assert kwargs["headers"]["Authorization"] == "Token deepgram-key"
         assert kwargs["params"]["model"] == "nova-3"
+
+
+class TestHyperFurionSTTProvider:
+    def test_create_stt_client_targets_hosted_relay(self) -> None:
+        cfg = {
+            "providers": {"hyperfurion": {"api_key": "hfk_abc", "base_url": ""}},
+            "stt": {"provider": "hyperfurion", "language": "en", "interim_results": True},
+        }
+
+        client = stt.create_stt_client(cfg)
+
+        assert isinstance(client, stt.STTClient)
+        assert client._api_key == "hfk_abc"
+        assert client._ws_url == "wss://api.hyperfurion.com/v1/stt"
+
+    def test_base_url_override_maps_scheme_and_strips_slash(self) -> None:
+        cfg = {
+            "providers": {
+                "hyperfurion": {"api_key": "hfk_abc", "base_url": "https://relay.example.com/"}
+            },
+            "stt": {"provider": "hyperfurion"},
+        }
+        assert stt.hyperfurion_ws_url(cfg) == "wss://relay.example.com/v1/stt"
+
+        cfg["providers"]["hyperfurion"]["base_url"] = "http://127.0.0.1:8787"
+        assert stt.hyperfurion_ws_url(cfg) == "ws://127.0.0.1:8787/v1/stt"
+
+    def test_connect_uses_relay_url_with_standard_query(self) -> None:
+        cfg = {
+            "providers": {
+                "hyperfurion": {"api_key": "hfk_abc", "base_url": "https://relay.example.com"}
+            },
+            "stt": {"provider": "hyperfurion", "language": "en", "interim_results": True},
+        }
+        client = stt.create_stt_client(cfg)
+
+        ws = mock.Mock()
+        ws.recv = mock.AsyncMock(return_value=json.dumps({"type": "transcript.created"}))
+
+        with mock.patch(
+            "voice_keyboard.stt.websockets.connect", new=mock.AsyncMock(return_value=ws)
+        ) as connect:
+            asyncio.run(client.connect(sample_rate=16000))
+
+        url = connect.call_args.args[0]
+        assert url.startswith("wss://relay.example.com/v1/stt?")
+        query = parse_qs(urlsplit(url).query)
+        assert query["sample_rate"] == ["16000"]
+        assert connect.call_args.kwargs["additional_headers"]["Authorization"] == "Bearer hfk_abc"
