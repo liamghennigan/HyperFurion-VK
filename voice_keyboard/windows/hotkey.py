@@ -77,26 +77,18 @@ class WinHotkeySpec:
 
 class WinHotkeyListener(HotkeyListener):
     def __init__(self, config: dict, *, on_toggle, on_hold_start, on_hold_stop):
-        # Mirrors the base initializer, minus evdev devices.
-        self._enabled = bool(config.get("enabled", True))
-        self._mode = str(config.get("mode", "auto")).lower()
-        self._hold_threshold_s = (
-            float(config.get("hold_threshold_ms", self.DEFAULT_HOLD_THRESHOLD_MS)) / 1000.0
+        # Base initializes the shared state machine; _make_spec swaps in the
+        # Windows virtual-key spec. Only the hook-thread id is added here.
+        super().__init__(
+            config,
+            on_toggle=on_toggle,
+            on_hold_start=on_hold_start,
+            on_hold_stop=on_hold_stop,
         )
-        self._spec = WinHotkeySpec(str(config.get("key", "control+alt+v")))
-        self._on_toggle = on_toggle
-        self._on_hold_start = on_hold_start
-        self._on_hold_stop = on_hold_stop
-        self._pressed: set[int] = set()
-        self._combo_latched = False
-        self._auto_combo_pending = False
-        self._hold_active = False
-        self._auto_hold_timer = None
-        self._devices: list = []
-        self._thread = None
-        self._stop_event = threading.Event()
-        self._lock = threading.Lock()
         self._thread_id = None
+
+    def _make_spec(self, key: str):
+        return WinHotkeySpec(key)
 
     def start(self) -> None:
         if not self._enabled or self._mode == "disabled":
@@ -147,18 +139,39 @@ class WinHotkeyListener(HotkeyListener):
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
         self._thread_id = kernel32.GetCurrentThreadId()
 
+        LRESULT = ctypes.c_ssize_t  # LONG_PTR — pointer-width, not c_int
+
         class KBDLLHOOKSTRUCT(ctypes.Structure):
             _fields_ = [
                 ("vkCode", wintypes.DWORD),
                 ("scanCode", wintypes.DWORD),
                 ("flags", wintypes.DWORD),
                 ("time", wintypes.DWORD),
-                ("dwExtraInfo", ctypes.POINTER(wintypes.ULONG)),
+                ("dwExtraInfo", ctypes.c_size_t),
             ]
 
         HOOKPROC = ctypes.WINFUNCTYPE(
-            ctypes.c_longlong, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM
+            LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM
         )
+
+        # Prototype every user32 call so ctypes does not truncate 64-bit
+        # pointers/handles to c_int. Untyped, CallNextHookEx would mangle the
+        # KBDLLHOOKSTRUCT pointer it forwards down the hook chain, and
+        # SetWindowsHookExW would return a truncated (invalid) HHOOK.
+        user32.SetWindowsHookExW.argtypes = [
+            ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD
+        ]
+        user32.SetWindowsHookExW.restype = wintypes.HHOOK
+        user32.CallNextHookEx.argtypes = [
+            wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM
+        ]
+        user32.CallNextHookEx.restype = LRESULT
+        user32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
+        user32.UnhookWindowsHookEx.restype = wintypes.BOOL
+        user32.GetMessageW.argtypes = [
+            ctypes.POINTER(wintypes.MSG), wintypes.HWND, ctypes.c_uint, ctypes.c_uint
+        ]
+        user32.GetMessageW.restype = ctypes.c_int
 
         def hook(n_code, w_param, l_param):
             if n_code >= 0:

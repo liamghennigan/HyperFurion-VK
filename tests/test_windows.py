@@ -41,6 +41,35 @@ class TestPlatformFactories:
         )
         assert isinstance(listener, WinHotkeyListener)
 
+    def test_subclass_inherits_full_base_state(self) -> None:
+        # Guards the super().__init__() refactor: every field the inherited
+        # state machine touches must be initialized on the Windows listener.
+        listener = WinHotkeyListener(
+            {"key": "control+alt+v", "mode": "auto"},
+            on_toggle=lambda: None,
+            on_hold_start=lambda: None,
+            on_hold_stop=lambda: None,
+        )
+        for field in (
+            "_pressed", "_combo_latched", "_auto_combo_pending", "_hold_active",
+            "_auto_hold_timer", "_stop_event", "_lock", "_mode", "_thread_id",
+        ):
+            assert hasattr(listener, field), field
+
+
+class TestInputStructSize:
+    def test_input_struct_matches_os_layout(self) -> None:
+        # ctypes lays structs out identically to the C ABI on the host, so on
+        # a 64-bit interpreter sizeof(_INPUT) must be 40 (the size SendInput's
+        # cbSize demands) — the union's largest member (MOUSEINPUT) present.
+        import ctypes
+
+        from voice_keyboard.windows.injector import _INPUT
+
+        pointer_bits = ctypes.sizeof(ctypes.c_void_p) * 8
+        expected = 40 if pointer_bits == 64 else 28
+        assert ctypes.sizeof(_INPUT) == expected
+
 
 class TestUtf16Units:
     def test_ascii_is_one_unit_each(self) -> None:
