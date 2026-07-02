@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HyperFurion VK</title>
-<meta name="description" content="A Linux voice keyboard. Press Ctrl+Space, speak, and it types into the focused app. Selectable STT/TTS providers, uinput injection, open source.">
+<meta name="description" content="A Linux voice keyboard. Press Ctrl+Space, speak, and it types into the focused app. This page is a working instance: it listens, types, reads aloud, and its config file is live.">
 <meta property="og:title" content="HyperFurion VK">
-<meta property="og:description" content="A Linux voice keyboard. Press Ctrl+Space, speak, and it types into the focused app.">
+<meta property="og:description" content="A Linux voice keyboard. Press Ctrl+Space, speak, and it types into the focused app. Try it on this page — it actually listens.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/">
 <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/">
@@ -21,6 +21,8 @@
     --code-bg: #f6f6f6;
     --link: #0969da;
     --rec: #e5484d;
+    --ok: #2da44e;
+    --interim: #999;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -29,10 +31,13 @@
       --line: #2a2a2a;
       --code-bg: #161616;
       --link: #58a6ff;
+      --ok: #3fb950;
+      --interim: #777;
     }
     html { background: #0d0d0d; }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   ::selection { background: rgba(9,105,218,.18); }
   body {
     margin: 0;
@@ -43,7 +48,7 @@
   a { color: var(--link); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
-  .hero { text-align: center; padding: 96px 0 24px; }
+  .hero { text-align: center; padding: 84px 0 24px; }
   .mic {
     font: inherit;
     font-size: 40px;
@@ -74,7 +79,7 @@
     font-size: 13px;
     line-height: 1.7;
   }
-  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   p code, li code {
     background: var(--code-bg);
     border: 1px solid var(--line);
@@ -82,45 +87,44 @@
     padding: 1px 5px;
     font-size: 13px;
   }
+  kbd {
+    font-size: 11.5px;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
 
-  /* dictation demo */
-  .demo {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
+  /* the focused app */
+  .term {
     background: var(--code-bg);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 14px 16px;
     margin: 0 0 10px;
     text-align: left;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 13px;
-    line-height: 1.7;
-    min-height: 51px;
+    overflow: hidden;
   }
-  .demo .prompt { color: var(--muted); user-select: none; }
-  .demo .out { overflow-wrap: anywhere; }
-  .caret {
-    display: inline-block;
-    width: 7px;
-    height: 14px;
-    background: var(--text);
-    vertical-align: -2px;
-    animation: blink 1.1s steps(1) infinite;
+  .term-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
   }
   .pill {
-    margin-left: auto;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     color: var(--rec);
-    font-size: 12px;
     white-space: nowrap;
   }
   .pill i {
     width: 3px;
-    height: 12px;
+    height: 11px;
     border-radius: 2px;
     background: var(--rec);
     animation: bar .9s ease-in-out infinite;
@@ -129,17 +133,49 @@
   .pill i:nth-child(3) { animation-delay: -.6s; }
   .pill i:nth-child(4) { animation-delay: -.15s; }
   @keyframes bar { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+  .term-body {
+    padding: 12px 16px 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    min-height: 100px;
+  }
+  .term-body .tline { overflow-wrap: anywhere; }
+  .term-body .dim { color: var(--muted); }
+  .term-body .interim { color: var(--interim); }
+  .caret {
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    background: var(--text);
+    vertical-align: -2px;
+    animation: blink 1.1s steps(1) infinite;
+  }
   @keyframes blink { 50% { opacity: 0; } }
   .hint { color: var(--muted); font-size: 13px; margin: 0 0 28px; }
-  .hint kbd {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 11.5px;
+  .hint .engine-live { color: var(--ok); }
+
+  /* live config */
+  .config-wrap { position: relative; }
+  pre.config { outline: none; }
+  pre.config:focus { border-color: var(--link); }
+  .cfgstatus { color: var(--muted); font-size: 13px; margin: 8px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .cfgstatus.err { color: var(--rec); }
+
+  /* tts chip */
+  .ttschip {
+    position: absolute;
+    z-index: 5;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text);
     background: var(--code-bg);
     border: 1px solid var(--line);
-    border-bottom-width: 2px;
-    border-radius: 4px;
-    padding: 1px 5px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0,0,0,.12);
   }
+
   @media (prefers-reduced-motion: reduce) {
     .caret, .pill i, .mic.live { animation: none; }
   }
@@ -170,17 +206,19 @@
 <main>
 
   <div class="hero">
-    <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Try the dictation demo">🎙️</button>
+    <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">🎙️</button>
     <h1>HyperFurion VK</h1>
     <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Space</code>, speak,
     and it types into whatever app has focus.</p>
 
-    <div class="demo" id="demo" hidden>
-      <span class="prompt">$</span><span class="out" id="out" aria-live="polite"></span><span class="caret" aria-hidden="true"></span>
-      <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
+    <div class="term" id="term" hidden>
+      <div class="term-bar">
+        <span>the focused app — bash</span>
+        <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
+      </div>
+      <div class="term-body" id="tbody" aria-live="polite"></div>
     </div>
-    <p class="hint" id="hint" hidden>this page has focus — press <kbd>Ctrl</kbd>+<kbd>Space</kbd> or tap the mic
-    <span class="muted">(simulated; no microphone involved)</span></p>
+    <p class="hint" id="hint" hidden></p>
 
     <pre><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
@@ -198,7 +236,9 @@ chmod +x install-hyperfurion-vk.sh
   through a uinput virtual keyboard. It works in terminals, IDEs, browsers —
   anything that takes keystrokes, on Wayland and X11.</p>
   <p>It also does the reverse: select text anywhere and run
-  <code>voice-keyboard tts</code> to hear it read aloud.</p>
+  <code>voice-keyboard tts</code> to hear it read aloud.
+  <span id="tts-note" hidden>That works here too — select any sentence on this
+  page and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>.</span></p>
 
   <h2>Usage</h2>
   <pre><code># tap to toggle dictation, or hold to talk
@@ -211,9 +251,28 @@ voice-keyboard status
 # read the selected text aloud
 voice-keyboard tts</code></pre>
 
+  <h2 id="config-h">Configuration</h2>
+  <p>The real config lives at <code>~/.config/voice-keyboard/config.toml</code>.
+  <span id="cfg-live-note" hidden>The copy below is <b>live</b>: edit it and this
+  page re-binds itself. Change the hotkey, switch the mode, tune the hold
+  threshold — then try it.</span></p>
+  <div class="config-wrap">
+<pre class="config" id="config" spellcheck="false">[hotkey]
+key = "control+space"
+# auto = tap to toggle, hold to talk
+# other choices: toggle, hold
+mode = "auto"
+hold_threshold_ms = 280
+
+[tts]
+# select text on this page, press ctrl+alt+t
+rate = 1.0
+pitch = 1.0</pre>
+    <p class="cfgstatus" id="cfgstatus" hidden></p>
+  </div>
+
   <h2>Providers</h2>
-  <p>Bring your own API key. Switch providers with one line in
-  <code>~/.config/voice-keyboard/config.toml</code>.</p>
+  <p>Bring your own API key. Switch providers with one line in the config.</p>
   <ul>
     <li><b>Speech-to-text:</b> xAI (streaming), OpenAI, Groq, Deepgram, AssemblyAI</li>
     <li><b>Text-to-speech:</b> xAI, OpenAI, ElevenLabs</li>
@@ -225,97 +284,298 @@ voice-keyboard tts</code></pre>
     <li>Cloud STT/TTS — this is not an offline dictation engine.</li>
     <li>Recording overlay is GNOME Shell 50 on Wayland; other desktops get notifications.</li>
     <li>Hotkeys need <code>input</code>-group access; log out and back in once after install.</li>
+    <li id="page-note" hidden>This page runs on your browser's speech engines, the same
+    way the daemon runs on its providers. Nothing else is loaded, stored, or sent.</li>
   </ul>
 
 </main>
 
-<footer>
+<footer id="foot">
   MIT License · <a href="https://github.com/liamghennigan/HyperFurion-VK">liamghennigan/HyperFurion-VK</a>
 </footer>
 
 <script>
 (() => {
-  // Simulated dictation. Mirrors the daemon's "auto" hotkey mode:
-  // tap Ctrl+Space to toggle, hold ≥280 ms to talk and release to stop
-  // (280 is the daemon's default hold_threshold_ms).
-  const HOLD_MS = 280;
-  const LINES = [
+  "use strict";
+  // This page is a working instance of the product, scaled to one tab:
+  //   dictation  -> the browser's speech engine types into the terminal above
+  //   tts        -> select text, Ctrl+Alt+T speaks it via speechSynthesis
+  //   config     -> the config.toml on the page is parsed live and re-binds
+  //                 the hotkey, mode, hold threshold, and tts voice settings
+  // When the browser has no speech engine or denies the mic, dictation falls
+  // back to canned transcripts so the interaction still demonstrates the flow.
+
+  const $ = (id) => document.getElementById(id);
+  const term = $("term"), tbody = $("tbody"), pill = $("pill"), mic = $("mic"), hint = $("hint");
+  const cfgEl = $("config"), cfgStatus = $("cfgstatus");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const synth = window.speechSynthesis;
+  const baseTitle = document.title;
+
+  // ---- reveal the interactive parts (page stays static without JS) ----
+  term.hidden = hint.hidden = false;
+  $("cfg-live-note").hidden = $("page-note").hidden = false;
+  cfgEl.contentEditable = "plaintext-only";
+  if (cfgEl.contentEditable !== "plaintext-only") cfgEl.contentEditable = "true";
+  if (synth) $("tts-note").hidden = false;
+
+  // ---- live config ----
+  const cfg = { mods: { ctrl: true, alt: false, shift: false, meta: false }, code: "Space",
+                keyLabel: "control+space", mode: "auto", holdMs: 280, rate: 1, pitch: 1 };
+
+  const CODE_MAP = { space: "Space", enter: "Enter", return: "Enter", tab: "Tab" };
+  function parseKeyCombo(str) {
+    const parts = str.toLowerCase().split("+").map(s => s.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const mods = { ctrl: false, alt: false, shift: false, meta: false };
+    let code = null;
+    for (const p of parts) {
+      if (p === "control" || p === "ctrl") mods.ctrl = true;
+      else if (p === "alt") mods.alt = true;
+      else if (p === "shift") mods.shift = true;
+      else if (p === "super" || p === "meta") mods.meta = true;
+      else if (CODE_MAP[p]) code = CODE_MAP[p];
+      else if (/^[a-z]$/.test(p)) code = "Key" + p.toUpperCase();
+      else if (/^[0-9]$/.test(p)) code = "Digit" + p;
+      else return null;
+    }
+    return code ? { mods, code } : null;
+  }
+
+  function applyConfig() {
+    const text = cfgEl.textContent;
+    const grab = (re) => { const m = text.match(re); return m ? m[1] : null; };
+    const errs = [];
+
+    const key = grab(/^\s*key\s*=\s*"([^"]*)"/m);
+    if (key !== null) {
+      const parsed = parseKeyCombo(key);
+      if (parsed) { cfg.mods = parsed.mods; cfg.code = parsed.code; cfg.keyLabel = key; }
+      else errs.push("key");
+    }
+    const mode = grab(/^\s*mode\s*=\s*"([^"]*)"/m);
+    if (mode !== null) {
+      if (["auto", "toggle", "hold"].includes(mode)) cfg.mode = mode;
+      else errs.push("mode");
+    }
+    const hold = grab(/^\s*hold_threshold_ms\s*=\s*(\d+)/m);
+    if (hold !== null) cfg.holdMs = Math.min(5000, Math.max(0, +hold));
+    const rate = grab(/^\s*rate\s*=\s*([\d.]+)/m);
+    if (rate !== null && !isNaN(+rate)) cfg.rate = Math.min(4, Math.max(.25, +rate));
+    const pitch = grab(/^\s*pitch\s*=\s*([\d.]+)/m);
+    if (pitch !== null && !isNaN(+pitch)) cfg.pitch = Math.min(2, Math.max(0, +pitch));
+
+    cfgStatus.hidden = false;
+    if (errs.length) {
+      cfgStatus.className = "cfgstatus err";
+      cfgStatus.textContent = "✗ could not parse: " + errs.join(", ") + " — keeping last good value";
+    } else {
+      cfgStatus.className = "cfgstatus";
+      cfgStatus.textContent = "✓ applied — hotkey " + cfg.keyLabel + " · mode " + cfg.mode +
+        " · hold " + cfg.holdMs + " ms";
+    }
+  }
+  cfgEl.addEventListener("input", applyConfig);
+
+  // ---- terminal ----
+  const history = [];
+  let committed = "", interim = "";
+  function renderTerm() {
+    tbody.replaceChildren();
+    for (const h of history.slice(-5)) {
+      const d = document.createElement("div");
+      d.className = "tline" + (h.dim ? " dim" : "");
+      d.textContent = h.text;
+      tbody.appendChild(d);
+    }
+    const cur = document.createElement("div");
+    cur.className = "tline";
+    const p = document.createElement("span"); p.className = "dim"; p.textContent = "$ ";
+    const c = document.createElement("span"); c.textContent = committed;
+    const i = document.createElement("span"); i.className = "interim"; i.textContent = interim;
+    const caret = document.createElement("span"); caret.className = "caret";
+    cur.append(p, c, i, caret);
+    tbody.appendChild(cur);
+  }
+  function commitLine() {
+    const text = (committed + interim).trim();
+    committed = interim = "";
+    if (text) history.push({ text: "$ " + text });
+    renderTerm();
+  }
+  history.push({ text: "$ voice-keyboard status" }, { text: "idle", dim: true });
+  renderTerm();
+
+  // ---- dictation ----
+  let recording = false, engine = "none", rec = null, typeTimer = 0, simIdx = 0, dictations = 0;
+  const SIM_LINES = [
     "dictated, not typed — this sentence never touched a keyboard",
     "git commit -m 'wrote this one out loud'",
-    "works in terminals, editors, and this text box",
     "note to self: cancel the RSI appointment",
   ];
 
-  const demo = document.getElementById("demo");
-  const out = document.getElementById("out");
-  const pill = document.getElementById("pill");
-  const mic = document.getElementById("mic");
-  const hint = document.getElementById("hint");
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function setHint() {
+    hint.replaceChildren();
+    const add = (html) => hint.insertAdjacentHTML("beforeend", html);
+    if (dictations === 0) {
+      add("this page has focus — press <kbd>" + cfg.keyLabel.replaceAll("+", "</kbd>+<kbd>") +
+          "</kbd> or tap the mic and <b>speak</b>");
+      if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
+                  "browser's speech engine, the way the daemon streams to its provider");
+      else add(" · no speech engine in this browser, so it will improvise");
+    } else if (dictations === 1) {
+      add("now hold it and release to stop — the <code>hold_threshold_ms = " + cfg.holdMs +
+          "</code> below is real, like everything else in that config");
+    } else {
+      add("select any text on this page and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> — " +
+          "the other half of the product · or go edit the <a href='#config-h'>live config</a>");
+    }
+  }
+  setHint();
 
-  demo.hidden = false;
-  hint.hidden = false;
-
-  let recording = false;
-  let line = 0;
-  let typeTimer = 0;
-  let dictations = 0;
+  function setRecording(on) {
+    recording = on;
+    pill.hidden = !on;
+    mic.classList.toggle("live", on);
+    mic.setAttribute("aria-pressed", String(on));
+    document.title = on ? "● recording — " + baseTitle : baseTitle;
+  }
 
   function start() {
+    if (recording) return;
     clearInterval(typeTimer);
-    out.textContent = "";
-    recording = true;
-    pill.hidden = false;
-    mic.classList.add("live");
-    mic.setAttribute("aria-pressed", "true");
+    committed = interim = "";
+    renderTerm();
+    setRecording(true);
+    if (SR) {
+      try {
+        rec = new SR();
+        rec.lang = navigator.language || "en-US";
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.onresult = (e) => {
+          interim = "";
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const r = e.results[i];
+            if (r.isFinal) committed += r[0].transcript;
+            else interim += r[0].transcript;
+          }
+          engine = "live";
+          renderTerm();
+        };
+        rec.onerror = () => { if (recording && !committed && !interim) engine = "sim"; };
+        rec.onend = () => { if (recording && engine !== "live") engine = "sim"; };
+        rec.start();
+        engine = "trying";
+        return;
+      } catch { /* fall through to sim */ }
+    }
+    engine = "sim";
   }
 
   function stop() {
     if (!recording) return;
-    recording = false;
-    pill.hidden = true;
-    mic.classList.remove("live");
-    mic.setAttribute("aria-pressed", "false");
-    type(LINES[line++ % LINES.length]);
-    if (++dictations === 1) {
-      hint.innerHTML = "now try holding <kbd>Ctrl</kbd>+<kbd>Space</kbd> and releasing to stop — " +
-        "same 280&thinsp;ms hold threshold as the daemon's <code>auto</code> mode";
-    }
+    setRecording(false);
+    if (rec) { try { rec.stop(); } catch {} rec = null; }
+    dictations++;
+    // give a final result a beat to arrive, then settle the line
+    setTimeout(() => {
+      if (committed.trim() || interim.trim()) { commitLine(); }
+      else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+      setHint();
+    }, engine === "live" || engine === "trying" ? 350 : 0);
   }
 
-  function type(text) {
-    if (reduced) { out.textContent = text; return; }
+  function typeSim(text) {
+    if (reduced) { committed = text; commitLine(); return; }
     let n = 0;
     typeTimer = setInterval(() => {
-      out.textContent = text.slice(0, ++n);
-      if (n >= text.length) clearInterval(typeTimer);
+      committed = text.slice(0, ++n);
+      renderTerm();
+      if (n >= text.length) { clearInterval(typeTimer); commitLine(); }
     }, 40);
   }
 
   const toggle = () => (recording ? stop() : start());
   mic.addEventListener("click", toggle);
 
-  let spaceDown = false;
-  let holdStarted = false;
-  let holdTimer = 0;
+  // ---- hotkey listener (honors the live config) ----
+  function comboDown(e) {
+    return e.ctrlKey === cfg.mods.ctrl && e.altKey === cfg.mods.alt &&
+           e.shiftKey === cfg.mods.shift && e.metaKey === cfg.mods.meta && e.code === cfg.code;
+  }
+  const inEditor = (e) => e.target === cfgEl || e.target.isContentEditable;
 
+  let keyDown = false, holdStarted = false, holdTimer = 0;
   addEventListener("keydown", (e) => {
-    if (!(e.ctrlKey && e.code === "Space")) return;
+    // tts hotkey: ctrl+alt+t on a selection
+    if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && e.code === "KeyT") {
+      e.preventDefault();
+      speakSelection();
+      return;
+    }
+    if (e.code === "Escape") { if (recording) stop(); if (synth) synth.cancel(); return; }
+    if (!comboDown(e) || inEditor(e)) return;
     e.preventDefault();
-    if (e.repeat || spaceDown) return;
-    spaceDown = true;
+    if (e.repeat || keyDown) return;
+    keyDown = true;
     holdStarted = false;
-    holdTimer = setTimeout(() => {
-      if (spaceDown && !recording) { holdStarted = true; start(); }
-    }, HOLD_MS);
+    if (cfg.mode === "toggle") { toggle(); return; }
+    if (cfg.mode === "hold") { if (!recording) { holdStarted = true; start(); } return; }
+    holdTimer = setTimeout(() => {           // auto
+      if (keyDown && !recording) { holdStarted = true; start(); }
+    }, cfg.holdMs);
+  });
+  addEventListener("keyup", (e) => {
+    if (!keyDown) return;
+    if (e.code !== cfg.code && !["ControlLeft","ControlRight","AltLeft","AltRight",
+        "ShiftLeft","ShiftRight","MetaLeft","MetaRight"].includes(e.code)) return;
+    keyDown = false;
+    clearTimeout(holdTimer);
+    if (cfg.mode === "toggle") return;
+    if (holdStarted) { stop(); return; }
+    if (cfg.mode === "auto") toggle();
   });
 
-  addEventListener("keyup", (e) => {
-    if (e.code !== "Space" || !spaceDown) return;
-    spaceDown = false;
-    clearTimeout(holdTimer);
-    if (holdStarted) stop();
-    else toggle();
+  // ---- tts on selection (the other half of the product) ----
+  let chip = null;
+  function removeChip() { if (chip) { chip.remove(); chip = null; } }
+  function speakSelection() {
+    if (!synth) return;
+    const sel = getSelection();
+    const text = sel ? sel.toString().trim() : "";
+    if (!text) return;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = cfg.rate;
+    u.pitch = cfg.pitch;
+    synth.speak(u);
+    removeChip();
+  }
+  document.addEventListener("mouseup", () => {
+    setTimeout(() => {
+      removeChip();
+      if (!synth) return;
+      const sel = getSelection();
+      const text = sel ? sel.toString().trim() : "";
+      if (text.length < 3 || sel.rangeCount === 0) return;
+      const r = sel.getRangeAt(0).getBoundingClientRect();
+      if (!r.width && !r.height) return;
+      chip = document.createElement("button");
+      chip.className = "ttschip";
+      chip.type = "button";
+      chip.textContent = "🔊 voice-keyboard tts";
+      chip.style.left = Math.max(8, r.left + scrollX) + "px";
+      chip.style.top = (r.bottom + scrollY + 6) + "px";
+      chip.addEventListener("mousedown", (e) => e.preventDefault());
+      chip.addEventListener("click", speakSelection);
+      document.body.appendChild(chip);
+    }, 0);
+  });
+  document.addEventListener("selectionchange", () => {
+    const sel = getSelection();
+    if (chip && (!sel || !sel.toString().trim())) removeChip();
   });
 })();
 </script>
