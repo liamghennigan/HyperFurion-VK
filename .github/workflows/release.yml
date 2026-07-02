@@ -1,12 +1,18 @@
-name: Create release on tag
+name: Create release on version bump
 
-# Push a tag like v1.1.0 and this cuts the GitHub Release, stamps the
-# bootstrap installer so its pinned default matches the tag, and attaches
-# it as the `install-hyperfurion-vk.sh` asset that
-# /releases/latest/download/... serves.
+# Three ways to cut a release, all landing in the same job:
+#   1. Merge a change to pyproject.toml's version on main — if v<version>
+#      has no release yet, one is created automatically (the usual path).
+#   2. Push a tag like v1.1.0.
+#   3. Run the workflow manually with a tag input.
+# The job stamps the bootstrap installer so its pinned default matches the
+# released tag and attaches it as the `install-hyperfurion-vk.sh` asset
+# that /releases/latest/download/... serves.
 
 on:
   push:
+    branches: [main]
+    paths: ["pyproject.toml"]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -23,21 +29,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Resolve the release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
-          echo "releasing $TAG at $GITHUB_SHA"
+          if [ -n "${{ github.event.inputs.tag || '' }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+            TAG="v$VERSION"
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG already exists — nothing to do"
+            echo "RELEASE_TAG=" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+            echo "releasing $TAG at $GITHUB_SHA"
+          fi
       - name: Pin the bootstrap installer to this tag
+        if: env.RELEASE_TAG != ''
         run: |
           sed -i "s|^VERSION=.*|VERSION=\"\${HYPERFURION_VK_VERSION:-${RELEASE_TAG}}\"|" \
             packaging/install-hyperfurion-vk.sh
           grep '^VERSION=' packaging/install-hyperfurion-vk.sh
       - name: Create the release with the installer asset
+        if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # On workflow_dispatch the tag may not exist yet; --target makes
-          # gh create it at this commit.
+          # --target creates the tag server-side when it does not exist yet.
           gh release create "$RELEASE_TAG" \
             packaging/install-hyperfurion-vk.sh \
             --target "$GITHUB_SHA" \
