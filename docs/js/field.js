@@ -1,4 +1,4 @@
-// ═══ FIELD — voice as a physical medium ═══════════════════════════════════
+// ═══ FIELD — voice as a physical medium: a weave of signal threads ════════
 // A stateless WebGL2 particle field behind the whole page. Every particle's
 // position is a pure function of (seed, time, audio, scroll) computed in the
 // vertex shader — no simulation buffers, so a lost context restores for
@@ -41,62 +41,79 @@ vec3 ramp(float t) {
 }
 
 void main() {
-  int band = int(aSeed.w * 7.9999);
-  float energy = uBands[band];
-  float e = smoothstep(0.18, 0.95, energy);     // gate: only real energy lights up
-  float depth = 0.25 + aSeed.z * 0.75;          // pseudo-depth: size + parallax
+  // threads, not grain: every particle is a bead on one of 24 strands.
+  // A strand is a pure function of (its id, time), so the whole weave
+  // stays stateless — but neighbours share a path, and the eye reads
+  // flowing filaments of signal instead of television snow.
+  float sid = floor(aSeed.x * 24.0);
+  float r1 = fract(aSeed.x * 24.0);             // uniform again after the split
+  float g1 = fract(sid * 0.6180339);            // per-strand goldens
+  float g2 = fract(sid * 0.3819661);
+  // each thread IS one frequency of the voice: three strands per band,
+  // and a whole thread swells together when its band sounds — the weave
+  // is the spectrum, laid out as matter
+  int band = int(mod(sid, 8.0));
+  float energy = uBands[band];                  // smoothed on the CPU — no flicker
+  float e = smoothstep(0.10, 0.85, energy);
+  // depth belongs to the strand, not the bead — a whole thread sits at one
+  // remove, so it renders as a ribbon instead of dissolving into bokeh
+  float depth = 0.35 + g2 * 0.65;
 
-  // composition, not confetti: most particles live in a waveform corridor —
-  // the old oscilloscope trace, become a ribbon of matter — while a sparse
-  // fifth of them roam the full height as ambient motes
-  float outlier = step(0.82, aSeed.z);
-  vec2 home = vec2(aSeed.x * 2.0 - 1.0, aSeed.y * 2.0 - 1.0);
-  home.y *= mix(0.16 + 0.10 * float(band) / 7.0, 1.0, outlier);
+  // the bead drifts along its strand — motion with a direction, not jitter
+  float t = fract(aSeed.y + uTime * (0.006 + 0.016 * g1) + g2 * 0.4);
 
-  // the corridor undulates; loudness opens the swell
-  float wavePh = home.x * 3.3 + aSeed.z * 2.0;
-  home.y += (1.0 - outlier) * (
-      sin(wavePh + uTime * 0.32) * 0.10 +
-      sin(wavePh * 2.3 - uTime * 0.21) * 0.05) * (1.0 + uLevel * 1.6);
+  // ── hero weave: strands run with the old trace's corridor ─────────────
+  float hx = t * 2.6 - 1.3;
+  float base = (g1 - 0.5) * (0.30 + 0.85 * g2);  // stacked around the corridor
+  float ph = hx * (1.5 + g2 * 1.9) + sid * 1.7;
+  float hy = base
+    + sin(ph + uTime * 0.42) * (0.055 + 0.12 * uLevel)
+    + sin(ph * 2.6 - uTime * 0.27) * (0.028 + 0.05 * uLevel)
+    + sign(base + 0.0001) * e * (0.08 + 0.28 * depth);
+  // thread thickness: a tight sheath of beads around the core path
+  float sheath = aSeed.z - 0.5;
+  hy += sheath * (0.008 + 0.028 * e);
+  vec2 heroP = vec2(hx, hy);
 
-  // coherent drift: phase keyed to the home position, so neighbours flow
-  // together — two octaves of "wave noise", stateless and cheap
-  float k1 = dot(home, vec2(2.1, 1.7)) + depth * 3.0;
-  float k2 = dot(home, vec2(-1.3, 2.9)) - depth * 2.0;
-  vec2 flow = vec2(
-    sin(uTime * 0.23 + k1 * 3.1) + 0.6 * sin(uTime * 0.41 + k2 * 5.3),
-    cos(uTime * 0.19 + k2 * 2.7) + 0.6 * sin(uTime * 0.37 + k1 * 4.7)
-  ) * (0.04 + 0.07 * uLevel) * (0.4 + depth);
+  // ── prose margins: a few strands climb the edges like signal in a wire ─
+  float mside = mix(-1.0, 1.0, step(0.5, g2));
+  float my = 1.3 - t * 2.6;                      // rising
+  float mx = mside * (0.84 + (g1 - 0.5) * 0.18)
+    + sin(my * 2.2 + uTime * 0.35 + sid) * (0.02 + 0.05 * e)
+    + sheath * 0.012;
+  vec2 marginP = vec2(mx, my);
 
-  vec2 p = home + flow;
+  float calm = smoothstep(0.0, 1.0, uCalm);
+  vec2 p = mix(heroP, marginP, calm);
 
-  // the voice pushes the corridor open: energetic bands lift their
-  // particles, the pulse envelope kicks everything radially for a beat
-  float sway = sin(uTime * 0.9 + k1 * 2.0) * 0.5 + 0.5;
-  p.y += sign(home.y + 0.0001) * e * (0.08 + 0.5 * depth) * (0.3 + 0.7 * sway) * (0.4 + 0.6 * uLevel);
-  float r = max(length(home), 0.001);
-  p += (home / r) * uPulse * 0.14 * depth;
-
-  // calm shaping for prose: thin the middle column, drift to the margins
-  p.x = mix(p.x, sign(home.x + 0.0001) * (0.72 + 0.38 * abs(home.x)), uCalm * 0.85);
+  // the pulse envelope breathes the whole weave outward for a beat
+  float r = max(length(p), 0.001);
+  p += (p / r) * uPulse * 0.06 * depth;
 
   // the page settles as you approach the colophon
   p *= 1.0 - 0.08 * uScene;
 
   gl_Position = vec4(p, 0.0, 1.0);
 
-  float size = uPx * (0.45 + depth) * (0.6 + e * 1.5 + uPulse * 0.6);
-  gl_PointSize = clamp(size, 1.0, 14.0);
+  float size = uPx * (0.5 + depth * 0.7) * (0.8 + e * 1.1 + uPulse * 0.4);
+  gl_PointSize = clamp(size, 1.0, 12.0);
 
   // hue anchored on the phosphor cyan mid-ramp; energy walks it hotter
   float hue = 0.14 + float(band) / 7.0 * 0.62 + e * 0.24;
   vec3 col = ramp(hue);
   col = mix(col, uSpec[4], e * e * 0.6);        // hot when loud
   vColor = col;
-  // the corridor ribbon stays faintly luminous even in silence
-  vAlpha = (0.05 + 0.11 * (1.0 - outlier) + 0.55 * e + 0.12 * uLevel + 0.25 * uPulse)
-         * (0.3 + 0.7 * depth)
-         * mix(1.0, 0.30, uCalm);
+
+  // in the margins only a third of the strands stay lit — a few clear
+  // threads, never a band of snow
+  float keep = mix(1.0, step(g1, 0.34) * 0.85, calm);
+  // the thread glows from its core: beads brighten toward the strand's
+  // centre line, so each filament reads as a line of light, not dots
+  float core = 1.0 - abs(sheath) * 2.0;
+  vAlpha = (0.10 + 0.14 * core * core + 0.5 * e + 0.10 * uLevel + 0.22 * uPulse)
+         * (0.35 + 0.65 * depth)
+         * keep
+         * mix(1.0, 0.55, calm);
 }
 `;
 
@@ -139,8 +156,8 @@ export const Field = (() => {
   let W = 0, H = 0, program = null, seedBuf = null, vao = null, uni = {};
   let count = Math.min(30000, Math.max(8000, Math.floor(innerWidth * innerHeight / 35)));
   let pulse = 0, calm = 0, calmTarget = 0, scene = 0, lost = false;
-  let ratchet = 0;
-  const dts = [];
+  let ratchet = 0, levelSm = 0;
+  const dts = [], bandsSm = new Float32Array(8);
 
   function compile(type, src) {
     const s = gl.createShader(type);
@@ -203,17 +220,24 @@ export const Field = (() => {
 
     const f = Signal.frame();
     const level = Math.min(1, Math.max(f.peak, AudioOut.level()));
-    const bands = Signal.bands();
+    // envelope followers: fast attack, slow release — beads swell and fade
+    // instead of flickering like snow
+    const raw = Signal.bands();
+    for (let i = 0; i < 8; i++) {
+      const k = raw[i] > bandsSm[i] ? 9 : 2.2;
+      bandsSm[i] += (raw[i] - bandsSm[i]) * Math.min(1, dt * k);
+    }
+    levelSm += (level - levelSm) * Math.min(1, dt * (level > levelSm ? 9 : 2.6));
 
     gl.useProgram(program);
     gl.bindVertexArray(vao);
     gl.uniform1f(uni.uTime, t);
-    gl.uniform1f(uni.uLevel, level);
+    gl.uniform1f(uni.uLevel, levelSm);
     gl.uniform1f(uni.uPulse, Math.min(1, pulse));
     gl.uniform1f(uni.uCalm, calm);
     gl.uniform1f(uni.uScene, scene);
     gl.uniform1f(uni.uPx, (H / 1080) * 7 + 3);
-    gl.uniform1fv(uni.uBands, bands);
+    gl.uniform1fv(uni.uBands, bandsSm);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
