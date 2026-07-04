@@ -14,7 +14,15 @@ When you ask for text-to-speech, it reads the primary selection from your
 desktop, sends that selected text to the configured TTS provider, and plays the
 returned audio locally.
 
-**New: [Flow — molten dictation](#flow--molten-dictation).** With a streaming
+**New in 2.0: Kai — a voice assistant in the keyboard.** A second hotkey
+(`Ctrl+Alt+.`) takes a spoken query and routes it by where you are: focused
+on a terminal, it turns your words into a command and types it at the
+prompt — never pressing Enter, only you can; anywhere else, it answers or
+searches the web, spoken back. The `[llm]` brain is model-agnostic and
+local-first (a ~1 GB model handles the command work). Off by default; see
+`[assistant]` in `config.toml.example`.
+
+**Flow — [molten dictation](#flow--molten-dictation).** With a streaming
 provider, words appear in the focused field *while you speak* and repair
 themselves in place as the transcript firms up. A spoken edit grammar
 ("scratch that", "new line", "period", `literal`), per-app context registers
