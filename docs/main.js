@@ -4,24 +4,32 @@
 // spectrogram of your voice), the scope strip, the VU meter, the signal-
 // path diagram, and the scope's frozen waveform — simultaneously.
 //
-//   dictation  -> the browser's speech engine types into the terminal,
-//                 the pipeline lights up, and the sentence's loudness
-//                 envelope freezes onto the scope
+//   dictation  -> words land in the focused window WHILE you speak,
+//                 molten (amber) at first, repairing in place as the
+//                 transcript firms up, frozen once they survive the
+//                 stability window — the same flow engine the daemon
+//                 runs (./js/flow.js is a port of voice_keyboard/flow/)
+//   grammar    -> "scratch that" · "new line" · "period" · "literal x" ·
+//                 "twenty three" -> 23 · "furion, make that formal" —
+//                 parsed before anything is typed, per-window registers
+//                 (the editor renders prose; the terminal, terminal)
 //   tts        -> select text, Ctrl+Alt+T speaks it; where the browser
 //                 supports the CSS Custom Highlight API, each word
 //                 lights up as it is read; the reverse lane glows
 //   config     -> the config.toml on the page is parsed live and
-//                 re-binds hotkey, mode, hold threshold, language,
-//                 interim rendering, and the tts voice/rate/pitch
+//                 re-binds hotkey, mode, stability_ms, auto_stop_ms,
+//                 wake_word, numbers, the default register, language,
+//                 and the tts voice/rate/pitch
 //   terminal   -> the prompt is real: voice-keyboard toggle | start |
-//                 stop | status | tts | version | --help
+//                 stop | status | tts | transform | history | recall |
+//                 version | --help
 //   hosted demo-> `real` reroutes the mic to actual xai grok stt through
 //                 a rate-limited relay; `say` plays the real eve voice;
 //                 `ask` answers questions via grok — all opt-in, all
 //                 labeled, all budget-capped server-side
 //
 // When the browser has no speech engine or denies the mic, dictation
-// falls back to canned transcripts and a synthesized signal — and every
+// falls back to scripted playback and a synthesized signal — and every
 // instrument says so in its caption. Honesty is part of the UI.
 //
 // The source is split by instrument under ./js/ — every file is readable,
@@ -44,6 +52,7 @@ import { Hints } from "./js/hints.js";
 import { Desktop } from "./js/desktop.js";
 import { Autopilot } from "./js/autopilot.js";
 import { Field } from "./js/field.js";
+import "./js/lede.js";
 import "./js/scrollfx.js";
 import "./js/cta.js";
 import "./js/checkout.js";

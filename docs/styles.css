@@ -4,6 +4,10 @@
            the single cyan now opens into a spectral ramp (bass = indigo,
            sibilants = hot white) that the particle field paints with
    light = a mid-century chart recorder: warm paper, ink strokes, graph grid
+   v2 adds one thermal state: MOLTEN — amber, the temperature of text that
+   is still allowed to change. Words type in molten and cool to ink when
+   the stability window freezes them; the amber never decorates, it only
+   ever means "not yet frozen".
    One signal feeds many gauges. Honesty labels are part of the UI.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -54,6 +58,11 @@
   --spec-4: #059669;
   --spec-5: #05323f;
   --field-alpha: .30;   /* ink stipple: present, never shouting */
+  /* molten: amber chart-recorder ink; the demo windows are always dark
+     instruments, so they use the fixed phosphor amber below */
+  --molten: #a8560a;
+  --molten-win: #fbbf24;
+  --molten-soft: rgba(168, 86, 10, .12);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -75,6 +84,8 @@
     --spec-4: #86efac;
     --spec-5: #eafcff;
     --field-alpha: .85;   /* phosphor: luminous against near-black */
+    --molten: #fbbf24;    /* heated phosphor, cooling to ink */
+    --molten-soft: rgba(251, 191, 36, .14);
   }
 }
 * { box-sizing: border-box; }
@@ -387,7 +398,6 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 }
 .term-body .tline { overflow-wrap: anywhere; }
 .term-body .dim { color: #8a8a95; }
-.term-body .interim { color: #6f6f7c; }
 .term-body .err { color: #f2777a; }
 .tcur { display: flex; align-items: baseline; }
 .tcur .cli {
@@ -465,8 +475,49 @@ canvas.scope { display: block; width: 100%; height: 64px; }
   color: #494954;
   text-align: right;
 }
+.eline span { white-space: pre-wrap; }
 .eline:first-child span { color: #8a8a95; }
-.ebody .interim { color: #6f6f7c; }
+
+/* ═══ MOLTEN — text that is still allowed to change ════════════════════ */
+/* The demo windows are always dark instruments, so molten there is always
+   the heated phosphor amber; prose contexts use the scheme-aware token. */
+.dwin .molten { color: var(--molten-win); }
+.dwin .molten:empty { display: none; }
+/* a repair just landed: the divergence flashes, then cools */
+.repair { border-radius: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .dwin .molten { animation: moltenbreathe 1.7s ease-in-out infinite; }
+  .repair { animation: repairflash .48s ease-out !important; }
+}
+@keyframes moltenbreathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .74; }
+}
+@keyframes repairflash {
+  0% { background: var(--molten-soft); box-shadow: 0 0 14px var(--molten-soft); }
+  100% { background: transparent; box-shadow: none; }
+}
+/* the wake word is forming: the tail is an instruction, never typed */
+.dwin .instr {
+  color: var(--molten-win);
+  font-style: italic;
+  opacity: .85;
+  text-decoration: underline dashed;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+.dwin .instr:empty { display: none; }
+/* the focus probe, made visible at recording start */
+.probechip {
+  color: var(--molten-win);
+  border: 1px solid rgba(251, 191, 36, .45);
+  border-radius: 999px;
+  padding: 2px 9px;
+  letter-spacing: .1em;
+}
+/* prose contexts: the word means the state, never decoration */
+.molten-word { color: var(--molten); font-weight: 600; }
+.lede .molten { color: var(--molten); }
 
 /* try-saying chips, the terminal toggle, the watch button */
 .demo-foot { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
@@ -552,6 +603,62 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 .pl-packet { fill: var(--wave); }
 .pl-rain text { font: 11px var(--mono); fill: var(--wave); }
 .pl-cap { margin: 8px 4px 6px; display: block; }
+.pl-note { font: 9.5px var(--mono); fill: var(--molten); letter-spacing: .06em; }
+
+/* ═══ 01 / MOLTEN DICTATION — three moments of one line ════════════════ */
+.moltenfig {
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px 18px 12px;
+  margin: 22px 0;
+}
+.mrow {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  column-gap: 16px;
+  align-items: baseline;
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.mrow:last-of-type { border-bottom: 0; }
+.mt {
+  font: 10px var(--mono);
+  letter-spacing: .1em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mtext { font: 13.5px/1.7 var(--mono); overflow-wrap: anywhere; }
+.mtext em { font-style: normal; color: var(--molten); }
+.mtext em.rep {
+  background: var(--molten-soft);
+  border-radius: 3px;
+  padding: 0 3px;
+  text-decoration: underline wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.mnote {
+  grid-column: 2;
+  font: 11px var(--mono);
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.moltenfig figcaption { margin-top: 12px; }
+@media (max-width: 480px) {
+  .mrow { grid-template-columns: 1fr; row-gap: 2px; }
+  .mnote { grid-column: 1; }
+}
+
+/* ═══ 04 / THE REWRITE LANE — the example ══════════════════════════════ */
+.rewrite-ex {
+  border-left: 3px solid var(--molten);
+  padding: 4px 0 4px 16px;
+  font-size: 15px;
+  line-height: 2;
+}
+.rewrite-ex .molten-word { font-weight: 500; }
 
 /* ═══ 02 / PROVIDERS — tables ══════════════════════════════════════════ */
 .tblwrap { overflow-x: auto; margin: 16px 0; }
@@ -827,11 +934,18 @@ footer .sigcap { display: block; margin-bottom: 10px; }
 /* ═══ FORCED COLORS (Windows High Contrast) ════════════════════════════ */
 @media (forced-colors: active) {
   .pl-node { fill: Canvas; stroke: CanvasText; }
-  .pl-node-label, .pl-node-sub, .pl-lane { fill: CanvasText; }
+  .pl-node-label, .pl-node-sub, .pl-lane, .pl-note { fill: CanvasText; }
   .pl-edge { stroke: CanvasText; }
   .pl-arrow { fill: CanvasText; }
-  .default-badge, .trust > div, .dwin, .dtoggle, .saychip, .watchbtn, .ghostkbd {
+  .default-badge, .trust > div, .dwin, .dtoggle, .saychip, .watchbtn, .ghostkbd,
+  .probechip, .moltenfig, .rewrite-ex {
     border-color: CanvasText; color: CanvasText;
+  }
+  /* molten keeps its meaning through the underline, not the color */
+  .dwin .molten, .dwin .instr, .molten-word, .mtext em, .lede .molten {
+    color: CanvasText;
+    text-decoration: underline dotted;
+    text-underline-offset: 4px;
   }
 }
 

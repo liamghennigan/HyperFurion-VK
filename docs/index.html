@@ -5,10 +5,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>document.documentElement.className = "js";</script>
-<title>HyperFurion VK — a voice keyboard for Linux</title>
-<meta name="description" content="Speak. It types. A Linux voice keyboard: press Ctrl+Alt+V and your words land in whatever app has focus, as real keystrokes. This page is a working instance — dictate into its editor or its real terminal, and its config file is live.">
-<meta property="og:title" content="HyperFurion VK — Speak. It types.">
-<meta property="og:description" content="A voice keyboard for Linux. Press Ctrl+Alt+V, speak, and it types into whatever app has focus. Try it on this page — it actually listens, or let the autopilot show you.">
+<title>HyperFurion VK — a voice keyboard for Linux · words appear while you speak</title>
+<meta name="description" content="Speak. It types — while you speak. A Linux voice keyboard: press Ctrl+Alt+V and words land molten in the focused app, repair themselves as the transcript firms up, and freeze once they're sure. Say 'scratch that'. Say 'furion, make that formal'. This page is a working instance.">
+<meta property="og:title" content="HyperFurion VK — Speak. It types. While you speak.">
+<meta property="og:description" content="A voice keyboard for Linux. Words land in the focused app while you're still speaking — molten, self-repairing, frozen once they're sure. Spoken edits, per-app registers, a wake-word rewrite. Try it on this page — it actually listens.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/">
 <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/">
@@ -20,16 +20,16 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "HyperFurion VK",
-  "operatingSystem": "Linux",
+  "operatingSystem": "Linux; macOS (beta); Windows (beta)",
   "applicationCategory": "UtilitiesApplication",
-  "softwareVersion": "1.1.0",
+  "softwareVersion": "1.2.1",
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://liamghennigan.github.io/HyperFurion-VK/",
-  "description": "A Linux voice keyboard. Press Ctrl+Alt+V, speak, and it types into the focused app through a uinput virtual keyboard. Select text and hear it read aloud.",
+  "description": "A Linux-first voice keyboard. Press Ctrl+Alt+V and words type into the focused app while you speak — molten at first, repairing in place, frozen once stable. Spoken edit grammar, per-app registers, spoken numbers, a wake-word LLM rewrite, full Unicode, and text-to-speech for any selection.",
   "offers": [
     { "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" },
-    { "@type": "Offer", "name": "Hosted — 20 h dictation + 250k spoken characters / month", "price": "5.00", "priceCurrency": "USD" },
-    { "@type": "Offer", "name": "Hosted — 60 h dictation + 1M spoken characters / month", "price": "10.00", "priceCurrency": "USD" }
+    { "@type": "Offer", "name": "Hosted — 20 h dictation + 10k spoken characters / month", "price": "5.00", "priceCurrency": "USD" },
+    { "@type": "Offer", "name": "Hosted — 40 h dictation + 50k spoken characters / month", "price": "10.00", "priceCurrency": "USD" }
   ]
 }
 </script>
@@ -39,7 +39,7 @@
 </head>
 <body>
 
-<a class="skip" href="#path">Skip to documentation</a>
+<a class="skip" href="#molten">Skip to documentation</a>
 
 <main>
 
@@ -48,7 +48,8 @@
        same signal as every other gauge — synthetic while idle, your live
        microphone while you dictate. Without WebGL2 this canvas draws the
        2D trace/spectrogram instead. The caption at the lower left always
-       says which signal you are seeing.
+       says which signal you are seeing. The lede types itself once, the
+       way the product types: molten, repaired, frozen (lede.js).
   ════════════════════════════════════════════════════════════════════ -->
   <header class="hero" id="hero">
     <canvas id="hero-canvas" aria-hidden="true"></canvas>
@@ -56,10 +57,13 @@
     <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">🎙️</button>
     <button class="watchbtn" id="watch" type="button" hidden>▶ watch it work</button>
     <h1>HyperFurion&nbsp;VK</h1>
-    <p class="lede">Speak. It types.</p>
-    <p class="tagline">A voice keyboard for Linux. Press <code>Ctrl+Alt+V</code>,
-    say the thing, and it lands in whatever app has focus — as real keystrokes.
-    The reverse too: select text anywhere and hear it read aloud.</p>
+    <p class="lede" id="lede">Speak. It types.</p>
+    <p class="tagline">A voice keyboard for Linux — macOS and Windows in beta.
+    Press <code>Ctrl+Alt+V</code> and words land in whatever app has focus
+    <i>while you&rsquo;re still speaking</i>: molten at first, repairing themselves
+    as the transcript firms up, frozen once they&rsquo;re sure. Say
+    &ldquo;scratch&nbsp;that&rdquo;. Say &ldquo;furion, make that formal&rdquo;.
+    And the reverse: select text anywhere and hear it read aloud.</p>
     <p class="hero-live" id="hero-live" hidden>this page is a working instance —
     <b>tap the mic, speak, tap again</b> · it listens, and it types</p>
     <pre data-copy id="install-cmd"><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
@@ -75,18 +79,21 @@ chmod +x install-hyperfurion-vk.sh
     <a class="scrolldown" href="#app" aria-hidden="true" tabindex="-1">↓</a>
   </header>
 
-  <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; </span></div>
+  <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · words appear while you speak · molten, then frozen · say &ldquo;scratch that&rdquo; · say &ldquo;furion, make that formal&rdquo; · registers per app · full unicode on linux · self-hosted · zero analytics · mit licensed · offline with a local model · xai by default · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · words appear while you speak · molten, then frozen · say &ldquo;scratch that&rdquo; · say &ldquo;furion, make that formal&rdquo; · registers per app · full unicode on linux · self-hosted · zero analytics · mit licensed · offline with a local model · xai by default · your keys stay yours &nbsp;·&nbsp; </span></div>
 
-  <!-- ═══ 00 / THE FOCUSED APP — one window that really types ═══════════
-       Dictation lands in the window below — the whole pitch, acted out.
-       The editor is an honest stand-in that shows where keystrokes go;
-       behind the toggle sits the demo's real terminal (a working CLI).
+  <!-- ═══ 00 / THE FOCUSED APP — two windows, two registers ═════════════
+       Dictation lands in the window below, molten — the whole pitch,
+       acted out. The editor renders prose; the terminal behind the
+       toggle renders the terminal register (no auto-caps, numbers as
+       digits) and is a working CLI. Switch windows mid-dictation and
+       typing freezes — the focus guard, demonstrated.
   ════════════════════════════════════════════════════════════════════ -->
-  <section class="wide demo" id="app" aria-label="Live demo — a window that really types">
+  <section class="wide demo" id="app" aria-label="Live demo — windows that really type, molten">
     <div class="desktop" id="desktop" hidden>
       <div class="dwin" id="win-editor" data-app="editor">
         <div class="dwin-bar">
           <span class="dwin-title">release-notes.md — editor</span>
+          <span class="probechip sigcap" hidden></span>
           <span class="dwin-dockbar"></span>
         </div>
         <div class="dwin-scope"></div>
@@ -96,6 +103,7 @@ chmod +x install-hyperfurion-vk.sh
       <div class="dwin term" id="win-term" data-app="terminal">
         <div class="dwin-bar term-bar">
           <span class="dwin-title term-title">the focused app — bash</span>
+          <span class="probechip sigcap" hidden></span>
           <span class="dwin-dockbar"></span>
         </div>
         <div class="dwin-scope">
@@ -119,22 +127,219 @@ chmod +x install-hyperfurion-vk.sh
     </div>
     <p class="hint" id="hint" hidden></p>
     <div class="funnel-card" id="funnel-card" hidden>
-      <span>that just typed itself — voice, to keystrokes. the desktop version
-      does this in every app you own.</span>
+      <span>that just typed itself — molten, repaired in place, frozen. the
+      desktop version does this in every app you own, while you speak.</span>
       <button class="copybtn inline" id="funnel-copy" type="button">copy the install command</button>
       <a href="#install">install notes →</a>
     </div>
   </section>
 
-  <!-- ═══ 01 / SIGNAL PATH ══════════════════════════════════════════════ -->
+  <!-- ═══ 01 / MOLTEN DICTATION ═════════════════════════════════════════ -->
+  <section class="prose" id="molten">
+    <h2><span class="num" aria-hidden="true">01</span>Molten dictation</h2>
+    <p>With a streaming provider, words land in the focused field while
+    you&rsquo;re still speaking. Each word arrives <b class="molten-word">molten</b> —
+    the provider is allowed to change its mind about it. When it does, the
+    daemon backspaces to the divergence and retypes: the text repairs itself
+    in front of you, in the real field, as real keystrokes.</p>
+
+    <figure class="moltenfig" aria-label="Three moments of one molten line: everything molten, a repair, then frozen text">
+      <div class="mrow">
+        <span class="mt">t + 0.4 s</span>
+        <span class="mtext">fixed the race <em>addition in</em></span>
+        <span class="mnote">everything is molten — still revisable</span>
+      </div>
+      <div class="mrow">
+        <span class="mt">t + 1.1 s</span>
+        <span class="mtext">fixed the race <em class="rep">condition</em> <em>in the audio</em></span>
+        <span class="mnote">the provider revised — backspace to the divergence, retype</span>
+      </div>
+      <div class="mrow">
+        <span class="mt">t + 2.6 s</span>
+        <span class="mtext">fixed the race condition in the audio <em>thread</em></span>
+        <span class="mnote">survivors froze — never touched again</span>
+      </div>
+      <figcaption class="sigcap">the stability window — 1.5 s and two updates, by default — is the whole trick</figcaption>
+    </figure>
+
+    <p>A word that survives the stability window <b>freezes</b> and is never
+    touched again — repairs stay short, and your caret never runs away.
+    <code>max_molten_chars</code> bounds the revisable tail outright. While you
+    record, the GNOME overlay pill becomes a live caption: a small VU meter
+    plus the molten tail of the transcript.</p>
+    <p class="muted">Live typing needs a streaming provider (<code>xai</code>,
+    <code>hyperfurion</code>) — or any local server via
+    <code>live_rest</code>, which re-transcribes the growing recording on an
+    interval. REST providers still get the whole grammar below; their words
+    just land on stop. And <code>flow.enabled = false</code> restores the old
+    record&nbsp;→&nbsp;wait&nbsp;→&nbsp;type behavior, exactly.</p>
+    <p class="muted">Try it above — and try slowing <code>stability_ms</code>
+    to 4000 in the <a href="#config-h">live config</a> to watch words stay
+    molten longer. Hands-free: <code>auto_stop_ms = 1200</code> ends the
+    recording by itself after ~1.2&nbsp;s of silence. Tap, speak, done.</p>
+  </section>
+
+  <!-- ═══ 02 / THE SPOKEN GRAMMAR ═══════════════════════════════════════ -->
+  <section class="prose" id="grammar">
+    <h2><span class="num" aria-hidden="true">02</span>The spoken grammar</h2>
+    <p>Edits, punctuation, and escapes are <b>commands, not text</b> — parsed
+    deterministically before anything is typed, on every provider, streaming
+    or not. Everything below works in the demo up top; say it, or press a chip.</p>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th scope="col">You say</th><th scope="col">You get</th></tr></thead>
+      <tbody>
+        <tr><td>&ldquo;scratch that&rdquo; · &ldquo;delete that&rdquo;</td>
+            <td>deletes the last utterance — even after it&rsquo;s been typed</td></tr>
+        <tr><td>&ldquo;new line&rdquo; · &ldquo;new paragraph&rdquo;</td>
+            <td>a line break · a blank line</td></tr>
+        <tr><td>&ldquo;period&rdquo; · &ldquo;comma&rdquo; · &ldquo;em dash&rdquo; · &ldquo;open quote&rdquo; · …</td>
+            <td><code>.</code> <code>,</code> <code>—</code> <code>&quot;</code> — the glyph, correctly spaced (30-odd phrases)</td></tr>
+        <tr><td>&ldquo;literal period&rdquo;</td>
+            <td>the word &ldquo;period&rdquo; — the escape hatch</td></tr>
+        <tr><td>&ldquo;twenty three&rdquo;</td>
+            <td><code>23</code> — in the terminal register, or with <code>numbers = "always"</code>.
+                Decimals too (&ldquo;three point one four&rdquo; → <code>3.14</code>) and digit runs
+                (&ldquo;one two seven&rdquo; → <code>127</code>)</td></tr>
+        <tr><td>&ldquo;furion, make that formal&rdquo;</td>
+            <td>rewrites what you just dictated, in place — <a href="#rewrite">the rewrite lane</a></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Every phrase is remappable and removable, and your own vocabulary
+    expands as you speak:</p>
+<pre data-copy><code>[flow.commands]
+scratch_that = ["nuke it", "scratch that"]
+
+[flow.punctuation]
+"comma" = ""                    # fine, have it your way
+
+[flow.vocabulary]
+"hyper furion" = "HyperFurion"  # live in the demo above — try saying it</code></pre>
+  </section>
+
+  <!-- ═══ 03 / REGISTERS & THE FOCUS PROBE ══════════════════════════════ -->
+  <section class="prose" id="registers">
+    <h2><span class="num" aria-hidden="true">03</span>Registers &amp; the focus probe</h2>
+    <p>Prose wants capital letters; a shell does not. At recording start the
+    daemon <b>probes the focused app</b> — AT-SPI on Linux, Quartz on macOS,
+    Win32 on Windows — and picks how dictation should render there:</p>
+    <div class="tblwrap">
+    <table>
+      <thead><tr><th scope="col">Register</th><th scope="col">Behavior</th></tr></thead>
+      <tbody>
+        <tr><td>prose <span class="default-badge">default</span></td>
+            <td>smart capitalization, punctuation spacing</td></tr>
+        <tr><td>terminal</td>
+            <td>no auto-caps, spoken numbers become digits, pastes with
+                <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td></tr>
+        <tr><td>verbatim</td>
+            <td>grammar off — words exactly as recognized</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Known terminals map automatically — kitty, alacritty, foot, konsole,
+    GNOME&nbsp;Terminal, wezterm, ghostty, Windows&nbsp;Terminal, iTerm2, and
+    friends — and you can override or extend per app:</p>
+<pre data-copy><code>[registers.map]
+kitty = "terminal"
+code = "verbatim"</code></pre>
+    <p>The demo&rsquo;s two windows carry different registers — dictate
+    &ldquo;twenty three failed tests&rdquo; into both and the register is the
+    difference you see.</p>
+    <p><b>The focus guard.</b> If focus moves to a different app mid-dictation,
+    typing freezes immediately and the transcript lands on the clipboard
+    instead. Dictation never types into the wrong window — toggle the demo&rsquo;s
+    windows while recording and watch it refuse.</p>
+    <h3>Full Unicode on Linux</h3>
+    <p>The uinput injector now types anything: plain ASCII takes the fast key
+    path, and any other run — accents, CJK, emoji, em-dashes — is pasted
+    through the clipboard (<code>wl-copy</code> on Wayland, <code>xclip</code>
+    on X11) with your previous clipboard contents restored afterwards.
+    Terminals get the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> chord via
+    the register. The macOS and Windows backends always typed full Unicode
+    natively; now Linux keeps up.</p>
+  </section>
+
+  <!-- ═══ 04 / THE REWRITE LANE ═════════════════════════════════════════ -->
+  <section class="prose" id="rewrite">
+    <h2><span class="num" aria-hidden="true">04</span>The rewrite lane</h2>
+    <p>End an utterance with the wake word — or speak it alone — and what you
+    just dictated is rewritten <b>in place</b>, on screen, by an LLM:</p>
+    <p class="rewrite-ex"><span class="muted">&ldquo;we fixed a bunch of bugs and it works now&rdquo;</span><br>
+    <b>&ldquo;… furion, make that formal&rdquo;</b><br>
+    <span class="molten-word">→ &ldquo;We resolved several defects and it functions correctly.&rdquo;</span></p>
+    <p>The instruction is anything you can say — make that formal, friendlier,
+    shorter, a bullet list. The same channel is a command, any time:</p>
+<pre data-copy><code>voice-keyboard transform "make it friendlier"
+voice-keyboard history 10    # the ledger (opt-in)
+voice-keyboard recall 2      # re-type an entry</code></pre>
+    <p>The rewrite goes through <code>[llm]</code> — any OpenAI-compatible
+    chat endpoint. The default is xAI&rsquo;s <code>grok-4-fast</code>; point
+    <code>base_url</code> at a local llama.cpp or vLLM server and rewrites are
+    fully local:</p>
+<pre data-copy><code>[llm]
+provider = "xai"          # or any /chat/completions endpoint
+model = "grok-4-fast"
+# base_url = "http://localhost:8080/v1"   # fully-local rewrites</code></pre>
+    <p class="muted">The just-typed text and your instruction leave for the
+    <code>[llm]</code> provider only when you invoke the wake word or
+    <code>transform</code> — never otherwise. The dictation ledger is
+    <b>off by default</b>; opt in with <code>history = true</code> and it is a
+    local file, mode 600. <code>voice-keyboard status</code> reports provider,
+    register, flow state, focused app, and the last error. Edits to
+    <code>[flow]</code>, <code>[registers]</code>, and <code>[llm]</code>
+    hot-reload at the next recording — no daemon restart.</p>
+  </section>
+
+  <!-- ═══ 05 / WHAT LEAVES YOUR MACHINE ═════════════════════════════════ -->
+  <section class="prose" id="trust-h">
+    <h2><span class="num" aria-hidden="true">05</span>What leaves your machine</h2>
+    <p>If you tried the demo, you just spoke into a web page — and the section
+    above mentioned an LLM. A fair moment to ask where everything goes. Both
+    halves of the answer are short.</p>
+    <div class="trust">
+      <div>
+        <h3>The daemon</h3>
+        <ul>
+          <li>Dictated audio goes to your chosen STT provider; selected text goes to your TTS provider. Nothing else, nowhere else.</li>
+          <li>Wake-word rewrites send that one utterance plus your instruction to your <code>[llm]</code> provider — only when you invoke them.</li>
+          <li>Recorded audio is held in memory while it is being transcribed — not written to disk.</li>
+          <li>TTS audio is a temporary MP3, deleted after playback.</li>
+          <li>The dictation ledger is opt-in, local, mode 600 — off by default.</li>
+          <li>API keys sit in <code>config.toml</code>, mode 600. The IPC socket is mode 600.</li>
+          <li>Default logs record state and transcript <i>lengths</i>, not transcript text.</li>
+          <li><code>input</code>-group membership is broad input access — that is the honest price of global hotkeys.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>This page</h3>
+        <ul>
+          <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon sends audio to its provider.</li>
+          <li>TTS uses your browser&rsquo;s speech synthesis.</li>
+          <li>The wake-word rewrite here is a deterministic page stand-in — labeled in the terminal, nothing leaves.</li>
+          <li>No scripts loaded from anyone, no analytics, no cookies, no storage.</li>
+          <li>Nothing is loaded, stored, or sent — until you opt in: the terminal&rsquo;s
+          <code>real</code>, <code>ask</code>, <code>say</code>, and <code>demo</code> commands
+          talk to <code>api.hyperfurion.com</code> (real xAI engines, rate-limited, labeled in
+          place). Nothing else on this page touches the network, ever.</li>
+          <li>Transcripts exist only on your screen and die on reload.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 06 / SIGNAL PATH ══════════════════════════════════════════════ -->
   <section class="wide" id="path">
     <div class="prose" style="padding:0">
-    <h2><span class="num" aria-hidden="true">01</span>Signal path</h2>
+    <h2><span class="num" aria-hidden="true">06</span>Signal path</h2>
     <p>A local daemon owns the long-lived resources: microphone capture, the
-    speech-to-text client, a uinput virtual keyboard, the global hotkey
-    listener, and an IPC socket. When you dictate, audio goes to the provider
-    you configured and the transcript is typed into the focused app as real
-    keystrokes — terminals, IDEs, browsers, anything, on Wayland and X11.</p>
+    speech-to-text client, the flow engine, a uinput virtual keyboard, the
+    global hotkey listener, and an IPC socket. When you dictate, audio streams
+    to the provider you configured; the transcript comes back token by token,
+    passes through the grammar and the focused app&rsquo;s register, and is typed
+    into that app as real keystrokes — terminals, IDEs, browsers, anything,
+    on Wayland and X11.</p>
     <p>The reverse lane reads your desktop&rsquo;s primary selection, sends it to a
     text-to-speech provider, and plays the audio locally.</p>
     </div>
@@ -142,14 +347,14 @@ chmod +x install-hyperfurion-vk.sh
     <figure class="pipeline" id="pipeline">
       <svg viewBox="0 0 760 240" role="img" aria-labelledby="pl-title pl-desc">
         <title id="pl-title">HyperFurion VK signal path</title>
-        <desc id="pl-desc">Dictation: microphone to daemon to speech-to-text provider, back to the daemon, then through a uinput virtual keyboard into the focused app. Text-to-speech: selected text to the daemon, to the TTS provider, then to the local speaker.</desc>
+        <desc id="pl-desc">Dictation: microphone to daemon to speech-to-text provider, back through the daemon's flow engine, then through a uinput virtual keyboard into the focused app, live while you speak. Text-to-speech: selected text to the daemon, to the TTS provider, then to the local speaker.</desc>
         <defs>
           <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L8 4 L0 8 z" class="pl-arrow"/>
           </marker>
         </defs>
 
-        <text x="25" y="48" class="pl-lane">dictation — speech in, keystrokes out</text>
+        <text x="25" y="48" class="pl-lane">dictation — speech in, molten keystrokes out, live</text>
 
         <!-- STT lane nodes: 5 columns at x 25/175/325/475/625, y 62, 110×46 -->
         <g>
@@ -159,7 +364,7 @@ chmod +x install-hyperfurion-vk.sh
 
           <rect class="pl-node n-daemon" x="175" y="62" width="110" height="46" rx="8"/>
           <text class="pl-node-label" x="230" y="82" text-anchor="middle">daemon</text>
-          <text class="pl-node-sub" x="230" y="97" text-anchor="middle">voice-keyboard</text>
+          <text class="pl-node-sub" x="230" y="97" text-anchor="middle">flow engine inside</text>
 
           <rect class="pl-node n-provider" x="325" y="62" width="110" height="46" rx="8"/>
           <text class="pl-node-label" x="380" y="82" text-anchor="middle">STT provider</text>
@@ -171,7 +376,7 @@ chmod +x install-hyperfurion-vk.sh
 
           <rect class="pl-node n-app" x="625" y="62" width="110" height="46" rx="8"/>
           <text class="pl-node-label" x="680" y="82" text-anchor="middle">focused app</text>
-          <text class="pl-node-sub" x="680" y="97" text-anchor="middle">gets keystrokes</text>
+          <text class="pl-node-sub" x="680" y="97" text-anchor="middle">molten → frozen</text>
         </g>
 
         <!-- STT lane edges -->
@@ -179,29 +384,31 @@ chmod +x install-hyperfurion-vk.sh
         <path id="pl-e2" class="pl-edge sttlane e-prov" d="M285 85 H323" marker-end="url(#arr)"/>
         <path id="pl-e3" class="pl-edge sttlane e-ret"  d="M435 85 H473" marker-end="url(#arr)"/>
         <path id="pl-e4" class="pl-edge sttlane e-type" d="M585 85 H623" marker-end="url(#arr)"/>
+        <text class="pl-note" x="530" y="127" text-anchor="middle">grammar · register · repair —</text>
+        <text class="pl-note" x="530" y="139" text-anchor="middle">interim tokens type while you speak</text>
 
-        <text x="25" y="152" class="pl-lane">tts — selected text in, speech out</text>
+        <text x="25" y="164" class="pl-lane">tts — selected text in, speech out</text>
 
-        <!-- TTS lane nodes: 3 columns aligned under 5/3/1, y 166, 110×42 -->
+        <!-- TTS lane nodes: 3 columns aligned under 5/3/1, y 176, 110×42 -->
         <g>
-          <rect class="pl-node" x="625" y="166" width="110" height="42" rx="8"/>
-          <text class="pl-node-label" x="680" y="185" text-anchor="middle">selected text</text>
-          <text class="pl-node-sub" x="680" y="199" text-anchor="middle">primary selection</text>
+          <rect class="pl-node" x="625" y="176" width="110" height="42" rx="8"/>
+          <text class="pl-node-label" x="680" y="195" text-anchor="middle">selected text</text>
+          <text class="pl-node-sub" x="680" y="209" text-anchor="middle">primary selection</text>
 
-          <rect class="pl-node" x="325" y="166" width="110" height="42" rx="8"/>
-          <text class="pl-node-label" x="380" y="185" text-anchor="middle">TTS provider</text>
-          <text class="pl-node-sub" x="380" y="199" text-anchor="middle">xAI · OpenAI · ElevenLabs</text>
+          <rect class="pl-node" x="325" y="176" width="110" height="42" rx="8"/>
+          <text class="pl-node-label" x="380" y="195" text-anchor="middle">TTS provider</text>
+          <text class="pl-node-sub" x="380" y="209" text-anchor="middle">xAI · OpenAI · ElevenLabs</text>
 
-          <rect class="pl-node" x="25" y="166" width="110" height="42" rx="8"/>
-          <text class="pl-node-label" x="80" y="185" text-anchor="middle">speaker</text>
-          <text class="pl-node-sub" x="80" y="199" text-anchor="middle">local playback</text>
+          <rect class="pl-node" x="25" y="176" width="110" height="42" rx="8"/>
+          <text class="pl-node-label" x="80" y="195" text-anchor="middle">speaker</text>
+          <text class="pl-node-sub" x="80" y="209" text-anchor="middle">local playback</text>
         </g>
 
         <!-- TTS lane edges (right to left), with a stub up to the daemon -->
-        <path class="pl-edge ttslane t-sel" d="M623 187 H437" marker-end="url(#arr)"/>
-        <path class="pl-edge ttslane t-out" d="M323 187 H137" marker-end="url(#arr)"/>
-        <path class="pl-edge ttslane" d="M230 110 V187" />
-        <text class="pl-node-sub" x="238" y="140">via daemon</text>
+        <path class="pl-edge ttslane t-sel" d="M623 197 H437" marker-end="url(#arr)"/>
+        <path class="pl-edge ttslane t-out" d="M323 197 H137" marker-end="url(#arr)"/>
+        <path class="pl-edge ttslane" d="M230 110 V197" />
+        <text class="pl-node-sub" x="238" y="150">via daemon</text>
 
         <!-- live overlays (packets, keystroke rain) are added here by JS -->
         <g id="pl-live-layer"></g>
@@ -211,64 +418,35 @@ chmod +x install-hyperfurion-vk.sh
     </figure>
 
     <div class="prose" style="padding:0">
-    <p class="muted">The typed transcript is injected as printable ASCII plus newline and
-    tab. The daemon is one process; the CLI is deliberately small — it reads
-    config, sends one IPC command over a Unix socket, and exits.</p>
+    <p class="muted">With a streaming provider the transcript types while you
+    speak; a REST provider lands it on stop. ASCII goes through the fast
+    uinput key path; everything else — accents, CJK, emoji — pastes through
+    the clipboard and your clipboard is restored after. The daemon is one
+    process; the CLI is deliberately small — it reads config, sends one IPC
+    command over a Unix socket, and exits.</p>
     </div>
   </section>
 
-  <!-- ═══ 02 / WHAT LEAVES YOUR MACHINE ═════════════════════════════════ -->
-  <section class="prose" id="trust-h">
-    <h2><span class="num" aria-hidden="true">02</span>What leaves your machine</h2>
-    <p>If you tried the demo, you just spoke into a web page — a fair moment
-    to ask where that went. Both halves of the answer are short.</p>
-    <div class="trust">
-      <div>
-        <h3>The daemon</h3>
-        <ul>
-          <li>Dictated audio goes to your chosen STT provider; selected text goes to your TTS provider. Nothing else.</li>
-          <li>Recorded audio is held in memory while it is being transcribed — not written to disk.</li>
-          <li>TTS audio is a temporary MP3, deleted after playback.</li>
-          <li>API keys sit in <code>config.toml</code>, mode 600. The IPC socket is mode 600.</li>
-          <li>Default logs record state and transcript <i>lengths</i>, not transcript text.</li>
-          <li><code>input</code>-group membership is broad input access — that is the honest price of global hotkeys.</li>
-        </ul>
-      </div>
-      <div>
-        <h3>This page</h3>
-        <ul>
-          <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon sends audio to its provider.</li>
-          <li>TTS uses your browser&rsquo;s speech synthesis.</li>
-          <li>One file, no scripts loaded, no analytics, no cookies, no storage.</li>
-          <li>Nothing is loaded, stored, or sent — until you opt in: the terminal&rsquo;s
-          <code>real</code>, <code>ask</code>, <code>say</code>, and <code>demo</code> commands
-          talk to <code>api.hyperfurion.com</code> (real xAI engines, rate-limited, labeled in
-          place). Nothing else on this page touches the network, ever.</li>
-          <li>Transcripts exist only on your screen and die on reload.</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ 03 / PROVIDERS ════════════════════════════════════════════════ -->
+  <!-- ═══ 07 / PROVIDERS ════════════════════════════════════════════════ -->
   <section class="prose" id="providers">
-    <h2><span class="num" aria-hidden="true">03</span>Providers</h2>
+    <h2><span class="num" aria-hidden="true">07</span>Providers</h2>
     <p><b>xAI is the default</b>, for speech-to-text and text-to-speech both —
-    it&rsquo;s what this project is built and daily-driven on. Every provider
-    below is one line of config; model IDs are plain config values. How you
-    pay for one — or don&rsquo;t — is the next section.</p>
+    it&rsquo;s what this project is built and daily-driven on, and its streaming
+    protocol is what molten dictation rides. Every provider below is one line
+    of config; model IDs are plain config values. How you pay for one — or
+    don&rsquo;t — is <a href="#pricing">the next section</a>.</p>
 
     <h3>Speech-to-text</h3>
     <div class="tblwrap">
     <table>
-      <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th></tr></thead>
+      <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th><th scope="col">Live typing</th></tr></thead>
       <tbody>
-        <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td></tr>
-        <tr><td>hyperfurion <span class="default-badge">subscription</span></td><td>provider default (xAI)</td></tr>
-        <tr><td>openai</td><td><code>gpt-4o-transcribe</code></td></tr>
-        <tr><td>groq</td><td><code>whisper-large-v3-turbo</code></td></tr>
-        <tr><td>deepgram</td><td><code>nova-3</code></td></tr>
-        <tr><td>assemblyai</td><td>provider default</td></tr>
+        <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td><td><span class="molten-word">streaming — molten</span></td></tr>
+        <tr><td>hyperfurion <span class="default-badge">subscription</span></td><td>provider default (xAI)</td><td><span class="molten-word">streaming — molten</span></td></tr>
+        <tr><td>openai</td><td><code>gpt-4o-transcribe</code></td><td>on stop · molten via local <code>live_rest</code></td></tr>
+        <tr><td>groq</td><td><code>whisper-large-v3-turbo</code></td><td>on stop — grammar still applies</td></tr>
+        <tr><td>deepgram</td><td><code>nova-3</code></td><td>on stop — grammar still applies</td></tr>
+        <tr><td>assemblyai</td><td>provider default</td><td>on stop — grammar still applies</td></tr>
       </tbody>
     </table>
     </div>
@@ -287,15 +465,19 @@ chmod +x install-hyperfurion-vk.sh
     </div>
 
     <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
-    <code>en_us</code>.</p>
+    <code>en_us</code>. <code>live_rest = "auto"</code> pseudo-streams only
+    against a <i>local</i> OpenAI-compatible server, where re-transcribing is
+    free; <code>"always"</code> opts in cloud REST providers too — each interim
+    probe re-bills, which is why it isn&rsquo;t the default.</p>
   </section>
 
-  <!-- ═══ 04 / THREE WAYS TO RUN IT ════════════════════════════════════ -->
+  <!-- ═══ 08 / THREE WAYS TO RUN IT ════════════════════════════════════ -->
   <section class="wide" id="pricing">
     <div class="prose" style="padding:0">
-    <h2><span class="num" aria-hidden="true">04</span>Three ways to run it</h2>
-    <p>All three run the same product. Nothing on this page is feature-gated,
-    and nothing below changes that.</p>
+    <h2><span class="num" aria-hidden="true">08</span>Three ways to run it</h2>
+    <p>All three run the same product — molten dictation, the grammar, the
+    registers, the rewrite lane, all of it. Nothing on this page is
+    feature-gated, and nothing below changes that.</p>
     </div>
 
     <div class="plans">
@@ -315,18 +497,21 @@ chmod +x install-hyperfurion-vk.sh
         <h3>Hosted</h3>
         <p class="plan-price">$5 <span>or</span> $10 <span>/ month</span></p>
         <ul>
-          <li><b>$5</b> — 20 hours of dictation + 250k spoken characters</li>
-          <li><b>$10</b> — 60 hours + 1M characters</li>
-          <li>hard-capped, so nobody can run up a bill</li>
+          <li><b>$5</b> — 20 hours of dictation + 10k spoken characters</li>
+          <li><b>$10</b> — 40 hours + 50k characters</li>
+          <li>hard-capped, so nobody can run up a bill — yours or ours</li>
           <li>same path as the default provider: a metered relay to xAI —
-              audio held in memory, never written to disk</li>
+              streaming, so molten dictation works; audio held in memory,
+              never written to disk</li>
           <li>the relay is <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay">open
               source and self-hostable</a></li>
           <li>what&rsquo;s left over funds this project</li>
         </ul>
         <div class="buy-row" id="buy-row" hidden></div>
-        <p class="sigcap plan-cap" id="hosted-soon">launching soon — type <code>subscribe</code> in the terminal above,
-        or <a href="https://github.com/sponsors/liamghennigan">early access via sponsors</a></p>
+        <p class="sigcap plan-cap" id="hosted-soon">subscribe —
+        <a href="https://buy.stripe.com/00w4gA89yaVI6Twgfm2oE00" rel="noopener">$5/mo basic</a> ·
+        <a href="https://buy.stripe.com/14A00k4Xm6Fs3Hk7IQ2oE01" rel="noopener">$10/mo pro</a> —
+        secure checkout on stripe; your <code>hfk_</code> key is shown once on the welcome page</p>
       </div>
 
       <div class="plan">
@@ -336,6 +521,8 @@ chmod +x install-hyperfurion-vk.sh
           <li>any OpenAI-compatible server counts as a provider — including one
               on <code>localhost</code></li>
           <li>no API key, nothing leaves your machine</li>
+          <li>molten included: <code>live_rest</code> pseudo-streams local
+              servers for free</li>
         </ul>
 <pre data-copy><code>[providers.openai]
 base_url = "http://localhost:8000/v1"
@@ -363,63 +550,88 @@ provider = "openai"</code></pre>
     <a href="https://huggingface.co/mistralai/Voxtral-Mini-3B-2507">Voxtral
     Mini&nbsp;3B</a> (Apache-2.0) serves OpenAI-compatible via vLLM; and
     <a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a> covers
-    CPU-only and edge boxes.</p>
+    CPU-only and edge boxes. For fully-local <i>rewrites</i>, point
+    <code>[llm] base_url</code> at llama.cpp or vLLM.</p>
     </div>
   </section>
 
-  <!-- ═══ 05 / CONFIGURATION ════════════════════════════════════════════ -->
+  <!-- ═══ 09 / CONFIGURATION ════════════════════════════════════════════ -->
   <section class="prose" id="config-h">
-    <h2><span class="num" aria-hidden="true">05</span>Configuration</h2>
+    <h2><span class="num" aria-hidden="true">09</span>Configuration</h2>
     <p>The real config lives at <code>~/.config/voice-keyboard/config.toml</code>
-    (mode 600 — it holds your API keys).
+    (mode 600 — it holds your API keys). On the daemon, <code>[flow]</code>,
+    <code>[registers]</code>, and <code>[llm]</code> hot-reload at the next
+    recording.
     <span id="cfg-live-note" hidden>The copy below is <b>live</b>: edit it and this
-    page re-binds itself. Change the hotkey, switch the mode, set a
-    <code>language</code>, pick a <code>voice_id</code> — then try it.</span></p>
+    page re-binds itself. Slow <code>stability_ms</code>, set
+    <code>auto_stop_ms = 1200</code>, rename the <code>wake_word</code>, switch
+    the default register to <code>verbatim</code> — then dictate again.</span></p>
     <div class="config-wrap">
 <pre class="config" id="config" spellcheck="false">[hotkey]
 key = "control+alt+v"
 # auto = tap to toggle, hold to talk
-# other choices: toggle, hold
 mode = "auto"
 hold_threshold_ms = 280
 
+[flow]
+# false = the old behavior: record, stop, then type
+live = true
+# a molten word freezes after surviving this long
+stability_ms = 1500
+# 1200 = hands-free: tap, speak, done (0 = off)
+auto_stop_ms = 0
+# spoken cardinals → digits: auto (terminal register),
+# always, or off
+numbers = "auto"
+# "&lt;wake_word&gt;, &lt;instruction&gt;" rewrites via [llm]
+wake_word = "furion"
+
+[registers]
+# the editor window's register: prose | terminal | verbatim
+# (the daemon probes the focused app; its terminal list is
+# built in — the demo's terminal is always "terminal")
+default = "prose"
+
 [stt]
-# the daemon also takes provider = "xai" (the default)
-#   | "hyperfurion" (subscription) | "openai" | "groq"
-#   | "deepgram" | "assemblyai" — this page's provider is
-#   your browser's speech engine, so only these two apply:
+# the daemon also takes provider = "xai" (default)
+#   | "hyperfurion" | "openai" | "groq" | "deepgram"
+#   | "assemblyai" — this page's provider is your
+#   browser's speech engine, so only these two apply:
 language = "en"
 interim_results = true
 
 [tts]
-# the daemon also takes provider = "xai" (the default)
-#   | "openai" | "elevenlabs"; here voice_id is matched
-#   against your browser's installed voices instead
+# daemon keys: provider, model, voice_id, language;
+# here voice_id matches your browser's installed voices
 voice_id = "eve"
-# rate and pitch are page-only knobs (the daemon's real
-# keys are provider, model, voice_id, language)
 rate = 1.0
 pitch = 1.0</pre>
       <p class="cfgstatus" id="cfgstatus" hidden></p>
     </div>
-    <p class="muted">On the desktop, restart after editing:
-    <code>systemctl --user restart voice-keyboard-daemon</code>.</p>
+    <p class="muted">On the desktop, provider/key/audio/hotkey changes still
+    want a restart: <code>systemctl --user restart voice-keyboard-daemon</code>.</p>
   </section>
 
-  <!-- ═══ 06 / SHORTCUTS & MODES ════════════════════════════════════════ -->
+  <!-- ═══ 10 / SHORTCUTS & COMMANDS ═════════════════════════════════════ -->
   <section class="prose" id="keys">
-    <h2><span class="num" aria-hidden="true">06</span>Shortcuts &amp; modes</h2>
+    <h2><span class="num" aria-hidden="true">10</span>Shortcuts &amp; commands</h2>
     <div class="tblwrap">
     <table>
       <thead><tr><th scope="col">Input</th><th scope="col">What happens</th><th scope="col">CLI equivalent</th></tr></thead>
       <tbody>
         <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> tap</td><td>toggle dictation</td><td><code>voice-keyboard toggle</code></td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> hold</td><td>talk until release (after <code>hold_threshold_ms</code>)</td><td><code>voice-keyboard start</code> / <code>stop</code></td></tr>
+        <tr><td>~1.2 s of silence</td><td>stops by itself, when <code>auto_stop_ms = 1200</code></td><td>—</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td><td>read the selection aloud — built into this page; on the desktop it&rsquo;s a shortcut you bind yourself</td><td><code>voice-keyboard tts</code></td></tr>
+        <tr><td>&ldquo;furion, &lt;instruction&gt;&rdquo;</td><td>rewrite the last dictation in place</td><td><code>voice-keyboard transform "…"</code></td></tr>
         <tr><td><kbd>Esc</kbd></td><td>stop recording or speech (page)</td><td><code>voice-keyboard stop</code></td></tr>
       </tbody>
     </table>
     </div>
+    <p class="muted"><code>voice-keyboard status</code> reports provider,
+    register, flow state, focused app, and the last error.
+    <code>history</code> and <code>recall</code> work once you opt into the
+    ledger — try all three in the demo terminal above.</p>
     <h3>Hotkey modes</h3>
     <div class="tblwrap">
     <table>
@@ -434,12 +646,14 @@ pitch = 1.0</pre>
     </div>
     <p class="muted">The desktop hotkey listener reads Linux input events
     directly — that is why your user needs <code>input</code>-group access, and why
-    you log out and back in once after install.</p>
+    you log out and back in once after install. On macOS it&rsquo;s an event tap;
+    on Windows, a low-level keyboard hook — which is also why the daemon&rsquo;s own
+    typing can never re-trigger the hotkey there.</p>
   </section>
 
-  <!-- ═══ 07 / HONEST LIMITATIONS ═══════════════════════════════════════ -->
+  <!-- ═══ 11 / HONEST LIMITATIONS ═══════════════════════════════════════ -->
   <section class="prose" id="limits">
-    <h2><span class="num" aria-hidden="true">07</span>Honest limitations</h2>
+    <h2><span class="num" aria-hidden="true">11</span>Honest limitations</h2>
     <p class="sigcap limits-cap">known limits — stated, not hidden</p>
     <ul>
       <li>Linux first — Python 3.11+, systemd user services, uinput access.
@@ -450,9 +664,25 @@ pitch = 1.0</pre>
       <li>Cloud by default; no speech model ships in the box. Fully offline is
       one config line — point <code>providers.openai.base_url</code> at a local
       OpenAI-compatible server (see Providers above).</li>
-      <li>Injection is printable ASCII plus newline and tab. Accents, CJK, emoji are skipped with warnings in the journal.</li>
-      <li>The near-field recording overlay is GNOME Shell 50 on Wayland; other desktops get ordinary notifications.</li>
-      <li>Stop-to-text latency depends on your provider and connection.</li>
+      <li>Live typing needs a streaming provider; REST providers land the text
+      on stop. <code>live_rest = "always"</code> re-bills a cloud REST provider
+      on every interim probe — that is why only local servers get it by
+      default.</li>
+      <li>Live repairs assume nothing else edits the field mid-dictation: type
+      or click into the text while speaking and a repair can land in the wrong
+      place. The stability window and <code>max_molten_chars</code> bound the
+      damage.</li>
+      <li>&ldquo;scratch that&rdquo; declines to delete across complex Unicode —
+      emoji, combining marks — where backspace-per-character isn&rsquo;t reliable.</li>
+      <li>A finalize that retro-revises an already-frozen word keeps the frozen
+      form; only the still-molten tail adopts late revisions.</li>
+      <li>Non-ASCII on Linux types through a clipboard paste (needs
+      <code>wl-copy</code> or <code>xclip</code>); clipboard managers may
+      glimpse the transient entry before the old contents are restored.</li>
+      <li>The near-field recording overlay — and its live molten caption — is
+      GNOME Shell 50 on Wayland; other desktops get ordinary notifications.</li>
+      <li>Stop-to-text latency depends on your provider; with a streaming
+      provider the wait mostly disappears, because the text is already there.</li>
       <li>IPC commands are handled one at a time; a slow TTS request can delay the next command.</li>
       <li id="page-note" hidden>This page runs on your browser&rsquo;s speech engines, the same
       way the daemon runs on its providers. When the browser has no speech engine
@@ -462,9 +692,9 @@ pitch = 1.0</pre>
     </ul>
   </section>
 
-  <!-- ═══ 08 / INSTALL ══════════════════════════════════════════════════ -->
+  <!-- ═══ 12 / INSTALL ══════════════════════════════════════════════════ -->
   <section class="prose" id="install">
-    <h2><span class="num" aria-hidden="true">08</span>Install</h2>
+    <h2><span class="num" aria-hidden="true">12</span>Install</h2>
     <h3>Linux</h3>
     <pre data-copy><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
@@ -476,6 +706,8 @@ chmod +x install-hyperfurion-vk.sh
       <li><code>systemctl --user restart voice-keyboard-daemon</code></li>
       <li><code>voice-keyboard status</code> — it prints <code>idle</code> or <code>recording</code>.</li>
     </ol>
+    <p class="muted">Upgrading is the same command — the installer restarts the
+    daemon so the version you installed is the version that&rsquo;s running.</p>
     <h3>macOS — beta</h3>
     <pre data-copy><code>git clone https://github.com/liamghennigan/HyperFurion-VK
 cd HyperFurion-VK
@@ -490,8 +722,9 @@ cd HyperFurion-VK
 powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</code></pre>
     <p class="muted">Native <code>SendInput</code> injection (full Unicode) and a
     low-level keyboard hook, started at login from your Startup folder — no
-    admin required. Beta on both platforms means exactly that: unit-tested,
-    honest about being young.</p>
+    admin required. IPC runs on loopback TCP guarded by a per-session token
+    file, so other local processes can&rsquo;t drive your keyboard. Beta on both
+    platforms means exactly that: unit-tested, honest about being young.</p>
     <p class="muted">Linux needs the <code>uinput</code> module, Python 3.11+, and
     systemd user services; the installer supports <code>apt-get</code>,
     <code>dnf</code>, and <code>pacman</code>. Full walkthroughs, non-interactive

@@ -1,4 +1,6 @@
 // ═══ CONFIG — the live config.toml, expanded ══════════════════════════════
+// The page parses the same keys the daemon hot-reloads ([flow], [registers],
+// [llm] apply at the next recording there; here they apply on every edit).
 import { cfgEl, cfgStatus, synth } from "./env.js";
 import { bus } from "./bus.js";
 
@@ -7,6 +9,11 @@ export const Config = (() => {
     mods: { ctrl: true, alt: true, shift: false, meta: false }, code: "KeyV",
     keyLabel: "control+alt+v", mode: "auto", holdMs: 280,
     lang: "en", interim: true, voiceId: "eve", voice: null, rate: 1, pitch: 1,
+    // [flow] — the molten dictation knobs, all live on this page
+    flowLive: true, stabilityMs: 1500, autoStopMs: 0,
+    numbers: "auto", wakeWord: "furion",
+    // [registers]
+    regDefault: "prose",
   };
   const CODE_MAP = { space: "Space", enter: "Enter", return: "Enter", tab: "Tab" };
   function parseKeyCombo(str) {
@@ -61,6 +68,31 @@ export const Config = (() => {
     }
     const interim = grab(/^\s*interim_results\s*=\s*(true|false)/m);
     if (interim !== null) cfg.interim = interim === "true";
+
+    // [flow] — molten dictation
+    const liveKey = grab(/^\s*live\s*=\s*(true|false)/m);
+    if (liveKey !== null) cfg.flowLive = liveKey === "true";
+    const stab = grab(/^\s*stability_ms\s*=\s*(\d+)/m);
+    if (stab !== null) cfg.stabilityMs = Math.min(8000, Math.max(200, +stab));
+    const auto = grab(/^\s*auto_stop_ms\s*=\s*(\d+)/m);
+    if (auto !== null) cfg.autoStopMs = +auto === 0 ? 0 : Math.min(8000, Math.max(400, +auto));
+    const numbers = grab(/^\s*numbers\s*=\s*"([^"]*)"/m);
+    if (numbers !== null) {
+      if (["auto", "always", "off"].includes(numbers)) cfg.numbers = numbers;
+      else errs.push("numbers");
+    }
+    const wake = grab(/^\s*wake_word\s*=\s*"([^"]*)"/m);
+    if (wake !== null) {
+      if (/^[a-z]{2,24}$/i.test(wake.trim())) cfg.wakeWord = wake.trim().toLowerCase();
+      else errs.push("wake_word");
+    }
+    // [registers]
+    const regDef = grab(/^\s*default\s*=\s*"([^"]*)"/m);
+    if (regDef !== null) {
+      if (["prose", "terminal", "verbatim"].includes(regDef)) cfg.regDefault = regDef;
+      else errs.push("default");
+    }
+
     const vid = grab(/^\s*voice_id\s*=\s*"([^"]*)"/m);
     if (vid !== null && vid.trim()) cfg.voiceId = vid.trim();
     const rate = grab(/^\s*rate\s*=\s*([\d.]+)/m);
@@ -76,11 +108,13 @@ export const Config = (() => {
     } else {
       cfgStatus.className = "cfgstatus";
       cfgStatus.textContent = "✓ applied — hotkey " + cfg.keyLabel + " · mode " + cfg.mode +
-        " · hold " + cfg.holdMs + " ms · lang " + cfg.lang +
-        " · interim " + (cfg.interim ? "on" : "off") +
+        " · flow " + (cfg.flowLive ? "live" : "batch") + " · stability " + cfg.stabilityMs + " ms" +
+        (cfg.autoStopMs ? " · auto-stop " + cfg.autoStopMs + " ms" : "") +
+        " · wake \"" + cfg.wakeWord + "\" · numbers " + cfg.numbers +
+        " · register " + cfg.regDefault +
         " · voice \"" + cfg.voiceId + "\" → " + voiceName;
     }
-    // the terminal re-renders on this event (it draws interim per cfg.interim)
+    // the demo re-renders on this event (registers, molten window, wake word)
     bus.emit("cfg:change", cfg);
   }
   cfgEl.addEventListener("input", apply);

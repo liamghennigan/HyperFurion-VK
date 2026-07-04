@@ -24,7 +24,7 @@ class TestHealth:
                     body = await resp.json()
             assert body["service"] == "hyperfurion-relay"
             assert body["tiers"]["basic"]["usd_per_month"] == 5
-            assert body["tiers"]["pro"]["stt_hours"] == 60
+            assert body["tiers"]["pro"]["stt_hours"] == 40
 
         run_rig(scenario)
 

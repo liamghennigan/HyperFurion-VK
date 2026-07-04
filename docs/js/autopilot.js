@@ -1,10 +1,12 @@
 // ═══ AUTOPILOT — a scripted ghost user, honestly labeled ══════════════════
 // Most visitors will not hand a landing page their microphone, and Firefox
 // has no SpeechRecognition at all. So the demo can drive itself: a ghost
-// presses the hotkey, dictates into the editor and then the terminal, and
-// ends by having a sentence read aloud. Every second of it is labeled as
-// scripted, and any real interaction (Esc, the mic, a key) takes over.
-import { $, hint, mic, synth, reduced, SR } from "./env.js";
+// presses the hotkey, dictates molten into the editor — mis-hears a word
+// and lets it repair itself — says "scratch that" out loud, shows the
+// terminal register turning spoken numbers into digits, and ends by having
+// a sentence read aloud. Every second of it is labeled as scripted, and
+// any real interaction (Esc, the mic, a key) takes over.
+import { $, hint, synth, reduced, SR } from "./env.js";
 import { bus } from "./bus.js";
 import { Desktop } from "./desktop.js";
 import { Dictation } from "./dictation.js";
@@ -16,8 +18,13 @@ export const Autopilot = (() => {
   let timers = [], overlay = null;
 
   const SCRIPT = [
-    { focus: "editor", say: "fixed the race condition in the audio thread — dictated, not typed" },
-    { focus: "terminal", say: "voice-keyboard status" },
+    { focus: "editor",
+      say: { text: "fixed the race condition in the audio thread period",
+             revise: { at: 3, wrong: "addition" } } },
+    { focus: "editor",
+      say: { text: "scratch that fixed the race in audio capture instead period" } },
+    { focus: "terminal",
+      say: { text: "twenty three tests green comma zero flaky" } },
   ];
 
   function ghostKbd() {
@@ -44,7 +51,7 @@ export const Autopilot = (() => {
     A.running = true;
     watchBtn.textContent = "■ stop watching";
     ghostKbd();
-    const dur = reduced ? 400 : 4200;   // per step: press, dictate, settle
+    const dur = reduced ? 400 : 4600;   // per step: press, dictate molten, settle
     SCRIPT.forEach((step, i) => {
       at(i * dur + 200, () => { Desktop.focus(step.focus); pressCombo(); });
       at(i * dur + (reduced ? 250 : 800), () => Dictation.simulate(step.say));
@@ -52,7 +59,7 @@ export const Autopilot = (() => {
     // the finale: the reverse lane reads the freshly typed line aloud
     at(SCRIPT.length * dur + 400, () => {
       const line = [...document.querySelectorAll("#ebody .eline span")]
-        .find((s) => /race condition/.test(s.textContent));
+        .find((s) => /audio capture/.test(s.textContent));
       if (synth && line && line.firstChild) {
         const r = document.createRange();
         r.selectNodeContents(line);
@@ -66,6 +73,7 @@ export const Autopilot = (() => {
     const el = document.createElement("span");
     hint.replaceChildren(el);
     el.outerHTML = "<span class='engine-live'>autopilot</span> — scripted demo, honestly labeled. " +
+      "watch the amber words: molten, then repaired, then frozen. " +
       "press <kbd>Esc</kbd> or the mic to take over.";
   }
   function stop(msg) {

@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 # Upstream prices (see relay/README.md); the flat ask cost is a
 # deliberately conservative over-estimate of a small chat completion.
 STT_USD_PER_SECOND = 0.20 / 3600
-TTS_USD_PER_CHAR = 4.20 / 1_000_000
+TTS_USD_PER_CHAR = 15.00 / 1_000_000  # xAI list price, verified 2026-07-04
 ASK_USD_FLAT = 0.002
 
 MAX_DICTATION_SECONDS = 20.0
