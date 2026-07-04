@@ -14,11 +14,23 @@ When you ask for text-to-speech, it reads the primary selection from your
 desktop, sends that selected text to the configured TTS provider, and plays the
 returned audio locally.
 
+**New: [Flow — molten dictation](#flow--molten-dictation).** With a streaming
+provider, words appear in the focused field *while you speak* and repair
+themselves in place as the transcript firms up. A spoken edit grammar
+("scratch that", "new line", "period", `literal`), per-app context registers
+(prose / terminal / verbatim, picked by probing the focused app), spoken
+numbers as digits, silence auto-stop, full Unicode on Linux via clipboard
+paste, and a wake-word rewrite channel ("… furion, make that formal") that
+routes the just-typed text through an LLM and repairs it on screen.
+
 ## Fast Answer
 
 - **Start or stop dictation:** press `Ctrl+Alt+V`, or run `voice-keyboard`
   / `voice-keyboard toggle`.
 - **Hold-to-talk:** hold `Ctrl+Alt+V`; release it to stop.
+- **Watch words appear as you speak:** on by default with a streaming
+  provider — see [Flow](#flow--molten-dictation). Say "scratch that",
+  "new line", "period"; say "furion, make that formal" to rewrite in place.
 - **Read selected text aloud:** select text in any app, then run
   `voice-keyboard tts`. You can bind this to `Ctrl+Alt+T` in your desktop.
 - **Check whether the daemon is recording:** `voice-keyboard status`.
@@ -165,11 +177,12 @@ months of daily driving the Linux build has. Issues welcome.
 ## Windows (Beta)
 
 Also native, also pure standard library: injection uses `SendInput` with
-Unicode events (again, better than the Linux ASCII limit), the hotkey uses a
-low-level keyboard hook (so hold-to-talk works, and the daemon's own typing
-can never re-trigger it), IPC runs on loopback TCP (`127.0.0.1:48765` —
-Windows Python has no Unix sockets), and status arrives as toasts. From a
-checkout, in PowerShell:
+Unicode events, the hotkey uses a low-level keyboard hook (so hold-to-talk
+works, and the daemon's own typing can never re-trigger it), IPC runs on
+loopback TCP (`127.0.0.1:48765` — Windows Python has no Unix sockets)
+guarded by a per-session token file (mode 600) so other local processes
+can't drive typing, and status arrives as toasts. From a checkout, in
+PowerShell:
 
 ```powershell
 git clone https://github.com/liamghennigan/HyperFurion-VK
@@ -252,6 +265,14 @@ voice-keyboard status
 
 `voice-keyboard` with no command is the same as `voice-keyboard toggle`.
 
+Flow commands (see [Flow — Molten Dictation](#flow--molten-dictation)):
+
+```bash
+voice-keyboard transform "make that more formal"   # rewrite last dictation in place
+voice-keyboard history 10                          # list the dictation ledger (opt-in)
+voice-keyboard recall 2                            # re-type the 2nd-most-recent entry
+```
+
 ### Text-To-Speech
 
 Select text in an app, then run:
@@ -296,6 +317,94 @@ Sway example:
 ```conf
 bindsym Control+Mod1+t exec voice-keyboard tts
 ```
+
+## Flow — Molten Dictation
+
+Flow is on by default. It has two halves:
+
+- **The pipeline** (all providers): a spoken edit grammar and per-app
+  rendering registers applied to every transcript before it is typed.
+- **Live molten injection** (streaming providers: `xai`, `hyperfurion`, and
+  local REST via `live_rest`): text streams into the focused field while you
+  speak. Words stay *molten* for a stability window (default 1.5 s); when the
+  provider revises a molten word, the daemon backspaces to the divergence
+  point and retypes — the text repairs itself in front of you. Once a word
+  survives the window it *freezes* and is never touched again, so repairs
+  stay short and your caret never runs away. `flow.enabled = false` restores
+  the old record → wait → paste behavior exactly.
+
+While recording, the GNOME overlay pill becomes a live caption: a small VU
+meter plus the molten tail of the transcript, updating as you speak.
+
+### The spoken grammar
+
+| You say | You get |
+| --- | --- |
+| `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text) |
+| `new line` / `new paragraph` | `\n` / `\n\n` |
+| `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
+| `literal period` | the word "period" |
+| `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
+| `furion, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
+
+Every phrase is remappable and removable in config (`[flow.commands]`,
+`[flow.punctuation]`), `[flow.vocabulary]` expands your own phrases
+("hyper furion" → "HyperFurion"), and the wake word is configurable.
+
+### Context registers
+
+At recording start the daemon probes the focused app — AT-SPI on Linux,
+Quartz on macOS, Win32 on Windows — and picks a register:
+
+| Register | Behavior |
+| --- | --- |
+| `prose` (default) | smart capitalization and punctuation spacing |
+| `terminal` | no auto-caps, numbers as digits, pastes with `Ctrl+Shift+V` |
+| `verbatim` | grammar off; words exactly as recognized |
+
+Known terminals (kitty, alacritty, foot, konsole, GNOME Terminal, wezterm,
+Windows Terminal, iTerm2, …) map to `terminal` automatically; override or
+extend per app in `[registers.map]`. If focus moves to a different app
+mid-dictation, typing freezes immediately and the transcript lands on the
+clipboard instead — dictation never types into the wrong window.
+
+### Unicode on Linux
+
+The uinput injector now types anything: plain ASCII goes through the fast
+key path, and any other run (accents, CJK, emoji, em-dashes) is pasted via
+the clipboard — `wl-copy` (Wayland) or `xclip` (X11) — with your previous
+clipboard contents restored afterwards. Terminals get the `Ctrl+Shift+V`
+chord via the register. Clipboard managers may briefly see the transient
+entry; if no clipboard tool is installed, non-ASCII is dropped with a
+warning as before.
+
+### Hands-free and recall
+
+- `auto_stop_ms = 1200` under `[flow]` ends recording by itself after ~1.2 s
+  of silence: tap, speak, done.
+- `voice-keyboard transform "make it friendlier"` rewrites the last
+  dictation in place, any time.
+- `history = true` under `[flow]` keeps an append-only local ledger
+  (`~/.local/state/voice-keyboard/history.jsonl`, mode 600).
+  `voice-keyboard history` lists; `voice-keyboard recall 2` re-types the
+  second-most-recent entry. Off by default.
+- `voice-keyboard status` now reports provider, register, flow state,
+  focused app, and the last error.
+
+`[flow]`, `[registers]`, and `[llm]` edits hot-reload at the next recording
+— no daemon restart.
+
+### Flow limitations (honest ones)
+
+- Live repairs assume nothing else edits the field mid-dictation: if you
+  type or click into the text while speaking, repairs can land in the wrong
+  place. The stability window and `max_molten_chars` bound the damage.
+- "scratch that" declines to delete across complex Unicode (emoji, combining
+  marks) — backspace-per-character is not reliable there.
+- A finalize that retro-revises an already-frozen word keeps the frozen
+  form; only the still-molten tail adopts late revisions.
+- `live_rest = "always"` re-bills cloud REST providers on every interim
+  probe; the default `"auto"` only pseudo-streams against local endpoints.
 
 ## Configuration
 
@@ -616,9 +725,10 @@ journalctl --user -u voice-keyboard-daemon -f
 ```
 
 The daemon types through a virtual keyboard, so the destination app must have
-keyboard focus when transcription finishes. The current injector supports
-printable ASCII plus newline and tab. Accents, CJK text, emoji, smart quotes,
-and other non-ASCII characters are skipped with warnings in the journal.
+keyboard focus. ASCII is typed through the uinput key path; anything else
+(accents, CJK, emoji, smart quotes) is pasted through the clipboard, which
+requires `wl-copy` (Wayland) or `xclip` (X11). If neither tool is installed,
+non-ASCII characters are skipped with warnings in the journal.
 
 ### Stop Takes A While
 
@@ -741,8 +851,11 @@ status UI, IPC, playback, and keyboard injection are already local.
   beta. iOS is not possible as a system-wide keyboard (see iOS — Why Not).
 - No speech model ships in the box: bring a provider key, the subscription, or
   a local OpenAI-compatible server (see Fully Offline above).
-- uinput injection on Linux is printable ASCII, newline, and tab only (the
-  macOS and Windows backends type full Unicode).
+- uinput injection on Linux types ASCII directly and everything else via a
+  clipboard paste (needs `wl-copy`/`xclip`; the macOS and Windows backends
+  type full Unicode natively).
+- Live molten injection assumes the field is not edited by hand mid-dictation
+  (see Flow limitations above).
 - The built-in global hotkey requires readable Linux input devices (Linux),
   Accessibility permission (macOS), or a keyboard hook (Windows).
 - The near-field overlay is GNOME Shell 50 Wayland specific.
@@ -759,16 +872,28 @@ voice-keyboard/
 |-- voice_keyboard/
 |   |-- daemon.py          # Main daemon, recording state, IPC handling, hotkeys
 |   |-- client.py          # CLI, primary-selection reading, overlay calls
+|   |-- flow/
+|   |   |-- engine.py      # Molten dictation state machine (pure logic)
+|   |   |-- grammar.py     # Spoken commands, punctuation, vocabulary, wake word
+|   |   |-- registers.py   # prose/terminal/verbatim rendering
+|   |   |-- numbers.py     # Spoken cardinals -> digits
+|   |   |-- vad.py         # RMS levels, VU meter, silence auto-stop
+|   |   `-- worker.py      # Injection convergence loop (type/backspace bursts)
+|   |-- transcript.py      # Streaming transcript merge heuristics
+|   |-- focusprobe.py      # Focused-app probe (AT-SPI / Quartz / Win32)
+|   |-- clipboard.py       # Clipboard get/set (wl-copy, xclip, pbcopy, ...)
+|   |-- llm.py             # OpenAI-compatible chat client for voice transform
+|   |-- history.py         # Opt-in dictation ledger
 |   |-- audio_capture.py   # PyAudio microphone capture
-|   |-- stt.py             # STT provider clients
+|   |-- stt.py             # STT provider clients (+ pseudo-streaming adapter)
 |   |-- tts.py             # TTS provider clients and playback
-|   |-- injector.py        # UInput virtual keyboard
-|   |-- ipc.py             # Unix socket server/client
+|   |-- injector.py        # UInput virtual keyboard + clipboard paste fallback
+|   |-- ipc.py             # Unix socket / loopback-TCP server & client
 |   |-- hotkey.py          # Linux input-event global hotkey listener
 |   `-- config.py          # Config loading and validation
 |-- gnome-shell/
 |   `-- voice-keyboard-overlay@liam-hennigan/
-|       |-- extension.js   # GNOME Shell near-field overlay
+|       |-- extension.js   # GNOME Shell near-field overlay + live caption
 |       `-- metadata.json
 |-- tests/
 |-- config.toml.example

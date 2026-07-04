@@ -62,6 +62,87 @@ key = "control+alt+v"
 # "auto" = tap to toggle, or hold to record until release.
 # You can still force "toggle" or "hold" if you want only one gesture.
 mode = "auto"
+# How long a press counts as a hold in "auto" mode.
+hold_threshold_ms = 280
+
+# ── Flow: molten dictation ────────────────────────────────────────────
+# Edits to [flow], [registers], and [llm] hot-reload at the next
+# recording — no daemon restart needed.
+
+[flow]
+# The grammar + register pipeline (all providers). false = the daemon
+# behaves exactly as it did before Flow existed.
+enabled = true
+# Type words live while you speak, repairing in place as the transcript
+# firms up (streaming providers: xai, hyperfurion, live_rest).
+live = true
+# Spoken commands and punctuation: "scratch that", "new line", "period",
+# "literal <word>", ...
+grammar = true
+# A molten word freezes after surviving this long and this many updates.
+# Until it freezes, provider revisions repair it on screen.
+stability_ms = 1500
+stability_updates = 2
+# Upper bound on the revisable tail; repairs can never be longer.
+max_molten_chars = 160
+# Widen the horizon automatically when the provider revises deeply.
+adaptive = true
+# Molten dictation for buffered REST providers by re-transcribing the
+# growing recording on an interval. "auto" enables it only against a
+# LOCAL openai-compatible base_url (re-transcribing is free there);
+# "always" opts in cloud REST providers too (each probe re-bills!).
+live_rest = "auto"
+live_rest_interval_ms = 2500
+# Stop recording automatically after this much silence (0 = off).
+# 1200 is a good hands-free value.
+auto_stop_ms = 0
+# Spoken cardinals -> digits ("twenty three" -> 23).
+# "auto" = terminal register only, "always", or "off".
+numbers = "auto"
+# Opt-in local dictation ledger for `voice-keyboard history` / `recall`.
+# Entries: ~/.local/state/voice-keyboard/history.jsonl (mode 600).
+history = false
+# Say "<wake_word>, <instruction>" at the end of an utterance to rewrite
+# it through [llm]: "... furion, make that formal".
+wake_word = "furion"
+
+[flow.vocabulary]
+# Spoken phrase -> replacement (multi-word keys fine).
+# "hyper furion" = "HyperFurion"
+
+[flow.commands]
+# Remap command phrases. Actions: scratch_that, new_line, new_paragraph,
+# literal. Values may be a string or a list of strings.
+# scratch_that = ["nuke it", "scratch that"]
+
+[flow.punctuation]
+# Remap spoken punctuation; "" removes a phrase.
+# "period" = "."
+# "comma" = ""
+
+[registers]
+# How dictation renders per app: prose (smart caps + punctuation),
+# terminal (verbatim-ish, numbers as digits, ctrl+shift+v paste),
+# verbatim (grammar off).
+default = "prose"
+# Probe the focused app at recording start (AT-SPI on Linux, Quartz on
+# macOS, Win32 on Windows) to pick the register automatically.
+probe = true
+
+[registers.map]
+# App -> register overrides, merged over the built-in terminal list.
+# kitty = "terminal"
+# code = "verbatim"
+
+[llm]
+# The voice-transform channel ("furion, ..." and `voice-keyboard
+# transform`). Any OpenAI-compatible /chat/completions endpoint works —
+# point base_url at a local llama.cpp/vLLM server for fully-local
+# rewrites. api_key falls back to the matching [providers.*] key.
+provider = "xai"
+base_url = ""
+api_key = ""
+model = "grok-4-fast"
 
 [daemon]
 # Defaults to ~/.config/voice-keyboard/socket if unset.
