@@ -16,17 +16,17 @@ export const Hints = (() => {
     const add = (html) => hint.insertAdjacentHTML("beforeend", html);
     if (state.dictations === 0) {
       const focused = state.focusedApp || "editor";
-      if (coarse) add("three windows, one focus — the <b>" + focused + "</b> has it. tap the mic up top, " +
-          "<b>speak</b>, then hit the red <b>stop</b> button");
-      else add("three windows, one focus — the <b>" + focused + "</b> has it. tap the mic up top or press " +
-          kbd(Config.cfg.keyLabel) + ", <b>speak</b>, and your words land there");
+      if (coarse) add("the <b>" + focused + "</b> above is live — tap the mic up top, " +
+          "<b>speak</b>, then hit the red <b>stop</b> button, and your words land in it");
+      else add("the <b>" + focused + "</b> above is live — tap the mic up top or press " +
+          kbd(Config.cfg.keyLabel) + ", <b>speak</b>, and your words land in it as keystrokes");
       if (SR) add(' · <span class="engine-live">it actually listens</span> — audio goes to your ' +
                   "browser's speech engine, the way the daemon sends audio to its provider");
       else add(' · no speech engine in this browser — hit <b>▶ watch it work</b> up top ' +
                "and the page will drive itself, honestly labeled");
     } else if (state.dictations === 1) {
-      add("the strip in the focused window froze your sentence's <i>waveform</i> — drawn from the " +
-          "signal, then let go. <b>alt+tab</b> (or click) moves focus — dictate into the chat next");
+      add("the strip in the window froze your sentence's <i>waveform</i> — drawn from the " +
+          "signal, then let go. the demo has a real terminal too — the toggle below opens it");
       if (!coarse) add(". now <b>hold</b> the hotkey and release to stop; <code>hold_threshold_ms = " +
           Config.cfg.holdMs + "</code> below is real, like everything else in that config");
       if (!Demo.want) add(" · or type <code>real</code> — the mic switches to the actual " +

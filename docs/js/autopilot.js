@@ -1,8 +1,8 @@
 // ═══ AUTOPILOT — a scripted ghost user, honestly labeled ══════════════════
 // Most visitors will not hand a landing page their microphone, and Firefox
 // has no SpeechRecognition at all. So the demo can drive itself: a ghost
-// presses the hotkey, dictates into each window, switches focus, and ends
-// by having a sentence read aloud. Every second of it is labeled as
+// presses the hotkey, dictates into the editor and then the terminal, and
+// ends by having a sentence read aloud. Every second of it is labeled as
 // scripted, and any real interaction (Esc, the mic, a key) takes over.
 import { $, hint, mic, synth, reduced, SR } from "./env.js";
 import { bus } from "./bus.js";
@@ -17,7 +17,6 @@ export const Autopilot = (() => {
 
   const SCRIPT = [
     { focus: "editor", say: "fixed the race condition in the audio thread — dictated, not typed" },
-    { focus: "chat", say: "running five minutes late, start without me" },
     { focus: "terminal", say: "voice-keyboard status" },
   ];
 
