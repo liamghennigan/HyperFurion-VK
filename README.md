@@ -430,7 +430,10 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
   focused app, so nothing leaks into a terminal; configurable — chords like
   `control+alt+.` work but terminals see escape codes when they're held),
   **click** the always-on Kai orb the overlay draws on screen, or (opt-in
-  `[wake]`) say the local **wake word "Kai"**. Kai routes your query by where you are: **in a
+  `[wake]`) say the local **wake word "Kai"**. (On Wayland the daemon often
+  can't see the focused app — GPU terminals expose no accessibility — so
+  when focus is unknown Kai still compiles commands from clearly-runnable
+  requests and answers everything else; toggle with `terminal_fallback`.) Kai routes your query by where you are: **in a
   terminal**, it turns your words into a command, types it at the prompt,
   and **never presses Enter — only you can**; **anywhere else**, it searches
   the web / answers you, spoken back through your xAI Voice Agent Builder

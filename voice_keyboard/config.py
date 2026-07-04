@@ -177,6 +177,12 @@ DEFAULT_CONFIG: dict = {
         # An always-on clickable Kai orb on screen (the GNOME overlay
         # extension draws it); click to summon. Set false to hide it.
         "button": True,
+        # On Wayland the daemon often can't see the focused app (GPU
+        # terminals expose no AT-SPI, GNOME denies introspection). When
+        # focus is UNKNOWN, still attempt the terminal command route — the
+        # classifier answers questions and only types actual commands (no
+        # Enter). Off = always answer when focus can't be resolved.
+        "terminal_fallback": True,
         # local = never send file contents; cloud = send excerpts of files
         # you explicitly name. Selection + memory are always allowed.
         "privacy_mode": "local",
@@ -459,7 +465,10 @@ def _validate_wake_config(config: dict) -> None:
 
 def _validate_assistant_config(config: dict) -> None:
     cfg = config.get("assistant", {})
-    for key in ("enabled", "memory_enabled", "web_enabled", "can_act", "earcon", "button"):
+    for key in (
+        "enabled", "memory_enabled", "web_enabled", "can_act",
+        "earcon", "button", "terminal_fallback",
+    ):
         if not isinstance(cfg.get(key, False), bool):
             raise RuntimeError(f"assistant.{key} must be a boolean")
     if str(cfg.get("brain", "auto")).lower() not in {"realtime", "local", "auto"}:

@@ -1507,7 +1507,21 @@ class Daemon:
         if self._brain is None:
             raise RuntimeError("[assistant] is not enabled")
 
-        if self._session_register.name == "terminal" and transcript.strip():
+        # On Wayland the daemon often can't see the focused app at all —
+        # GPU terminals (Ghostty, kitty, …) expose no AT-SPI, and GNOME
+        # denies window introspection. So when focus is UNKNOWN, fall back
+        # to attempting the command route: the classifier below returns None
+        # for questions, so "what is X" is still answered, but "list the
+        # folders" becomes a typed command. Turn this off to force answers
+        # when focus can't be resolved.
+        focus_unknown = self._session_focus is None
+        terminal_fallback = bool(
+            self._config.get("assistant", {}).get("terminal_fallback", True)
+        )
+        try_command = self._session_register.name == "terminal" or (
+            focus_unknown and terminal_fallback
+        )
+        if try_command and transcript.strip():
             # A terminal being focused makes a command POSSIBLE, not
             # certain — the user might just have a question. Classify the
             # query: a runnable request becomes a typed command (no Enter);
