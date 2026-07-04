@@ -5,4 +5,8 @@
 export const state = {
   recording: false,   // mirrors Dictation.recording (written by dictation.js)
   dictations: 0,
+  focusedApp: "",     // which demo window has focus (written by desktop.js)
+  lastError: "",      // the daemon's `status` reports this; so does the page's
+  ledger: [],         // page-session dictation history — dies on reload, like
+                      // the daemon's ledger would if you never opted in
 };

@@ -1,6 +1,7 @@
-// ═══ TERMINAL — history, dictation line, and a real CLI ═══════════════════
+// ═══ TERMINAL — history, a molten dictation line, and a real CLI ══════════
 import { tbody, synth, coarse, reduced } from "./env.js";
 import { bus } from "./bus.js";
+import { state } from "./state.js";
 import { Config } from "./config.js";
 import { AudioOut, Demo } from "./demo-relay.js";
 import { Dictation } from "./dictation.js";
@@ -10,7 +11,7 @@ import { CHECKOUT, checkoutLive, live } from "./checkout.js";
 
 export const Terminal = (() => {
   const history = [];
-  let committed = "", interim = "";
+  let committed = "", interim = "", instr = "", flash = 0;
   tbody.replaceChildren();
   const tlines = document.createElement("div");
   const tcur = document.createElement("div");
@@ -18,7 +19,8 @@ export const Terminal = (() => {
   const prompt = document.createElement("span");
   prompt.className = "dim"; prompt.textContent = "$ ";
   const cSpan = document.createElement("span");
-  const iSpan = document.createElement("span"); iSpan.className = "interim";
+  const iSpan = document.createElement("span"); iSpan.className = "molten";
+  const nSpan = document.createElement("span"); nSpan.className = "instr";
   const cli = document.createElement("input");
   cli.className = "cli"; cli.type = "text";
   cli.autocomplete = "off"; cli.autocapitalize = "off"; cli.spellcheck = false;
@@ -26,7 +28,7 @@ export const Terminal = (() => {
   cli.setAttribute("aria-label", "terminal — type voice-keyboard commands, or dictate");
   const caret = document.createElement("span");
   caret.className = "caret"; caret.hidden = true;
-  tcur.append(prompt, cSpan, iSpan, cli, caret);
+  tcur.append(prompt, cSpan, iSpan, nSpan, cli, caret);
   tbody.append(tlines, tcur);
 
   function render() {
@@ -37,17 +39,38 @@ export const Terminal = (() => {
       d.textContent = h.text;
       tlines.appendChild(d);
     }
-    cSpan.textContent = committed;
-    iSpan.textContent = Config.cfg.interim ? interim : "";
+    cSpan.textContent = committed.replace(/\n/g, " ⏎ ");
+    iSpan.textContent = interim.replace(/\n/g, " ⏎ ");
+    iSpan.classList.toggle("repair", !!flash);
+    nSpan.textContent = instr ? " ✦ " + instr : "";
   }
   function print(text, cls) { history.push({ text, cls }); render(); }
-  function setLine(c, i) { committed = c; interim = i; render(); }
+  function setLine(c, i, fx = {}) {
+    committed = c; interim = i; instr = fx.instr || "";
+    if (fx.repair && !reduced) {
+      flash = 1;
+      setTimeout(() => { flash = 0; render(); }, 480);
+    }
+    render();
+  }
   function commitCurrent() {
     const text = (committed + interim).trim();
-    committed = interim = "";
-    if (text) history.push({ text: "$ " + text });
+    committed = interim = instr = "";
+    if (text) history.push({ text: "$ " + text.replace(/\n/g, " ⏎ "), dict: true });
     render();
     return text;
+  }
+  function retract() {
+    for (let k = history.length - 1; k >= 0; k--) {
+      if (history[k].dict) { history.splice(k, 1); break; }
+    }
+    render();
+  }
+  function replaceLast(text) {
+    for (let k = history.length - 1; k >= 0; k--) {
+      if (history[k].dict) { history[k].text = "$ " + text.replace(/\n/g, " ⏎ "); break; }
+    }
+    render();
   }
   function recMode(on) {
     tcur.classList.toggle("rec", on);
@@ -60,8 +83,11 @@ export const Terminal = (() => {
   const HELP = [
     ["usage: voice-keyboard [command]", "dim"],
     ["  toggle (default) · start · stop · status · tts · version", "dim"],
+    ["  transform \"<instruction>\" · history [n] · recall <n>", "dim"],
     ["  page-only: help · clear · sponsor · subscribe", "dim"],
     ["  hosted demo (real xai): real · ask <q> · say <text> · demo", "dim"],
+    ["say, while dictating: \"scratch that\" · \"new line\" · \"period\" ·", "dim"],
+    ["  \"literal <word>\" · \"twenty three\" → 23 · \"furion, make that formal\"", "dim"],
   ];
   function doAsk(q) {
     if (!q) { print("usage: ask <a question about the product>", "dim"); return; }
@@ -94,6 +120,43 @@ export const Terminal = (() => {
     else if (Demo.want) Demo.check().then((st) => (st.live ? go() : browserVoice()));
     else browserVoice();
   }
+  function doStatus() {
+    print(Dictation.recording ? "recording" : "idle");
+    print("provider: " + (Demo.armed() ? "xai grok stt — hosted relay" : "browser speech engine (this page)"), "dim");
+    const app = state.focusedApp || "editor";
+    const reg = app === "terminal" ? "terminal" : (Config.cfg.regDefault || "prose");
+    print("register: " + reg + " · focused app: " + app, "dim");
+    print(Config.cfg.flowLive && Config.cfg.interim
+      ? "flow: live · stability " + Config.cfg.stabilityMs + " ms · wake \"" + Config.cfg.wakeWord + "\"" +
+        (Config.cfg.autoStopMs ? " · auto-stop " + Config.cfg.autoStopMs + " ms" : "")
+      : "flow: batch — words land on stop (live = false)", "dim");
+    print("last error: " + (state.lastError || "none"), "dim");
+  }
+  function doTransform(arg) {
+    const instrText = (arg || "make that formal").replace(/^["']|["']$/g, "").trim();
+    const out = Dictation.transform(instrText);
+    if (out === null) {
+      print("nothing dictated yet — the mic is up top, or press a chip", "dim");
+      return;
+    }
+    print("✦ rewritten in place — page stand-in; the daemon sends this through", "dim");
+    print("  your [llm] (grok-4-fast by default, or any local OpenAI-compatible server)", "dim");
+  }
+  function doHistory(arg) {
+    const n = Math.max(1, Math.min(20, parseInt(arg, 10) || 10));
+    const entries = state.ledger.slice(-n).reverse();
+    if (!entries.length) { print("ledger empty — dictate something first", "dim"); return; }
+    entries.forEach((e, i) =>
+      print((i + 1) + " · " + (e.app || "editor").padEnd(8) + " · " + e.text, "dim"));
+    print("· page-local, dies on reload. the daemon's ledger is opt-in:", "dim");
+    print("  [flow] history = true → ~/.local/state/voice-keyboard/history.jsonl (mode 600)", "dim");
+  }
+  function doRecall(arg) {
+    const n = Math.max(1, parseInt(arg, 10) || 1);
+    const e = state.ledger[state.ledger.length - n];
+    if (!e) { print("recall " + n + ": no such entry — try `history`", "dim"); return; }
+    Dictation.simulate({ text: e.text }, { raw: true });
+  }
   function run(raw) {
     const echoed = raw.trim();
     print("$ " + echoed);
@@ -104,11 +167,14 @@ export const Terminal = (() => {
     const arg = cmd.slice(verb.length).trim();
     if (verb === "ask") { doAsk(arg); return; }
     if (verb === "say") { doSay(arg); return; }
+    if (verb === "transform") { doTransform(arg); return; }
+    if (verb === "history") { doHistory(arg); return; }
+    if (verb === "recall") { doRecall(arg); return; }
     switch (cmd) {
       case "toggle": Dictation.toggle(); break;
       case "start": Dictation.start(); break;
       case "stop": Dictation.stop(); break;
-      case "status": print(Dictation.recording ? "recording" : "idle", "dim"); break;
+      case "status": doStatus(); break;
       case "tts": {
         const sel = getSelection();
         if (synth && sel && sel.toString().trim()) { TTS.speakSelection(); print("speaking selection…", "dim"); }
@@ -120,7 +186,7 @@ export const Terminal = (() => {
         }
         break;
       }
-      case "version": print("voice-keyboard 1.1.0", "dim"); break;
+      case "version": print("voice-keyboard 1.2.1", "dim"); break;
       case "sponsor": case "donate":
         print("free, MIT — if it earns its keystrokes:", "dim");
         print("https://github.com/sponsors/liamghennigan", "dim");
@@ -130,8 +196,8 @@ export const Terminal = (() => {
         print("convenience + supporting the project — you gain no abilities by paying;", "dim");
         print("everything is open source, free forever with your own key", "dim");
         if (checkoutLive) {
-          if (live(CHECKOUT.basic)) print("$5/mo  basic — 20 h dictation + 250k chars: " + CHECKOUT.basic, "dim");
-          if (live(CHECKOUT.pro)) print("$10/mo pro   — 60 h dictation + 1M chars:  " + CHECKOUT.pro, "dim");
+          if (live(CHECKOUT.basic)) print("$5/mo  basic — 20 h dictation + 10k chars:  " + CHECKOUT.basic, "dim");
+          if (live(CHECKOUT.pro)) print("$10/mo pro   — 40 h dictation + 50k chars: " + CHECKOUT.pro, "dim");
           print("opening secure checkout on stripe…", "dim");
           const url = live(CHECKOUT.basic) ? CHECKOUT.basic : CHECKOUT.pro;
           window.open(url, "_blank", "noopener");
@@ -186,6 +252,7 @@ export const Terminal = (() => {
   if (reduced) {
     print("$ voice-keyboard status");
     print("idle", "dim");
+    print("flow: live — words type while you speak", "dim");
   } else {
     const bootCmd = "voice-keyboard status";
     let bi = 0;
@@ -198,11 +265,12 @@ export const Terminal = (() => {
           if (Dictation.recording || committed !== bootCmd) return;
           commitCurrent();
           print("idle", "dim");
+          print("flow: live — words type while you speak", "dim");
         }, 200);
       }
     }, 26);
   }
   render();
-  bus.on("cfg:change", render);   // interim visibility follows the live config
-  return { print, setLine, commitCurrent, recMode, render };
+  bus.on("cfg:change", render);   // molten visibility follows the live config
+  return { print, setLine, commitCurrent, retract, replaceLast, recMode, render };
 })();

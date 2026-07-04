@@ -1,4 +1,10 @@
-// ═══ DICTATION — the product's forward lane ═══════════════════════════════
+// ═══ DICTATION — the product's forward lane, now molten ═══════════════════
+// Every path — your browser's speech engine, the hosted xai relay, and the
+// scripted chips — feeds the same flow engine (flow.js), the same way every
+// provider feeds the daemon's. Words render molten, repair in place, freeze
+// on the stability window, honor the spoken grammar and the focused
+// window's register. flow.live = false in the live config restores the old
+// record → wait → type behavior, exactly like the daemon's flow.enabled.
 import { desktop, pill, mic, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
@@ -11,17 +17,25 @@ import { Demo } from "./demo-relay.js";
 import { Terminal } from "./terminal.js";
 import { Desktop } from "./desktop.js";
 import { Hints } from "./hints.js";
+import { moltenLine, compileScript, pageRewrite } from "./flow.js";
 
 export const Dictation = (() => {
   const SIM_LINES = [
-    "dictated, not typed — this sentence never touched a keyboard",
-    "git commit -m 'wrote this one out loud'",
-    "note to self: cancel the RSI appointment",
+    { text: "dictated comma not typed em dash this sentence never touched a keyboard period" },
+    { text: "note to self colon cancel the RSI appointment", revise: { at: 6, wrong: "RSVP" } },
+    { text: "twenty three unread emails question mark later period" },
   ];
   const D = { recording: false };
-  let engine = "none", rec = null, typeTimer = 0, simIdx = 0, redSample = 0;
+  let engine = "none", rec = null, simIdx = 0, redSample = 0;
   let relay = null, relayT = 0, funneled = false;
+  let line = null;            // the molten line for the current utterance
+  let rawFinal = "", rawInterim = "";
+  let guard = false;          // focus changed mid-dictation: typing is frozen
+  let tickT = 0, autoStopT = 0;
+  let playTimers = [];        // scripted playback
   Object.defineProperty(D, "engine", { get: () => engine });
+
+  const liveFlow = () => Config.cfg.flowLive && Config.cfg.interim;
 
   function setRecording(on) {
     D.recording = on;
@@ -34,13 +48,46 @@ export const Dictation = (() => {
     favicon.href = on ? FAV_REC : FAV_IDLE;
     Desktop.recMode(on);
   }
+
+  // ── one render pipe: raw transcript -> engine -> the focused window ─────
+  function newLine() {
+    line = moltenLine({ register: Desktop.register(), cfg: Config.cfg });
+    rawFinal = ""; rawInterim = ""; guard = false;
+    state.lastError = "";
+  }
+  function raw() { return (rawFinal + " " + rawInterim).trim(); }
+  function paint(r) {
+    if (guard) return;                       // the daemon never types into the wrong window
+    for (let k = 0; k < (r.retracts || 0); k++) Desktop.retract();
+    Desktop.setLine(r.frozen, r.molten, { repair: r.repair, instr: r.instr });
+  }
+  function pump() {
+    if (!line) return;
+    if (!liveFlow()) {                       // flow.live = false → the old behavior
+      Desktop.setLine(rawFinal, Config.cfg.interim ? rawInterim : "", {});
+      return;
+    }
+    paint(line.update(raw(), performance.now()));
+  }
+  function armAutoStop() {
+    clearTimeout(autoStopT);
+    const ms = Config.cfg.autoStopMs;
+    if (ms > 0 && D.recording)
+      autoStopT = setTimeout(() => { Terminal.print("· auto-stop: " + ms + " ms of silence", "dim"); stop(); }, ms);
+  }
+
   function start() {
     if (D.recording) return;
-    clearInterval(typeTimer);
-    Desktop.setLine("", "");
+    stopPlayback();
+    newLine();
+    Desktop.setLine("", "", {});
+    Desktop.probe();
     setRecording(true);
     const sigP = Signal.start();
     Ticker.wake();
+    // the stability clock ticks even between provider updates
+    tickT = setInterval(pump, 350);
+    armAutoStop();
     if (reduced) {
       // no animation loop runs, but the frozen waveform still needs data
       redSample = setInterval(() => Scope.push(Signal.frame().peak), 250);
@@ -61,16 +108,17 @@ export const Dictation = (() => {
         rec.lang = Config.cfg.lang || navigator.language || "en-US";
         rec.continuous = true;
         rec.interimResults = true;
-        let committed = "";
         rec.onresult = (e) => {
           let interim = "";
           for (let i = e.resultIndex; i < e.results.length; i++) {
             const r = e.results[i];
-            if (r.isFinal) { committed += r[0].transcript; bus.emit("rec:final", { text: r[0].transcript }); }
+            if (r.isFinal) { rawFinal += " " + r[0].transcript; bus.emit("rec:final", { text: r[0].transcript }); }
             else interim += r[0].transcript;
           }
           engine = "live";
-          Desktop.setLine(committed, interim);
+          rawInterim = interim;
+          pump();
+          armAutoStop();
           bus.emit("rec:interim", { text: interim });
         };
         rec.onerror = () => { if (D.recording && engine !== "live") engine = "sim"; };
@@ -100,7 +148,7 @@ export const Dictation = (() => {
       const proc = au.ctx.createScriptProcessor(4096, 1, 1);
       const sink = au.ctx.createGain();
       sink.gain.value = 0;  // the processor needs a destination, not an echo
-      relay = { ws, src, proc, sink, committed: "", done: false };
+      relay = { ws, src, proc, sink, done: false };
       proc.onaudioprocess = (e) => {
         if (!relay || ws.readyState !== 1) return;
         const f = e.inputBuffer.getChannelData(0);
@@ -129,17 +177,19 @@ export const Dictation = (() => {
     let ev; try { ev = JSON.parse(m.data); } catch { return; }
     if (ev.type === "transcript.partial") {
       if (ev.is_final && ev.text) {
-        relay.committed = relay.committed ? relay.committed + " " + ev.text : ev.text;
-        Desktop.setLine(relay.committed, "");
+        rawFinal += " " + ev.text;
+        rawInterim = "";
+        pump(); armAutoStop();
         bus.emit("rec:final", { text: ev.text });
       } else {
-        Desktop.setLine(relay.committed, ev.text || "");
+        rawInterim = ev.text || "";
+        pump(); armAutoStop();
         bus.emit("rec:interim", { text: ev.text || "" });
       }
     } else if (ev.type === "transcript.done") {
       const t = String(ev.text || "");
-      if (t.length >= relay.committed.length) relay.committed = t;
-      Desktop.setLine(relay.committed, "");
+      if (t.length >= rawFinal.trim().length) { rawFinal = t; rawInterim = ""; }
+      pump();
       relay.done = true;
       if (D.recording) stop();  // the demo cap finalized for us
       else relaySettle();
@@ -165,9 +215,8 @@ export const Dictation = (() => {
     if (!relay) return;
     clearTimeout(relayT);
     relayCleanup();
-    const settled = Desktop.commit();
-    if (settled) { done(settled); funnel(); }
-    else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+    if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
+    else funnel();
     Hints.advance();
   }
   function relayFail(msg) {
@@ -175,6 +224,7 @@ export const Dictation = (() => {
     // assigned (mic denied, WebSocket ctor threw). Clean up only if built.
     if (relay) relayCleanup();
     clearTimeout(relayT);
+    state.lastError = "hosted demo: " + msg;
     Terminal.print("hosted demo: " + msg, "err");
     if (D.recording) {
       engine = "none";
@@ -182,9 +232,7 @@ export const Dictation = (() => {
       startBrowser();
       Hero.caption();
     } else {
-      const settled = Desktop.commit();
-      if (settled) done(settled);
-      else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+      if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
       Hints.advance();
     }
   }
@@ -194,10 +242,73 @@ export const Dictation = (() => {
     Terminal.print("· that came through xai grok stt — the hosted tier. $5/mo, one key: type subscribe", "dim");
   }
 
+  // ── the landing: flush the grammar, run the rewrite lane, commit ────────
+  // Returns the committed text ("" when nothing was recognized).
+  function settleLine() {
+    if (!line) return "";
+    if (!liveFlow()) {
+      // flow.live = false — the old behavior exactly: no grammar, no
+      // molten, the raw transcript lands on stop
+      line = null;
+      const text = raw();
+      if (guard) {
+        if (!text) return "";
+        try { navigator.clipboard.writeText(text); } catch {}
+        Terminal.print("⚑ focus changed mid-dictation — typing froze; the transcript landed on the clipboard", "dim");
+        done(text);
+        return text;
+      }
+      Desktop.setLine(text, "", {});
+      const settled = Desktop.commit();
+      if (settled) done(settled);
+      return settled;
+    }
+    const r = line.flush();
+    const text = (r.frozen + r.molten).trim();
+    if (guard) {
+      // focus moved mid-dictation: the transcript lands on the clipboard,
+      // never in the wrong window — exactly what the daemon does
+      line = null;
+      if (!text) return "";
+      try { navigator.clipboard.writeText(text); } catch {}
+      Terminal.print("⚑ focus changed mid-dictation — typing froze; the transcript landed on the clipboard", "dim");
+      state.dictations++;
+      done(text);
+      return text;
+    }
+    for (let k = 0; k < (r.retracts || 0); k++) Desktop.retract();
+    line = null;
+    if (r.instr && text) {
+      // the wake word: rewrite the just-typed utterance in place. These
+      // timers finish on their own — a new dictation must never cancel
+      // the commit out from under the window.
+      Desktop.setLine(text, "", {});
+      const rewritten = pageRewrite(text, r.instr);
+      setTimeout(() => {
+        Desktop.setLine(rewritten, "", { repair: true });
+        Terminal.print("✦ " + (Config.cfg.wakeWord || "furion") + ", " + r.instr +
+          " — rewritten in place. page stand-in; the daemon sends it through your [llm]", "dim");
+        setTimeout(() => { const t = Desktop.commit(); if (t) done(t); }, reduced ? 0 : 420);
+      }, reduced ? 0 : 520);
+      return rewritten;
+    }
+    if (r.instr && !text) {
+      Terminal.print("✦ “" + (Config.cfg.wakeWord || "furion") + ", " + r.instr +
+        "” — nothing typed yet to rewrite. dictate first, then speak the wake word", "dim");
+      return "";
+    }
+    Desktop.setLine(text, "", {});
+    const settled = Desktop.commit();
+    if (settled) done(settled);
+    return settled;
+  }
+
   function stop() {
     if (!D.recording) return;
     setRecording(false);
     clearInterval(redSample);
+    clearInterval(tickT);
+    clearTimeout(autoStopT);
     Signal.stop();
     Scope.freeze();
     if (rec) { try { rec.stop(); } catch {} rec = null; }
@@ -212,44 +323,87 @@ export const Dictation = (() => {
         // startRelay never opened a socket (mic still pending, or it
         // failed before assigning relay) — settle the line here so the
         // terminal never hangs
-        const settled = Desktop.commit();
-        if (settled) { done(settled); }
-        else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+        if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
         Hints.advance();
       }
       return;
     }
     // give a final result a beat to arrive, then settle the line
     setTimeout(() => {
-      const settled = Desktop.commit();
-      if (settled) { done(settled); }
-      else typeSim(SIM_LINES[simIdx++ % SIM_LINES.length]);
+      if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
       Hints.advance();
     }, engine === "live" || engine === "trying" ? 350 : 0);
   }
-  function typeSim(text) {
-    if (reduced) { Desktop.setLine(text, ""); Desktop.commit(); done(text); return; }
-    let n = 0;
-    typeTimer = setInterval(() => {
-      Desktop.setLine(text.slice(0, ++n), "");
-      if (n >= text.length) {
-        clearInterval(typeTimer);
-        Desktop.commit();
-        done(text);
-      }
-    }, 40);
+
+  // ── scripted playback: chips, autopilot, and the no-engine fallback ─────
+  // A compiled script replays interim snapshots through the same molten
+  // engine a live session uses — deterministic, and shaped like the truth.
+  function playScript(script, opts = {}) {
+    stopPlayback();
+    const sc = typeof script === "string" ? { text: script } : script;
+    const compiled = compileScript(sc.text, { revise: sc.revise || null });
+    newLine();
+    Desktop.probe();   // playback shows the focus probe too
+    if (opts.raw) line = moltenLine({ register: { name: "verbatim", smartCaps: false, grammar: false }, cfg: Config.cfg });
+    if (reduced || !liveFlow()) {
+      rawFinal = compiled.final;
+      line.update(compiled.final, performance.now());
+      settleLine();
+      state.dictations++;
+      Hints.advance();
+      return;
+    }
+    for (const step of compiled.steps) {
+      playTimers.push(setTimeout(() => {
+        rawFinal = ""; rawInterim = step.text;
+        pump();
+      }, step.t));
+    }
+    playTimers.push(setTimeout(() => {
+      rawFinal = compiled.final; rawInterim = "";
+      pump();
+      settleLine();
+      // scripted playback advances the tour, the way a real dictation does
+      state.dictations++;
+      Hints.advance();
+    }, compiled.dur + 560));
   }
+  function stopPlayback() {
+    for (const t of playTimers) clearTimeout(t);
+    playTimers = [];
+  }
+
   function done(text) {
+    state.ledger.push({ text, app: Desktop.focusedName(), when: Date.now() });
+    if (state.ledger.length > 20) state.ledger.shift();
     bus.emit("type:text", { text });
     engine = "none";
   }
+
   D.start = start; D.stop = stop;
   D.toggle = () => (D.recording ? stop() : start());
   // scripted typing into the focused window — the try-saying chips and the
   // autopilot use this; it ends in the same type:text event real dictation does
-  D.simulate = (text) => { if (!D.recording) typeSim(String(text)); };
-  // starting from the hero mic: bring the terminal into view so you can
-  // watch your words get typed — the whole point of the demo
+  D.simulate = (script, opts) => { if (!D.recording) playScript(script, opts); };
+  // the focus guard: Desktop calls this when focus moves mid-dictation
+  D.guard = () => {
+    if (!D.recording || guard) return;
+    guard = true;
+    Desktop.setLine("", "", {});
+    Terminal.print("⚑ focus changed — typing frozen; the transcript will land on the clipboard", "dim");
+  };
+  // `voice-keyboard transform "<instruction>"` — rewrite the last dictation
+  D.transform = (instruction) => {
+    const last = state.ledger[state.ledger.length - 1];
+    if (!last) return null;
+    const rewritten = pageRewrite(last.text, instruction);
+    Desktop.replaceLast(last.app, rewritten);
+    last.text = rewritten;
+    return rewritten;
+  };
+
+  // starting from the hero mic: bring the demo into view so you can
+  // watch your words get typed — the whole point
   mic.addEventListener("click", () => {
     const starting = !D.recording;
     D.toggle();
