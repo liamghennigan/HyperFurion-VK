@@ -40,6 +40,37 @@ CHAR_TO_KEY = {} if e is None else {
     "\n": e.KEY_ENTER, "\t": e.KEY_TAB,
 }
 
+# Named keys for combo injection (the `key` IPC command / press_combo). Modifiers
+# + navigation + function keys an integrator (e.g. a computer-use agent) needs to
+# drive apps — open a tab, focus the address bar, Tab through a form, arrow around.
+# Letters/digits/punctuation fall through to CHAR_TO_KEY.
+KEY_NAMES = {} if e is None else {
+    "ctrl": e.KEY_LEFTCTRL, "control": e.KEY_LEFTCTRL, "leftctrl": e.KEY_LEFTCTRL,
+    "rightctrl": e.KEY_RIGHTCTRL,
+    "shift": e.KEY_LEFTSHIFT, "leftshift": e.KEY_LEFTSHIFT, "rightshift": e.KEY_RIGHTSHIFT,
+    "alt": e.KEY_LEFTALT, "leftalt": e.KEY_LEFTALT, "altgr": e.KEY_RIGHTALT,
+    "rightalt": e.KEY_RIGHTALT, "option": e.KEY_LEFTALT,
+    "super": e.KEY_LEFTMETA, "meta": e.KEY_LEFTMETA, "win": e.KEY_LEFTMETA,
+    "cmd": e.KEY_LEFTMETA, "command": e.KEY_LEFTMETA,
+    "enter": e.KEY_ENTER, "return": e.KEY_ENTER, "kpenter": e.KEY_KPENTER,
+    "tab": e.KEY_TAB, "esc": e.KEY_ESC, "escape": e.KEY_ESC,
+    "space": e.KEY_SPACE, "spacebar": e.KEY_SPACE,
+    "backspace": e.KEY_BACKSPACE, "bksp": e.KEY_BACKSPACE,
+    "delete": e.KEY_DELETE, "del": e.KEY_DELETE, "insert": e.KEY_INSERT,
+    "up": e.KEY_UP, "down": e.KEY_DOWN, "left": e.KEY_LEFT, "right": e.KEY_RIGHT,
+    "home": e.KEY_HOME, "end": e.KEY_END,
+    "pageup": e.KEY_PAGEUP, "pgup": e.KEY_PAGEUP,
+    "pagedown": e.KEY_PAGEDOWN, "pgdn": e.KEY_PAGEDOWN,
+    "capslock": e.KEY_CAPSLOCK,
+    "minus": e.KEY_MINUS, "equal": e.KEY_EQUAL, "comma": e.KEY_COMMA,
+    "period": e.KEY_DOT, "dot": e.KEY_DOT, "slash": e.KEY_SLASH,
+    "backslash": e.KEY_BACKSLASH, "semicolon": e.KEY_SEMICOLON,
+    "apostrophe": e.KEY_APOSTROPHE, "grave": e.KEY_GRAVE,
+    "f1": e.KEY_F1, "f2": e.KEY_F2, "f3": e.KEY_F3, "f4": e.KEY_F4,
+    "f5": e.KEY_F5, "f6": e.KEY_F6, "f7": e.KEY_F7, "f8": e.KEY_F8,
+    "f9": e.KEY_F9, "f10": e.KEY_F10, "f11": e.KEY_F11, "f12": e.KEY_F12,
+}
+
 # How long the focused app gets to read the clipboard after the paste
 # chord before the previous clipboard contents are restored.
 PASTE_SETTLE_S = 0.15
@@ -120,6 +151,15 @@ class TextInjector:
                 e.KEY_ENTER, e.KEY_TAB,
                 e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT,
                 e.KEY_BACKSPACE, e.KEY_LEFTCTRL,
+                # Extended set for combo injection (press_combo / the `key` IPC
+                # command) — modifiers, navigation, editing, function keys.
+                e.KEY_RIGHTCTRL, e.KEY_LEFTALT, e.KEY_RIGHTALT,
+                e.KEY_LEFTMETA, e.KEY_RIGHTMETA, e.KEY_ESC, e.KEY_CAPSLOCK,
+                e.KEY_KPENTER, e.KEY_DELETE, e.KEY_INSERT,
+                e.KEY_UP, e.KEY_DOWN, e.KEY_LEFT, e.KEY_RIGHT,
+                e.KEY_HOME, e.KEY_END, e.KEY_PAGEUP, e.KEY_PAGEDOWN,
+                e.KEY_F1, e.KEY_F2, e.KEY_F3, e.KEY_F4, e.KEY_F5, e.KEY_F6,
+                e.KEY_F7, e.KEY_F8, e.KEY_F9, e.KEY_F10, e.KEY_F11, e.KEY_F12,
             ],
         }
         self._ui = UInput(caps, name="voice-keyboard", version=0x1)
@@ -149,6 +189,33 @@ class TextInjector:
             self._ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
             self._ui.syn()
         time.sleep(0.002)
+
+    def _resolve_key(self, name: str) -> int:
+        key = str(name).strip().lower()
+        if key in KEY_NAMES:
+            return KEY_NAMES[key]
+        if len(key) == 1 and key in CHAR_TO_KEY:
+            return CHAR_TO_KEY[key]
+        raise ValueError(f"unknown key {name!r}")
+
+    def press_combo(self, names: list[str]) -> None:
+        """Press a key chord (e.g. ['ctrl','t'] or ['alt','Tab']): press each key
+        down in order, release in reverse — so modifiers wrap the terminal key.
+        Enter is NOT suppressed here (a combo is an explicit key request; the
+        no-Enter guard is for dictated TEXT, not integrator key events)."""
+        if self._ui is None:
+            raise RuntimeError("Injector not started")
+        codes = [self._resolve_key(n) for n in names]
+        if not codes:
+            return
+        for code in codes:
+            self._ui.write(e.EV_KEY, code, 1)
+            self._ui.syn()
+            time.sleep(0.002)
+        for code in reversed(codes):
+            self._ui.write(e.EV_KEY, code, 0)
+            self._ui.syn()
+            time.sleep(0.002)
 
     def type_text(self, text: str) -> None:
         if self.suppress_enter:

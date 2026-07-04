@@ -590,6 +590,24 @@ class Daemon:
                         else:
                             response = {"status": "ok", "message": "typed"}
 
+                elif command == "key":
+                    keys = str(payload.get("keys", "")).strip()
+                    names = [p.strip() for p in keys.split("+") if p.strip()]
+                    if not names:
+                        response = {"status": "error", "message": "no keys provided"}
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._press_keys(names), self._loop
+                        )
+                        try:
+                            future.result(timeout=10)
+                        except TimeoutError:
+                            response = {"status": "error", "message": "timed out pressing keys"}
+                        except Exception as exc:
+                            response = {"status": "error", "message": str(exc)}
+                        else:
+                            response = {"status": "ok", "message": f"pressed {keys}"}
+
                 elif command == "converse":
                     # Summon Kai (or end/cancel a turn) — the same toggle the
                     # hotkey fires. Fire-and-forget: the turn is long and owns
@@ -1741,6 +1759,17 @@ class Daemon:
         if self._recording:
             raise RuntimeError("cannot type while recording")
         await asyncio.to_thread(self._injector.type_text, text)
+
+    async def _press_keys(self, names: list) -> None:
+        """IPC `key`: press a key chord (e.g. ctrl+t, alt+Tab, Return). Used by
+        integrators — Seneschal.Computer drives the agent's keystrokes through
+        this so all injection shares VK's one virtual keyboard."""
+        if self._recording:
+            raise RuntimeError("cannot press keys while recording")
+        press = getattr(self._injector, "press_combo", None)
+        if press is None:
+            raise RuntimeError("key injection unsupported on this platform backend")
+        await asyncio.to_thread(press, names)
 
     # ------------------------------------------------------------ streams
 
