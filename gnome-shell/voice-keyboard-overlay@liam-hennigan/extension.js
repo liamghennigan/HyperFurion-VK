@@ -20,8 +20,16 @@ const DBUS_XML = `<node>
       <arg type="i" name="timeoutMs" direction="in"/>
     </method>
     <method name="Hide"/>
+    <method name="SetButton">
+      <arg type="b" name="visible" direction="in"/>
+    </method>
   </interface>
 </node>`;
+
+// Where the daemon listens (matches ipc.DEFAULT_SOCKET_PATH).
+const SOCKET_PATH = GLib.build_filenamev(
+    [GLib.get_user_config_dir(), 'voice-keyboard', 'socket']);
+const ORB_SIZE = 46;
 
 const STATE_STYLES = {
     starting: {
@@ -70,6 +78,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         this._detailLabel = null;
         this._timeoutId = 0;
         this._pulseId = 0;
+        this._button = null;
         this._dbus = Gio.DBusExportedObject.wrapJSObject(DBUS_XML, this);
         this._dbus.export(Gio.DBus.session, OBJECT_PATH);
         this._ownName = Gio.DBus.session.own_name(
@@ -77,10 +86,14 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             Gio.BusNameOwnerFlags.NONE,
             null,
             () => this._hide());
+        // The always-on Kai orb defaults visible; the daemon hides it via
+        // SetButton(false) when [assistant].button (or the mind) is off.
+        this._showButton();
     }
 
     disable() {
         this._hide();
+        this._hideButton();
         if (this._ownName) {
             Gio.DBus.session.unown_name(this._ownName);
             this._ownName = 0;
@@ -98,6 +111,92 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
 
     Hide() {
         this._hide();
+    }
+
+    SetButton(visible) {
+        if (visible)
+            this._showButton();
+        else
+            this._hideButton();
+    }
+
+    _showButton() {
+        if (this._button)
+            return;
+        const orb = new St.Button({
+            label: '⌁',
+            reactive: true,
+            can_focus: true,
+            track_hover: true,
+            style: [
+                `width: ${ORB_SIZE}px`,
+                `height: ${ORB_SIZE}px`,
+                'border-radius: 999px',
+                'background-color: rgba(14, 116, 144, 0.92)',
+                'border: 2px solid #22d3ee',
+                'box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5)',
+                'color: #e0fbff',
+                'font-size: 20px',
+                'font-weight: bold',
+            ].join('; '),
+        });
+        orb.connect('clicked', () => this._summon());
+        // Reactive (unlike the click-through pill) so it receives clicks.
+        Main.layoutManager.addChrome(orb, {
+            affectsStruts: false,
+            trackFullscreen: true,
+        });
+        const mon = Main.layoutManager.primaryMonitor;
+        const margin = 22;
+        orb.set_position(
+            mon.x + mon.width - ORB_SIZE - margin,
+            mon.y + mon.height - ORB_SIZE - margin);
+        orb.show();
+        this._button = orb;
+    }
+
+    _hideButton() {
+        if (this._button) {
+            this._button.destroy();
+            this._button = null;
+        }
+    }
+
+    _summon() {
+        // Fire the same converse toggle the hotkey sends, straight to the
+        // daemon's Unix socket (JSON, half-close to signal EOF). Fire-and-
+        // forget: the turn owns its own overlay.
+        try {
+            const client = new Gio.SocketClient();
+            const addr = new Gio.UnixSocketAddress({path: SOCKET_PATH});
+            client.connect_async(addr, null, (src, res) => {
+                let conn;
+                try {
+                    conn = src.connect_finish(res);
+                } catch (e) {
+                    logError(e, 'Kai orb: daemon not reachable');
+                    return;
+                }
+                const payload = new TextEncoder().encode(
+                    JSON.stringify({command: 'converse'}));
+                const os = conn.get_output_stream();
+                os.write_all_async(payload, GLib.PRIORITY_DEFAULT, null, (s, r) => {
+                    try {
+                        s.write_all_finish(r);
+                        conn.get_socket().shutdown(false, true);
+                    } catch (e) {
+                        logError(e, 'Kai orb: write failed');
+                    }
+                    try {
+                        conn.close(null);
+                    } catch (e) {
+                        // ignore
+                    }
+                });
+            });
+        } catch (e) {
+            logError(e, 'Kai orb: summon failed');
+        }
     }
 
     _clearTimers() {

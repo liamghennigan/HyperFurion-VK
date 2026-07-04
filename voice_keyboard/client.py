@@ -146,6 +146,11 @@ def _stop_overlay() -> None:
     _call_shell_overlay("Hide", timeout=0.4)
 
 
+def _set_overlay_button(visible: bool) -> None:
+    """Show/hide the always-on Kai orb the overlay extension draws."""
+    _call_shell_overlay("SetButton", "true" if visible else "false", timeout=0.5)
+
+
 def _notify_windows_toast(summary: str, body: str) -> None:
     """Notification-center toast via WinRT from PowerShell — no extra deps.
 
@@ -566,7 +571,7 @@ def main() -> None:
         choices=[
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
-            "keep", "discard", "ask", "find",
+            "keep", "discard", "ask", "find", "converse", "summon",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -617,6 +622,17 @@ def main() -> None:
 
     if args.command == "find":
         _run_find(args.args)
+        return
+
+    if args.command in {"converse", "summon"}:
+        # Summon Kai (or end/cancel a live turn) — the same toggle the second
+        # hotkey and the on-screen orb fire. Fire-and-forget: the turn owns
+        # its own overlay, so don't wait on it.
+        try:
+            client.send_command("converse", timeout=5.0)
+        except Exception as e:
+            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            sys.exit(1)
         return
 
     if args.command in {"keep", "discard"}:

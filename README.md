@@ -14,13 +14,17 @@ When you ask for text-to-speech, it reads the primary selection from your
 desktop, sends that selected text to the configured TTS provider, and plays the
 returned audio locally.
 
-**New in 2.0: Kai — a voice assistant in the keyboard.** A second hotkey
-(`Ctrl+Alt+.`) takes a spoken query and routes it by where you are: focused
-on a terminal, it turns your words into a command and types it at the
-prompt — never pressing Enter, only you can; anywhere else, it answers or
-searches the web, spoken back. The `[llm]` brain is model-agnostic and
-local-first (a ~1 GB model handles the command work). Off by default; see
-`[assistant]` in `config.toml.example`.
+**New in 2.0: Kai — a voice assistant in the keyboard.** Summon Kai three
+ways — **hold** the summon key (`Ctrl+Alt+.`) walkie-talkie style and
+release to send, **click** the always-on Kai orb on screen, or (opt-in) say
+the **wake word "Kai"** — and it routes your spoken query by where you are:
+focused on a terminal, it turns your words into a command and types it at
+the prompt — never pressing Enter, only you can; anywhere else, it answers
+or searches the web, spoken back. An earcon confirms the mic is live, the
+turn runs off the hotkey path (so a second tap cuts Kai off mid-answer), and
+the `[llm]` brain is model-agnostic and local-first (a ~1 GB model handles
+the command work). On by default and push-to-talk — nothing is captured
+until you summon it. See `[assistant]` / `[wake]` in `config.toml.example`.
 
 **Flow — [molten dictation](#flow--molten-dictation).** With a streaming
 provider, words appear in the focused field *while you speak* and repair
@@ -419,15 +423,23 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
 - **Ambient containment** (`[ambient]`, experimental) — in a long-open
   session, only utterances that start with the address word are typed;
   room speech never reaches the engine.
-- **Kai — the voice assistant** (`[assistant]`, second hotkey `Ctrl+Alt+.`)
-  — turn this on and the keyboard grows a voice assistant. Speak a query
-  and Kai routes it by where you are: **in a terminal**, it turns your
-  words into a command, types it at the prompt, and **never presses Enter —
-  only you can**; **anywhere else**, it searches the web / answers you,
-  spoken back through your xAI Voice Agent Builder agent (memory unified
-  with the dictation ledger, so it remembers everything you ever said).
-  Voice in, voice or a drafted command out — you never type to it. Frontier
-  brain, local hands, you own the Enter key.
+- **Kai — the voice assistant** (`[assistant]`) — the keyboard grows a voice
+  assistant, on by default and push-to-talk. Summon it three ways: **hold**
+  the summon key (`Ctrl+Alt+.`) and release to send, **click** the always-on
+  Kai orb the overlay draws on screen, or (opt-in `[wake]`) say the local
+  **wake word "Kai"**. Kai routes your query by where you are: **in a
+  terminal**, it turns your words into a command, types it at the prompt,
+  and **never presses Enter — only you can**; **anywhere else**, it searches
+  the web / answers you, spoken back through your xAI Voice Agent Builder
+  agent (memory unified with the dictation ledger). An earcon confirms the
+  mic is live; the turn runs off the hotkey path, so a second tap barges in
+  and cuts Kai off. Voice in, voice or a drafted command out — you never
+  type to it. Frontier brain, local hands, you own the Enter key.
+- **Wake word "Kai"** (`[wake]`, opt-in, default off) — a tiny **local**
+  openWakeWord detector summons Kai hands-free; nothing is transcribed and
+  nothing leaves the box until it fires. It's the one path that keeps the
+  mic warm, so it stays behind an explicit switch (`pip install
+  'hyperfurion-vk[wake]'`); the hotkey remains the hard mute.
 - **Total recall** (`[recall]`, `voice-keyboard find "…"`) — search
   everything you ever dictated. Keyword search out of the box; point it
   at a local Ollama `/embeddings` endpoint and it becomes semantic,

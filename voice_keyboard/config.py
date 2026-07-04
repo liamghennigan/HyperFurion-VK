@@ -149,8 +149,10 @@ DEFAULT_CONFIG: dict = {
         # holds a conversation with memory, instead of typing. Brain is
         # the xAI realtime voice agent when configured, else the local
         # [llm]. Off by default; the daemon is a keyboard until you turn
-        # the mind on.
-        "enabled": False,
+        # the mind on. On by default: it's push-to-talk, so nothing is
+        # captured until you press the hotkey (or the on-screen button) —
+        # the hotkey stays the hard mute.
+        "enabled": True,
         # What the mind calls itself — local brain persona + on-screen
         # copy. "Kai", from KairOS. (The spoken voice agent's own name is
         # set in the xAI Voice Agent Builder console.)
@@ -163,6 +165,15 @@ DEFAULT_CONFIG: dict = {
         # Spoken conversation trigger (a second global hotkey). Dictation
         # keeps Ctrl+Alt+V; this defaults to Ctrl+Alt+period.
         "hotkey": "control+alt+.",
+        # How the summon key behaves, like [hotkey].mode: auto = HOLD to
+        # talk / release to send, or a quick TAP to toggle hands-free.
+        "mode": "auto",
+        # A short offline tone when Kai starts listening / captures your
+        # question — eyes-free confirmation. No network, no asset.
+        "earcon": True,
+        # An always-on clickable Kai orb on screen (the GNOME overlay
+        # extension draws it); click to summon. Set false to hide it.
+        "button": True,
         # local = never send file contents; cloud = send excerpts of files
         # you explicitly name. Selection + memory are always allowed.
         "privacy_mode": "local",
@@ -219,6 +230,25 @@ DEFAULT_CONFIG: dict = {
         "enabled": False,
         # The instruction's first word that routes to the intent channel.
         "verbs": ["run", "command", "execute"],
+    },
+    "wake": {
+        # Summon Kai hands-free by saying her name. A tiny LOCAL openWakeWord
+        # model scores a rolling mic buffer — no transcription, nothing
+        # leaves the box — and only when it fires does normal capture begin.
+        # OFF by default: this is the ONE path that keeps the mic warm, so
+        # the hotkey stays the hard mute unless you arm this. Needs the
+        # optional dep: pip install 'hyperfurion-vk[wake]'.
+        "enabled": False,
+        "engine": "openwakeword",
+        "word": "kai",
+        # Path to a trained "Kai" openWakeWord model. Empty = fall back to
+        # openWakeWord's bundled words (for testing); train one with
+        # scripts/train_kai_wakeword.py.
+        "model_path": "",
+        "threshold": 0.5,
+        # Ignore repeat fires within this many seconds.
+        "cooldown_s": 2.0,
+        "mic_device": "",
     },
 }
 
@@ -402,15 +432,37 @@ def validate_config(config: dict) -> None:
     _validate_verb_channel(config, "recall")
     _validate_remote_mic_config(config)
     _validate_assistant_config(config)
+    _validate_wake_config(config)
+
+
+def _validate_wake_config(config: dict) -> None:
+    cfg = config.get("wake", {})
+    if not isinstance(cfg.get("enabled", False), bool):
+        raise RuntimeError("wake.enabled must be a boolean")
+    for key in ("engine", "word", "model_path", "mic_device"):
+        if not isinstance(cfg.get(key, ""), str):
+            raise RuntimeError(f"wake.{key} must be a string")
+    threshold = cfg.get("threshold", 0.5)
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not (
+        0.0 <= float(threshold) <= 1.0
+    ):
+        raise RuntimeError("wake.threshold must be a number in [0, 1]")
+    cooldown = cfg.get("cooldown_s", 2.0)
+    if not isinstance(cooldown, (int, float)) or isinstance(cooldown, bool) or cooldown < 0:
+        raise RuntimeError("wake.cooldown_s must be a non-negative number")
+    if cfg.get("enabled", False) and str(cfg.get("word", "")).strip() == "":
+        raise RuntimeError("wake.enabled needs a wake.word")
 
 
 def _validate_assistant_config(config: dict) -> None:
     cfg = config.get("assistant", {})
-    for key in ("enabled", "memory_enabled", "web_enabled", "can_act"):
+    for key in ("enabled", "memory_enabled", "web_enabled", "can_act", "earcon", "button"):
         if not isinstance(cfg.get(key, False), bool):
             raise RuntimeError(f"assistant.{key} must be a boolean")
     if str(cfg.get("brain", "auto")).lower() not in {"realtime", "local", "auto"}:
         raise RuntimeError("assistant.brain must be one of: realtime, local, auto")
+    if str(cfg.get("mode", "auto")).lower() not in {"auto", "toggle", "hold"}:
+        raise RuntimeError("assistant.mode must be one of: auto, toggle, hold")
     if str(cfg.get("privacy_mode", "local")).lower() not in {"local", "cloud"}:
         raise RuntimeError("assistant.privacy_mode must be one of: local, cloud")
     for key in ("name", "agent_id", "api_key", "hotkey", "home_root"):
@@ -419,8 +471,20 @@ def _validate_assistant_config(config: dict) -> None:
     max_mem = cfg.get("max_memory_results", 5)
     if not isinstance(max_mem, int) or isinstance(max_mem, bool) or max_mem < 0:
         raise RuntimeError("assistant.max_memory_results must be a non-negative integer")
+    hotkey = str(cfg.get("hotkey", "")).strip()
+    if hotkey:
+        # The summon key is always bound (a press gives a helpful hint even
+        # when the mind is off), so a typo must fail loud at load, not
+        # silently at listener start. Skip when evdev is absent (no Linux
+        # keycode table to resolve against).
+        from voice_keyboard.hotkey import MODIFIER_ALIASES, HotkeySpec
+
+        if MODIFIER_ALIASES:
+            try:
+                HotkeySpec(hotkey)
+            except ValueError as exc:
+                raise RuntimeError(f"assistant.hotkey is invalid: {exc}") from exc
     if cfg.get("enabled", False):
-        hotkey = str(cfg.get("hotkey", "")).strip()
         main_hotkey = str(config.get("hotkey", {}).get("key", "")).strip().lower()
         if hotkey and hotkey.lower().replace(" ", "") == main_hotkey.replace(" ", ""):
             raise RuntimeError(
