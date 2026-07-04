@@ -177,10 +177,19 @@ class STTClient:
             query["language"] = self._language
         return f"{self._ws_url}?{urlencode(query)}"
 
+    @staticmethod
+    def _rejection_detail(exc: Exception) -> str:
+        """The HTTP body of a rejected handshake, where the server names the
+        actual problem (e.g. an invalid API key); "" when unavailable."""
+        body = getattr(getattr(exc, "response", None), "body", b"") or b""
+        if isinstance(body, bytes):
+            body = body.decode("utf-8", "replace")
+        return " ".join(str(body).split())[:300]
+
     async def connect(self, sample_rate: int) -> None:
         headers = {"Authorization": f"Bearer {self._api_key}"}
         url = self._url_for_sample_rate(sample_rate)
-        last_error: Optional[Exception] = None
+        last_error = ""
         for attempt in range(1, MAX_CONNECT_RETRIES + 1):
             try:
                 self._ws = await asyncio.wait_for(
@@ -197,13 +206,14 @@ class STTClient:
                 RuntimeError,
                 json.JSONDecodeError,
             ) as exc:
-                last_error = exc
+                detail = self._rejection_detail(exc)
+                last_error = f"{exc}: {detail}" if detail else str(exc)
                 await self.close()
                 logger.warning(
                     "STT connect attempt %d/%d failed: %s",
                     attempt,
                     MAX_CONNECT_RETRIES,
-                    exc,
+                    last_error,
                 )
                 if attempt < MAX_CONNECT_RETRIES:
                     await asyncio.sleep(CONNECT_BACKOFF_BASE * attempt)
