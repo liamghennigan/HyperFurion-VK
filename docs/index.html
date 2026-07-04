@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>document.documentElement.className = "js";</script>
 <title>HyperFurion VK — a voice keyboard for Linux</title>
-<meta name="description" content="Speak. It types. A Linux voice keyboard: press Ctrl+Alt+V and your words land in whatever app has focus, as real keystrokes. This page is a working instance — dictate into its editor, chat, and terminal, and its config file is live.">
+<meta name="description" content="Speak. It types. A Linux voice keyboard: press Ctrl+Alt+V and your words land in whatever app has focus, as real keystrokes. This page is a working instance — dictate into its editor or its real terminal, and its config file is live.">
 <meta property="og:title" content="HyperFurion VK — Speak. It types.">
 <meta property="og:description" content="A voice keyboard for Linux. Press Ctrl+Alt+V, speak, and it types into whatever app has focus. Try it on this page — it actually listens, or let the autopilot show you.">
 <meta property="og:type" content="website">
@@ -77,15 +77,13 @@ chmod +x install-hyperfurion-vk.sh
 
   <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · speak · it types · self-hosted · no third-party code · zero analytics · mit licensed · works offline once loaded · xai by default · bring any provider · your keys stay yours &nbsp;·&nbsp; </span></div>
 
-  <!-- ═══ 00 / THE FOCUSED APP — a working desktop, scaled to one tab ═══
-       Three windows, one focus. Dictation lands in whichever window has
-       it — the whole pitch, acted out. The terminal is real (a CLI); the
-       editor and chat are honest stand-ins that show where keystrokes go.
+  <!-- ═══ 00 / THE FOCUSED APP — one window that really types ═══════════
+       Dictation lands in the window below — the whole pitch, acted out.
+       The editor is an honest stand-in that shows where keystrokes go;
+       behind the toggle sits the demo's real terminal (a working CLI).
   ════════════════════════════════════════════════════════════════════ -->
-  <section class="wide demo" id="app" aria-label="Live demo — a working desktop that really types">
+  <section class="wide demo" id="app" aria-label="Live demo — a window that really types">
     <div class="desktop" id="desktop" hidden>
-      <div class="dswitch" id="dswitch" role="tablist" aria-label="Demo windows"></div>
-
       <div class="dwin" id="win-editor" data-app="editor">
         <div class="dwin-bar">
           <span class="dwin-title">release-notes.md — editor</span>
@@ -93,15 +91,6 @@ chmod +x install-hyperfurion-vk.sh
         </div>
         <div class="dwin-scope"></div>
         <div class="dwin-body ebody" id="ebody" aria-live="polite"></div>
-      </div>
-
-      <div class="dwin" id="win-chat" data-app="chat">
-        <div class="dwin-bar">
-          <span class="dwin-title">#audio-team — chat</span>
-          <span class="dwin-dockbar"></span>
-        </div>
-        <div class="dwin-scope"></div>
-        <div class="dwin-body cbody" id="cbody" aria-live="polite"></div>
       </div>
 
       <div class="dwin term" id="win-term" data-app="terminal">
@@ -118,13 +107,16 @@ chmod +x install-hyperfurion-vk.sh
         <div class="term-body" id="tbody" aria-live="polite"></div>
       </div>
 
-      <!-- the recording controls dock into whichever window has focus -->
+      <!-- the recording controls dock into whichever window is open -->
       <span class="demo-live" id="demo-live">
         <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
         <button class="stopbtn" id="stopbtn" hidden>stop</button>
       </span>
     </div>
-    <div class="saychips" id="saychips" hidden></div>
+    <div class="demo-foot">
+      <div class="saychips" id="saychips" hidden></div>
+      <button class="dtoggle" id="dtoggle" type="button" hidden></button>
+    </div>
     <p class="hint" id="hint" hidden></p>
     <div class="funnel-card" id="funnel-card" hidden>
       <span>that just typed itself — voice, to keystrokes. the desktop version

@@ -414,48 +414,21 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 .hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
 .hint .engine-live { color: var(--wave); }
 
-/* ═══ 00 / THE DESKTOP — three windows, one focus ══════════════════════ */
-.desktop { position: relative; height: 640px; }
-.dswitch {
-  position: absolute; inset: 0 0 auto 0;
-  display: flex; gap: 8px; align-items: center;
-}
-.dtab {
-  font: 600 10.5px var(--mono);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 13px;
-  cursor: pointer;
-}
-.dtab.on { color: var(--wave); border-color: var(--wave); }
-.dswitch-cap { margin-left: auto; }
-
+/* ═══ 00 / THE FOCUSED APP — one window, a terminal behind a toggle ════ */
 .dwin {
-  position: absolute;
-  display: flex;
+  display: none;
   flex-direction: column;
   text-align: left;
   background: #0c0c11;
   border: 1px solid #26262e;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 14px 50px rgba(0,0,0,.22);
-  opacity: .8;
-  transition: opacity .25s, border-color .25s, box-shadow .25s;
 }
 .dwin.focused {
-  z-index: 5;
-  opacity: 1;
+  display: flex;
   border-color: color-mix(in srgb, var(--wave) 55%, #26262e);
   box-shadow: 0 18px 60px rgba(0,0,0,.42), 0 0 26px var(--glow);
 }
-#win-editor { left: 0; top: 42px; width: 56%; height: 45%; }
-#win-chat   { right: 0; top: 74px; width: 46%; height: 48%; }
-#win-term   { left: 9%; bottom: 0; width: 70%; height: 44%; }
 
 .dwin-bar {
   display: flex;
@@ -473,6 +446,7 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 .dwin-scope:empty { display: none; }
 .dwin-scope .scope-wrap { border-top: 0; }
 .dwin-body { flex: 1; overflow-y: auto; }
+.dwin .dwin-body, .dwin .term-body { min-height: 200px; max-height: 340px; }
 
 /* the editor: a numbered buffer */
 .ebody {
@@ -494,25 +468,22 @@ canvas.scope { display: block; width: 100%; height: 64px; }
 .eline:first-child span { color: #8a8a95; }
 .ebody .interim { color: #6f6f7c; }
 
-/* the chat: a thread and a composer */
-.cbody { padding: 12px 14px; font: 13px/1.55 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #e8e8ec; }
-.cmsg { display: flex; gap: 10px; margin: 7px 0; overflow-wrap: anywhere; }
-.cmsg b { font: 600 11px var(--mono); padding-top: 2px; }
-.cmsg.them b { color: #a78bfa; }
-.cmsg.me b { color: var(--wave); }
-.ccomp {
-  border-top: 1px solid #1c1c23;
-  margin-top: 12px;
-  padding-top: 9px;
-  font-family: var(--mono);
-  font-size: 13px;
-  overflow-wrap: anywhere;
+/* try-saying chips, the terminal toggle, the watch button */
+.demo-foot { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.saychips { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dtoggle {
+  font: 600 10.5px var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 13px;
+  margin-left: auto;
+  cursor: pointer;
 }
-.ccomp .dim { color: #494954; }
-.ccomp .interim { color: #6f6f7c; }
-
-/* try-saying chips + the watch button */
-.saychips { display: flex; gap: 10px; align-items: center; margin: 12px 0 0; flex-wrap: wrap; }
+.dtoggle:hover { color: var(--wave); border-color: var(--wave); }
 .saychip {
   font: 12px var(--mono);
   color: var(--text);
@@ -557,16 +528,6 @@ canvas.scope { display: block; width: 100%; height: 64px; }
   text-align: center;
 }
 .ghostkbd .keys kbd { font-size: 13px; padding: 3px 9px; }
-
-/* small screens: the desktop becomes tabs, one window at a time */
-@media (max-width: 760px) {
-  .desktop { height: auto; padding-top: 42px; }
-  .dswitch { position: absolute; }
-  .dswitch-cap { display: none; }
-  .dwin { position: static; width: auto !important; height: auto !important; display: none; opacity: 1; }
-  .dwin.focused { display: flex; }
-  .dwin-body, .term-body { min-height: 180px; max-height: 300px; }
-}
 
 /* ═══ 01 / SIGNAL PATH — the pipeline instrument ═══════════════════════ */
 .pipeline {
@@ -855,7 +816,7 @@ footer .sigcap { display: block; margin-bottom: 10px; }
   .pl-node-label, .pl-node-sub, .pl-lane { fill: CanvasText; }
   .pl-edge { stroke: CanvasText; }
   .pl-arrow { fill: CanvasText; }
-  .default-badge, .trust > div, .dwin, .dtab, .saychip, .watchbtn, .ghostkbd {
+  .default-badge, .trust > div, .dwin, .dtoggle, .saychip, .watchbtn, .ghostkbd {
     border-color: CanvasText; color: CanvasText;
   }
 }
