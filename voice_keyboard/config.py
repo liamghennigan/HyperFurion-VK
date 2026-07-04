@@ -162,9 +162,12 @@ DEFAULT_CONFIG: dict = {
         "api_key": "",
         # realtime | local | auto (realtime when configured, else local).
         "brain": "auto",
-        # Spoken conversation trigger (a second global hotkey). Dictation
-        # keeps Ctrl+Alt+V; this defaults to Ctrl+Alt+period.
-        "hotkey": "control+alt+.",
+        # Spoken conversation trigger (a second global binding; dictation
+        # keeps Ctrl+Alt+V). Default is a BARE modifier — hold Right Ctrl to
+        # talk — because a modifier alone never reaches the focused app:
+        # held symbol chords (e.g. control+alt+.) make terminals spray
+        # escape codes (CSI-u) into the shell. Chords still work if set.
+        "hotkey": "rightctrl",
         # How the summon key behaves, like [hotkey].mode: auto = HOLD to
         # talk / release to send, or a quick TAP to toggle hands-free.
         "mode": "auto",
@@ -481,7 +484,7 @@ def _validate_assistant_config(config: dict) -> None:
 
         if MODIFIER_ALIASES:
             try:
-                HotkeySpec(hotkey)
+                HotkeySpec(hotkey, allow_bare=True)
             except ValueError as exc:
                 raise RuntimeError(f"assistant.hotkey is invalid: {exc}") from exc
     if cfg.get("enabled", False):

@@ -215,6 +215,19 @@ class TTSClient:
         resp.raise_for_status()
         return resp.content
 
+    def play_pcm(self, pcm: bytes, sample_rate: int = 24000) -> None:
+        """Play RAW s16le mono PCM — the realtime voice agent's answer
+        format. Feeding this to the MP3 path makes the decoder chew static
+        (mpg123 'Illegal Audio-MPEG-Header' spam)."""
+        if not pcm:
+            return
+        import numpy as np
+        import sounddevice as sd
+
+        data = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+        sd.play(data, sample_rate)
+        sd.wait()
+
     def stop_playback(self) -> None:
         """Cut off any in-flight speech immediately — the barge-in path.
         Safe to call when nothing is playing."""

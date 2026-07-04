@@ -283,7 +283,7 @@ class TestConverseIntegration:
         daemon._brain = brain
         result = asyncio.run(daemon._run_converse_audio(b"pcm", "capital of France"))
         assert result == "Paris."
-        daemon._tts_client.play_audio.assert_called_once_with(b"SPOKEN")
+        daemon._tts_client.play_pcm.assert_called_once_with(b"SPOKEN", mock.ANY)
         assert daemon._injector.typed == []  # answers never type into the app
 
     def test_terminal_command_query_is_typed_no_enter(self) -> None:
@@ -319,7 +319,7 @@ class TestConverseIntegration:
             )
         assert result == "Paris."
         assert daemon._injector.typed == []  # nothing typed into the terminal
-        daemon._tts_client.play_audio.assert_called_once_with(b"SPOKEN")
+        daemon._tts_client.play_pcm.assert_called_once_with(b"SPOKEN", mock.ANY)
 
     def test_type_no_enter_helper_arms_and_restores(self) -> None:
         daemon = _daemon(_config())
@@ -483,8 +483,14 @@ class TestSummonUX:
     ) -> None:
         captured: dict = {}
 
-        def fake_create(cfg, *, on_toggle, on_hold_start, on_hold_stop):
-            captured.update(cfg=cfg, hold_start=on_hold_start, hold_stop=on_hold_stop)
+        def fake_create(cfg, *, on_toggle, on_hold_start, on_hold_stop, on_hold_cancel):
+            captured.update(
+                cfg=cfg,
+                toggle=on_toggle,
+                hold_start=on_hold_start,
+                hold_stop=on_hold_stop,
+                hold_cancel=on_hold_cancel,
+            )
             return mock.Mock()
 
         monkeypatch.setattr(
@@ -494,13 +500,100 @@ class TestSummonUX:
         daemon._start_assistant_hotkey_listener()
         assert daemon._assistant_hotkey_listener is not None
         assert captured["cfg"]["mode"] == "auto"
-        assert captured["cfg"]["key"] == "control+alt+."
-        # Hold handlers are wired to converse start/stop, not no-ops.
+        # The terminal-safe default: a bare modifier, held to talk.
+        assert captured["cfg"]["key"] == "rightctrl"
+        assert captured["cfg"]["allow_bare"] is True
         daemon._schedule_hotkey_action = mock.Mock()
         captured["hold_start"]()
         captured["hold_stop"]()
+        captured["hold_cancel"]()
+        captured["toggle"]()
         daemon._schedule_hotkey_action.assert_any_call("converse_start")
         daemon._schedule_hotkey_action.assert_any_call("converse_stop")
+        daemon._schedule_hotkey_action.assert_any_call("converse_cancel")
+        # A bare tap is inert when idle (routes to converse_tap, not toggle).
+        daemon._schedule_hotkey_action.assert_any_call("converse_tap")
+
+    def test_chord_binding_taps_as_toggle(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict = {}
+
+        def fake_create(cfg, *, on_toggle, on_hold_start, on_hold_stop, on_hold_cancel):
+            captured.update(toggle=on_toggle)
+            return mock.Mock()
+
+        monkeypatch.setattr(
+            "voice_keyboard.daemon.create_hotkey_listener", fake_create
+        )
+        daemon = _daemon(_config(enabled=True, hotkey="control+alt+."))
+        daemon._start_assistant_hotkey_listener()
+        daemon._schedule_hotkey_action = mock.Mock()
+        captured["toggle"]()
+        daemon._schedule_hotkey_action.assert_called_with("converse_toggle")
+
+    def test_bare_tap_never_opens_the_mic(self) -> None:
+        daemon = self._kai(_config(enabled=True))
+        daemon._converse_start = mock.AsyncMock()
+        daemon._converse_stop = mock.AsyncMock()
+        asyncio.run(daemon._handle_hotkey_action("converse_tap"))
+        daemon._converse_start.assert_not_awaited()
+
+    def test_bare_tap_ends_capture_and_barges_in(self) -> None:
+        daemon = self._kai(_config(enabled=True))
+        daemon._converse_capture = True
+        daemon._converse_stop = mock.AsyncMock()
+        asyncio.run(daemon._handle_hotkey_action("converse_tap"))
+        daemon._converse_stop.assert_awaited_once()
+
+        daemon2 = self._kai(_config(enabled=True))
+        daemon2._converse_cancel = mock.AsyncMock()
+
+        async def scenario() -> None:
+            daemon2._converse_task = asyncio.ensure_future(asyncio.sleep(5))
+            await daemon2._handle_hotkey_action("converse_tap")
+            daemon2._converse_task.cancel()
+
+        asyncio.run(scenario())
+        daemon2._converse_cancel.assert_awaited_once()
+
+    def test_turn_times_out_to_error_never_stuck(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A wedged brain/LLM must end as a visible error, not a forever
+        # PROCESSING overlay.
+        monkeypatch.setattr("voice_keyboard.daemon.CONVERSE_TURN_TIMEOUT_S", 0.05)
+        daemon = self._kai(_config(enabled=True))
+
+        async def _wedged(*_a) -> str:
+            await asyncio.sleep(5)
+            return ""
+
+        daemon._run_converse_audio = _wedged
+        daemon._show_hotkey_overlay = mock.AsyncMock()
+        asyncio.run(daemon._converse_turn(b"pcm", "hello"))
+        state = daemon._show_hotkey_overlay.await_args.args[0]
+        assert state == "error"
+        assert "timed out" in daemon._show_hotkey_overlay.await_args.kwargs["detail"]
+
+    def test_spoken_answer_finalizes_overlay_and_plays_pcm(self) -> None:
+        # The stuck-overlay regression: the spoken path must set a terminal
+        # overlay state, and the realtime agent's RAW PCM answer must go
+        # through play_pcm — the MP3 path chews it into static.
+        daemon = self._kai(_config(enabled=True, brain="auto"), register="prose")
+        brain = mock.Mock()
+        brain.remember_interaction = mock.Mock()
+        brain.respond_audio = mock.AsyncMock(
+            return_value=mock.Mock(
+                text="Paris.", audio=b"PCMPCM", audio_sample_rate=24000, brain="realtime"
+            )
+        )
+        daemon._brain = brain
+        daemon._show_hotkey_overlay = mock.AsyncMock()
+        asyncio.run(daemon._run_converse_audio(b"pcm", "capital of France"))
+        daemon._tts_client.play_pcm.assert_called_once_with(b"PCMPCM", 24000)
+        states = [c.args[0] for c in daemon._show_hotkey_overlay.await_args_list]
+        assert states[-1] == "inserted"  # the answer replaces PROCESSING
 
 
 class TestAssistantConfigValidation:  # noqa: E301
