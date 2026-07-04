@@ -1,0 +1,41 @@
+# Fly.io deployment for the HyperFurion relay.
+#
+# IMPORTANT — run EXACTLY ONE machine. The relay keeps its subscriber
+# database in SQLite on the volume below and tracks live STT sessions in
+# memory. A second machine would have its own separate copy of both, so
+# keys issued on one wouldn't authenticate on the other and quotas would
+# not add up. Keep one volume and one machine — never `fly scale count 2`.
+#
+# Deploy:
+#   fly apps create hyperfurion-relay          # pick a globally-unique name
+#   fly volumes create relay_data --size 1 --region iad
+#   fly secrets set XAI_API_KEY=xai-... STRIPE_WEBHOOK_SECRET=whsec_...
+#   fly deploy
+#   fly certs add api.hyperfurion.com          # then add the DNS it prints
+app = "hyperfurion-relay"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  RELAY_PORT = "8787"
+  # The app sits behind Fly's proxy, so per-IP demo caps may trust
+  # X-Forwarded-For (otherwise every request looks like it comes from Fly).
+  DEMO_TRUST_FORWARDED = "1"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # A relay must stay reachable for live dictation WebSockets — keep it warm.
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+[mounts]
+  source = "relay_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -6,6 +6,7 @@ import { AudioOut, Demo } from "./demo-relay.js";
 import { Dictation } from "./dictation.js";
 import { TTS } from "./tts.js";
 import { Hints } from "./hints.js";
+import { CHECKOUT, checkoutLive, live } from "./checkout.js";
 
 export const Terminal = (() => {
   const history = [];
@@ -128,7 +129,15 @@ export const Terminal = (() => {
         print("hosted tier — $5/mo: one hfk_ key, no provider accounts, hard quotas", "dim");
         print("convenience + supporting the project — you gain no abilities by paying;", "dim");
         print("everything is open source, free forever with your own key", "dim");
-        print("launching soon · early access via sponsors: github.com/sponsors/liamghennigan", "dim");
+        if (checkoutLive) {
+          if (live(CHECKOUT.basic)) print("$5/mo  basic — 20 h dictation + 250k chars: " + CHECKOUT.basic, "dim");
+          if (live(CHECKOUT.pro)) print("$10/mo pro   — 60 h dictation + 1M chars:  " + CHECKOUT.pro, "dim");
+          print("opening secure checkout on stripe…", "dim");
+          const url = live(CHECKOUT.basic) ? CHECKOUT.basic : CHECKOUT.pro;
+          window.open(url, "_blank", "noopener");
+        } else {
+          print("launching soon · early access via sponsors: github.com/sponsors/liamghennigan", "dim");
+        }
         break;
       case "real": case "real on":
         Demo.want = true;
