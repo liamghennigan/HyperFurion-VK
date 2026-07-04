@@ -16,6 +16,32 @@ def _listener(mode: str, events: list[str]) -> HotkeyListener:
     )
 
 
+class TestHotkeySpec:
+    def test_punctuation_keys_resolve(self) -> None:
+        # The assistant hotkey is control+alt+. — evdev names it KEY_DOT,
+        # so a plain KEY_"." lookup fails without the alias.
+        from voice_keyboard.hotkey import HotkeySpec
+
+        assert HotkeySpec("control+alt+.").trigger_code == e.KEY_DOT
+        assert HotkeySpec("control+alt+period").trigger_code == e.KEY_DOT
+        assert HotkeySpec("ctrl+alt+/").trigger_code == e.KEY_SLASH
+        assert HotkeySpec("control+alt+minus").trigger_code == e.KEY_MINUS
+
+    def test_assistant_combo_fires(self) -> None:
+        events: list[str] = []
+        listener = HotkeyListener(
+            {"enabled": True, "key": "control+alt+.", "mode": "toggle",
+             "hold_threshold_ms": 10_000},
+            on_toggle=lambda: events.append("toggle"),
+            on_hold_start=lambda: None,
+            on_hold_stop=lambda: None,
+        )
+        listener._handle_key_event(e.KEY_LEFTCTRL, 1)
+        listener._handle_key_event(e.KEY_LEFTALT, 1)
+        listener._handle_key_event(e.KEY_DOT, 1)
+        assert events == ["toggle"]
+
+
 class TestHotkeyListener:
     def test_toggle_fires_once_per_combo_press(self) -> None:
         events: list[str] = []

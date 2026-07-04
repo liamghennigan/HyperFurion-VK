@@ -216,7 +216,11 @@ class TTSClient:
         return resp.content
 
     def synthesize_and_play(self, text: str) -> None:
-        audio_data = self.synthesize(text)
+        self.play_audio(self.synthesize(text))
+
+    def play_audio(self, audio_data: bytes) -> None:
+        """Play already-synthesized audio — the instant half of the TTS
+        path, used directly on a prefetch-cache hit."""
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             f.write(audio_data)
             tmp_path = f.name

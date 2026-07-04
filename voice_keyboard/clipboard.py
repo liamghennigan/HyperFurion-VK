@@ -73,6 +73,29 @@ def get_text() -> str | None:
     return None
 
 
+def get_primary_text() -> str | None:
+    """Current PRIMARY selection text (Linux only — the text currently
+    highlighted); "" when empty, None off-Linux or on failure."""
+    if sys.platform in {"darwin", "win32"}:
+        return None
+    candidates: list[list[str]] = []
+    if _is_wayland() and shutil.which("wl-paste"):
+        candidates.append(["wl-paste", "--primary", "--no-newline"])
+    if shutil.which("xclip"):
+        candidates.append(["xclip", "-selection", "primary", "-o"])
+    for command in candidates:
+        try:
+            result = _run(command)
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+        if result.returncode == 0:
+            return result.stdout
+        stderr = (result.stderr or "").lower()
+        if "empty" in stderr or "no selection" in stderr or "nothing" in stderr:
+            return ""
+    return None
+
+
 def set_text(text: str) -> bool:
     """Put `text` on the clipboard; True on success."""
     candidates: list[list[str]] = []

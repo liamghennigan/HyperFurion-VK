@@ -6,7 +6,10 @@ import threading
 import time
 from typing import Optional
 
-from voice_keyboard import clipboard, history
+from voice_keyboard import clipboard, dictionary, history, recall
+from voice_keyboard.ambient import AmbientGate
+from voice_keyboard.assistant import Brain, create_brain
+from voice_keyboard.assistant.citations import format_visual_citations
 from voice_keyboard.audio_capture import AudioCapture
 from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
@@ -23,6 +26,8 @@ from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
 from voice_keyboard.llm import create_llm_client
+from voice_keyboard.prefetch import SelectionWatcher, prefetch_enabled
+from voice_keyboard.remotemic import RemoteAudioSource, RemoteMicServer
 from voice_keyboard.stt import create_stt_client
 
 # Re-exported for backwards compatibility: these lived here before they
@@ -44,6 +49,8 @@ logger = logging.getLogger(__name__)
 FLOW_TICK_S = 0.25
 FOCUS_WATCHDOG_S = 1.5
 CAPTION_MAX_CHARS = 46
+# A held rewrite that is neither kept nor discarded evaporates.
+PENDING_REWRITE_TTL_S = 120.0
 
 
 class Daemon:
@@ -70,7 +77,14 @@ class Daemon:
         self._stt_error: Optional[str] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._hotkey_listener: Optional[HotkeyListener] = None
+        self._assistant_hotkey_listener: Optional[HotkeyListener] = None
         self._hotkey_lock: Optional[asyncio.Lock] = None
+        # The conversational mind (None until [assistant] enabled).
+        self._brain: Optional[Brain] = create_brain(self._config)
+        # This recording session routes to the brain, not the keyboard.
+        self._converse_capture = False
+        self._converse_pcm: list[bytes] = []
+        self._last_answer = ""
 
         # Flow — molten dictation session state.
         self._flow_engine: Optional[FlowEngine] = None
@@ -82,12 +96,23 @@ class Daemon:
             self._config.get("registers", {}).get("default", "prose")
         )
         self._focus_lost = False
+        self._session_secret = False
+        self._ambient_gate: Optional[AmbientGate] = None
         self._silence_gate: Optional[SilenceGate] = None
         self._auto_stop_started = False
         self._levels: list[float] = []
         self._last_caption = ""
         self._last_typed = ""
         self._last_error = ""
+        # Molten diffs: a rewrite held for approval ([flow] rewrite_pending).
+        self._pending_rewrite: Optional[dict] = None
+        self._last_scratches = 0
+        # Speculative TTS: (text, audio) for the last stable selection.
+        self._tts_cache: Optional[tuple[str, bytes]] = None
+        self._prefetch_watcher: Optional[SelectionWatcher] = None
+        # The multiplayer keyboard: a phone-fed session replaces PyAudio.
+        self._remote_mic: Optional[RemoteMicServer] = None
+        self._audio_source_override: Optional[RemoteAudioSource] = None
         self._started_at = time.monotonic()
         self._config_mtime = self._current_config_mtime()
 
@@ -97,6 +122,25 @@ class Daemon:
         self._injector.start()
         self._ipc_server.start()
         self._start_hotkey_listener()
+        self._start_assistant_hotkey_listener()
+        if prefetch_enabled(self._config):
+            # A separate TTS client: the watcher thread never shares a
+            # requests session with the playback path.
+            self._prefetch_watcher = SelectionWatcher(
+                tts_client=create_tts_client(self._config),
+                store=self._store_tts_prefetch,
+                is_busy=lambda: self._recording,
+            )
+            self._prefetch_watcher.start()
+        mic_cfg = self._config.get("remote_mic", {})
+        if bool(mic_cfg.get("enabled", False)):
+            self._remote_mic = RemoteMicServer(
+                port=int(mic_cfg.get("port", 9177)),
+                token=str(mic_cfg.get("token", "")).strip(),
+                on_start=self._schedule_remote_start,
+                on_stop=self._schedule_remote_stop,
+            )
+            self._remote_mic.start()
         logger.info("Daemon started, socket: %s", self._socket_path)
 
         ipc_thread = threading.Thread(target=self._ipc_loop, daemon=True)
@@ -121,9 +165,18 @@ class Daemon:
 
     async def _shutdown(self) -> None:
         logger.info("Shutting down daemon")
+        if self._remote_mic is not None:
+            self._remote_mic.stop()
+            self._remote_mic = None
+        if self._prefetch_watcher is not None:
+            self._prefetch_watcher.stop()
+            self._prefetch_watcher = None
         if self._hotkey_listener:
             self._hotkey_listener.stop()
             self._hotkey_listener = None
+        if self._assistant_hotkey_listener:
+            self._assistant_hotkey_listener.stop()
+            self._assistant_hotkey_listener = None
         if self._recording:
             await self._stop_recording()
         self._injector.stop()
@@ -141,6 +194,28 @@ class Daemon:
         except Exception:
             logger.exception("Failed to start hotkey listener")
             self._hotkey_listener = None
+
+    def _start_assistant_hotkey_listener(self) -> None:
+        """A SECOND global hotkey for converse mode — the mind, not the
+        keyboard. Only when [assistant] is enabled with its own binding."""
+        assistant_cfg = self._config.get("assistant", {})
+        if not assistant_cfg.get("enabled", False):
+            return
+        binding = str(assistant_cfg.get("hotkey", "")).strip()
+        if not binding:
+            return
+        try:
+            self._assistant_hotkey_listener = create_hotkey_listener(
+                {"enabled": True, "key": binding, "mode": "toggle"},
+                on_toggle=lambda: self._schedule_hotkey_action("converse_toggle"),
+                on_hold_start=lambda: None,
+                on_hold_stop=lambda: None,
+            )
+            self._assistant_hotkey_listener.start()
+            logger.info("Assistant hotkey listening: %s", binding)
+        except Exception:
+            logger.exception("Failed to start assistant hotkey listener")
+            self._assistant_hotkey_listener = None
 
     def _schedule_hotkey_action(self, action: str) -> None:
         if self._loop is None or self._loop.is_closed():
@@ -161,6 +236,16 @@ class Daemon:
                     await self._hotkey_start_recording(hold_to_talk=True)
                 elif action == "stop":
                     await self._hotkey_stop_recording()
+                elif action == "converse_toggle":
+                    if self._recording:
+                        await self._hotkey_stop_recording()
+                    else:
+                        self._converse_capture = True
+                        self._converse_pcm = []
+                        await self._show_hotkey_overlay(
+                            "listening", detail=f"⌁ ask {self._assistant_name()}…"
+                        )
+                        await self._start_recording()
             except Exception as exc:
                 logger.exception("Hotkey action failed: %s", action)
                 self._last_error = str(exc)
@@ -315,6 +400,69 @@ class Daemon:
                                 "text": text,
                             }
 
+                elif command == "ask":
+                    question = str(payload.get("instruction", "")).strip()
+                    if not question:
+                        response = {"status": "error", "message": "no question provided"}
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._ask_last(question), self._loop
+                        )
+                        try:
+                            text = future.result(timeout=90)
+                        except TimeoutError:
+                            response = {"status": "error", "message": "timed out answering"}
+                        else:
+                            response = {"status": "ok", "message": "answered", "text": text}
+
+                elif command == "keep":
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._keep_pending(), self._loop
+                    )
+                    try:
+                        text = future.result(timeout=30)
+                    except TimeoutError:
+                        response = {"status": "error", "message": "timed out applying rewrite"}
+                    else:
+                        response = {"status": "ok", "message": "rewrite kept", "text": text}
+
+                elif command == "discard":
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._discard_pending(), self._loop
+                    )
+                    try:
+                        had = future.result(timeout=10)
+                    except TimeoutError:
+                        response = {"status": "error", "message": "timed out"}
+                    else:
+                        response = (
+                            {"status": "ok", "message": "rewrite discarded"}
+                            if had
+                            else {"status": "error", "message": "no pending rewrite"}
+                        )
+
+                elif command == "intent":
+                    request = str(payload.get("instruction", "")).strip()
+                    if not request:
+                        response = {"status": "error", "message": "no request provided"}
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._intent_last(request), self._loop
+                        )
+                        try:
+                            text = future.result(timeout=45)
+                        except TimeoutError:
+                            response = {
+                                "status": "error",
+                                "message": "timed out compiling the command",
+                            }
+                        else:
+                            response = {
+                                "status": "ok",
+                                "message": "command typed — Enter is yours",
+                                "text": text,
+                            }
+
                 elif command == "type":
                     text = str(payload.get("text", ""))
                     if not text:
@@ -362,6 +510,10 @@ class Daemon:
             "flow_enabled": bool(flow_cfg.get("enabled", True)),
             "flow_live": bool(flow_cfg.get("live", True)),
             "focused_app": self._session_focus.app if self._session_focus else "",
+            "pending_rewrite": self._pending_rewrite is not None,
+            "ambient": self._ambient_gate is not None,
+            "assistant": self._brain is not None,
+            "assistant_can_act": bool(self._config.get("assistant", {}).get("can_act", False)),
             "last_text_len": len(self._last_typed),
             "last_error": self._last_error,
             "uptime_s": int(time.monotonic() - self._started_at),
@@ -386,7 +538,7 @@ class Daemon:
             return 0.0
 
     def _maybe_reload_flow_config(self) -> None:
-        """Adopt [flow]/[registers]/[llm] edits without a daemon restart.
+        """Adopt [flow]/[registers]/[llm]/[intent] edits without a restart.
 
         Provider, audio, hotkey, and daemon changes still need a restart —
         they own live resources. Reload happens at recording start, so a
@@ -402,19 +554,33 @@ class Daemon:
         except Exception as exc:
             logger.warning("Config changed but did not validate; keeping old: %s", exc)
             return
-        for section in ("flow", "registers", "llm"):
+        for section in (
+            "flow", "registers", "llm", "intent", "ambient", "ask", "recall", "assistant"
+        ):
             self._config[section] = fresh.get(section, {})
-        logger.info("Reloaded flow/registers/llm config sections")
+        # Rebuild the brain so [assistant] edits (brain, can_act, agent_id,
+        # privacy) take effect at the next turn without a restart. The
+        # assistant HOTKEY still needs a restart — it owns a listener.
+        self._brain = create_brain(self._config)
+        logger.info("Reloaded flow/registers/llm/intent/ambient/ask/recall/assistant config")
 
     # ------------------------------------------------------- flow session
 
     def _build_grammar(self, register: Register) -> Grammar:
         flow_cfg = self._config.get("flow", {})
+        vocabulary = dict(flow_cfg.get("vocabulary") or {})
+        if flow_cfg.get("personal_dictionary", True):
+            # Accepted `voice-keyboard learned` entries; explicit config wins.
+            try:
+                for spoken, replacement in dictionary.vocabulary_overrides().items():
+                    vocabulary.setdefault(spoken, replacement)
+            except Exception:
+                logger.exception("Could not load the personal dictionary")
         return Grammar(
             enabled=bool(flow_cfg.get("grammar", True)) and register.grammar_enabled,
             commands=flow_cfg.get("commands") or {},
             punctuation=flow_cfg.get("punctuation") or {},
-            vocabulary=flow_cfg.get("vocabulary") or {},
+            vocabulary=vocabulary,
             wake_word=str(flow_cfg.get("wake_word", "furion")),
             numbers=str(flow_cfg.get("numbers", "auto")).lower(),
             numbers_on=register.numbers_on,
@@ -441,11 +607,36 @@ class Daemon:
 
     async def _setup_flow_session(self, probe_task: Optional[asyncio.Task]) -> None:
         self._focus_lost = False
+        self._session_secret = False
         self._auto_stop_started = False
         self._levels = []
         self._last_caption = ""
 
         flow_cfg = self._config.get("flow", {})
+        self._ambient_gate = None
+        if self._converse_capture:
+            # Kai captures a spoken query but never types it live. It still
+            # needs to know WHERE you are — a terminal query becomes a
+            # drafted command, anything else becomes a spoken answer — so
+            # resolve focus + register, but build no engine/worker.
+            focus = None
+            if probe_task is not None:
+                try:
+                    focus = await asyncio.wait_for(probe_task, timeout=1.5)
+                except Exception:
+                    focus = None
+            self._session_focus = focus
+            registers_cfg = self._config.get("registers", {})
+            self._session_register = register_for_app(
+                focus.app if focus else "",
+                focus.role if focus else "",
+                config_map=registers_cfg.get("map", {}) or {},
+                default=str(registers_cfg.get("default", "prose")),
+            )
+            self._flow_engine = None
+            self._flow_worker = None
+            self._silence_gate = None
+            return
         if not flow_cfg.get("enabled", True):
             self._flow_engine = None
             self._flow_worker = None
@@ -473,6 +664,26 @@ class Daemon:
         self._session_register = register
         if hasattr(self._injector, "paste_chord_shift"):
             self._injector.paste_chord_shift = register.paste_chord_shift
+
+        # A secret widget gets maximum protection: verbatim register (set
+        # above via the role), no ledger entry, no vocabulary bias.
+        self._session_secret = bool(getattr(focus, "secret", False)) if focus else False
+        bias = ""
+        if not self._session_secret and bool(
+            self._config.get("stt", {}).get("hotword_bias", False)
+        ):
+            bias = self._hotword_bias()
+        if hasattr(self._stt_client, "bias_prompt"):
+            self._stt_client.bias_prompt = bias
+
+        ambient_cfg = self._config.get("ambient", {})
+        if bool(ambient_cfg.get("enabled", False)):
+            address = str(ambient_cfg.get("address_word", "")).strip() or str(
+                flow_cfg.get("wake_word", "furion")
+            ).strip()
+            if address:
+                self._ambient_gate = AmbientGate(address)
+                logger.info("Ambient containment active: address word %r", address)
 
         self._flow_engine = FlowEngine(
             self._flow_config_obj(), self._build_grammar(register), register
@@ -594,11 +805,16 @@ class Daemon:
             # Kick the focus probe early so it overlaps the STT connect.
             probe_task = asyncio.create_task(asyncio.to_thread(probe_focus))
 
-        self._audio_capture = AudioCapture(
-            sample_rate=self._config["audio"]["sample_rate"],
-            chunk_ms=self._config["audio"]["chunk_ms"],
-            device_name=self._config["audio"]["device_name"],
-        )
+        override = self._audio_source_override
+        if override is not None:
+            # A remote mic session: the phone's frames replace PyAudio.
+            self._audio_capture = override
+        else:
+            self._audio_capture = AudioCapture(
+                sample_rate=self._config["audio"]["sample_rate"],
+                chunk_ms=self._config["audio"]["chunk_ms"],
+                device_name=self._config["audio"]["device_name"],
+            )
         try:
             self._audio_capture.start()
         except Exception:
@@ -730,6 +946,19 @@ class Daemon:
             _merge_transcript_text(self._final_text, self._interim_text)
         )
 
+        if self._converse_capture:
+            # This session was a spoken question for the mind, not text for
+            # the keyboard: send it to the brain, type nothing.
+            self._converse_capture = False
+            pcm = b"".join(self._converse_pcm)
+            self._converse_pcm = []
+            await self._teardown_flow_session()
+            if pcm or merged.strip():
+                await self._run_converse_audio(pcm, merged.strip())
+            else:
+                await self._show_hotkey_overlay("empty", timeout_ms=1800)
+            return ""
+
         engine = self._flow_engine
         if engine is None:
             # Flow disabled: the original type-at-stop behavior, unchanged.
@@ -744,6 +973,7 @@ class Daemon:
 
         result = engine.finalize(merged, now=time.monotonic())
         final = result.text
+        self._last_scratches = result.scratches
         worker = self._flow_worker
         try:
             if worker is not None:
@@ -773,6 +1003,10 @@ class Daemon:
                     logger.info("Focus changed; final transcript is on the clipboard")
             return typed
 
+        resolved = await self._maybe_resolve_pending(final, worker)
+        if resolved is not None:
+            return resolved
+
         worker.set_target(final)
         typed = await worker.drain(timeout=self._drain_timeout(final))
         if typed != final:
@@ -795,6 +1029,9 @@ class Daemon:
     async def _finish_classic(self, final: str, instruction: str) -> str:
         """Type-at-stop path (buffered providers or flow.live=false), with
         grammar and registers already applied by the engine."""
+        resolved = await self._maybe_resolve_pending(final, None)
+        if resolved is not None:
+            return resolved
         if instruction and final:
             llm_client = create_llm_client(self._config)
             if llm_client is None:
@@ -825,9 +1062,22 @@ class Daemon:
         return final
 
     async def _transform_previous_or_report(self, instruction: str) -> str:
-        """A standalone "furion, ..." utterance: rewrite the previous
-        dictation in place."""
+        """A standalone "furion, ..." utterance, routed by precedence:
+        an exact macro name types its saved text; an intent verb types a
+        command (never Enter); an ask verb answers about the selection; a
+        recall verb searches the ledger; anything else rewrites the
+        previous dictation in place."""
         try:
+            macro = dictionary.macro_text(instruction)
+            if macro is not None:
+                return await self._run_macro(macro)
+            if self._intent_request(instruction):
+                return await self._run_intent(instruction)
+            if self._verb_request("ask", instruction):
+                return await self._run_ask(self._strip_verb(instruction, {"ask", "answer"}))
+            if self._verb_request("recall", instruction):
+                query = self._strip_verb(instruction, {"recall", "remember"})
+                return await self._run_recall(query)
             return await self._run_transform(instruction, worker=None)
         except Exception as exc:
             logger.warning("Voice transform failed: %s", exc)
@@ -839,8 +1089,22 @@ class Daemon:
         # ~6ms per key edge pair on the slowest backend, plus headroom.
         return max(6.0, len(final) * 0.012 + 4.0)
 
-    def _remember_typed(self, final: str) -> None:
+    def _hotword_bias(self) -> str:
+        """User-accepted hotwords as an STT vocabulary prior — the only
+        biasing signal that earns its keep: curated words the user
+        actually says. (Screen text is NOT harvested: dictation is new
+        thought, not a continuation of what is near the caret.)"""
+        try:
+            accepted = dictionary.hotwords()
+        except Exception:
+            accepted = []
+        return ", ".join(accepted[:24])
+
+    def _remember_typed(self, final: str, *, register: str = "") -> None:
         if not final:
+            return
+        if self._session_secret:
+            logger.info("Secret field: not remembering what was typed")
             return
         self._last_typed = final
         self._last_error = ""
@@ -848,7 +1112,7 @@ class Daemon:
             history.append_entry(
                 final,
                 app=self._session_focus.app if self._session_focus else "",
-                register=self._session_register.name,
+                register=register or self._session_register.name,
             )
 
     # -------------------------------------------------------- transforms
@@ -882,6 +1146,22 @@ class Daemon:
             clipboard.set_text(rewritten)
             raise RuntimeError("focus changed — the rewrite is on the clipboard")
 
+        if bool(self._config.get("flow", {}).get("rewrite_pending", False)):
+            # Molten diffs: hold the rewrite; nothing touches the screen
+            # until it is kept. The original text stays frozen in place.
+            self._pending_rewrite = {
+                "text": rewritten,
+                "target": target,
+                "expires": time.monotonic() + PENDING_REWRITE_TTL_S,
+            }
+            preview = rewritten if len(rewritten) <= 90 else rewritten[:87] + "…"
+            await self._show_hotkey_overlay(
+                "listening",
+                detail=f"⌁ pending: {preview} — say 'keep it' or 'scratch that'",
+                timeout_ms=8000,
+            )
+            return target
+
         if worker is not None and worker.screen and not worker.abandoned:
             to_delete = worker.screen[common_prefix_len(worker.screen, rewritten):]
             if risky_backspace(to_delete):
@@ -900,6 +1180,284 @@ class Daemon:
         await asyncio.to_thread(self._injector.delete_chars, len(target))
         await asyncio.to_thread(self._injector.type_text, rewritten)
         return rewritten
+
+    # ----------------------------------------------------------- intents
+
+    def _verb_request(self, section: str, instruction: str) -> bool:
+        """True when a voice instruction routes to a verb channel:
+        the section is enabled and the first word is one of its verbs."""
+        cfg = self._config.get(section, {})
+        if not cfg.get("enabled", False):
+            return False
+        verbs = cfg.get("verbs") or []
+        first = instruction.strip().split(" ", 1)[0].strip(",.:;!?").casefold()
+        return first in {str(v).strip().casefold() for v in verbs}
+
+    @staticmethod
+    def _strip_verb(instruction: str, strippable: set) -> str:
+        parts = instruction.strip().split(" ", 1)
+        first = parts[0].strip(",.:;!?").casefold()
+        if first in strippable and len(parts) > 1:
+            return parts[1].strip()
+        return instruction.strip()
+
+    def _intent_request(self, instruction: str) -> bool:
+        return self._verb_request("intent", instruction)
+
+    async def _intent_last(self, request: str) -> str:
+        """IPC `intent`: compile and type a command line, never Enter."""
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            if self._recording:
+                raise RuntimeError("stop recording before typing a command")
+            return await self._run_intent(request)
+
+    async def _run_intent(self, request: str) -> str:
+        """The intent channel: one spoken request becomes ONE typed command
+        line at the caret. The injector's no-Enter mode guarantees nothing
+        executes — pressing Enter stays a human act."""
+        llm_client = create_llm_client(self._config)
+        if llm_client is None:
+            raise RuntimeError("[llm] is not configured")
+
+        await self._show_hotkey_overlay("processing", detail=f"⌁ {request}")
+        command = await asyncio.to_thread(llm_client.compile_command, request)
+        return await self._deliver_command(command)
+
+    async def _deliver_command(self, command: str) -> str:
+        """Type a compiled command at the caret, never Enter. Shared by the
+        intent channel and Kai's terminal route."""
+        if await self._focus_changed_since_session():
+            clipboard.set_text(command)
+            raise RuntimeError("focus changed — the command is on the clipboard")
+        await self._type_no_enter(command)
+        self._remember_typed(command, register="intent")
+        await self._show_hotkey_overlay(
+            "inserted", detail="⌁ typed — Enter is yours", timeout_ms=2200
+        )
+        return command
+
+    async def _type_no_enter(self, command: str) -> None:
+        """Type a command at the caret with Enter refused on every injector
+        path. The single chokepoint for 'draft an action, never run it' —
+        used by the intent channel AND the assistant's hands."""
+        injector = self._injector
+        has_flag = hasattr(injector, "suppress_enter")
+        if has_flag:
+            injector.suppress_enter = True
+        try:
+            await asyncio.to_thread(injector.type_text, command)
+        finally:
+            if has_flag:
+                injector.suppress_enter = False
+
+    # --------------------------------------------------------- the mind
+
+    def _assistant_name(self) -> str:
+        return str(self._config.get("assistant", {}).get("name", "Kai")).strip() or "Kai"
+
+    async def _run_converse_audio(self, pcm: bytes, transcript: str) -> str:
+        """A spoken query to Kai, routed by where you are:
+
+        - focused on a TERMINAL → turn the query into a command, type it at
+          the prompt, and never press Enter (that stays yours);
+        - anywhere else → answer / search the web, spoken back (the voice
+          agent when configured, else the local brain).
+        """
+        if self._brain is None:
+            raise RuntimeError("[assistant] is not enabled")
+
+        if self._session_register.name == "terminal" and transcript.strip():
+            # A terminal being focused makes a command POSSIBLE, not
+            # certain — the user might just have a question. Classify the
+            # query: a runnable request becomes a typed command (no Enter);
+            # a question falls through to the spoken answer below.
+            llm_client = create_llm_client(self._config)
+            if llm_client is not None:
+                await self._show_hotkey_overlay("processing", detail=f"⌁ {transcript[:40]}")
+                try:
+                    command = await asyncio.to_thread(
+                        llm_client.route_terminal_request, transcript
+                    )
+                except Exception as exc:
+                    logger.warning("Terminal routing failed (%s); answering instead", exc)
+                    command = None
+                if command:
+                    return await self._deliver_command(command)
+                # Not a command — answer it, even though we're in a terminal.
+
+        await self._show_hotkey_overlay("processing", detail=f"⌁ {self._assistant_name()}…")
+        sample_rate = int(self._config.get("audio", {}).get("sample_rate", 16000))
+        result = await self._brain.respond_audio(
+            pcm, sample_rate=sample_rate, transcript_hint=transcript
+        )
+        answer = result.text
+        self._last_answer = answer
+        if transcript:
+            self._brain.remember_interaction(transcript, answer)
+        # The voice agent returns its own spoken audio; otherwise TTS the text.
+        if result.audio and hasattr(self._tts_client, "play_audio"):
+            await asyncio.to_thread(self._tts_client.play_audio, result.audio)
+        elif answer:
+            try:
+                await self._run_tts(answer)
+            except Exception as exc:
+                logger.debug("Assistant TTS failed: %s", exc)
+        logger.info("Kai (%s): heard %r", result.brain or "?", transcript[:60])
+        return answer
+
+    # ------------------------------------------------------ pending rewrite
+
+    _KEEP_PHRASES = {"keep it", "keep that", "apply it", "apply that"}
+
+    def _peek_pending_rewrite(self) -> Optional[dict]:
+        """The live pending rewrite, dropping it silently if expired."""
+        pending = self._pending_rewrite
+        if pending is None:
+            return None
+        if time.monotonic() > float(pending.get("expires", 0)):
+            logger.info("Pending rewrite expired unapplied")
+            self._pending_rewrite = None
+            return None
+        return pending
+
+    async def _maybe_resolve_pending(
+        self, final: str, worker: Optional[InjectionWorker]
+    ) -> Optional[str]:
+        """Voice approval for a held rewrite: "keep it" applies it, a bare
+        "scratch that" discards it. Returns None when this utterance is
+        ordinary dictation."""
+        if self._peek_pending_rewrite() is None:
+            return None
+        spoken = final.strip().strip(".,!?").casefold()
+        if spoken in self._KEEP_PHRASES:
+            if worker is not None:
+                # The approval words were molten-typed live; erase them
+                # before the held rewrite lands.
+                worker.set_target("")
+                await worker.drain(timeout=6.0)
+            try:
+                return await self._apply_pending_rewrite()
+            except Exception as exc:
+                logger.warning("Pending rewrite failed to apply: %s", exc)
+                self._last_error = str(exc)
+                await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+                return ""
+        if not final and self._last_scratches > 0:
+            self._pending_rewrite = None
+            await self._show_hotkey_overlay("empty", detail="⌁ discarded", timeout_ms=1500)
+            return ""
+        return None
+
+    async def _apply_pending_rewrite(self) -> str:
+        pending = self._peek_pending_rewrite()
+        self._pending_rewrite = None
+        if pending is None:
+            raise RuntimeError("no pending rewrite")
+        target = str(pending["target"])
+        rewritten = str(pending["text"])
+        if await self._focus_changed_since_session():
+            clipboard.set_text(rewritten)
+            raise RuntimeError("focus changed — the rewrite is on the clipboard")
+        if risky_backspace(target):
+            clipboard.set_text(rewritten)
+            raise RuntimeError(
+                "can't repair across pasted text — the rewrite is on the clipboard"
+            )
+        await asyncio.to_thread(self._injector.delete_chars, len(target))
+        await asyncio.to_thread(self._injector.type_text, rewritten)
+        self._remember_typed(rewritten)
+        await self._show_hotkey_overlay("inserted", detail="⌁ kept", timeout_ms=1500)
+        return rewritten
+
+    async def _keep_pending(self) -> str:
+        """IPC `keep`: apply the held rewrite."""
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            if self._recording:
+                raise RuntimeError("stop recording before keeping the rewrite")
+            return await self._apply_pending_rewrite()
+
+    async def _discard_pending(self) -> bool:
+        """IPC `discard`: drop the held rewrite; True when one existed."""
+        had = self._peek_pending_rewrite() is not None
+        self._pending_rewrite = None
+        return had
+
+    async def _run_macro(self, text: str) -> str:
+        """Procedural memory: type a user-named macro verbatim. The body
+        is the user's own accepted text, typed on their spoken command —
+        newlines preserved (this is recall of consented text, not model
+        output)."""
+        if await self._focus_changed_since_session():
+            clipboard.set_text(text)
+            raise RuntimeError("focus changed — the macro is on the clipboard")
+        await asyncio.to_thread(self._injector.type_text, text)
+        self._remember_typed(text, register="macro")
+        await self._show_hotkey_overlay("inserted", detail="⌁ macro typed", timeout_ms=1500)
+        return text
+
+    async def _ask_last(self, question: str) -> str:
+        """IPC `ask`: answer a question about the current selection."""
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            if self._recording:
+                raise RuntimeError("stop recording before asking")
+            return await self._run_ask(question)
+
+    async def _run_ask(self, question: str) -> str:
+        """Talk to any app: answer about the PRIMARY selection through
+        [llm]; spoken via TTS or typed (newline-suppressed) per config."""
+        if not question.strip():
+            raise RuntimeError("ask needs a question")
+        llm_client = create_llm_client(self._config)
+        if llm_client is None:
+            raise RuntimeError("[llm] is not configured")
+        context = ""
+        if not self._session_secret:
+            try:
+                context = (clipboard.get_primary_text() or "").strip()[:4000]
+            except Exception:
+                context = ""
+        await self._show_hotkey_overlay("processing", detail=f"⌁ {question[:40]}")
+        answer = await asyncio.to_thread(llm_client.answer, question, context)
+        if str(self._config.get("ask", {}).get("mode", "say")).lower() == "type":
+            injector = self._injector
+            has_flag = hasattr(injector, "suppress_enter")
+            if has_flag:
+                injector.suppress_enter = True
+            try:
+                await asyncio.to_thread(injector.type_text, answer)
+            finally:
+                if has_flag:
+                    injector.suppress_enter = False
+            self._remember_typed(answer, register="ask")
+        else:
+            await self._run_tts(answer)
+        return answer
+
+    async def _run_recall(self, query: str) -> str:
+        """Total recall: the best ledger match, spoken or typed."""
+        if not query.strip():
+            raise RuntimeError("recall needs a query")
+        entries = await asyncio.to_thread(history.last_entries, 500)
+        if not entries:
+            raise RuntimeError("the ledger is empty — enable [flow] history")
+        embedder = recall.create_embedder(self._config)
+        hits = await asyncio.to_thread(
+            recall.search, entries, query, embedder=embedder, limit=1
+        )
+        if not hits:
+            raise RuntimeError("nothing recalled for that")
+        text = str(hits[0].get("text", ""))
+        if str(self._config.get("recall", {}).get("mode", "say")).lower() == "type":
+            await asyncio.to_thread(self._injector.type_text, text)
+        else:
+            await self._run_tts(text)
+        return text
 
     async def _focus_changed_since_session(self) -> bool:
         focus = self._session_focus
@@ -928,6 +1486,11 @@ class Daemon:
                 chunk = await asyncio.to_thread(audio_capture.read_chunk)
                 if not self._recording or self._stt_client is None:
                     break
+                if self._converse_capture:
+                    # Keep the raw PCM: a converse turn may go to the voice
+                    # agent, which answers audio, not text. STT still runs
+                    # so we have a transcript for memory + local fallback.
+                    self._converse_pcm.append(bytes(chunk))
                 await self._stt_client.send_audio(chunk)
                 self._observe_audio(chunk, chunk_ms)
             except Exception:
@@ -991,12 +1554,57 @@ class Daemon:
         if engine is None:
             return
         merged = _merge_transcript_text(self._final_text, self._interim_text)
+        if self._ambient_gate is not None:
+            # Containment: room speech never reaches the engine at all.
+            merged = self._ambient_gate.filter(merged, is_final=is_final)
         engine.on_transcript(merged, is_final=is_final, now=time.monotonic())
         worker = self._flow_worker
         if worker is not None:
             worker.set_target(engine.desired_text())
 
+    # ---------------------------------------------------------- remote mic
+
+    def _schedule_remote_start(self, source: RemoteAudioSource) -> None:
+        if self._loop is None or self._loop.is_closed():
+            return
+        asyncio.run_coroutine_threadsafe(self._remote_start(source), self._loop)
+
+    def _schedule_remote_stop(self) -> None:
+        if self._loop is None or self._loop.is_closed():
+            return
+        asyncio.run_coroutine_threadsafe(self._remote_stop(), self._loop)
+
+    async def _remote_start(self, source: RemoteAudioSource) -> None:
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            if self._recording:
+                logger.info("Remote mic start ignored: already recording")
+                return
+            self._audio_source_override = source
+            try:
+                await self._start_recording()
+            except Exception as exc:
+                logger.exception("Remote mic session failed to start")
+                self._last_error = str(exc)
+            finally:
+                self._audio_source_override = None
+
+    async def _remote_stop(self) -> None:
+        await self._handle_hotkey_action("stop")
+
+    def _store_tts_prefetch(self, text: str, audio: bytes) -> None:
+        # Called from the watcher thread; a single tuple swap is atomic.
+        self._tts_cache = (text, audio)
+
     async def _run_tts(self, text: str) -> None:
+        cache = self._tts_cache
+        if cache is not None and cache[0] == text and hasattr(
+            self._tts_client, "play_audio"
+        ):
+            logger.info("TTS prefetch hit (%d chars) — instant playback", len(text))
+            await asyncio.to_thread(self._tts_client.play_audio, cache[1])
+            return
         await asyncio.to_thread(self._tts_client.synthesize_and_play, text)
 
 

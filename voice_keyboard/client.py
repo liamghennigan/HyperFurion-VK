@@ -364,6 +364,196 @@ def _run_transform(client: "IPCClient", extra_args: list[str]) -> None:
         sys.exit(1)
 
 
+def _run_learned(extra_args: list[str]) -> None:
+    """Review corrections mined from the ledger. Nothing applies until it
+    is accepted here; accepted entries merge into the grammar vocabulary
+    at the next recording start."""
+    from voice_keyboard import dictionary
+    from voice_keyboard.history import last_entries
+
+    entries = last_entries(500)
+    data = dictionary.load_dictionary()
+    candidates = dictionary.open_candidates(entries)
+    hotword_candidates = dictionary.open_hotword_candidates(entries)
+    macro_candidates = dictionary.open_macro_candidates(entries)
+
+    if not extra_args:
+        if data["overrides"]:
+            print("accepted overrides:")
+            for spoken, replacement in sorted(data["overrides"].items()):
+                print(f'  "{spoken}" -> "{replacement}"')
+        if data["hotwords"]:
+            print("hotwords: " + ", ".join(sorted(data["hotwords"])))
+        if data["macros"]:
+            print("macros (say \"furion, <name>\"):")
+            for name, body in sorted(data["macros"].items()):
+                preview = body if len(body) <= 50 else body[:47] + "…"
+                print(f'  "{name}" -> "{preview}"')
+        if candidates:
+            print("correction candidates (learned accept N / reject N):")
+            for n, (heard, meant, count) in enumerate(candidates, 1):
+                print(f'  {n:3d}. "{heard}" -> "{meant}"  (seen {count}x)')
+        if hotword_candidates:
+            print("hotword candidates (learned hotword N / reject-hotword N):")
+            for n, (token, count) in enumerate(hotword_candidates, 1):
+                print(f"  {n:3d}. {token}  (seen {count}x)")
+        if macro_candidates:
+            print("macro candidates (learned macro N <name> / reject-macro N):")
+            for n, (text, count) in enumerate(macro_candidates, 1):
+                preview = text if len(text) <= 50 else text[:47] + "…"
+                print(f'  {n:3d}. "{preview}"  (dictated {count}x)')
+        if not (
+            data["overrides"] or data["hotwords"] or data["macros"]
+            or candidates or hotword_candidates or macro_candidates
+        ):
+            if entries:
+                print("No candidates yet — they appear after you re-dictate a line.")
+            else:
+                print(
+                    "Nothing to mine. Enable the ledger with `history = true`"
+                    " under [flow]; corrections are mined from it, locally."
+                )
+        return
+
+    def _pick(items: list, index_arg: str, what: str):
+        try:
+            index = int(index_arg)
+        except ValueError:
+            print(f"learned: not an index: {index_arg!r}", file=sys.stderr)
+            sys.exit(2)
+        if not 1 <= index <= len(items):
+            print(f"learned: no such {what} candidate: {index}", file=sys.stderr)
+            sys.exit(1)
+        return items[index - 1]
+
+    action = extra_args[0].lower()
+    if action == "accept" and len(extra_args) > 1:
+        heard, meant, _count = _pick(candidates, extra_args[1], "correction")
+        data["overrides"][heard] = meant
+        dictionary.save_dictionary(data)
+        print(f'accepted: "{heard}" -> "{meant}"')
+    elif action == "reject" and len(extra_args) > 1:
+        heard, meant, _count = _pick(candidates, extra_args[1], "correction")
+        data["rejected"].append(dictionary.candidate_key(heard, meant))
+        dictionary.save_dictionary(data)
+        print(f'rejected: "{heard}" -> "{meant}"')
+    elif action == "hotword" and len(extra_args) > 1:
+        token, _count = _pick(hotword_candidates, extra_args[1], "hotword")
+        data["hotwords"].append(token)
+        dictionary.save_dictionary(data)
+        print(f"hotword added: {token}")
+    elif action == "reject-hotword" and len(extra_args) > 1:
+        token, _count = _pick(hotword_candidates, extra_args[1], "hotword")
+        data["rejected"].append(dictionary.candidate_key("hotword", token))
+        dictionary.save_dictionary(data)
+        print(f"hotword rejected: {token}")
+    elif action == "macro" and len(extra_args) > 2:
+        text, _count = _pick(macro_candidates, extra_args[1], "macro")
+        name = " ".join(extra_args[2:]).strip().casefold()
+        if not name:
+            print("learned macro N <name>: a spoken name is required", file=sys.stderr)
+            sys.exit(2)
+        data["macros"][name] = text
+        dictionary.save_dictionary(data)
+        print(f'macro saved — say "furion, {name}" to type it')
+    elif action == "reject-macro" and len(extra_args) > 1:
+        text, _count = _pick(macro_candidates, extra_args[1], "macro")
+        data["rejected"].append(dictionary.candidate_key("macro", text))
+        dictionary.save_dictionary(data)
+        print("macro candidate rejected")
+    elif action == "forget" and len(extra_args) > 1:
+        spoken = " ".join(extra_args[1:]).casefold()
+        removed = [k for k in data["overrides"] if k.casefold() == spoken]
+        for key in removed:
+            del data["overrides"][key]
+        data["hotwords"] = [w for w in data["hotwords"] if w.casefold() != spoken]
+        had_macro = data["macros"].pop(spoken, None) is not None
+        dictionary.save_dictionary(data)
+        found = bool(removed) or had_macro
+        print(f"forgot: {extra_args[1]}" if found else f"not found: {extra_args[1]}")
+    else:
+        print(
+            "usage: voice-keyboard learned"
+            " [accept N | reject N | hotword N | reject-hotword N |"
+            " macro N <name> | reject-macro N | forget <spoken>]",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+
+def _run_ask_cli(client: "IPCClient", extra_args: list[str]) -> None:
+    """Talk to any app: answer a question about the current selection."""
+    question = " ".join(extra_args).strip()
+    if not question:
+        print('usage: voice-keyboard ask "why does this stack trace fire"', file=sys.stderr)
+        sys.exit(2)
+    _show_overlay("processing", detail=f"⌁ {question[:40]}")
+    try:
+        response = client.send_command("ask", {"instruction": question}, timeout=95.0)
+    except Exception as e:
+        _show_overlay("error", detail=str(e), timeout_ms=3000)
+        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        sys.exit(1)
+    if response.get("status") == "ok":
+        print(response.get("text", ""))
+    else:
+        message = response.get("message", "ask failed")
+        _show_overlay("error", detail=message, timeout_ms=3000)
+        print(f"Error: {message}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _run_find(extra_args: list[str]) -> None:
+    """Total recall: search the dictation ledger, semantically when
+    [recall] points at an embeddings endpoint, by keyword otherwise."""
+    from voice_keyboard import recall as recall_mod
+    from voice_keyboard.config import load_config
+    from voice_keyboard.history import last_entries
+
+    query = " ".join(extra_args).strip()
+    if not query:
+        print('usage: voice-keyboard find "the relay caps"', file=sys.stderr)
+        sys.exit(2)
+    entries = last_entries(500)
+    if not entries:
+        print("The ledger is empty — enable it with `history = true` under [flow].")
+        return
+    embedder = recall_mod.create_embedder(load_config())
+    hits = recall_mod.search(entries, query, embedder=embedder, limit=5)
+    if not hits:
+        print("Nothing recalled for that.")
+        return
+    for hit in hits:
+        stamp = _format_history_time(float(hit.get("ts", 0)))
+        app = hit.get("app") or "?"
+        print(f"[{stamp}] ({app}, {hit.get('score', 0):.2f}) {hit.get('text', '')}")
+
+
+def _run_intent_cli(client: "IPCClient", extra_args: list[str]) -> None:
+    """Type-don't-execute: the daemon types ONE command line at the caret
+    and never presses Enter — that keypress stays with the human."""
+    request = " ".join(extra_args).strip()
+    if not request:
+        print('usage: voice-keyboard intent "find every TODO in this repo"', file=sys.stderr)
+        sys.exit(2)
+    _show_overlay("processing", detail=f"⌁ {request}")
+    try:
+        response = client.send_command("intent", {"instruction": request}, timeout=50.0)
+    except Exception as e:
+        _show_overlay("error", detail=str(e), timeout_ms=3000)
+        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        sys.exit(1)
+    if response.get("status") == "ok":
+        text = response.get("text", "")
+        _show_overlay("inserted", detail="⌁ typed — Enter is yours", timeout_ms=2200)
+        print(f"Typed (Enter is yours): {text}")
+    else:
+        message = response.get("message", "intent failed")
+        _show_overlay("error", detail=message, timeout_ms=3000)
+        print(f"Error: {message}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="voice-keyboard",
@@ -375,7 +565,8 @@ def main() -> None:
         default="toggle",
         choices=[
             "start", "stop", "toggle", "tts", "status",
-            "history", "recall", "transform",
+            "history", "recall", "transform", "intent", "learned",
+            "keep", "discard", "ask", "find",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -384,6 +575,9 @@ def main() -> None:
         nargs="*",
         help=(
             "history [count] | recall [n-back] | transform <instruction...>"
+            " | intent <request...> | ask <question...> | find <query...>"
+            " | learned [accept N | reject N | hotword N | macro N <name> |"
+            " forget <spoken>]"
         ),
     )
     parser.add_argument(
@@ -407,6 +601,42 @@ def main() -> None:
 
     if args.command == "transform":
         _run_transform(client, args.args)
+        return
+
+    if args.command == "intent":
+        _run_intent_cli(client, args.args)
+        return
+
+    if args.command == "learned":
+        _run_learned(args.args)
+        return
+
+    if args.command == "ask":
+        _run_ask_cli(client, args.args)
+        return
+
+    if args.command == "find":
+        _run_find(args.args)
+        return
+
+    if args.command in {"keep", "discard"}:
+        try:
+            response = client.send_command(args.command, timeout=35.0)
+        except Exception as e:
+            _show_overlay("error", detail=str(e), timeout_ms=3000)
+            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            sys.exit(1)
+        if response.get("status") == "ok":
+            if args.command == "keep":
+                _show_overlay("inserted", detail="⌁ kept", timeout_ms=1500)
+                print(f"Kept: {response.get('text', '')}")
+            else:
+                print("Discarded the pending rewrite")
+        else:
+            message = response.get("message", f"{args.command} failed")
+            _show_overlay("error", detail=message, timeout_ms=3000)
+            print(f"Error: {message}", file=sys.stderr)
+            sys.exit(1)
         return
 
     if args.command == "tts":

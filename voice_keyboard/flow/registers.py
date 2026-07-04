@@ -22,6 +22,7 @@ class Register:
     numbers_on: bool = False       # convert spoken cardinals by default
     numbers_min: int = 10          # single-word conversion threshold
     paste_chord_shift: bool = False  # terminals paste with ctrl+shift+v
+    compiler: str = ""             # semantic compiler key (flow/code.py)
 
 
 PROSE = Register(name="prose", smart_caps=True, numbers_on=False)
@@ -33,8 +34,23 @@ TERMINAL = Register(
     paste_chord_shift=True,
 )
 VERBATIM = Register(name="verbatim", smart_caps=False, grammar_enabled=False)
+PYTHON = Register(
+    name="python",
+    smart_caps=False,
+    numbers_on=True,
+    numbers_min=0,
+    compiler="python",
+)
+SHELL = Register(
+    name="shell",
+    smart_caps=False,
+    numbers_on=True,
+    numbers_min=0,
+    paste_chord_shift=True,
+    compiler="shell",
+)
 
-REGISTERS = {r.name: r for r in (PROSE, TERMINAL, VERBATIM)}
+REGISTERS = {r.name: r for r in (PROSE, TERMINAL, VERBATIM, PYTHON, SHELL)}
 
 # App identifiers (AT-SPI application names, macOS app names, Windows exe
 # basenames — lowercased) that default to the terminal register.
@@ -62,8 +78,11 @@ def register_for_app(
     config_map: Optional[dict] = None,
     default: str = "prose",
 ) -> Register:
-    """Pick a register for the focused app: config map wins, then built-in
-    terminal detection, then the configured default."""
+    """Pick a register for the focused app: a password widget always wins
+    (verbatim — no smart rewriting inside a secret field), then the config
+    map, then built-in terminal detection, then the configured default."""
+    if (role or "").strip().lower() == "password text":
+        return VERBATIM
     app_key = (app or "").strip().lower()
     exe_key = app_key[:-4] if app_key.endswith(".exe") else app_key
     for key in (app_key, exe_key):
@@ -81,6 +100,7 @@ class RenderState:
     at_start: bool = True          # nothing rendered yet this session
     glue_next: bool = False        # suppress the space before the next atom
     capitalize_next: bool = True   # next word starts a sentence
+    pending: str = ""              # semantic-compiler hold (dash, open call)
 
 
 def initial_state(register: Register) -> RenderState:
@@ -109,6 +129,13 @@ def render_items(
     Pure and associative over concatenation: render(a+b) ==
     render(a) + render_continue(b) — the prefix-stability property.
     """
+    if register.compiler:
+        # Semantic registers compile speech; lazy import avoids a cycle.
+        from voice_keyboard.flow.code import COMPILERS
+
+        compiler = COMPILERS.get(register.compiler)
+        if compiler is not None:
+            return compiler(items, state, register)
     out: list[str] = []
     at_start = state.at_start
     glue_next = state.glue_next

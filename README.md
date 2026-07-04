@@ -14,11 +14,20 @@ When you ask for text-to-speech, it reads the primary selection from your
 desktop, sends that selected text to the configured TTS provider, and plays the
 returned audio locally.
 
-**New: [Flow — molten dictation](#flow--molten-dictation).** With a streaming
+**New in 2.0: Kai — a voice assistant in the keyboard.** A second hotkey
+(`Ctrl+Alt+.`) takes a spoken query and routes it by where you are: focused
+on a terminal, it turns your words into a command and types it at the
+prompt — never pressing Enter, only you can; anywhere else, it answers or
+searches the web, spoken back. The `[llm]` brain is model-agnostic and
+local-first (a ~1 GB model handles the command work). Off by default; see
+`[assistant]` in `config.toml.example`.
+
+**Flow — [molten dictation](#flow--molten-dictation).** With a streaming
 provider, words appear in the focused field *while you speak* and repair
 themselves in place as the transcript firms up. A spoken edit grammar
 ("scratch that", "new line", "period", `literal`), per-app context registers
-(prose / terminal / verbatim, picked by probing the focused app), spoken
+(prose / terminal / verbatim / python / shell, picked by probing the focused
+app), spoken
 numbers as digits, silence auto-stop, full Unicode on Linux via clipboard
 paste, and a wake-word rewrite channel ("… furion, make that formal") that
 routes the just-typed text through an LLM and repairs it on screen.
@@ -33,6 +42,13 @@ routes the just-typed text through an LLM and repairs it on screen.
   "new line", "period"; say "furion, make that formal" to rewrite in place.
 - **Read selected text aloud:** select text in any app, then run
   `voice-keyboard tts`. You can bind this to `Ctrl+Alt+T` in your desktop.
+- **Type a command without running it:** `voice-keyboard intent "find every
+  TODO in this repo"` — one line lands at your prompt, Enter stays yours
+  (enable the voice trigger with `[intent] enabled`).
+- **Teach it your vocabulary:** `voice-keyboard learned` reviews corrections
+  mined from the opt-in ledger; accept what is right.
+- **Hold rewrites for approval:** `[flow] rewrite_pending = true`, then
+  "keep it" / "scratch that" (or `voice-keyboard keep` / `discard`).
 - **Check whether the daemon is recording:** `voice-keyboard status`.
 - **Check whether the daemon is running:**
   `systemctl --user status voice-keyboard-daemon`.
@@ -361,12 +377,78 @@ Quartz on macOS, Win32 on Windows — and picks a register:
 | `prose` (default) | smart capitalization and punctuation spacing |
 | `terminal` | no auto-caps, numbers as digits, pastes with `Ctrl+Shift+V` |
 | `verbatim` | grammar off; words exactly as recognized |
+| `python` | compiles speech: "for i in range ten colon" → `for i in range(10):` |
+| `shell` | compiles speech: "pipe grep dash i error" → `| grep -i error` |
 
 Known terminals (kitty, alacritty, foot, konsole, GNOME Terminal, wezterm,
 Windows Terminal, iTerm2, …) map to `terminal` automatically; override or
-extend per app in `[registers.map]`. If focus moves to a different app
+extend per app in `[registers.map]` (that is also where you opt an editor
+into `python` or `shell`). If focus moves to a different app
 mid-dictation, typing freezes immediately and the transcript lands on the
-clipboard instead — dictation never types into the wrong window.
+clipboard instead — dictation never types into the wrong window. On Linux
+the probe also sees the focused *widget*: a password field always forces
+`verbatim`, is never written to the history ledger, and never contributes
+biasing context.
+
+### The next-level channels
+
+Seven capabilities landed together, each config-gated and off by default
+where behavior could change (see `ROADMAP.md` for the doctrine and
+`config.toml.example` for every key):
+
+- **Hotword biasing** (`[stt] hotword_bias`) — recognition is biased
+  toward the vocabulary you accepted via `voice-keyboard learned`, on
+  REST providers (OpenAI-style `prompt`, Deepgram `keyterm`/`keywords`,
+  AssemblyAI `word_boost`). Curated words only — screen text is never
+  harvested; dictation is new thought, not a continuation of what is on
+  screen. Assembled per session, never stored.
+- **A keyboard that learns you** (`voice-keyboard learned`) — corrections
+  are mined from the opt-in history ledger; nothing applies until you
+  accept it, then it merges into the grammar vocabulary
+  (`[flow] personal_dictionary`). All of it lives in
+  `~/.local/state/voice-keyboard/dictionary.json`, mode 600.
+- **Semantic registers** (`python`, `shell`) — deterministic spoken-code
+  compilation, no model in the loop.
+- **Molten diffs** (`[flow] rewrite_pending`) — a "furion, …" rewrite is
+  held pending; say "keep it" or "scratch that" (CLI: `keep` /
+  `discard`). No edit is real until it freezes.
+- **Type, never execute** (`[intent]`, `voice-keyboard intent "…"`) —
+  "furion, run …" types ONE command line at your prompt and cannot press
+  Enter: the refusal is enforced inside the keystroke injector on every
+  path (keycode, newline, clipboard paste). Your keypress is the consent.
+- **Ambient containment** (`[ambient]`, experimental) — in a long-open
+  session, only utterances that start with the address word are typed;
+  room speech never reaches the engine.
+- **Kai — the voice assistant** (`[assistant]`, second hotkey `Ctrl+Alt+.`)
+  — turn this on and the keyboard grows a voice assistant. Speak a query
+  and Kai routes it by where you are: **in a terminal**, it turns your
+  words into a command, types it at the prompt, and **never presses Enter —
+  only you can**; **anywhere else**, it searches the web / answers you,
+  spoken back through your xAI Voice Agent Builder agent (memory unified
+  with the dictation ledger, so it remembers everything you ever said).
+  Voice in, voice or a drafted command out — you never type to it. Frontier
+  brain, local hands, you own the Enter key.
+- **Total recall** (`[recall]`, `voice-keyboard find "…"`) — search
+  everything you ever dictated. Keyword search out of the box; point it
+  at a local Ollama `/embeddings` endpoint and it becomes semantic,
+  fully on-box. "furion, recall the relay caps" speaks the best match.
+- **The multiplayer keyboard** (`[remote_mic]`, experimental) — the
+  daemon serves a one-page LAN mic over self-signed HTTPS; your phone
+  streams audio into a normal dictation session on the desktop. Audio
+  never leaves your network.
+- **Procedural memory** (`voice-keyboard learned`) — texts you dictate
+  again and again surface as macro candidates; name one
+  (`learned macro N trailer`) and "furion, trailer" types it verbatim.
+  Offered, never imposed — the same consent gate as corrections.
+- **Speculative TTS** (`[tts] prefetch`) — the primary selection is
+  synthesized *while you are still highlighting it*, so `voice-keyboard
+  tts` starts instantly on a cache hit. `"auto"` prefetches only against
+  a local endpoint (free); `"always"` opts in cloud (spends tokens on
+  selections never played, and sends selection text before you ask).
+- **Preedit is molten** (`SPOKEN-INPUT-PROTOCOL.md`) — the input-method
+  mapping layer (`voice_keyboard/imethod.py`) that renders molten text as
+  IM preedit and freeze as commit; host integration is a deliberate,
+  separate opt-in.
 
 ### Unicode on Linux
 
@@ -875,7 +957,7 @@ voice-keyboard/
 |   |-- flow/
 |   |   |-- engine.py      # Molten dictation state machine (pure logic)
 |   |   |-- grammar.py     # Spoken commands, punctuation, vocabulary, wake word
-|   |   |-- registers.py   # prose/terminal/verbatim rendering
+|   |   |-- registers.py   # register rendering (+ semantic compilers in code.py)
 |   |   |-- numbers.py     # Spoken cardinals -> digits
 |   |   |-- vad.py         # RMS levels, VU meter, silence auto-stop
 |   |   `-- worker.py      # Injection convergence loop (type/backspace bursts)

@@ -36,6 +36,12 @@ provider = "xai"
 model = ""
 language = "en"
 interim_results = true
+# Bias recognition toward the hotwords you accepted via
+# `voice-keyboard learned` — curated vocabulary you actually say. REST
+# providers only (openai prompt / deepgram keyterm / assemblyai
+# word_boost); assembled per session, never stored. Password fields are
+# always excluded. Screen text is never harvested.
+hotword_bias = false
 
 [tts]
 # Choices: xai, hyperfurion, openai, elevenlabs
@@ -50,6 +56,12 @@ model = ""
 # elevenlabs = "JBFqnCBsd6RMkjVDRZzb"
 voice_id = "eve"
 language = "en"
+# Speculative TTS: synthesize the primary selection while you highlight,
+# so `voice-keyboard tts` plays instantly. "auto" = only against a LOCAL
+# openai-compatible endpoint (free); "always" opts in cloud TTS (spends
+# tokens on selections never played, and sends selection text before you
+# ask); "off" = never.
+prefetch = "off"
 
 [audio]
 sample_rate = 16000
@@ -66,8 +78,8 @@ mode = "auto"
 hold_threshold_ms = 280
 
 # ── Flow: molten dictation ────────────────────────────────────────────
-# Edits to [flow], [registers], and [llm] hot-reload at the next
-# recording — no daemon restart needed.
+# Edits to [flow], [registers], [llm], [intent], and [ambient] hot-reload
+# at the next recording — no daemon restart needed.
 
 [flow]
 # The grammar + register pipeline (all providers). false = the daemon
@@ -102,6 +114,15 @@ numbers = "auto"
 # Opt-in local dictation ledger for `voice-keyboard history` / `recall`.
 # Entries: ~/.local/state/voice-keyboard/history.jsonl (mode 600).
 history = false
+# Merge corrections you accepted via `voice-keyboard learned` into the
+# grammar vocabulary. Dormant until you accept something; your explicit
+# [flow.vocabulary] entries always win.
+personal_dictionary = true
+# Molten diffs: hold a "furion, ..." rewrite as PENDING instead of
+# landing it — say "keep it" (or `voice-keyboard keep`) to apply,
+# "scratch that" (or `discard`) to drop; unkept rewrites evaporate
+# after two minutes. false = rewrites land immediately, as before.
+rewrite_pending = false
 # Say "<wake_word>, <instruction>" at the end of an utterance to rewrite
 # it through [llm]: "... furion, make that formal".
 wake_word = "furion"
@@ -123,7 +144,10 @@ wake_word = "furion"
 [registers]
 # How dictation renders per app: prose (smart caps + punctuation),
 # terminal (verbatim-ish, numbers as digits, ctrl+shift+v paste),
-# verbatim (grammar off).
+# verbatim (grammar off), python / shell (semantic registers that COMPILE
+# speech: "for i in range ten colon" -> `for i in range(10):`,
+# "pipe grep dash i error" -> `| grep -i error`).
+# Password fields always force verbatim and are never remembered.
 default = "prose"
 # Probe the focused app at recording start (AT-SPI on Linux, Quartz on
 # macOS, Win32 on Windows) to pick the register automatically.
@@ -135,14 +159,123 @@ probe = true
 # code = "verbatim"
 
 [llm]
-# The voice-transform channel ("furion, ..." and `voice-keyboard
-# transform`). Any OpenAI-compatible /chat/completions endpoint works —
-# point base_url at a local llama.cpp/vLLM server for fully-local
-# rewrites. api_key falls back to the matching [providers.*] key.
+# The interactive brain: "furion, ..." rewrites, `voice-keyboard
+# transform`, intent command compilation, and Kai's terminal
+# command-vs-question routing. Fully model-agnostic — ANY
+# OpenAI-compatible /chat/completions endpoint works.
+#
+# Cloud default (needs a key):
 provider = "xai"
 base_url = ""
 api_key = ""
-model = "grok-4-fast"
+model = "grok-4.3"
+#
+# LOCAL / offline (no key, private, bundle-friendly) — point at a local
+# OpenAI-compatible server. Recommended small models for this task
+# (instruction-following + shell-command generation, ~1-4B, permissive
+# license so it can ship with the installer):
+#   • Qwen3.5-2B-Instruct   — Apache-2.0, best small coder, ~1.3 GB (Q4)
+#   • Phi-4-mini (3.8B)     — MIT, strongest instruction/function-calling
+#   • Gemma 4 E2B           — Apache-2.0, smallest/fastest, <1.5 GB
+# Example (Ollama):
+#   provider = "openai"
+#   base_url = "http://localhost:11434/v1"
+#   model    = "qwen3.5:2b"
+#   api_key  = "ollama"
+
+[assistant]
+# Kai — the voice assistant. When enabled, a SECOND hotkey (below) takes a
+# spoken query and routes it by WHERE YOU ARE:
+#   • focused on a terminal  -> it turns your words into a command, types it
+#     at the prompt, and NEVER presses Enter (that stays yours);
+#   • anywhere else          -> it answers / searches the web, spoken back.
+# Voice in, voice or a drafted command out — you never type to it (typed
+# interaction is a future Seneschal-computer thing). Off by default.
+enabled = false
+# What the mind calls itself — the local brain's persona and the on-screen
+# copy. "Kai", from KairOS. (The spoken voice agent introduces itself with
+# whatever name you gave it in the xAI Voice Agent Builder console.)
+name = "Kai"
+# xAI Voice Agent Builder id for the realtime voice brain; key falls back
+# to providers.xai. Leave empty to use the local [llm] brain only.
+agent_id = ""
+api_key = ""
+# Which brain answers a SPOKEN turn (the hotkey): realtime | local | auto.
+# The xAI voice agent is voice-to-voice — it answers your captured audio
+# with speech. TYPED conversations (`voice-keyboard converse "…"`) always
+# use the local [llm]; the voice agent cannot take text. auto = the voice
+# agent for spoken turns when configured, local otherwise.
+brain = "auto"
+# The conversation hotkey (a second global binding; dictation keeps
+# Ctrl+Alt+V). Restart to change — it owns a listener.
+hotkey = "control+alt+."
+# local = never send file contents to the brain; cloud = send excerpts of
+# files you explicitly name. Your selection and memory are always allowed.
+privacy_mode = "local"
+memory_enabled = true
+web_enabled = true
+max_memory_results = 5
+# (Reserved) the terminal route ALWAYS drafts a command (typed, no Enter);
+# this would additionally let the brain draft one when you are NOT in a
+# terminal. Off by default; unused by the current voice flow.
+can_act = false
+# Confine any file context the brain may read to this root (default: home).
+home_root = ""
+
+[ask]
+# Talk to any app: "furion, ask why does this fail" answers about the
+# PRIMARY SELECTION through [llm]. mode "say" speaks the answer via TTS;
+# "type" types it at the caret (newline-suppressed). This gates only the
+# voice trigger; `voice-keyboard ask "…"` is always available.
+enabled = false
+verbs = ["ask", "explain", "answer"]
+mode = "say"
+
+[recall]
+# Total recall: search everything you dictated ([flow] history ledger).
+# Keyword search needs no setup; set base_url + model to an
+# OpenAI-compatible /embeddings endpoint for semantic search — a local
+# Ollama works: base_url = "http://localhost:11434/v1",
+# model = "nomic-embed-text". Voice trigger gated here;
+# `voice-keyboard find "…"` is always available.
+enabled = false
+verbs = ["recall", "remember"]
+mode = "say"
+base_url = ""
+model = ""
+api_key = ""
+
+[remote_mic]
+# EXPERIMENTAL multiplayer keyboard: the daemon serves a one-page LAN
+# mic over self-signed HTTPS. Open https://<this-machine>:<port>/?t=<token>
+# on your phone (accept the certificate warning once), tap start, and
+# dictation lands on this desktop. Audio never leaves your network.
+# The token is auto-generated and logged at startup when left empty.
+# Restart the daemon to toggle — it owns a listening socket.
+enabled = false
+port = 9177
+token = ""
+
+[ambient]
+# EXPERIMENTAL containment for long-open sessions: when on, only
+# utterances that START with the address word are typed ("furion write
+# ..."); room speech never reaches the engine and evaporates. Does NOT
+# start background capture — sessions still begin explicitly, and the
+# hotkey stays the hard mute.
+enabled = false
+# Defaults to flow.wake_word when empty.
+address_word = ""
+
+[intent]
+# The voice→command channel: "furion, run …" compiles ONE command line
+# through [llm], types it at the caret, and NEVER presses Enter — the
+# refusal is enforced inside the keystroke injector, so nothing the model
+# says can execute anything. You review the line and press Enter yourself.
+# This switch gates only the voice trigger; `voice-keyboard intent "…"`
+# is explicit and always available.
+enabled = false
+# The instruction's first word that routes to the intent channel.
+verbs = ["run", "command", "execute"]
 
 [daemon]
 # Defaults to ~/.config/voice-keyboard/socket if unset.

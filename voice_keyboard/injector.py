@@ -45,6 +45,12 @@ CHAR_TO_KEY = {} if e is None else {
 PASTE_SETTLE_S = 0.15
 
 
+def strip_line_breaks(text: str) -> str:
+    """Collapse newlines/carriage returns to spaces — nothing that could
+    submit a command may reach the keycode or paste paths in no-Enter mode."""
+    return text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+
+
 def create_injector():
     """Platform factory: uinput on Linux, Quartz on macOS, SendInput on Windows."""
     if sys.platform == "darwin":
@@ -83,6 +89,11 @@ class TextInjector:
         # Terminals paste with ctrl+shift+v; the daemon sets this per
         # session from the resolved register.
         self.paste_chord_shift = False
+        # The intent channel types commands but must never run them: while
+        # set, Enter cannot be emitted by ANY path — keycode, newline in
+        # text, or newline smuggled through a clipboard paste. Pressing
+        # Enter stays a human act.
+        self.suppress_enter = False
         self._warned_no_clipboard = False
 
     def start(self) -> None:
@@ -123,6 +134,9 @@ class TextInjector:
     def _press_key(self, code: int, shift: bool = False) -> None:
         if self._ui is None:
             raise RuntimeError("Injector not started")
+        if self.suppress_enter and code == e.KEY_ENTER:
+            logger.warning("no-Enter mode: refused to press Enter")
+            return
         if shift:
             self._ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
             self._ui.syn()
@@ -137,6 +151,8 @@ class TextInjector:
         time.sleep(0.002)
 
     def type_text(self, text: str) -> None:
+        if self.suppress_enter:
+            text = strip_line_breaks(text)
         for keyable, run in _split_runs(text):
             if keyable:
                 self._type_keyable(run)
@@ -160,6 +176,11 @@ class TextInjector:
     def _paste_text(self, text: str) -> None:
         """Type beyond the uinput key map by pasting: put the run on the
         clipboard, press the paste chord, then restore the clipboard."""
+        if self.suppress_enter:
+            # Defense in depth: terminals execute pasted newlines.
+            text = strip_line_breaks(text)
+            if not text:
+                return
         if not clipboard.available():
             if not self._warned_no_clipboard:
                 self._warned_no_clipboard = True

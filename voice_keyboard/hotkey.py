@@ -30,6 +30,23 @@ if e is not None:
         "enter": e.KEY_ENTER,
         "return": e.KEY_ENTER,
         "tab": e.KEY_TAB,
+        # Punctuation keys: evdev names them KEY_DOT etc., not KEY_".",
+        # so bindings like control+alt+. resolve (the assistant hotkey).
+        ".": e.KEY_DOT,
+        "period": e.KEY_DOT,
+        ",": e.KEY_COMMA,
+        "comma": e.KEY_COMMA,
+        "/": e.KEY_SLASH,
+        "slash": e.KEY_SLASH,
+        ";": e.KEY_SEMICOLON,
+        "'": e.KEY_APOSTROPHE,
+        "-": e.KEY_MINUS,
+        "minus": e.KEY_MINUS,
+        "=": e.KEY_EQUAL,
+        "[": e.KEY_LEFTBRACE,
+        "]": e.KEY_RIGHTBRACE,
+        "\\": e.KEY_BACKSLASH,
+        "`": e.KEY_GRAVE,
     }
 else:
     MODIFIER_ALIASES = {}
