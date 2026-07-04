@@ -60,11 +60,66 @@ class TestTextInjector:
             first = key_writes[0]
             assert first[2] == 1
 
-    def test_unsupported_character_logs_warning(self, injector: TextInjector, caplog: pytest.LogCaptureFixture) -> None:
-        with mock.patch("voice_keyboard.injector.UInput"):
+    def test_unsupported_character_without_clipboard_logs_warning(
+        self, injector: TextInjector, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with mock.patch("voice_keyboard.injector.UInput"), \
+             mock.patch("voice_keyboard.injector.clipboard.available", return_value=False):
             injector.start()
             injector.type_text("é")
             assert "Unsupported character" in caplog.text
+
+    def test_unsupported_character_pastes_via_clipboard(self, injector: TextInjector) -> None:
+        from evdev import ecodes as e
+        with mock.patch("voice_keyboard.injector.UInput") as mock_uinput, \
+             mock.patch("voice_keyboard.injector.clipboard.available", return_value=True), \
+             mock.patch("voice_keyboard.injector.clipboard.get_text", return_value="old clip"), \
+             mock.patch("voice_keyboard.injector.clipboard.set_text", return_value=True) as set_text, \
+             mock.patch("voice_keyboard.injector.time.sleep"):
+            injector.start()
+            injector.type_text("café — naïve")
+            # The non-ASCII runs went through the clipboard, and the prior
+            # clipboard contents were restored afterwards.
+            pasted = [call.args[0] for call in set_text.call_args_list]
+            assert "é" in "".join(pasted)
+            assert "—" in "".join(pasted)
+            assert pasted[-1] == "old clip" or "old clip" in pasted
+            # A paste chord was pressed: ctrl went down at least once.
+            ctrl_events = [
+                call.args
+                for call in mock_uinput.return_value.write.call_args_list
+                if len(call.args) == 3 and call.args[1] == e.KEY_LEFTCTRL
+            ]
+            assert ctrl_events and ctrl_events[0][2] == 1
+
+    def test_terminal_paste_chord_holds_shift(self, injector: TextInjector) -> None:
+        from evdev import ecodes as e
+        with mock.patch("voice_keyboard.injector.UInput") as mock_uinput, \
+             mock.patch("voice_keyboard.injector.clipboard.available", return_value=True), \
+             mock.patch("voice_keyboard.injector.clipboard.get_text", return_value=None), \
+             mock.patch("voice_keyboard.injector.clipboard.set_text", return_value=True), \
+             mock.patch("voice_keyboard.injector.time.sleep"):
+            injector.paste_chord_shift = True
+            injector.start()
+            injector.type_text("é")
+            shift_downs = [
+                call.args
+                for call in mock_uinput.return_value.write.call_args_list
+                if len(call.args) == 3 and call.args[1] == e.KEY_LEFTSHIFT and call.args[2] == 1
+            ]
+            assert shift_downs, "terminal register pastes with ctrl+shift+v"
+
+    def test_delete_chars_presses_backspace(self, injector: TextInjector) -> None:
+        from evdev import ecodes as e
+        with mock.patch("voice_keyboard.injector.UInput") as mock_uinput:
+            injector.start()
+            injector.delete_chars(3)
+            presses = [
+                call.args
+                for call in mock_uinput.return_value.write.call_args_list
+                if len(call.args) == 3 and call.args[1] == e.KEY_BACKSPACE and call.args[2] == 1
+            ]
+            assert len(presses) == 3
 
     def test_type_text_does_not_block_main_thread(self, injector: TextInjector) -> None:
         with mock.patch("voice_keyboard.injector.UInput") as mock_uinput:

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 INPUT_KEYBOARD = 1
 KEYEVENTF_UNICODE = 0x0004
 KEYEVENTF_KEYUP = 0x0002
+VK_BACK = 0x08
 
 # Units per SendInput batch; a breather between batches keeps slow apps fed.
 BATCH_UTF16_UNITS = 16
@@ -106,4 +107,25 @@ class WinTextInjector:
             )
             if sent != len(events):
                 logger.warning("SendInput delivered %d/%d events", sent, len(events))
+            time.sleep(0.004)
+
+    def delete_chars(self, count: int) -> None:
+        """Erase `count` characters before the caret via Backspace."""
+        if self._user32 is None:
+            raise RuntimeError("Injector not started")
+        remaining = max(0, count)
+        while remaining > 0:
+            batch = min(remaining, BATCH_UTF16_UNITS)
+            events = (_INPUT * (batch * 2))()
+            for i in range(batch):
+                for j, flags in enumerate((0, KEYEVENTF_KEYUP)):
+                    event = events[i * 2 + j]
+                    event.type = INPUT_KEYBOARD
+                    event.ki = _KEYBDINPUT(VK_BACK, 0, flags, 0, 0)
+            sent = self._user32.SendInput(
+                len(events), events, ctypes.sizeof(_INPUT)
+            )
+            if sent != len(events):
+                logger.warning("SendInput delivered %d/%d events", sent, len(events))
+            remaining -= batch
             time.sleep(0.004)
