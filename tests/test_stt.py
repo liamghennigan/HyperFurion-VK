@@ -305,6 +305,11 @@ class TestOpenAICompatibleBaseURL:
             "stt": {"provider": "openai", "language": "en"},
         }
         client = stt.create_stt_client(cfg)
+        # A local endpoint gets the pseudo-streaming adapter by default
+        # (flow.live_rest = "auto"): re-transcribing locally is free.
+        assert isinstance(client, stt.ChunkedRESTAdapter)
+        assert client.supports_streaming
+        client = client._inner
         assert isinstance(client, stt.BufferedRESTSTTClient)
 
         captured = {}

@@ -9,6 +9,8 @@ except ImportError:  # non-Linux: create_injector() picks the mac backend
     UInput = None
     e = None
 
+from voice_keyboard import clipboard
+
 logger = logging.getLogger(__name__)
 
 SHIFT_MAP = {
@@ -38,6 +40,10 @@ CHAR_TO_KEY = {} if e is None else {
     "\n": e.KEY_ENTER, "\t": e.KEY_TAB,
 }
 
+# How long the focused app gets to read the clipboard after the paste
+# chord before the previous clipboard contents are restored.
+PASTE_SETTLE_S = 0.15
+
 
 def create_injector():
     """Platform factory: uinput on Linux, Quartz on macOS, SendInput on Windows."""
@@ -52,9 +58,32 @@ def create_injector():
     return TextInjector()
 
 
+def _keyable(ch: str) -> bool:
+    """True when the uinput key map can type `ch` directly."""
+    if ch.isupper():
+        return ch.lower() in CHAR_TO_KEY
+    return ch in CHAR_TO_KEY or (ch in SHIFT_MAP and SHIFT_MAP[ch] in CHAR_TO_KEY)
+
+
+def _split_runs(text: str) -> list[tuple[bool, str]]:
+    """Partition text into (keyable, run) segments."""
+    runs: list[tuple[bool, str]] = []
+    for ch in text:
+        keyable = _keyable(ch)
+        if runs and runs[-1][0] == keyable:
+            runs[-1] = (keyable, runs[-1][1] + ch)
+        else:
+            runs.append((keyable, ch))
+    return runs
+
+
 class TextInjector:
     def __init__(self):
         self._ui: Optional["UInput"] = None
+        # Terminals paste with ctrl+shift+v; the daemon sets this per
+        # session from the resolved register.
+        self.paste_chord_shift = False
+        self._warned_no_clipboard = False
 
     def start(self) -> None:
         if UInput is None:
@@ -79,6 +108,7 @@ class TextInjector:
                 e.KEY_SLASH, e.KEY_GRAVE,
                 e.KEY_ENTER, e.KEY_TAB,
                 e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT,
+                e.KEY_BACKSPACE, e.KEY_LEFTCTRL,
             ],
         }
         self._ui = UInput(caps, name="voice-keyboard", version=0x1)
@@ -107,20 +137,68 @@ class TextInjector:
         time.sleep(0.002)
 
     def type_text(self, text: str) -> None:
+        for keyable, run in _split_runs(text):
+            if keyable:
+                self._type_keyable(run)
+            else:
+                self._paste_text(run)
+
+    def delete_chars(self, count: int) -> None:
+        """Erase `count` characters before the caret via Backspace."""
+        for _ in range(max(0, count)):
+            self._press_key(e.KEY_BACKSPACE)
+
+    def _type_keyable(self, text: str) -> None:
         for ch in text:
             if ch.isupper():
-                lower = ch.lower()
-                if lower in CHAR_TO_KEY:
-                    self._press_key(CHAR_TO_KEY[lower], shift=True)
-                else:
-                    logger.warning("Unsupported character: %r", ch)
+                self._press_key(CHAR_TO_KEY[ch.lower()], shift=True)
             elif ch in SHIFT_MAP:
-                base = SHIFT_MAP[ch]
-                if base in CHAR_TO_KEY:
-                    self._press_key(CHAR_TO_KEY[base], shift=True)
-                else:
-                    logger.warning("Unsupported character: %r", ch)
-            elif ch in CHAR_TO_KEY:
-                self._press_key(CHAR_TO_KEY[ch])
+                self._press_key(CHAR_TO_KEY[SHIFT_MAP[ch]], shift=True)
             else:
-                logger.warning("Unsupported character: %r", ch)
+                self._press_key(CHAR_TO_KEY[ch])
+
+    def _paste_text(self, text: str) -> None:
+        """Type beyond the uinput key map by pasting: put the run on the
+        clipboard, press the paste chord, then restore the clipboard."""
+        if not clipboard.available():
+            if not self._warned_no_clipboard:
+                self._warned_no_clipboard = True
+                logger.warning(
+                    "Unsupported characters need a clipboard tool for paste"
+                    " injection; install wl-clipboard (Wayland) or xclip (X11)"
+                )
+            logger.warning("Unsupported characters dropped: %r", text)
+            return
+
+        previous = clipboard.get_text()
+        if not clipboard.set_text(text):
+            logger.warning("Unsupported characters dropped (clipboard write failed): %r", text)
+            return
+        try:
+            self._press_paste_chord()
+            # Give the focused app time to read the selection before the
+            # previous clipboard contents come back.
+            time.sleep(PASTE_SETTLE_S)
+        finally:
+            if previous is not None:
+                clipboard.set_text(previous)
+
+    def _press_paste_chord(self) -> None:
+        if self._ui is None:
+            raise RuntimeError("Injector not started")
+        self._ui.write(e.EV_KEY, e.KEY_LEFTCTRL, 1)
+        if self.paste_chord_shift:
+            self._ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+        self._ui.syn()
+        time.sleep(0.002)
+        self._ui.write(e.EV_KEY, e.KEY_V, 1)
+        self._ui.syn()
+        time.sleep(0.002)
+        self._ui.write(e.EV_KEY, e.KEY_V, 0)
+        self._ui.syn()
+        time.sleep(0.002)
+        if self.paste_chord_shift:
+            self._ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+        self._ui.write(e.EV_KEY, e.KEY_LEFTCTRL, 0)
+        self._ui.syn()
+        time.sleep(0.002)

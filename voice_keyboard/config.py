@@ -64,8 +64,68 @@ DEFAULT_CONFIG: dict = {
         "enabled": True,
         "key": "control+alt+v",
         "mode": "auto",
+        "hold_threshold_ms": 280,
+    },
+    "flow": {
+        # Grammar + register pipeline (all providers). Off = the daemon
+        # behaves exactly as before Flow existed.
+        "enabled": True,
+        # Molten live injection while speaking (streaming providers).
+        "live": True,
+        # Spoken commands and punctuation ("scratch that", "period", ...).
+        "grammar": True,
+        # A molten word commits after surviving this long...
+        "stability_ms": 1500,
+        # ...and this many consecutive transcript updates.
+        "stability_updates": 2,
+        # Upper bound on the revisable tail (repairs can never be longer).
+        "max_molten_chars": 160,
+        # Widen the stability requirement when the provider revises deeply.
+        "adaptive": True,
+        # Pseudo-streaming for REST providers: auto = only local endpoints
+        # (re-transcribing is free there), always, or off.
+        "live_rest": "auto",
+        "live_rest_interval_ms": 2500,
+        # Auto-stop after this much silence (0 = off).
+        "auto_stop_ms": 0,
+        # Spoken cardinals -> digits: auto = terminal register only.
+        "numbers": "auto",
+        # Opt-in local dictation ledger (history/recall).
+        "history": False,
+        # Wake word for in-stream instructions ("furion, make that formal").
+        "wake_word": "furion",
+        # "spoken phrase" = "Replacement" (multi-word keys fine).
+        "vocabulary": {},
+        # Remap command phrases: scratch_that / new_line / new_paragraph /
+        # literal, e.g. scratch_that = ["nuke it"].
+        "commands": {},
+        # Remap spoken punctuation: "period" = "." ("" removes a phrase).
+        "punctuation": {},
+    },
+    "registers": {
+        "default": "prose",
+        # Probe the focused app (AT-SPI / Quartz / Win32) at recording start.
+        "probe": True,
+        # App -> register overrides, merged over the built-in terminal list.
+        "map": {},
+    },
+    "llm": {
+        # Voice-transform channel; any OpenAI-compatible chat endpoint.
+        "provider": "xai",
+        "base_url": "",
+        "api_key": "",
+        "model": "grok-4-fast",
     },
 }
+
+VALID_REGISTERS = {"prose", "terminal", "verbatim"}
+_FLOW_BOOL_KEYS = ("enabled", "live", "grammar", "adaptive", "history")
+_FLOW_INT_KEYS = (
+    "stability_ms",
+    "stability_updates",
+    "max_molten_chars",
+    "live_rest_interval_ms",
+)
 
 PLACEHOLDER_API_KEYS = {
     "xai-your-api-key-here",
@@ -215,3 +275,45 @@ def validate_config(config: dict) -> None:
     mode = hotkey_cfg.get("mode", "auto")
     if mode not in {"auto", "toggle", "hold", "disabled"}:
         raise RuntimeError("hotkey.mode must be one of: auto, toggle, hold, disabled")
+
+    _validate_flow_config(config)
+
+
+def _validate_flow_config(config: dict) -> None:
+    flow_cfg = config.get("flow", {})
+    for key in _FLOW_BOOL_KEYS:
+        value = flow_cfg.get(key, DEFAULT_CONFIG["flow"][key])
+        if not isinstance(value, bool):
+            raise RuntimeError(f"flow.{key} must be a boolean")
+    for key in _FLOW_INT_KEYS:
+        value = flow_cfg.get(key, DEFAULT_CONFIG["flow"][key])
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise RuntimeError(f"flow.{key} must be a positive integer")
+    auto_stop = flow_cfg.get("auto_stop_ms", 0)
+    if not isinstance(auto_stop, int) or isinstance(auto_stop, bool) or auto_stop < 0:
+        raise RuntimeError("flow.auto_stop_ms must be a non-negative integer (0 = off)")
+    if str(flow_cfg.get("live_rest", "auto")).lower() not in {"auto", "always", "off"}:
+        raise RuntimeError("flow.live_rest must be one of: auto, always, off")
+    if str(flow_cfg.get("numbers", "auto")).lower() not in {"auto", "always", "off"}:
+        raise RuntimeError("flow.numbers must be one of: auto, always, off")
+    vocabulary = flow_cfg.get("vocabulary", {})
+    if not isinstance(vocabulary, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in vocabulary.items()
+    ):
+        raise RuntimeError("flow.vocabulary must map spoken phrases to strings")
+
+    registers_cfg = config.get("registers", {})
+    default_register = str(registers_cfg.get("default", "prose")).lower()
+    if default_register not in VALID_REGISTERS:
+        raise RuntimeError(
+            f"registers.default must be one of: {', '.join(sorted(VALID_REGISTERS))}"
+        )
+    register_map = registers_cfg.get("map", {})
+    if not isinstance(register_map, dict):
+        raise RuntimeError("registers.map must be a table of app = register")
+    for app, register in register_map.items():
+        if str(register).lower() not in VALID_REGISTERS:
+            raise RuntimeError(
+                f"registers.map.{app} must be one of: "
+                f"{', '.join(sorted(VALID_REGISTERS))}"
+            )

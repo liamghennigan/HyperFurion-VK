@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 # in UTF-16 code units (the API's native unit).
 CHUNK_UTF16_UNITS = 18
 
+# Virtual keycode for the Delete (backspace) key on Apple keyboards.
+KVK_DELETE = 51
+
 
 def _utf16_units(text: str) -> int:
     return len(text.encode("utf-16-le")) // 2
@@ -69,3 +72,16 @@ class MacTextInjector:
                 q.CGEventKeyboardSetUnicodeString(event, units, chunk)
                 q.CGEventPost(q.kCGHIDEventTap, event)
             time.sleep(0.005)
+
+    def delete_chars(self, count: int) -> None:
+        """Erase `count` characters before the caret via the Delete key."""
+        if self._quartz is None:
+            raise RuntimeError("Injector not started")
+        q = self._quartz
+        for index in range(max(0, count)):
+            for is_down in (True, False):
+                event = q.CGEventCreateKeyboardEvent(None, KVK_DELETE, is_down)
+                q.CGEventPost(q.kCGHIDEventTap, event)
+            if (index + 1) % 16 == 0:
+                time.sleep(0.005)
+        time.sleep(0.005)

@@ -23,139 +23,6 @@ def _notification_id_path() -> Path:
     return _runtime_path("voice-keyboard-notification-id")
 
 
-FOCUS_ANCHOR_SCRIPT = r"""
-import json
-
-try:
-    import gi
-    gi.require_version("Atspi", "2.0")
-    from gi.repository import Atspi
-except Exception:
-    raise SystemExit(1)
-
-CoordType = Atspi.CoordType.SCREEN
-Focused = Atspi.StateType.FOCUSED
-
-
-def state_contains(accessible, state):
-    try:
-        return accessible.get_state_set().contains(state)
-    except Exception:
-        return False
-
-
-def accessible_name(accessible):
-    try:
-        return accessible.get_name() or ""
-    except Exception:
-        return ""
-
-
-def accessible_role(accessible):
-    try:
-        return accessible.get_role_name() or ""
-    except Exception:
-        return ""
-
-
-def application_name(accessible):
-    try:
-        app = accessible.get_application()
-        return app.get_name() or ""
-    except Exception:
-        return ""
-
-
-def is_shell_chrome(accessible):
-    return (
-        application_name(accessible) == "gnome-shell"
-        and accessible_name(accessible) == "Main stage"
-        and accessible_role(accessible) == "window"
-    )
-
-
-def rect_tuple(rect):
-    return int(rect.x), int(rect.y), int(rect.width), int(rect.height)
-
-
-def usable_rect(rect):
-    x, y, width, height = rect_tuple(rect)
-    return width > 0 and height > 0 and x > -30000 and y > -30000
-
-
-def find_focused(accessible, depth=0, max_depth=14, seen=None):
-    if seen is None:
-        seen = set()
-    if depth > max_depth:
-        return None
-    ident = id(accessible)
-    if ident in seen:
-        return None
-    seen.add(ident)
-
-    best = (
-        accessible
-        if state_contains(accessible, Focused) and not is_shell_chrome(accessible)
-        else None
-    )
-    try:
-        child_count = accessible.get_child_count()
-    except Exception:
-        return best
-
-    for index in range(child_count):
-        try:
-            child = accessible.get_child_at_index(index)
-        except Exception:
-            continue
-        found = find_focused(child, depth + 1, max_depth, seen)
-        if found is not None:
-            best = found
-    return best
-
-
-def caret_anchor(accessible):
-    try:
-        offset = Atspi.Text.get_caret_offset(accessible)
-    except Exception:
-        return None
-    for candidate in [offset, offset - 1, 0]:
-        if candidate < 0:
-            continue
-        try:
-            rect = Atspi.Text.get_character_extents(accessible, candidate, CoordType)
-        except Exception:
-            continue
-        if usable_rect(rect):
-            x, y, width, height = rect_tuple(rect)
-            anchor_x = x if candidate == offset else x + width
-            return {"x": anchor_x, "y": y}
-    return None
-
-
-def component_anchor(accessible):
-    try:
-        rect = Atspi.Component.get_extents(accessible, CoordType)
-    except Exception:
-        return None
-    if not usable_rect(rect):
-        return None
-    x, y, width, height = rect_tuple(rect)
-    return {"x": x + max(width // 2, 1), "y": y}
-
-
-focused = find_focused(Atspi.get_desktop(0))
-if focused is None:
-    raise SystemExit(1)
-
-anchor = caret_anchor(focused) or component_anchor(focused)
-if anchor is None:
-    raise SystemExit(1)
-
-print(json.dumps(anchor))
-"""
-
-
 def _read_notification_id() -> str:
     try:
         value = _notification_id_path().read_text(encoding="utf-8").strip()
@@ -235,23 +102,12 @@ def _notify(
 
 
 def _focused_anchor() -> tuple[int, int]:
-    try:
-        result = subprocess.run(
-            ["/usr/bin/python3", "-c", FOCUS_ANCHOR_SCRIPT],
-            capture_output=True,
-            text=True,
-            timeout=1.2,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    from voice_keyboard.focusprobe import probe_focus
+
+    info = probe_focus()
+    if info is None:
         return (-1, -1)
-    if result.returncode != 0:
-        return (-1, -1)
-    try:
-        payload = json.loads(result.stdout)
-        return (int(payload["x"]), int(payload["y"]))
-    except (KeyError, TypeError, ValueError):
-        return (-1, -1)
+    return (info.x, info.y)
 
 
 def _call_shell_overlay(
@@ -331,8 +187,11 @@ def _show_overlay(
     *,
     detail: str = "",
     timeout_ms: int = 0,
+    anchor: tuple[int, int] | None = None,
 ) -> None:
-    x, y = _focused_anchor()
+    # A caller with a cached anchor (the daemon's live caption at ~4 Hz)
+    # passes it in; re-probing AT-SPI on every update would be too heavy.
+    x, y = anchor if anchor is not None else _focused_anchor()
     if not _call_shell_overlay("Show", state, str(x), str(y), detail, str(timeout_ms)):
         _notify("Voice Keyboard", detail or state.replace("_", " ").title())
 
@@ -392,6 +251,119 @@ def _stop_timeout_for_config(config: dict) -> float:
     return 20.0
 
 
+def _print_status_details(response: dict) -> None:
+    details = []
+    if response.get("stt_provider"):
+        details.append(f"stt: {response['stt_provider']}")
+    if response.get("tts_provider"):
+        details.append(f"tts: {response['tts_provider']}")
+    if response.get("register"):
+        details.append(f"register: {response['register']}")
+    if "flow_enabled" in response:
+        flow = "off"
+        if response.get("flow_enabled"):
+            flow = "live" if response.get("flow_live") else "on"
+        details.append(f"flow: {flow}")
+    if response.get("focused_app"):
+        details.append(f"app: {response['focused_app']}")
+    if response.get("last_text_len"):
+        details.append(f"last: {response['last_text_len']} chars")
+    if response.get("uptime_s") is not None:
+        details.append(f"up: {int(response['uptime_s'])}s")
+    if details:
+        print("  " + " | ".join(details))
+    if response.get("last_error"):
+        print(f"  last error: {response['last_error']}")
+
+
+def _format_history_time(ts: float) -> str:
+    import datetime
+
+    try:
+        return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+    except (OverflowError, OSError, ValueError):
+        return "?"
+
+
+def _run_history(extra_args: list[str]) -> None:
+    from voice_keyboard.history import history_path, last_entries
+
+    count = 10
+    if extra_args:
+        try:
+            count = max(1, int(extra_args[0]))
+        except ValueError:
+            print(f"history: not a count: {extra_args[0]!r}", file=sys.stderr)
+            sys.exit(2)
+    entries = last_entries(count)
+    if not entries:
+        print(
+            "No dictation history. Enable it with `history = true` under"
+            f" [flow] in the config; entries land in {history_path()}."
+        )
+        return
+    total = len(entries)
+    for index, entry in enumerate(entries):
+        n_back = total - index  # `recall N` counts back from the latest
+        stamp = _format_history_time(float(entry.get("ts", 0)))
+        app = entry.get("app") or "?"
+        print(f"{n_back:3d}. [{stamp}] ({app}) {entry.get('text', '')}")
+
+
+def _run_recall(client: "IPCClient", extra_args: list[str]) -> None:
+    from voice_keyboard.history import last_entries
+
+    n_back = 1
+    if extra_args:
+        try:
+            n_back = max(1, int(extra_args[0]))
+        except ValueError:
+            print(f"recall: not an index: {extra_args[0]!r}", file=sys.stderr)
+            sys.exit(2)
+    entries = last_entries(max(n_back, 10))
+    if len(entries) < n_back:
+        print("recall: no such history entry (is [flow] history enabled?)", file=sys.stderr)
+        sys.exit(1)
+    text = str(entries[-n_back].get("text", ""))
+    try:
+        response = client.send_command(
+            "type", {"text": text}, timeout=max(20.0, len(text) * 0.02)
+        )
+    except Exception as e:
+        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        sys.exit(1)
+    if response.get("status") == "ok":
+        print(f"Re-typed {len(text)} characters")
+    else:
+        print(f"Error: {response.get('message')}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _run_transform(client: "IPCClient", extra_args: list[str]) -> None:
+    instruction = " ".join(extra_args).strip()
+    if not instruction:
+        print('usage: voice-keyboard transform "make that more formal"', file=sys.stderr)
+        sys.exit(2)
+    _show_overlay("processing", detail=f"⌁ {instruction}")
+    try:
+        response = client.send_command(
+            "transform", {"instruction": instruction}, timeout=50.0
+        )
+    except Exception as e:
+        _show_overlay("error", detail=str(e), timeout_ms=3000)
+        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        sys.exit(1)
+    if response.get("status") == "ok":
+        text = response.get("text", "")
+        _show_overlay("inserted", detail="Rewrote in place", timeout_ms=1800)
+        print(f"Transformed: {text}")
+    else:
+        message = response.get("message", "transform failed")
+        _show_overlay("error", detail=message, timeout_ms=3000)
+        print(f"Error: {message}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="voice-keyboard",
@@ -401,8 +373,18 @@ def main() -> None:
         "command",
         nargs="?",
         default="toggle",
-        choices=["start", "stop", "toggle", "tts", "status"],
+        choices=[
+            "start", "stop", "toggle", "tts", "status",
+            "history", "recall", "transform",
+        ],
         help="Command to send to daemon (default: toggle)",
+    )
+    parser.add_argument(
+        "args",
+        nargs="*",
+        help=(
+            "history [count] | recall [n-back] | transform <instruction...>"
+        ),
     )
     parser.add_argument(
         "--socket",
@@ -414,6 +396,18 @@ def main() -> None:
     config = load_config()
     socket_path = args.socket or config["daemon"]["socket_path"]
     client = IPCClient(socket_path)
+
+    if args.command == "history":
+        _run_history(args.args)
+        return
+
+    if args.command == "recall":
+        _run_recall(client, args.args)
+        return
+
+    if args.command == "transform":
+        _run_transform(client, args.args)
+        return
 
     if args.command == "tts":
         text = _get_clipboard_text()
@@ -458,6 +452,7 @@ def main() -> None:
                 print("recording")
             else:
                 print("idle")
+            _print_status_details(response)
         except Exception as e:
             print(f"Failed to connect to daemon: {e}", file=sys.stderr)
             sys.exit(1)

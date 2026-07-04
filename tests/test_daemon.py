@@ -62,6 +62,9 @@ class TestDaemonStateTransitions:
     @pytest.fixture
     def daemon(self):
         cfg = _valid_config()
+        # These tests pin the transcript plumbing and the pre-Flow
+        # type-at-stop behavior; Flow gets its own tests.
+        cfg["flow"]["enabled"] = False
         injector = mock.Mock()
         injector.start = mock.Mock()
         injector.stop = mock.Mock()
