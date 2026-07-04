@@ -65,6 +65,9 @@ const STATE_STYLES = {
 export default class VoiceKeyboardOverlayExtension extends Extension {
     enable() {
         this._actor = null;
+        this._state = null;
+        this._textBox = null;
+        this._detailLabel = null;
         this._timeoutId = 0;
         this._pulseId = 0;
         this._dbus = Gio.DBusExportedObject.wrapJSObject(DBUS_XML, this);
@@ -114,10 +117,35 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             this._actor.destroy();
             this._actor = null;
         }
+        this._state = null;
+        this._textBox = null;
+        this._detailLabel = null;
     }
 
     _show(state, x, y, detail, timeoutMs) {
+        // Same state again (the daemon's live caption updates a few times a
+        // second while listening): update the detail label in place instead
+        // of rebuilding, so the pill doesn't flicker and the pulse doesn't
+        // restart.
+        if (this._actor && this._state === state) {
+            this._setDetail(detail);
+            if (timeoutMs > 0) {
+                if (this._timeoutId)
+                    GLib.source_remove(this._timeoutId);
+                this._timeoutId = GLib.timeout_add(
+                    GLib.PRIORITY_DEFAULT,
+                    timeoutMs,
+                    () => {
+                        this._timeoutId = 0;
+                        this._hide();
+                        return GLib.SOURCE_REMOVE;
+                    });
+            }
+            return;
+        }
+
         this._hide();
+        this._state = state;
         const style = STATE_STYLES[state] || STATE_STYLES.listening;
         const actor = this._buildActor(style, detail || style.detail);
         Main.layoutManager.addChrome(actor, {
@@ -187,15 +215,33 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         });
         textBox.add_child(label);
 
-        if (detail) {
-            const detailLabel = new St.Label({
-                text: detail,
-                style: 'color: rgba(255,255,255,0.9); font-size: 10pt;',
-            });
-            textBox.add_child(detailLabel);
-        }
+        this._textBox = textBox;
+        this._detailLabel = null;
+        if (detail)
+            this._setDetail(detail);
 
         return box;
+    }
+
+    _setDetail(detail) {
+        if (!detail) {
+            if (this._detailLabel) {
+                this._detailLabel.destroy();
+                this._detailLabel = null;
+            }
+            return;
+        }
+        if (this._detailLabel) {
+            this._detailLabel.set_text(detail);
+            return;
+        }
+        if (!this._textBox)
+            return;
+        this._detailLabel = new St.Label({
+            text: detail,
+            style: 'color: rgba(255,255,255,0.9); font-size: 10pt;',
+        });
+        this._textBox.add_child(this._detailLabel);
     }
 
     _startPulse(actor) {

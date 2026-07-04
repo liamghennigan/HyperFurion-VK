@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import secrets
 import socket
 import sys
 from pathlib import Path
@@ -29,6 +30,17 @@ def _default_socket_path() -> str:
 
 
 DEFAULT_SOCKET_PATH = _default_socket_path()
+
+
+def _token_path() -> Path:
+    return _config_dir() / "ipc-token"
+
+
+def read_ipc_token() -> str:
+    try:
+        return _token_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def parse_endpoint(socket_path: str) -> tuple[str, object]:
@@ -77,6 +89,14 @@ class IPCServer:
     def __init__(self, socket_path: str = DEFAULT_SOCKET_PATH):
         self._socket_path = socket_path
         self._sock: Optional[socket.socket] = None
+        self._token: Optional[str] = None
+
+    @property
+    def required_token(self) -> Optional[str]:
+        """Session token clients must echo; set only on loopback TCP,
+        where socket permissions can't gate access the way a 0600 Unix
+        socket does — without it any local process could drive typing."""
+        return self._token
 
     def start(self) -> None:
         kind, target = parse_endpoint(self._socket_path)
@@ -86,6 +106,14 @@ class IPCServer:
             self._sock.bind(target)
             self._sock.listen(5)
             self._sock.setblocking(True)
+            self._token = secrets.token_hex(16)
+            token_path = _token_path()
+            token_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+            token_path.write_text(self._token, encoding="utf-8")
+            try:
+                os.chmod(token_path, 0o600)
+            except OSError:
+                pass
             logger.info("IPC server listening on %s", self._socket_path)
             return
 
@@ -124,6 +152,11 @@ class IPCServer:
             self._sock.close()
             self._sock = None
         if parse_endpoint(self._socket_path)[0] == "inet":
+            self._token = None
+            try:
+                os.unlink(_token_path())
+            except OSError:
+                pass
             logger.info("IPC server stopped")
             return
         socket_path = Path(self._socket_path)
@@ -153,6 +186,10 @@ class IPCClient:
         msg = {"command": command}
         if payload is not None:
             msg["payload"] = payload
+        if parse_endpoint(self._socket_path)[0] == "inet":
+            token = read_ipc_token()
+            if token:
+                msg["token"] = token
         sock = _connect_socket(
             self._socket_path, timeout if timeout is not None else self._timeout
         )

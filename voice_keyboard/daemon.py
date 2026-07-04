@@ -1,138 +1,49 @@
 import asyncio
 import json
 import logging
-import re
 import signal
 import threading
+import time
 from typing import Optional
 
+from voice_keyboard import clipboard, history
 from voice_keyboard.audio_capture import AudioCapture
-from voice_keyboard.config import load_config, validate_config
+from voice_keyboard.config import _config_dir, load_config, validate_config
+from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
+from voice_keyboard.flow.engine import risky_backspace
+from voice_keyboard.flow.registers import (
+    Register,
+    register_for_app,
+    resolve_register,
+)
+from voice_keyboard.flow.vad import SilenceGate, chunk_rms, vu_bar
+from voice_keyboard.flow.worker import common_prefix_len
+from voice_keyboard.focusprobe import FocusInfo, probe_focus
 from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
+from voice_keyboard.llm import create_llm_client
 from voice_keyboard.stt import create_stt_client
+
+# Re-exported for backwards compatibility: these lived here before they
+# moved to voice_keyboard.transcript.
+from voice_keyboard.transcript import (  # noqa: F401
+    _dedupe_repeated_transcript_text,
+    _join_transcript_text,
+    _merge_transcript_text,
+    _transcript_words,
+    _word_prefix_overlap,
+    _word_sequence_contains,
+    _word_sequence_endswith,
+    _word_sequence_startswith,
+)
 from voice_keyboard.tts import TTSClient, create_tts_client
 
 logger = logging.getLogger(__name__)
-_TRANSCRIPT_WORD_RE = re.compile(r"[A-Za-z0-9']+")
 
-
-def _transcript_words(text: str) -> list[tuple[str, int, int]]:
-    return [
-        (match.group(0).casefold(), match.start(), match.end())
-        for match in _TRANSCRIPT_WORD_RE.finditer(text)
-    ]
-
-
-def _word_sequence_startswith(
-    words: list[tuple[str, int, int]],
-    prefix: list[tuple[str, int, int]],
-) -> bool:
-    return len(words) >= len(prefix) and [
-        word for word, _, _ in words[:len(prefix)]
-    ] == [word for word, _, _ in prefix]
-
-
-def _word_sequence_endswith(
-    words: list[tuple[str, int, int]],
-    suffix: list[tuple[str, int, int]],
-) -> bool:
-    return len(words) >= len(suffix) and [
-        word for word, _, _ in words[-len(suffix):]
-    ] == [word for word, _, _ in suffix]
-
-
-def _word_sequence_contains(
-    words: list[tuple[str, int, int]],
-    needle: list[tuple[str, int, int]],
-) -> bool:
-    if not needle:
-        return True
-    if len(needle) > len(words):
-        return False
-    needle_values = [word for word, _, _ in needle]
-    for index in range(len(words) - len(needle) + 1):
-        if [word for word, _, _ in words[index:index + len(needle)]] == needle_values:
-            return True
-    return False
-
-
-def _word_prefix_overlap(
-    current: list[tuple[str, int, int]],
-    update: list[tuple[str, int, int]],
-) -> int:
-    max_overlap = min(len(current), len(update))
-    for overlap in range(max_overlap, 0, -1):
-        if [word for word, _, _ in current[-overlap:]] == [
-            word for word, _, _ in update[:overlap]
-        ]:
-            return overlap
-    return 0
-
-
-def _dedupe_repeated_transcript_text(text: str, *, min_words: int = 4) -> str:
-    """Collapse a transcript that is one whole phrase repeated twice."""
-    words = _transcript_words(text)
-    if len(words) < min_words * 2:
-        return text
-
-    word_values = [word for word, _, _ in words]
-    for block_size in range(len(words) // 2, min_words - 1, -1):
-        if block_size * 2 != len(words):
-            continue
-        if word_values[:block_size] == word_values[block_size:block_size * 2]:
-            second_copy_start = words[block_size][1]
-            return text[:second_copy_start].rstrip()
-
-    return text
-
-
-def _join_transcript_text(left: str, right: str) -> str:
-    if not left:
-        return right
-    if not right:
-        return left
-    if left[-1].isspace() or right[0].isspace():
-        return f"{left}{right}"
-    return f"{left} {right}"
-
-
-def _merge_transcript_text(current: str, update: str) -> str:
-    """Merge STT updates that may be full transcripts or finalized segments."""
-    update = update or ""
-    if not update:
-        return current
-    if not current:
-        return update
-    if update == current or update.startswith(current):
-        return update
-    if current.endswith(update):
-        return current
-
-    current_words = _transcript_words(current)
-    update_words = _transcript_words(update)
-    if current_words and update_words:
-        if _word_sequence_startswith(update_words, current_words):
-            return update
-        if _word_sequence_endswith(current_words, update_words):
-            return current
-        if len(current_words) >= 3 and _word_sequence_contains(update_words, current_words):
-            return update
-        if len(update_words) >= 3 and _word_sequence_contains(current_words, update_words):
-            return current
-
-        word_overlap = _word_prefix_overlap(current_words, update_words)
-        if word_overlap:
-            prefix_end = current_words[-word_overlap][1]
-            return _join_transcript_text(current[:prefix_end].rstrip(), update)
-
-    max_overlap = min(len(current), len(update))
-    for overlap in range(max_overlap, 0, -1):
-        if current[-overlap:] == update[:overlap]:
-            return f"{current}{update[overlap:]}"
-
-    return _join_transcript_text(current, update)
+FLOW_TICK_S = 0.25
+FOCUS_WATCHDOG_S = 1.5
+CAPTION_MAX_CHARS = 46
 
 
 class Daemon:
@@ -160,6 +71,25 @@ class Daemon:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._hotkey_listener: Optional[HotkeyListener] = None
         self._hotkey_lock: Optional[asyncio.Lock] = None
+
+        # Flow — molten dictation session state.
+        self._flow_engine: Optional[FlowEngine] = None
+        self._flow_worker: Optional[InjectionWorker] = None
+        self._flow_ticker: Optional[asyncio.Task] = None
+        self._focus_watchdog: Optional[asyncio.Task] = None
+        self._session_focus: Optional[FocusInfo] = None
+        self._session_register: Register = resolve_register(
+            self._config.get("registers", {}).get("default", "prose")
+        )
+        self._focus_lost = False
+        self._silence_gate: Optional[SilenceGate] = None
+        self._auto_stop_started = False
+        self._levels: list[float] = []
+        self._last_caption = ""
+        self._last_typed = ""
+        self._last_error = ""
+        self._started_at = time.monotonic()
+        self._config_mtime = self._current_config_mtime()
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -233,6 +163,7 @@ class Daemon:
                     await self._hotkey_stop_recording()
             except Exception as exc:
                 logger.exception("Hotkey action failed: %s", action)
+                self._last_error = str(exc)
                 await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
 
     async def _show_hotkey_overlay(
@@ -241,6 +172,7 @@ class Daemon:
         *,
         detail: str = "",
         timeout_ms: int = 0,
+        anchor: Optional[tuple[int, int]] = None,
     ) -> None:
         from voice_keyboard.client import _show_overlay
 
@@ -249,6 +181,7 @@ class Daemon:
             state,
             detail=detail,
             timeout_ms=timeout_ms,
+            anchor=anchor,
         )
 
     async def _hotkey_start_recording(self, *, hold_to_talk: bool = False) -> None:
@@ -293,7 +226,11 @@ class Daemon:
                 command = msg.get("command", "")
                 payload = msg.get("payload", {})
 
-                if command == "start":
+                required_token = getattr(self._ipc_server, "required_token", None)
+                if required_token and msg.get("token") != required_token:
+                    response = {"status": "error", "message": "invalid IPC token"}
+
+                elif command == "start":
                     future = asyncio.run_coroutine_threadsafe(
                         self._start_recording(), self._loop
                     )
@@ -356,11 +293,45 @@ class Daemon:
                     else:
                         response = {"status": "error", "message": "no text provided"}
 
+                elif command == "transform":
+                    instruction = str(payload.get("instruction", "")).strip()
+                    if not instruction:
+                        response = {"status": "error", "message": "no instruction provided"}
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._transform_last(instruction), self._loop
+                        )
+                        try:
+                            text = future.result(timeout=45)
+                        except TimeoutError:
+                            response = {
+                                "status": "error",
+                                "message": "timed out applying transform",
+                            }
+                        else:
+                            response = {
+                                "status": "ok",
+                                "message": "transform applied",
+                                "text": text,
+                            }
+
+                elif command == "type":
+                    text = str(payload.get("text", ""))
+                    if not text:
+                        response = {"status": "error", "message": "no text provided"}
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._type_text(text), self._loop
+                        )
+                        try:
+                            future.result(timeout=max(15.0, len(text) * 0.01))
+                        except TimeoutError:
+                            response = {"status": "error", "message": "timed out typing"}
+                        else:
+                            response = {"status": "ok", "message": "typed"}
+
                 elif command == "status":
-                    response = {
-                        "status": "ok",
-                        "recording": self._recording,
-                    }
+                    response = self._status_response()
 
                 else:
                     response = {"status": "error", "message": f"unknown command: {command}"}
@@ -380,6 +351,22 @@ class Daemon:
                 except OSError:
                     pass
 
+    def _status_response(self) -> dict:
+        flow_cfg = self._config.get("flow", {})
+        return {
+            "status": "ok",
+            "recording": self._recording,
+            "stt_provider": str(self._config.get("stt", {}).get("provider", "")),
+            "tts_provider": str(self._config.get("tts", {}).get("provider", "")),
+            "register": self._session_register.name,
+            "flow_enabled": bool(flow_cfg.get("enabled", True)),
+            "flow_live": bool(flow_cfg.get("live", True)),
+            "focused_app": self._session_focus.app if self._session_focus else "",
+            "last_text_len": len(self._last_typed),
+            "last_error": self._last_error,
+            "uptime_s": int(time.monotonic() - self._started_at),
+        }
+
     def _stt_completion_timeout(self) -> float:
         try:
             timeout = float(getattr(self._stt_client, "completion_timeout", 5.0))
@@ -390,10 +377,222 @@ class Daemon:
     def _stop_recording_ipc_timeout(self) -> float:
         return max(18.0, self._stt_completion_timeout() + 10.0)
 
+    # ------------------------------------------------------------ config
+
+    def _current_config_mtime(self) -> float:
+        try:
+            return (_config_dir() / "config.toml").stat().st_mtime
+        except OSError:
+            return 0.0
+
+    def _maybe_reload_flow_config(self) -> None:
+        """Adopt [flow]/[registers]/[llm] edits without a daemon restart.
+
+        Provider, audio, hotkey, and daemon changes still need a restart —
+        they own live resources. Reload happens at recording start, so a
+        broken config never interrupts an active session.
+        """
+        mtime = self._current_config_mtime()
+        if mtime == self._config_mtime:
+            return
+        self._config_mtime = mtime
+        try:
+            fresh = load_config()
+            validate_config(fresh)
+        except Exception as exc:
+            logger.warning("Config changed but did not validate; keeping old: %s", exc)
+            return
+        for section in ("flow", "registers", "llm"):
+            self._config[section] = fresh.get(section, {})
+        logger.info("Reloaded flow/registers/llm config sections")
+
+    # ------------------------------------------------------- flow session
+
+    def _build_grammar(self, register: Register) -> Grammar:
+        flow_cfg = self._config.get("flow", {})
+        return Grammar(
+            enabled=bool(flow_cfg.get("grammar", True)) and register.grammar_enabled,
+            commands=flow_cfg.get("commands") or {},
+            punctuation=flow_cfg.get("punctuation") or {},
+            vocabulary=flow_cfg.get("vocabulary") or {},
+            wake_word=str(flow_cfg.get("wake_word", "furion")),
+            numbers=str(flow_cfg.get("numbers", "auto")).lower(),
+            numbers_on=register.numbers_on,
+            numbers_min=register.numbers_min,
+        )
+
+    def _flow_config_obj(self) -> FlowConfig:
+        flow_cfg = self._config.get("flow", {})
+        defaults = FlowConfig()
+
+        def _int(key: str, fallback: int) -> int:
+            try:
+                return max(1, int(flow_cfg.get(key, fallback)))
+            except (TypeError, ValueError):
+                return fallback
+
+        return FlowConfig(
+            live=bool(flow_cfg.get("live", True)),
+            stability_ms=_int("stability_ms", defaults.stability_ms),
+            stability_updates=_int("stability_updates", defaults.stability_updates),
+            max_molten_chars=_int("max_molten_chars", defaults.max_molten_chars),
+            adaptive=bool(flow_cfg.get("adaptive", True)),
+        )
+
+    async def _setup_flow_session(self, probe_task: Optional[asyncio.Task]) -> None:
+        self._focus_lost = False
+        self._auto_stop_started = False
+        self._levels = []
+        self._last_caption = ""
+
+        flow_cfg = self._config.get("flow", {})
+        if not flow_cfg.get("enabled", True):
+            self._flow_engine = None
+            self._flow_worker = None
+            self._session_focus = None
+            self._silence_gate = None
+            if probe_task is not None:
+                probe_task.cancel()
+            return
+
+        focus: Optional[FocusInfo] = None
+        if probe_task is not None:
+            try:
+                focus = await asyncio.wait_for(probe_task, timeout=1.5)
+            except Exception:
+                focus = None
+        self._session_focus = focus
+
+        registers_cfg = self._config.get("registers", {})
+        register = register_for_app(
+            focus.app if focus else "",
+            focus.role if focus else "",
+            config_map=registers_cfg.get("map", {}) or {},
+            default=str(registers_cfg.get("default", "prose")),
+        )
+        self._session_register = register
+        if hasattr(self._injector, "paste_chord_shift"):
+            self._injector.paste_chord_shift = register.paste_chord_shift
+
+        self._flow_engine = FlowEngine(
+            self._flow_config_obj(), self._build_grammar(register), register
+        )
+
+        auto_stop_ms = flow_cfg.get("auto_stop_ms", 0)
+        try:
+            auto_stop_ms = max(0, int(auto_stop_ms))
+        except (TypeError, ValueError):
+            auto_stop_ms = 0
+        self._silence_gate = (
+            SilenceGate(auto_stop_ms=auto_stop_ms) if auto_stop_ms > 0 else None
+        )
+
+        live = bool(flow_cfg.get("live", True)) and bool(
+            getattr(self._stt_client, "supports_streaming", False)
+        )
+        self._flow_worker = InjectionWorker(self._injector) if live else None
+        logger.info(
+            "Flow session: register=%s app=%r live=%s",
+            register.name,
+            focus.app if focus else "",
+            bool(self._flow_worker),
+        )
+
+    async def _teardown_flow_session(self) -> None:
+        for task_attr in ("_flow_ticker", "_focus_watchdog"):
+            task = getattr(self, task_attr)
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                setattr(self, task_attr, None)
+        if self._flow_worker is not None:
+            await self._flow_worker.close()
+            self._flow_worker = None
+        self._flow_engine = None
+        self._silence_gate = None
+
+    async def _flow_ticker_loop(self) -> None:
+        try:
+            while self._recording:
+                await asyncio.sleep(FLOW_TICK_S)
+                engine = self._flow_engine
+                if engine is None or not self._recording:
+                    break
+                engine.on_tick(time.monotonic())
+                worker = self._flow_worker
+                if worker is not None:
+                    worker.set_target(engine.desired_text())
+                self._push_live_caption(engine)
+        except asyncio.CancelledError:
+            pass
+
+    def _push_live_caption(self, engine: FlowEngine) -> None:
+        caption = engine.caption()
+        if len(caption) > CAPTION_MAX_CHARS:
+            caption = "…" + caption[-CAPTION_MAX_CHARS:]
+        detail = f"{vu_bar(self._levels)} {caption}".rstrip()
+        if detail == self._last_caption:
+            return
+        self._last_caption = detail
+        anchor = (
+            (self._session_focus.x, self._session_focus.y)
+            if self._session_focus is not None
+            else None
+        )
+        asyncio.create_task(
+            self._show_hotkey_overlay("listening", detail=detail, anchor=anchor)
+        )
+
+    async def _focus_watchdog_loop(self) -> None:
+        focus = self._session_focus
+        if focus is None or not focus.identity:
+            return
+        baseline = focus.identity
+        try:
+            while self._recording:
+                await asyncio.sleep(FOCUS_WATCHDOG_S)
+                if not self._recording:
+                    break
+                current = await asyncio.to_thread(probe_focus)
+                if current is None or not current.identity:
+                    continue
+                if current.identity != baseline:
+                    self._focus_lost = True
+                    worker = self._flow_worker
+                    if worker is not None:
+                        worker.abandon()
+                    logger.warning(
+                        "Focus moved from %r to %r during dictation; typing frozen",
+                        baseline,
+                        current.identity,
+                    )
+                    await self._show_hotkey_overlay(
+                        "error",
+                        detail="Focus changed — typing frozen; transcript goes to the clipboard",
+                        timeout_ms=2600,
+                    )
+                    break
+        except asyncio.CancelledError:
+            pass
+
+    # --------------------------------------------------------- recording
+
     async def _start_recording(self) -> None:
         if self._recording:
             return
+        self._maybe_reload_flow_config()
         validate_config(self._config)
+
+        flow_cfg = self._config.get("flow", {})
+        probe_task: Optional[asyncio.Task] = None
+        if flow_cfg.get("enabled", True) and self._config.get("registers", {}).get(
+            "probe", True
+        ):
+            # Kick the focus probe early so it overlaps the STT connect.
+            probe_task = asyncio.create_task(asyncio.to_thread(probe_focus))
 
         self._audio_capture = AudioCapture(
             sample_rate=self._config["audio"]["sample_rate"],
@@ -404,6 +603,8 @@ class Daemon:
             self._audio_capture.start()
         except Exception:
             self._audio_capture = None
+            if probe_task is not None:
+                probe_task.cancel()
             raise
 
         self._stt_client = create_stt_client(self._config)
@@ -412,8 +613,12 @@ class Daemon:
         except Exception:
             # Roll back partial state so a failed start doesn't leak the
             # audio capture handle or leave the daemon in a half-open state.
+            if probe_task is not None:
+                probe_task.cancel()
             await self._cleanup_after_failed_start()
             raise
+
+        await self._setup_flow_session(probe_task)
 
         self._final_text = ""
         self._interim_text = ""
@@ -422,6 +627,10 @@ class Daemon:
 
         self._receive_task = asyncio.create_task(self._receive_events())
         self._send_task = asyncio.create_task(self._stream_audio())
+        if self._flow_worker is not None:
+            self._flow_worker.start()
+            self._flow_ticker = asyncio.create_task(self._flow_ticker_loop())
+            self._focus_watchdog = asyncio.create_task(self._focus_watchdog_loop())
         logger.info("Recording started")
 
     async def _cleanup_after_failed_start(self) -> None:
@@ -432,6 +641,7 @@ class Daemon:
         connect raises. Safe to call multiple times.
         """
         self._recording = False
+        await self._teardown_flow_session()
         if self._audio_capture is not None:
             try:
                 self._audio_capture.stop()
@@ -508,20 +718,208 @@ class Daemon:
             self._stt_client = None
 
         if self._stt_error:
+            # Error path: never delete what was already typed live. Freeze
+            # the screen as-is and surface the error.
+            self._last_error = self._stt_error
+            if self._flow_worker is not None:
+                self._flow_worker.abandon()
+            await self._teardown_flow_session()
             raise RuntimeError(self._stt_error)
 
-        final = _dedupe_repeated_transcript_text(
+        merged = _dedupe_repeated_transcript_text(
             _merge_transcript_text(self._final_text, self._interim_text)
         )
+
+        engine = self._flow_engine
+        if engine is None:
+            # Flow disabled: the original type-at-stop behavior, unchanged.
+            final = merged
+            if final:
+                await asyncio.to_thread(self._injector.type_text, final)
+                logger.info("Injected %d characters", len(final))
+            else:
+                logger.info("No transcript received")
+            self._remember_typed(final)
+            return final
+
+        result = engine.finalize(merged, now=time.monotonic())
+        final = result.text
+        worker = self._flow_worker
+        try:
+            if worker is not None:
+                final = await self._finish_live(worker, final, result.instruction)
+            else:
+                final = await self._finish_classic(final, result.instruction)
+        finally:
+            await self._teardown_flow_session()
+
         if final:
-            await asyncio.to_thread(self._injector.type_text, final)
-            logger.info("Injected %d characters", len(final))
+            logger.info("Inserted %d characters", len(final))
         else:
             logger.info("No transcript received")
-
+        self._remember_typed(final)
         return final
 
+    async def _finish_live(
+        self, worker: InjectionWorker, final: str, instruction: str
+    ) -> str:
+        """Reconcile a live-typed session at stop: converge the screen to
+        the finalized text (never re-type it wholesale — the live worker
+        already typed the bulk), then apply any wake-word instruction."""
+        if self._focus_lost:
+            typed = worker.screen
+            if final and final != typed:
+                if clipboard.set_text(final):
+                    logger.info("Focus changed; final transcript is on the clipboard")
+            return typed
+
+        worker.set_target(final)
+        typed = await worker.drain(timeout=self._drain_timeout(final))
+        if typed != final:
+            logger.warning(
+                "Live injection finished at %d/%d characters", len(typed), len(final)
+            )
+            final = typed
+
+        if instruction and final and not worker.abandoned:
+            try:
+                final = await self._run_transform(instruction, worker=worker)
+            except Exception as exc:
+                logger.warning("Voice transform failed: %s", exc)
+                self._last_error = str(exc)
+                await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+        elif instruction and not final:
+            final = await self._transform_previous_or_report(instruction)
+        return final
+
+    async def _finish_classic(self, final: str, instruction: str) -> str:
+        """Type-at-stop path (buffered providers or flow.live=false), with
+        grammar and registers already applied by the engine."""
+        if instruction and final:
+            llm_client = create_llm_client(self._config)
+            if llm_client is None:
+                await self._show_hotkey_overlay(
+                    "error", detail="[llm] is not configured", timeout_ms=3000
+                )
+            else:
+                await self._show_hotkey_overlay("processing", detail="Transforming…")
+                try:
+                    final = await asyncio.to_thread(
+                        llm_client.rewrite, final, instruction
+                    )
+                except Exception as exc:
+                    logger.warning("Voice transform failed: %s", exc)
+                    self._last_error = str(exc)
+                    await self._show_hotkey_overlay(
+                        "error", detail=str(exc), timeout_ms=3000
+                    )
+        elif instruction and not final:
+            return await self._transform_previous_or_report(instruction)
+
+        if final:
+            if self._focus_lost:
+                if clipboard.set_text(final):
+                    logger.info("Focus changed; transcript is on the clipboard")
+                    return ""
+            await asyncio.to_thread(self._injector.type_text, final)
+        return final
+
+    async def _transform_previous_or_report(self, instruction: str) -> str:
+        """A standalone "furion, ..." utterance: rewrite the previous
+        dictation in place."""
+        try:
+            return await self._run_transform(instruction, worker=None)
+        except Exception as exc:
+            logger.warning("Voice transform failed: %s", exc)
+            self._last_error = str(exc)
+            await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+            return ""
+
+    def _drain_timeout(self, final: str) -> float:
+        # ~6ms per key edge pair on the slowest backend, plus headroom.
+        return max(6.0, len(final) * 0.012 + 4.0)
+
+    def _remember_typed(self, final: str) -> None:
+        if not final:
+            return
+        self._last_typed = final
+        self._last_error = ""
+        if self._config.get("flow", {}).get("history", False):
+            history.append_entry(
+                final,
+                app=self._session_focus.app if self._session_focus else "",
+                register=self._session_register.name,
+            )
+
+    # -------------------------------------------------------- transforms
+
+    async def _transform_last(self, instruction: str) -> str:
+        """IPC `transform`: rewrite the last dictation in place."""
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            if self._recording:
+                raise RuntimeError("stop recording before transforming")
+            text = await self._run_transform(instruction, worker=None)
+            self._remember_typed(text)
+            return text
+
+    async def _run_transform(
+        self, instruction: str, *, worker: Optional[InjectionWorker]
+    ) -> str:
+        llm_client = create_llm_client(self._config)
+        if llm_client is None:
+            raise RuntimeError("[llm] is not configured")
+
+        target = worker.screen if worker is not None and worker.screen else self._last_typed
+        if not target:
+            raise RuntimeError("nothing to transform yet")
+
+        await self._show_hotkey_overlay("processing", detail=f"⌁ {instruction}")
+        rewritten = await asyncio.to_thread(llm_client.rewrite, target, instruction)
+
+        if await self._focus_changed_since_session():
+            clipboard.set_text(rewritten)
+            raise RuntimeError("focus changed — the rewrite is on the clipboard")
+
+        if worker is not None and worker.screen and not worker.abandoned:
+            to_delete = worker.screen[common_prefix_len(worker.screen, rewritten):]
+            if risky_backspace(to_delete):
+                clipboard.set_text(rewritten)
+                raise RuntimeError(
+                    "can't repair across pasted text — the rewrite is on the clipboard"
+                )
+            worker.set_target(rewritten)
+            return await worker.drain(timeout=self._drain_timeout(rewritten))
+
+        if risky_backspace(target):
+            clipboard.set_text(rewritten)
+            raise RuntimeError(
+                "can't repair across pasted text — the rewrite is on the clipboard"
+            )
+        await asyncio.to_thread(self._injector.delete_chars, len(target))
+        await asyncio.to_thread(self._injector.type_text, rewritten)
+        return rewritten
+
+    async def _focus_changed_since_session(self) -> bool:
+        focus = self._session_focus
+        if focus is None or not focus.identity:
+            return False
+        if not self._config.get("registers", {}).get("probe", True):
+            return False
+        current = await asyncio.to_thread(probe_focus)
+        return bool(current and current.identity and current.identity != focus.identity)
+
+    async def _type_text(self, text: str) -> None:
+        """IPC `type`: inject text directly (used by `voice-keyboard recall`)."""
+        if self._recording:
+            raise RuntimeError("cannot type while recording")
+        await asyncio.to_thread(self._injector.type_text, text)
+
+    # ------------------------------------------------------------ streams
+
     async def _stream_audio(self) -> None:
+        chunk_ms = float(self._config.get("audio", {}).get("chunk_ms", 100))
         while self._recording and self._stt_client:
             try:
                 audio_capture = self._audio_capture
@@ -531,10 +929,27 @@ class Daemon:
                 if not self._recording or self._stt_client is None:
                     break
                 await self._stt_client.send_audio(chunk)
+                self._observe_audio(chunk, chunk_ms)
             except Exception:
                 if self._recording:
                     logger.exception("Error streaming audio")
                 break
+
+    def _observe_audio(self, chunk: bytes, chunk_ms: float) -> None:
+        level = chunk_rms(chunk)
+        self._levels.append(level)
+        del self._levels[:-8]
+        gate = self._silence_gate
+        if (
+            gate is not None
+            and not self._auto_stop_started
+            and gate.feed(level, chunk_ms)
+        ):
+            self._auto_stop_started = True
+            logger.info("Auto-stop: %dms of silence", gate.auto_stop_ms)
+            asyncio.get_running_loop().create_task(
+                self._handle_hotkey_action("stop")
+            )
 
     async def _receive_events(self) -> None:
         try:
@@ -549,6 +964,9 @@ class Daemon:
                             self._interim_text,
                         )
                         self._interim_text = ""
+                        self._feed_flow(is_final=True)
+                    else:
+                        self._feed_flow(is_final=False)
                 elif event_type == "transcript.done":
                     self._final_text = _merge_transcript_text(
                         self._final_text,
@@ -556,6 +974,7 @@ class Daemon:
                     )
                     self._interim_text = ""
                     logger.debug("Final transcript received")
+                    self._feed_flow(is_final=True)
                     break
                 elif event_type == "error":
                     self._stt_error = str(
@@ -566,6 +985,16 @@ class Daemon:
         except Exception as exc:
             self._stt_error = str(exc) or exc.__class__.__name__
             logger.exception("Error receiving STT events")
+
+    def _feed_flow(self, *, is_final: bool) -> None:
+        engine = self._flow_engine
+        if engine is None:
+            return
+        merged = _merge_transcript_text(self._final_text, self._interim_text)
+        engine.on_transcript(merged, is_final=is_final, now=time.monotonic())
+        worker = self._flow_worker
+        if worker is not None:
+            worker.set_target(engine.desired_text())
 
     async def _run_tts(self, text: str) -> None:
         await asyncio.to_thread(self._tts_client.synthesize_and_play, text)
