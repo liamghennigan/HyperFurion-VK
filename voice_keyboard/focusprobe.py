@@ -32,6 +32,9 @@ class FocusInfo:
     x: int = -1
     y: int = -1
     editable: bool = False
+    # A password/secret widget: never remember what was typed, render
+    # verbatim, never contribute to STT biasing.
+    secret: bool = False
 
     @property
     def identity(self) -> str:
@@ -167,13 +170,15 @@ focused = find_focused(Atspi.get_desktop(0))
 if focused is None:
     raise SystemExit(1)
 
+role = accessible_role(focused)
 anchor = caret_anchor(focused) or component_anchor(focused) or {"x": -1, "y": -1}
 print(json.dumps({
     "x": anchor["x"],
     "y": anchor["y"],
     "app": application_name(focused),
-    "role": accessible_role(focused),
+    "role": role,
     "editable": state_contains(focused, Editable),
+    "secret": role == "password text",
 }))
 """
 
@@ -199,6 +204,7 @@ def _probe_linux(timeout: float) -> Optional[FocusInfo]:
             x=int(payload.get("x", -1)),
             y=int(payload.get("y", -1)),
             editable=bool(payload.get("editable", False)),
+            secret=bool(payload.get("secret", False)),
         )
     except (KeyError, TypeError, ValueError):
         return None

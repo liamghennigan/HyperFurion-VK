@@ -39,6 +39,26 @@ DEFAULT_STT_MODELS = {
 }
 
 
+def _bias_tokens(bias: str, cap: int = 24) -> list[str]:
+    """Distinct word-ish tokens from a biasing prompt, order preserved —
+    the shape Deepgram keywords/keyterm and AssemblyAI word_boost expect."""
+    import re
+
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for token in re.findall(r"[\w'-]+", bias):
+        if len(token) < 3:
+            continue
+        key = token.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        tokens.append(token)
+        if len(tokens) >= cap:
+            break
+    return tokens
+
+
 def _build_session() -> requests.Session:
     session = requests.Session()
     retry_strategy = Retry(
@@ -166,6 +186,9 @@ class STTClient:
         self._connect_timeout = connect_timeout
         self._ws_url = ws_url
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
+        # Interface parity with the REST clients. The xAI wire protocol has
+        # no biasing parameter, so this is honestly ignored (debug-logged).
+        self.bias_prompt = ""
 
     def _url_for_sample_rate(self, sample_rate: int) -> str:
         query = {
@@ -234,6 +257,9 @@ class STTClient:
     async def send_audio(self, data: bytes) -> None:
         if self._ws is None:
             raise RuntimeError("Not connected")
+        if self.bias_prompt:
+            logger.debug("Streaming STT has no biasing parameter; context ignored")
+            self.bias_prompt = ""
         await self._ws.send(data)
 
     async def send_audio_done(self) -> None:
@@ -293,6 +319,9 @@ class BufferedRESTSTTClient:
         self._poll_interval = poll_interval
         self._max_poll_time = max_poll_time
         self._sample_rate = 16000
+        # Per-session vocabulary bias (user-accepted hotwords); the daemon
+        # sets it at recording start when [stt] hotword_bias is on.
+        self.bias_prompt = ""
         self._chunks: list[bytes] = []
         self._session: Optional[requests.Session] = None
         self._events: deque[dict] = deque()
@@ -417,6 +446,10 @@ class BufferedRESTSTTClient:
         }
         if self._language:
             data["language"] = self._language
+        if self.bias_prompt:
+            # The Whisper-family biasing hook: vocabulary the model should
+            # prefer when the audio is ambiguous.
+            data["prompt"] = self.bias_prompt
         files = {
             "file": ("speech.wav", wav_data, "audio/wav"),
         }
@@ -436,12 +469,17 @@ class BufferedRESTSTTClient:
             "Authorization": f"Token {self._api_key}",
             "Content-Type": "audio/wav",
         }
-        params = {
+        params: dict = {
             "model": self._model,
             "smart_format": "true",
         }
         if self._language:
             params["language"] = self._language
+        if self.bias_prompt:
+            # nova-3 renamed keyword biasing to "keyterm"; earlier models
+            # take repeated "keywords" params.
+            param = "keyterm" if self._model.startswith("nova-3") else "keywords"
+            params[param] = _bias_tokens(self.bias_prompt)
         response = self.session.post(
             DEEPGRAM_STT_URL,
             headers=headers,
@@ -474,6 +512,8 @@ class BufferedRESTSTTClient:
             "punctuate": True,
             "format_text": True,
         }
+        if self.bias_prompt:
+            payload["word_boost"] = _bias_tokens(self.bias_prompt)
         if self._language:
             payload["language_code"] = "en_us" if self._language == "en" else self._language
         if self._model:
@@ -546,6 +586,15 @@ class ChunkedRESTAdapter:
     @property
     def completion_timeout(self) -> float:
         return self._inner.completion_timeout
+
+    @property
+    def bias_prompt(self) -> str:
+        return self._inner.bias_prompt
+
+    @bias_prompt.setter
+    def bias_prompt(self, value: str) -> None:
+        self._inner.bias_prompt = value
+        self._interim.bias_prompt = value
 
     async def connect(self, sample_rate: int) -> None:
         await self._inner.connect(sample_rate)

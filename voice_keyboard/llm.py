@@ -35,6 +35,25 @@ SYSTEM_PROMPT = (
 )
 
 
+ASK_SYSTEM_PROMPT = (
+    "You answer a spoken question, usually about the provided text "
+    "(selected on the user's screen). Reply with ONLY the answer: plain "
+    "prose, no markdown, no preamble, at most three sentences unless the "
+    "question demands more. If there is no text, answer the question "
+    "directly."
+)
+
+INTENT_SYSTEM_PROMPT = (
+    "You turn a spoken request into exactly one command line for the "
+    "user's terminal. Reply with ONLY the command: a single line, no "
+    "prose, no markdown fences, no leading $. Prefer safe, read-only "
+    "forms unless the request clearly asks otherwise. The command is "
+    "typed at the prompt but never executed — a human reviews it and "
+    "presses Enter. If no reasonable command exists, reply with a one-line "
+    "# comment saying why."
+)
+
+
 def _strip_wrapping(text: str) -> str:
     text = text.strip()
     if text.startswith("```") and text.endswith("```"):
@@ -124,3 +143,83 @@ class LLMClient:
         if not rewritten:
             raise RuntimeError("transform returned empty text")
         return rewritten
+
+    def answer(self, question: str, context: str = "") -> str:
+        """Answer a question, optionally about selected text.
+
+        Raises RuntimeError with a readable message on any failure,
+        like `rewrite`.
+        """
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        if context:
+            user = f"Question: {question}\n\nText:\n{context}"
+        else:
+            user = f"Question: {question}"
+        payload = {
+            "model": self._model,
+            "temperature": 0.2,
+            "messages": [
+                {"role": "system", "content": ASK_SYSTEM_PROMPT},
+                {"role": "user", "content": user},
+            ],
+        }
+        try:
+            response = requests.post(
+                f"{self._base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+            body = response.json()
+            content = body["choices"][0]["message"]["content"]
+        except requests.RequestException as exc:
+            raise RuntimeError(f"ask request failed: {exc}") from exc
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise RuntimeError("ask response had no text") from exc
+
+        text = _strip_wrapping(str(content))
+        if not text:
+            raise RuntimeError("ask returned empty text")
+        return text
+
+    def compile_command(self, request: str) -> str:
+        """Turn a spoken request into ONE command line (never executed here).
+
+        Raises RuntimeError with a readable message on any failure, like
+        `rewrite`. The result is reduced to its first line — the injector's
+        no-Enter mode is the real guarantee; this keeps the typed text sane.
+        """
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        payload = {
+            "model": self._model,
+            "temperature": 0.1,
+            "messages": [
+                {"role": "system", "content": INTENT_SYSTEM_PROMPT},
+                {"role": "user", "content": request},
+            ],
+        }
+        try:
+            response = requests.post(
+                f"{self._base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+            body = response.json()
+            content = body["choices"][0]["message"]["content"]
+        except requests.RequestException as exc:
+            raise RuntimeError(f"intent request failed: {exc}") from exc
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise RuntimeError("intent response had no text") from exc
+
+        command = _strip_wrapping(str(content))
+        command = command.splitlines()[0].strip() if command else ""
+        if not command:
+            raise RuntimeError("intent produced no command")
+        return command
