@@ -100,7 +100,7 @@ def create_stt_client(config: dict):
             config.get("providers", {}).get("openai", {}).get("base_url", "")
         ).strip()
 
-    return BufferedRESTSTTClient(
+    client = BufferedRESTSTTClient(
         provider=provider,
         api_key=api_key,
         model=model,
@@ -108,11 +108,49 @@ def create_stt_client(config: dict):
         base_url=base_url,
     )
 
+    if _live_rest_enabled(config, provider=provider, base_url=base_url):
+        interval_ms = config.get("flow", {}).get("live_rest_interval_ms", 2500)
+        try:
+            interval_ms = max(800, int(interval_ms))
+        except (TypeError, ValueError):
+            interval_ms = 2500
+        interim = BufferedRESTSTTClient(
+            provider=provider,
+            api_key=api_key,
+            model=model,
+            language=language,
+            base_url=base_url,
+            # Interim probes must never stall the stop path; keep them short.
+            timeout=min(10.0, interval_ms / 1000.0 * 3),
+        )
+        return ChunkedRESTAdapter(client, interim, interval_ms=interval_ms)
+    return client
+
+
+def _live_rest_enabled(config: dict, *, provider: str, base_url: str) -> bool:
+    """Pseudo-streaming for buffered providers: "always" opts any REST
+    provider in; "auto" enables it only against a local endpoint, where
+    re-transcribing the growing buffer is free."""
+    flow_cfg = config.get("flow", {})
+    if not flow_cfg.get("enabled", True) or not flow_cfg.get("live", True):
+        return False
+    mode = str(flow_cfg.get("live_rest", "auto")).strip().lower()
+    if mode == "always":
+        return True
+    if mode != "auto":
+        return False
+    if provider != "openai" or not base_url:
+        return False
+    from voice_keyboard.config import _is_local_endpoint  # lazy: avoid cycle
+
+    return _is_local_endpoint(base_url)
+
 
 class STTClient:
     """Streaming STT client for the xAI wire protocol (xAI or a HyperFurion relay)."""
 
     completion_timeout = 5.0
+    supports_streaming = True
 
     def __init__(
         self,
@@ -221,6 +259,8 @@ class STTClient:
 
 class BufferedRESTSTTClient:
     """Record PCM chunks locally, then submit a WAV file to an STT REST API."""
+
+    supports_streaming = False
 
     def __init__(
         self,
@@ -457,3 +497,121 @@ class BufferedRESTSTTClient:
             time.sleep(self._poll_interval)
 
         raise RuntimeError("Timed out waiting for AssemblyAI transcription")
+
+
+class ChunkedRESTAdapter:
+    """Pseudo-streaming on top of a buffered REST client.
+
+    While recording, the accumulated audio is re-transcribed on an
+    interval (by a second client with its own session and a short
+    timeout) and surfaced as transcript.partial events — so the flow
+    engine sees a streaming provider and molten dictation works against
+    plain REST endpoints. The wrapped client still produces the single
+    authoritative transcript.done at stop.
+
+    "auto" mode only enables this against local endpoints: each interim
+    probe re-sends the whole buffer, which is free on localhost Whisper
+    but would re-bill on metered cloud REST providers ("always" opts in).
+    """
+
+    supports_streaming = True
+
+    def __init__(
+        self,
+        inner: BufferedRESTSTTClient,
+        interim_client: BufferedRESTSTTClient,
+        *,
+        interval_ms: int = 2500,
+    ):
+        self._inner = inner
+        self._interim = interim_client
+        self._interval = max(0.8, interval_ms / 1000.0)
+        self._events: asyncio.Queue = asyncio.Queue()
+        self._interim_task: Optional[asyncio.Task] = None
+        self._pump_task: Optional[asyncio.Task] = None
+        self._stopping = asyncio.Event()
+        self._audio_since_probe = False
+        self._last_partial = ""
+
+    @property
+    def completion_timeout(self) -> float:
+        return self._inner.completion_timeout
+
+    async def connect(self, sample_rate: int) -> None:
+        await self._inner.connect(sample_rate)
+        await self._interim.connect(sample_rate)
+        self._stopping.clear()
+        self._audio_since_probe = False
+        self._last_partial = ""
+        self._interim_task = asyncio.create_task(
+            self._interim_loop(), name="stt-interim-probe"
+        )
+
+    async def send_audio(self, data: bytes) -> None:
+        await self._inner.send_audio(data)
+        self._audio_since_probe = True
+
+    async def send_audio_done(self) -> None:
+        self._stopping.set()
+        await self._inner.send_audio_done()
+        if self._pump_task is None:
+            self._pump_task = asyncio.create_task(
+                self._pump_final(), name="stt-final-pump"
+            )
+
+    async def receive_events(self) -> AsyncIterator[dict]:
+        while True:
+            event = await self._events.get()
+            yield event
+            if event.get("type") in {"transcript.done", "error"}:
+                break
+
+    async def close(self) -> None:
+        self._stopping.set()
+        for task in (self._interim_task, self._pump_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        self._interim_task = None
+        self._pump_task = None
+        await self._interim.close()
+        await self._inner.close()
+
+    async def _pump_final(self) -> None:
+        try:
+            async for event in self._inner.receive_events():
+                await self._events.put(event)
+        except Exception as exc:
+            await self._events.put(
+                {"type": "error", "message": str(exc) or exc.__class__.__name__}
+            )
+
+    async def _interim_loop(self) -> None:
+        while not self._stopping.is_set():
+            try:
+                await asyncio.wait_for(self._stopping.wait(), timeout=self._interval)
+                return  # stopping
+            except (TimeoutError, asyncio.TimeoutError):
+                pass
+            if not self._audio_since_probe or self._stopping.is_set():
+                continue
+            self._audio_since_probe = False
+            wav_data = self._inner._wav_bytes()
+            try:
+                text = await asyncio.to_thread(
+                    self._interim._transcribe_wav, wav_data
+                )
+            except Exception as exc:
+                # Interim probes are best-effort; the final POST decides.
+                logger.debug("Interim REST transcription failed: %s", exc)
+                continue
+            if self._stopping.is_set():
+                return
+            if text and text != self._last_partial:
+                self._last_partial = text
+                await self._events.put(
+                    {"type": "transcript.partial", "text": text, "is_final": False}
+                )
