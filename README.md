@@ -411,10 +411,15 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
 - **Ambient containment** (`[ambient]`, experimental) — in a long-open
   session, only utterances that start with the address word are typed;
   room speech never reaches the engine.
-- **Talk to any app** (`[ask]`, `voice-keyboard ask "…"`) — highlight
-  anything, ask a question, get the answer spoken or typed — in vim, a
-  browser, a PDF viewer, anything that can select text. No plugins, no
-  app integration: the keyboard is the AI surface for every app at once.
+- **Kai — the voice assistant** (`[assistant]`, second hotkey `Ctrl+Alt+.`)
+  — turn this on and the keyboard grows a voice assistant. Speak a query
+  and Kai routes it by where you are: **in a terminal**, it turns your
+  words into a command, types it at the prompt, and **never presses Enter —
+  only you can**; **anywhere else**, it searches the web / answers you,
+  spoken back through your xAI Voice Agent Builder agent (memory unified
+  with the dictation ledger, so it remembers everything you ever said).
+  Voice in, voice or a drafted command out — you never type to it. Frontier
+  brain, local hands, you own the Enter key.
 - **Total recall** (`[recall]`, `voice-keyboard find "…"`) — search
   everything you ever dictated. Keyword search out of the box; point it
   at a local Ollama `/embeddings` endpoint and it becomes semantic,

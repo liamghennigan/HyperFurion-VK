@@ -153,7 +153,14 @@ class TestCompileCommand:
         with mock.patch(
             "voice_keyboard.llm.requests.post", return_value=self._response("   ")
         ):
-            with pytest.raises(RuntimeError, match="intent"):
+            with pytest.raises(RuntimeError, match="intent produced no command"):
+                self._client().compile_command("list files")
+
+    def test_none_reply_raises(self) -> None:
+        with mock.patch(
+            "voice_keyboard.llm.requests.post", return_value=self._response("NONE")
+        ):
+            with pytest.raises(RuntimeError, match="intent produced no command"):
                 self._client().compile_command("list files")
 
     def test_network_error_raises_readable(self) -> None:
@@ -163,8 +170,35 @@ class TestCompileCommand:
             "voice_keyboard.llm.requests.post",
             side_effect=requests.RequestException("boom"),
         ):
-            with pytest.raises(RuntimeError, match="intent request failed"):
+            with pytest.raises(RuntimeError, match="request failed"):
                 self._client().compile_command("list files")
+
+
+class TestTerminalRouter:
+    def _client(self) -> LLMClient:
+        return LLMClient(base_url="https://api.x.ai/v1", api_key="k", model="m")
+
+    def _reply(self, content: str):
+        with mock.patch.object(LLMClient, "_chat", return_value=content):
+            return self._client().route_terminal_request("some query")
+
+    def test_command_reply_yields_command(self) -> None:
+        # Few-shot: the model completes a bare command line, cleaned up.
+        assert self._reply("git status") == "git status"
+        assert self._reply("`ls -la`") == "ls -la"
+        assert self._reply("$ pwd") == "pwd"
+
+    def test_none_yields_none(self) -> None:
+        # A question -> the model outputs NONE -> Kai answers, types nothing.
+        assert self._reply("NONE") is None
+        assert self._reply("none") is None
+
+    def test_weak_model_prose_defaults_to_answer(self) -> None:
+        # Junk a weak model might leak must never reach the shell prompt.
+        assert self._reply("Which directory do you want me to list?") is None
+        assert self._reply("\\boxed{Los Angeles Dodgers}") is None
+        assert self._reply("Sorry, I need more detail.") is None
+        assert self._reply("") is None
 
 
 class TestIntentRouting:

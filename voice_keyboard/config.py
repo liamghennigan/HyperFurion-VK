@@ -132,7 +132,7 @@ DEFAULT_CONFIG: dict = {
         "provider": "xai",
         "base_url": "",
         "api_key": "",
-        "model": "grok-4-fast",
+        "model": "grok-4.3",
     },
     "ambient": {
         # EXPERIMENTAL containment layer for long-open sessions: when on,
@@ -143,6 +143,38 @@ DEFAULT_CONFIG: dict = {
         "enabled": False,
         # Defaults to flow.wake_word when empty.
         "address_word": "",
+    },
+    "assistant": {
+        # The conversational MIND: "furion, …" (or the assistant hotkey)
+        # holds a conversation with memory, instead of typing. Brain is
+        # the xAI realtime voice agent when configured, else the local
+        # [llm]. Off by default; the daemon is a keyboard until you turn
+        # the mind on.
+        "enabled": False,
+        # What the mind calls itself — local brain persona + on-screen
+        # copy. "Kai", from KairOS. (The spoken voice agent's own name is
+        # set in the xAI Voice Agent Builder console.)
+        "name": "Kai",
+        # xAI Voice Agent Builder id; key falls back to providers.xai.
+        "agent_id": "",
+        "api_key": "",
+        # realtime | local | auto (realtime when configured, else local).
+        "brain": "auto",
+        # Spoken conversation trigger (a second global hotkey). Dictation
+        # keeps Ctrl+Alt+V; this defaults to Ctrl+Alt+period.
+        "hotkey": "control+alt+.",
+        # local = never send file contents; cloud = send excerpts of files
+        # you explicitly name. Selection + memory are always allowed.
+        "privacy_mode": "local",
+        "memory_enabled": True,
+        "web_enabled": True,
+        "max_memory_results": 5,
+        # The brain gets HANDS: when true it may propose one command line,
+        # which the daemon TYPES at the caret and never runs (Enter is
+        # refused in the injector). Off by default.
+        "can_act": False,
+        # Confine any file context the brain sees to this root.
+        "home_root": "",
     },
     "ask": {
         # Talk to any app: "furion, ask why does this fail" answers about
@@ -369,6 +401,31 @@ def validate_config(config: dict) -> None:
     _validate_verb_channel(config, "ask")
     _validate_verb_channel(config, "recall")
     _validate_remote_mic_config(config)
+    _validate_assistant_config(config)
+
+
+def _validate_assistant_config(config: dict) -> None:
+    cfg = config.get("assistant", {})
+    for key in ("enabled", "memory_enabled", "web_enabled", "can_act"):
+        if not isinstance(cfg.get(key, False), bool):
+            raise RuntimeError(f"assistant.{key} must be a boolean")
+    if str(cfg.get("brain", "auto")).lower() not in {"realtime", "local", "auto"}:
+        raise RuntimeError("assistant.brain must be one of: realtime, local, auto")
+    if str(cfg.get("privacy_mode", "local")).lower() not in {"local", "cloud"}:
+        raise RuntimeError("assistant.privacy_mode must be one of: local, cloud")
+    for key in ("name", "agent_id", "api_key", "hotkey", "home_root"):
+        if not isinstance(cfg.get(key, ""), str):
+            raise RuntimeError(f"assistant.{key} must be a string")
+    max_mem = cfg.get("max_memory_results", 5)
+    if not isinstance(max_mem, int) or isinstance(max_mem, bool) or max_mem < 0:
+        raise RuntimeError("assistant.max_memory_results must be a non-negative integer")
+    if cfg.get("enabled", False):
+        hotkey = str(cfg.get("hotkey", "")).strip()
+        main_hotkey = str(config.get("hotkey", {}).get("key", "")).strip().lower()
+        if hotkey and hotkey.lower().replace(" ", "") == main_hotkey.replace(" ", ""):
+            raise RuntimeError(
+                "assistant.hotkey must differ from the dictation hotkey.key"
+            )
 
 
 def _validate_ambient_config(config: dict) -> None:

@@ -8,6 +8,8 @@ from typing import Optional
 
 from voice_keyboard import clipboard, dictionary, history, recall
 from voice_keyboard.ambient import AmbientGate
+from voice_keyboard.assistant import Brain, create_brain
+from voice_keyboard.assistant.citations import format_visual_citations
 from voice_keyboard.audio_capture import AudioCapture
 from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
@@ -75,7 +77,14 @@ class Daemon:
         self._stt_error: Optional[str] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._hotkey_listener: Optional[HotkeyListener] = None
+        self._assistant_hotkey_listener: Optional[HotkeyListener] = None
         self._hotkey_lock: Optional[asyncio.Lock] = None
+        # The conversational mind (None until [assistant] enabled).
+        self._brain: Optional[Brain] = create_brain(self._config)
+        # This recording session routes to the brain, not the keyboard.
+        self._converse_capture = False
+        self._converse_pcm: list[bytes] = []
+        self._last_answer = ""
 
         # Flow — molten dictation session state.
         self._flow_engine: Optional[FlowEngine] = None
@@ -113,6 +122,7 @@ class Daemon:
         self._injector.start()
         self._ipc_server.start()
         self._start_hotkey_listener()
+        self._start_assistant_hotkey_listener()
         if prefetch_enabled(self._config):
             # A separate TTS client: the watcher thread never shares a
             # requests session with the playback path.
@@ -164,6 +174,9 @@ class Daemon:
         if self._hotkey_listener:
             self._hotkey_listener.stop()
             self._hotkey_listener = None
+        if self._assistant_hotkey_listener:
+            self._assistant_hotkey_listener.stop()
+            self._assistant_hotkey_listener = None
         if self._recording:
             await self._stop_recording()
         self._injector.stop()
@@ -181,6 +194,28 @@ class Daemon:
         except Exception:
             logger.exception("Failed to start hotkey listener")
             self._hotkey_listener = None
+
+    def _start_assistant_hotkey_listener(self) -> None:
+        """A SECOND global hotkey for converse mode — the mind, not the
+        keyboard. Only when [assistant] is enabled with its own binding."""
+        assistant_cfg = self._config.get("assistant", {})
+        if not assistant_cfg.get("enabled", False):
+            return
+        binding = str(assistant_cfg.get("hotkey", "")).strip()
+        if not binding:
+            return
+        try:
+            self._assistant_hotkey_listener = create_hotkey_listener(
+                {"enabled": True, "key": binding, "mode": "toggle"},
+                on_toggle=lambda: self._schedule_hotkey_action("converse_toggle"),
+                on_hold_start=lambda: None,
+                on_hold_stop=lambda: None,
+            )
+            self._assistant_hotkey_listener.start()
+            logger.info("Assistant hotkey listening: %s", binding)
+        except Exception:
+            logger.exception("Failed to start assistant hotkey listener")
+            self._assistant_hotkey_listener = None
 
     def _schedule_hotkey_action(self, action: str) -> None:
         if self._loop is None or self._loop.is_closed():
@@ -201,6 +236,16 @@ class Daemon:
                     await self._hotkey_start_recording(hold_to_talk=True)
                 elif action == "stop":
                     await self._hotkey_stop_recording()
+                elif action == "converse_toggle":
+                    if self._recording:
+                        await self._hotkey_stop_recording()
+                    else:
+                        self._converse_capture = True
+                        self._converse_pcm = []
+                        await self._show_hotkey_overlay(
+                            "listening", detail=f"⌁ ask {self._assistant_name()}…"
+                        )
+                        await self._start_recording()
             except Exception as exc:
                 logger.exception("Hotkey action failed: %s", action)
                 self._last_error = str(exc)
@@ -467,6 +512,8 @@ class Daemon:
             "focused_app": self._session_focus.app if self._session_focus else "",
             "pending_rewrite": self._pending_rewrite is not None,
             "ambient": self._ambient_gate is not None,
+            "assistant": self._brain is not None,
+            "assistant_can_act": bool(self._config.get("assistant", {}).get("can_act", False)),
             "last_text_len": len(self._last_typed),
             "last_error": self._last_error,
             "uptime_s": int(time.monotonic() - self._started_at),
@@ -507,9 +554,15 @@ class Daemon:
         except Exception as exc:
             logger.warning("Config changed but did not validate; keeping old: %s", exc)
             return
-        for section in ("flow", "registers", "llm", "intent", "ambient", "ask", "recall"):
+        for section in (
+            "flow", "registers", "llm", "intent", "ambient", "ask", "recall", "assistant"
+        ):
             self._config[section] = fresh.get(section, {})
-        logger.info("Reloaded flow/registers/llm/intent/ambient/ask/recall config")
+        # Rebuild the brain so [assistant] edits (brain, can_act, agent_id,
+        # privacy) take effect at the next turn without a restart. The
+        # assistant HOTKEY still needs a restart — it owns a listener.
+        self._brain = create_brain(self._config)
+        logger.info("Reloaded flow/registers/llm/intent/ambient/ask/recall/assistant config")
 
     # ------------------------------------------------------- flow session
 
@@ -561,6 +614,29 @@ class Daemon:
 
         flow_cfg = self._config.get("flow", {})
         self._ambient_gate = None
+        if self._converse_capture:
+            # Kai captures a spoken query but never types it live. It still
+            # needs to know WHERE you are — a terminal query becomes a
+            # drafted command, anything else becomes a spoken answer — so
+            # resolve focus + register, but build no engine/worker.
+            focus = None
+            if probe_task is not None:
+                try:
+                    focus = await asyncio.wait_for(probe_task, timeout=1.5)
+                except Exception:
+                    focus = None
+            self._session_focus = focus
+            registers_cfg = self._config.get("registers", {})
+            self._session_register = register_for_app(
+                focus.app if focus else "",
+                focus.role if focus else "",
+                config_map=registers_cfg.get("map", {}) or {},
+                default=str(registers_cfg.get("default", "prose")),
+            )
+            self._flow_engine = None
+            self._flow_worker = None
+            self._silence_gate = None
+            return
         if not flow_cfg.get("enabled", True):
             self._flow_engine = None
             self._flow_worker = None
@@ -870,6 +946,19 @@ class Daemon:
             _merge_transcript_text(self._final_text, self._interim_text)
         )
 
+        if self._converse_capture:
+            # This session was a spoken question for the mind, not text for
+            # the keyboard: send it to the brain, type nothing.
+            self._converse_capture = False
+            pcm = b"".join(self._converse_pcm)
+            self._converse_pcm = []
+            await self._teardown_flow_session()
+            if pcm or merged.strip():
+                await self._run_converse_audio(pcm, merged.strip())
+            else:
+                await self._show_hotkey_overlay("empty", timeout_ms=1800)
+            return ""
+
         engine = self._flow_engine
         if engine is None:
             # Flow disabled: the original type-at-stop behavior, unchanged.
@@ -1134,11 +1223,25 @@ class Daemon:
 
         await self._show_hotkey_overlay("processing", detail=f"⌁ {request}")
         command = await asyncio.to_thread(llm_client.compile_command, request)
+        return await self._deliver_command(command)
 
+    async def _deliver_command(self, command: str) -> str:
+        """Type a compiled command at the caret, never Enter. Shared by the
+        intent channel and Kai's terminal route."""
         if await self._focus_changed_since_session():
             clipboard.set_text(command)
             raise RuntimeError("focus changed — the command is on the clipboard")
+        await self._type_no_enter(command)
+        self._remember_typed(command, register="intent")
+        await self._show_hotkey_overlay(
+            "inserted", detail="⌁ typed — Enter is yours", timeout_ms=2200
+        )
+        return command
 
+    async def _type_no_enter(self, command: str) -> None:
+        """Type a command at the caret with Enter refused on every injector
+        path. The single chokepoint for 'draft an action, never run it' —
+        used by the intent channel AND the assistant's hands."""
         injector = self._injector
         has_flag = hasattr(injector, "suppress_enter")
         if has_flag:
@@ -1148,11 +1251,61 @@ class Daemon:
         finally:
             if has_flag:
                 injector.suppress_enter = False
-        self._remember_typed(command, register="intent")
-        await self._show_hotkey_overlay(
-            "inserted", detail="⌁ typed — Enter is yours", timeout_ms=2200
+
+    # --------------------------------------------------------- the mind
+
+    def _assistant_name(self) -> str:
+        return str(self._config.get("assistant", {}).get("name", "Kai")).strip() or "Kai"
+
+    async def _run_converse_audio(self, pcm: bytes, transcript: str) -> str:
+        """A spoken query to Kai, routed by where you are:
+
+        - focused on a TERMINAL → turn the query into a command, type it at
+          the prompt, and never press Enter (that stays yours);
+        - anywhere else → answer / search the web, spoken back (the voice
+          agent when configured, else the local brain).
+        """
+        if self._brain is None:
+            raise RuntimeError("[assistant] is not enabled")
+
+        if self._session_register.name == "terminal" and transcript.strip():
+            # A terminal being focused makes a command POSSIBLE, not
+            # certain — the user might just have a question. Classify the
+            # query: a runnable request becomes a typed command (no Enter);
+            # a question falls through to the spoken answer below.
+            llm_client = create_llm_client(self._config)
+            if llm_client is not None:
+                await self._show_hotkey_overlay("processing", detail=f"⌁ {transcript[:40]}")
+                try:
+                    command = await asyncio.to_thread(
+                        llm_client.route_terminal_request, transcript
+                    )
+                except Exception as exc:
+                    logger.warning("Terminal routing failed (%s); answering instead", exc)
+                    command = None
+                if command:
+                    return await self._deliver_command(command)
+                # Not a command — answer it, even though we're in a terminal.
+
+        await self._show_hotkey_overlay("processing", detail=f"⌁ {self._assistant_name()}…")
+        sample_rate = int(self._config.get("audio", {}).get("sample_rate", 16000))
+        result = await self._brain.respond_audio(
+            pcm, sample_rate=sample_rate, transcript_hint=transcript
         )
-        return command
+        answer = result.text
+        self._last_answer = answer
+        if transcript:
+            self._brain.remember_interaction(transcript, answer)
+        # The voice agent returns its own spoken audio; otherwise TTS the text.
+        if result.audio and hasattr(self._tts_client, "play_audio"):
+            await asyncio.to_thread(self._tts_client.play_audio, result.audio)
+        elif answer:
+            try:
+                await self._run_tts(answer)
+            except Exception as exc:
+                logger.debug("Assistant TTS failed: %s", exc)
+        logger.info("Kai (%s): heard %r", result.brain or "?", transcript[:60])
+        return answer
 
     # ------------------------------------------------------ pending rewrite
 
@@ -1333,6 +1486,11 @@ class Daemon:
                 chunk = await asyncio.to_thread(audio_capture.read_chunk)
                 if not self._recording or self._stt_client is None:
                     break
+                if self._converse_capture:
+                    # Keep the raw PCM: a converse turn may go to the voice
+                    # agent, which answers audio, not text. STT still runs
+                    # so we have a transcript for memory + local fallback.
+                    self._converse_pcm.append(bytes(chunk))
                 await self._stt_client.send_audio(chunk)
                 self._observe_audio(chunk, chunk_ms)
             except Exception:

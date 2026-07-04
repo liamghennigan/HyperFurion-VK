@@ -148,8 +148,12 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         this._state = state;
         const style = STATE_STYLES[state] || STATE_STYLES.listening;
         const actor = this._buildActor(style, detail || style.detail);
+        // NOTE: do NOT re-add the input-region param that GNOME 50 removed
+        // from addChrome's params — Params.parse throws on the unknown key
+        // and the pill stops drawing entirely (see tests for the regression
+        // guard). Click-through is preserved because the actors are
+        // non-reactive (reactive defaults to false) on GNOME 50.
         Main.layoutManager.addChrome(actor, {
-            affectsInputRegion: false,
             affectsStruts: false,
             trackFullscreen: true,
         });
