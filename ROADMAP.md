@@ -117,15 +117,18 @@ freezes without stability, with a visible pending state that can simply
 evaporate, is exactly the containment always-on input needs.
 
 - Local-only wake-word and voice activity detection; nothing streams
-  anywhere while idle.
+  anywhere while idle. **Shipped (2.1):** the opt-in `[wake]` word "Kai"
+  runs a local openWakeWord detector — no transcription, nothing off-box —
+  and summons Kai hands-free; the hotkey stays the hard mute.
 - Addressing segmentation: machine-directed vs. room-directed speech, by
   wake word, prosody, and pause structure.
 - Anything uncertain stays molten and dies unfrozen. Hard-mute is a
   first-class control.
 
 Nobody ships ambient dictation because nobody has the pending-state
-machinery. HyperFurion already does. Depends on items 1 and 2 being
-mature; the false-positive cost is why this is horizon-tier.
+machinery. HyperFurion already does. The wake-word *summon* is done; the
+remaining horizon work is always-on *dictation* contained by molten, where
+the false-positive cost still bites.
 
 ## 7. Become the layer, not the app — *horizon*
 

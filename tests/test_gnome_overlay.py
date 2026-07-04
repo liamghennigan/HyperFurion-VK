@@ -30,3 +30,18 @@ def test_affects_input_region_never_reappears() -> None:
         "throws on it and the overlay pill stops drawing. Remove it; "
         "click-through comes from the actors being non-reactive."
     )
+
+
+def test_kai_orb_is_wired() -> None:
+    # The always-on clickable Kai orb: a reactive button that summons Kai
+    # by speaking the daemon's Unix-socket IPC directly.
+    text = _EXT.read_text(encoding="utf-8")
+    for token in (
+        "SetButton",
+        "_showButton",
+        "_summon",
+        "St.Button",
+        "UnixSocketAddress",
+        "'converse'",
+    ):
+        assert token in text, f"{token!r} missing from extension.js (Kai orb)"

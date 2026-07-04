@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "voice-keyboard"
 # Bumping this on main cuts a GitHub release automatically (release.yml).
-version = "2.0.0"
+version = "2.1.0"
 description = "Universal Linux voice keyboard with selectable speech providers"
 requires-python = ">=3.11"
 authors = [{name = "Liam Hennigan"}]
@@ -23,6 +23,9 @@ dependencies = [
 
 [project.optional-dependencies]
 pygame = ["pygame>=2.5"]
+# Wake word "Kai" — a local openWakeWord detector (opt-in; [wake] off by
+# default). Pulls onnxruntime/tflite, so it stays out of the base install.
+wake = ["openwakeword>=0.6"]
 dev = [
     "pytest>=7.4",
     "pytest-asyncio>=0.21",

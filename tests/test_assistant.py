@@ -251,8 +251,15 @@ class TestRealtimeFactory:
 
 
 class TestConverseIntegration:
-    def test_disabled_by_default(self) -> None:
+    def test_enabled_by_default(self) -> None:
+        # Kai ships ON: it's push-to-talk, so nothing is captured until you
+        # summon it — the hotkey stays the hard mute.
         daemon = _daemon(_config())
+        assert daemon._brain is not None
+        assert daemon._status_response()["assistant"] is True
+
+    def test_explicit_disable_has_no_brain(self) -> None:
+        daemon = _daemon(_config(enabled=False))
         assert daemon._brain is None
         assert daemon._status_response()["assistant"] is False
 
@@ -340,6 +347,162 @@ class TestConverseIntegration:
         asyncio.run(run())
 
 
+class TestSummonUX:
+    """The rebuilt summon flow: hold-to-talk, off-lock turn, barge-in,
+    graceful degrade, earcon, and the always-bound auto-mode listener."""
+
+    def _kai(self, cfg: dict, register: str = "prose") -> Daemon:
+        from voice_keyboard.flow.registers import resolve_register
+
+        daemon = _daemon(cfg)
+        daemon._session_register = resolve_register(register)
+        return daemon
+
+    def test_summon_when_disabled_shows_hint_never_opens_mic(self) -> None:
+        # Bound but the mind is off: a press nudges the user, never a crash
+        # and never a hot mic.
+        daemon = self._kai(_config(enabled=False))
+        assert daemon._brain is None
+        daemon._start_recording = mock.AsyncMock()
+        asyncio.run(daemon._converse_start())
+        daemon._start_recording.assert_not_awaited()
+        assert daemon._converse_capture is False
+
+    def test_listening_shown_only_after_mic_is_live(self) -> None:
+        # Ordering fix: STARTING before connect, LISTENING only after — so
+        # the front of the question is never clipped.
+        from voice_keyboard import client
+
+        daemon = self._kai(_config(enabled=True))
+        order: list[str] = []
+        daemon._start_recording = mock.AsyncMock(
+            side_effect=lambda: order.append("connect")
+        )
+        client._show_overlay.side_effect = lambda state, **kw: order.append(state)
+        asyncio.run(daemon._converse_start())
+        assert order == ["starting", "connect", "listening"]
+        client._show_overlay.side_effect = None
+
+    def test_stop_hands_turn_to_task_off_lock(self) -> None:
+        # _converse_stop must not await the turn inline — it schedules a
+        # task so the hotkey lock is released immediately.
+        daemon = self._kai(_config(enabled=True))
+        daemon._recording = True
+        daemon._converse_capture = True
+
+        async def scenario() -> None:
+            daemon._stop_recording = mock.AsyncMock(return_value="")
+            await daemon._converse_stop()
+            daemon._stop_recording.assert_awaited_once()
+
+        asyncio.run(scenario())
+
+    def test_converse_turn_runs_and_clears(self) -> None:
+        daemon = self._kai(_config(enabled=True))
+        daemon._run_converse_audio = mock.AsyncMock(return_value="ok")
+
+        async def scenario() -> None:
+            daemon._converse_task = asyncio.current_task()
+            await daemon._converse_turn(b"pcm", "hello")
+
+        asyncio.run(scenario())
+        daemon._run_converse_audio.assert_awaited_once_with(b"pcm", "hello")
+        assert daemon._converse_task is None
+
+    def test_toggle_during_dictation_leaves_it_alone(self) -> None:
+        # The mode-confusion fix: summoning while dictation is live must NOT
+        # stop the dictation.
+        daemon = self._kai(_config(enabled=True))
+        daemon._recording = True
+        daemon._converse_capture = False
+        daemon._converse_start = mock.AsyncMock()
+        daemon._hotkey_stop_recording = mock.AsyncMock()
+        asyncio.run(daemon._handle_hotkey_action("converse_toggle"))
+        daemon._converse_start.assert_not_awaited()
+        daemon._hotkey_stop_recording.assert_not_awaited()
+
+    def test_toggle_mid_turn_barges_in(self) -> None:
+        daemon = self._kai(_config(enabled=True))
+        daemon._converse_cancel = mock.AsyncMock()
+
+        async def scenario() -> None:
+            daemon._converse_task = asyncio.ensure_future(asyncio.sleep(5))
+            await daemon._handle_hotkey_action("converse_toggle")
+            daemon._converse_task.cancel()
+
+        asyncio.run(scenario())
+        daemon._converse_cancel.assert_awaited_once()
+
+    def test_cancel_stops_speech_and_cancels_task(self) -> None:
+        daemon = self._kai(_config(enabled=True))
+        daemon._tts_client.stop_playback = mock.Mock()
+
+        async def scenario() -> asyncio.Task:
+            task = asyncio.ensure_future(asyncio.sleep(5))
+            daemon._converse_task = task
+            await daemon._converse_cancel()
+            return task
+
+        task = asyncio.run(scenario())
+        daemon._tts_client.stop_playback.assert_called_once()
+        assert task.cancelled()
+        assert daemon._converse_task is None
+
+    def test_earcon_gated_on_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[str] = []
+        monkeypatch.setattr(
+            "voice_keyboard.earcon.play_earcon", lambda kind: calls.append(kind)
+        )
+        self._kai(_config(enabled=True, earcon=False))._earcon("listen")
+        assert calls == []
+        self._kai(_config(enabled=True, earcon=True))._earcon("listen")
+        assert calls == ["listen"]
+
+    def test_hands_free_auto_stop_routes_to_converse_not_dictation(self) -> None:
+        # A hands-free question ends via converse_stop (schedules the turn,
+        # owns its overlay), NOT the dictation stop that would clobber it.
+        daemon = self._kai(_config(enabled=True))
+        daemon._converse_capture = True
+        daemon._auto_stop_started = False
+        daemon._silence_gate = mock.Mock(auto_stop_ms=1500)
+        daemon._silence_gate.feed.return_value = True
+        scheduled: list[str] = []
+
+        async def scenario() -> None:
+            daemon._handle_hotkey_action = mock.AsyncMock(
+                side_effect=lambda action: scheduled.append(action)
+            )
+            daemon._observe_audio(b"\x00\x00" * 8, 80.0)
+            await asyncio.sleep(0)
+
+        asyncio.run(scenario())
+        assert scheduled == ["converse_stop"]
+
+    def test_listener_binds_auto_even_when_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict = {}
+
+        def fake_create(cfg, *, on_toggle, on_hold_start, on_hold_stop):
+            captured.update(cfg=cfg, hold_start=on_hold_start, hold_stop=on_hold_stop)
+            return mock.Mock()
+
+        monkeypatch.setattr(
+            "voice_keyboard.daemon.create_hotkey_listener", fake_create
+        )
+        daemon = _daemon(_config(enabled=False))  # mind off — still binds
+        daemon._start_assistant_hotkey_listener()
+        assert daemon._assistant_hotkey_listener is not None
+        assert captured["cfg"]["mode"] == "auto"
+        assert captured["cfg"]["key"] == "control+alt+."
+        # Hold handlers are wired to converse start/stop, not no-ops.
+        daemon._schedule_hotkey_action = mock.Mock()
+        captured["hold_start"]()
+        captured["hold_stop"]()
+        daemon._schedule_hotkey_action.assert_any_call("converse_start")
+        daemon._schedule_hotkey_action.assert_any_call("converse_stop")
+
+
 class TestAssistantConfigValidation:  # noqa: E301
     def test_defaults_validate(self) -> None:
         validate_config(_config())
@@ -364,3 +527,20 @@ class TestAssistantConfigValidation:  # noqa: E301
     def test_create_brain_gated_on_enabled(self) -> None:
         assert create_brain(_config(enabled=False)) is None
         assert create_brain(_config(enabled=True, brain="local")) is not None
+
+    def test_mode_enum(self) -> None:
+        validate_config(_config(mode="hold"))
+        with pytest.raises(RuntimeError, match="assistant.mode"):
+            validate_config(_config(mode="double-tap"))
+
+    def test_earcon_and_button_are_bool(self) -> None:
+        with pytest.raises(RuntimeError, match="assistant.earcon"):
+            validate_config(_config(earcon="yes"))
+        with pytest.raises(RuntimeError, match="assistant.button"):
+            validate_config(_config(button="on"))
+
+    def test_invalid_hotkey_fails_loud(self) -> None:
+        # A typo in the always-bound summon key must fail at load, not
+        # silently at listener start.
+        with pytest.raises(RuntimeError, match="assistant.hotkey is invalid"):
+            validate_config(_config(hotkey="control+alt+notakey"))

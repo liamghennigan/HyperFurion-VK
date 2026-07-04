@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 
 FLOW_TICK_S = 0.25
 FOCUS_WATCHDOG_S = 1.5
+# A hands-free Kai question (a tap, or the wake word) ends after this much
+# trailing silence — you just stop talking, no second press.
+CONVERSE_AUTO_STOP_MS = 1500
 CAPTION_MAX_CHARS = 46
 # A held rewrite that is neither kept nor discarded evaporates.
 PENDING_REWRITE_TTL_S = 120.0
@@ -84,6 +87,12 @@ class Daemon:
         # This recording session routes to the brain, not the keyboard.
         self._converse_capture = False
         self._converse_pcm: list[bytes] = []
+        # A Kai turn (route + answer + speak) runs here, OFF the hotkey lock,
+        # so the daemon never freezes and a second press can cut it off.
+        self._converse_task: Optional[asyncio.Task] = None
+        # Hands-free summon (a tap, or the wake word) ends on silence; a hold
+        # ends on release.
+        self._converse_hands_free = False
         self._last_answer = ""
 
         # Flow — molten dictation session state.
@@ -113,6 +122,9 @@ class Daemon:
         # The multiplayer keyboard: a phone-fed session replaces PyAudio.
         self._remote_mic: Optional[RemoteMicServer] = None
         self._audio_source_override: Optional[RemoteAudioSource] = None
+        # Wake word "Kai" — opt-in, always-on LOCAL detector (None unless
+        # [wake] enabled).
+        self._wake_listener = None
         self._started_at = time.monotonic()
         self._config_mtime = self._current_config_mtime()
 
@@ -123,6 +135,10 @@ class Daemon:
         self._ipc_server.start()
         self._start_hotkey_listener()
         self._start_assistant_hotkey_listener()
+        self._push_button_visibility()
+        # Re-push shortly after start in case the shell extension was not yet
+        # listening on the bus (daemon-before-extension ordering).
+        self._loop.call_later(1.6, self._push_button_visibility)
         if prefetch_enabled(self._config):
             # A separate TTS client: the watcher thread never shares a
             # requests session with the playback path.
@@ -141,6 +157,7 @@ class Daemon:
                 on_stop=self._schedule_remote_stop,
             )
             self._remote_mic.start()
+        self._start_wake_listener()
         logger.info("Daemon started, socket: %s", self._socket_path)
 
         ipc_thread = threading.Thread(target=self._ipc_loop, daemon=True)
@@ -165,6 +182,9 @@ class Daemon:
 
     async def _shutdown(self) -> None:
         logger.info("Shutting down daemon")
+        if self._wake_listener is not None:
+            self._wake_listener.stop()
+            self._wake_listener = None
         if self._remote_mic is not None:
             self._remote_mic.stop()
             self._remote_mic = None
@@ -196,26 +216,54 @@ class Daemon:
             self._hotkey_listener = None
 
     def _start_assistant_hotkey_listener(self) -> None:
-        """A SECOND global hotkey for converse mode — the mind, not the
-        keyboard. Only when [assistant] is enabled with its own binding."""
+        """A SECOND global hotkey to summon Kai — the mind, not the keyboard.
+
+        Always bound when a binding exists (even if the mind is off, so a
+        press gives a helpful hint rather than silence), and it behaves like
+        dictation: [assistant].mode = auto means HOLD to talk / release to
+        send, or a quick TAP to toggle."""
         assistant_cfg = self._config.get("assistant", {})
-        if not assistant_cfg.get("enabled", False):
-            return
         binding = str(assistant_cfg.get("hotkey", "")).strip()
         if not binding:
             return
+        mode = str(assistant_cfg.get("mode", "auto")).strip().lower() or "auto"
+        hold_ms = int(self._config.get("hotkey", {}).get("hold_threshold_ms", 280))
         try:
             self._assistant_hotkey_listener = create_hotkey_listener(
-                {"enabled": True, "key": binding, "mode": "toggle"},
+                {
+                    "enabled": True,
+                    "key": binding,
+                    "mode": mode,
+                    "hold_threshold_ms": hold_ms,
+                },
                 on_toggle=lambda: self._schedule_hotkey_action("converse_toggle"),
-                on_hold_start=lambda: None,
-                on_hold_stop=lambda: None,
+                on_hold_start=lambda: self._schedule_hotkey_action("converse_start"),
+                on_hold_stop=lambda: self._schedule_hotkey_action("converse_stop"),
             )
             self._assistant_hotkey_listener.start()
-            logger.info("Assistant hotkey listening: %s", binding)
+            logger.info("Assistant hotkey listening: %s (%s)", binding, mode)
         except Exception:
             logger.exception("Failed to start assistant hotkey listener")
             self._assistant_hotkey_listener = None
+
+    def _start_wake_listener(self) -> None:
+        """Arm the opt-in local wake word. A detection fires the same summon
+        toggle as the hotkey, hands-free."""
+        from voice_keyboard.wake import WakeListener, wake_enabled
+
+        if not wake_enabled(self._config):
+            return
+        try:
+            self._wake_listener = WakeListener(
+                config=self._config,
+                on_wake=lambda: self._schedule_hotkey_action("converse_toggle"),
+                is_busy=lambda: self._recording
+                or bool(self._converse_task and not self._converse_task.done()),
+            )
+            self._wake_listener.start()
+        except Exception:
+            logger.exception("Failed to start wake listener")
+            self._wake_listener = None
 
     def _schedule_hotkey_action(self, action: str) -> None:
         if self._loop is None or self._loop.is_closed():
@@ -236,16 +284,30 @@ class Daemon:
                     await self._hotkey_start_recording(hold_to_talk=True)
                 elif action == "stop":
                     await self._hotkey_stop_recording()
+                elif action == "converse_start":
+                    # A HOLD began — talk until release.
+                    await self._converse_start(hands_free=False)
+                elif action == "converse_stop":
+                    await self._converse_stop()
+                elif action == "converse_cancel":
+                    await self._converse_cancel()
                 elif action == "converse_toggle":
-                    if self._recording:
-                        await self._hotkey_stop_recording()
-                    else:
-                        self._converse_capture = True
-                        self._converse_pcm = []
+                    # A quick tap (or the button / wake word): cut Kai off if
+                    # she's mid-turn, end an in-flight question, or start a
+                    # new hands-free one. Never touches a live dictation
+                    # session (that's the other key's job).
+                    if self._converse_task and not self._converse_task.done():
+                        await self._converse_cancel()
+                    elif self._converse_capture:
+                        await self._converse_stop()
+                    elif self._recording:
                         await self._show_hotkey_overlay(
-                            "listening", detail=f"⌁ ask {self._assistant_name()}…"
+                            "processing",
+                            detail="⌁ busy — dictation is live",
+                            timeout_ms=1400,
                         )
-                        await self._start_recording()
+                    else:
+                        await self._converse_start(hands_free=True)
             except Exception as exc:
                 logger.exception("Hotkey action failed: %s", action)
                 self._last_error = str(exc)
@@ -268,6 +330,20 @@ class Daemon:
             timeout_ms=timeout_ms,
             anchor=anchor,
         )
+
+    def _push_button_visibility(self) -> None:
+        """Tell the overlay extension whether to draw the always-on Kai orb.
+        The orb defaults visible, so we only need to hide it when the button
+        is switched off or the mind is disabled; a missed call in the common
+        case leaves it correctly shown."""
+        cfg = self._config.get("assistant", {})
+        visible = bool(cfg.get("button", True)) and bool(cfg.get("enabled", True))
+        try:
+            from voice_keyboard.client import _set_overlay_button
+
+            _set_overlay_button(visible)
+        except Exception:
+            logger.debug("Could not push Kai button visibility")
 
     async def _hotkey_start_recording(self, *, hold_to_talk: bool = False) -> None:
         if self._recording:
@@ -478,6 +554,16 @@ class Daemon:
                         else:
                             response = {"status": "ok", "message": "typed"}
 
+                elif command == "converse":
+                    # Summon Kai (or end/cancel a turn) — the same toggle the
+                    # hotkey fires. Fire-and-forget: the turn is long and owns
+                    # its own overlay, so don't block the caller (the orb) on
+                    # it.
+                    asyncio.run_coroutine_threadsafe(
+                        self._handle_hotkey_action("converse_toggle"), self._loop
+                    )
+                    response = {"status": "ok", "message": "converse toggled"}
+
                 elif command == "status":
                     response = self._status_response()
 
@@ -635,7 +721,13 @@ class Daemon:
             )
             self._flow_engine = None
             self._flow_worker = None
-            self._silence_gate = None
+            # A hands-free question ends itself on silence; a hold ends on
+            # release, so no endpointer there.
+            self._silence_gate = (
+                SilenceGate(auto_stop_ms=CONVERSE_AUTO_STOP_MS)
+                if self._converse_hands_free
+                else None
+            )
             return
         if not flow_cfg.get("enabled", True):
             self._flow_engine = None
@@ -947,14 +1039,18 @@ class Daemon:
         )
 
         if self._converse_capture:
-            # This session was a spoken question for the mind, not text for
-            # the keyboard: send it to the brain, type nothing.
+            # A spoken question for the mind, not text for the keyboard. Hand
+            # the turn to a background task so the hotkey lock is freed at
+            # once: the daemon stays responsive and a second press can cut
+            # Kai off mid-answer.
             self._converse_capture = False
             pcm = b"".join(self._converse_pcm)
             self._converse_pcm = []
             await self._teardown_flow_session()
             if pcm or merged.strip():
-                await self._run_converse_audio(pcm, merged.strip())
+                self._converse_task = asyncio.create_task(
+                    self._converse_turn(pcm, merged.strip())
+                )
             else:
                 await self._show_hotkey_overlay("empty", timeout_ms=1800)
             return ""
@@ -1257,6 +1353,103 @@ class Daemon:
     def _assistant_name(self) -> str:
         return str(self._config.get("assistant", {}).get("name", "Kai")).strip() or "Kai"
 
+    async def _converse_start(self, *, hands_free: bool = False) -> None:
+        """Summon Kai: open the mic for a spoken question. Shared by the
+        hotkey (hold or tap), the on-screen button, and the wake word.
+
+        hands_free (a tap or the wake word) ends the question on silence; a
+        hold ends it on release."""
+        if self._recording or (self._converse_task and not self._converse_task.done()):
+            return
+        if self._brain is None:
+            # Bound but the mind is off — a helpful nudge, never silence.
+            await self._show_hotkey_overlay(
+                "empty",
+                detail="⌁ enable [assistant] to summon Kai",
+                timeout_ms=2600,
+            )
+            return
+        self._converse_capture = True
+        self._converse_hands_free = hands_free
+        self._converse_pcm = []
+        await self._show_hotkey_overlay("starting", detail=f"⌁ {self._assistant_name()}…")
+        try:
+            await self._start_recording()
+        except Exception as exc:
+            self._converse_capture = False
+            self._converse_pcm = []
+            logger.exception("Kai summon failed to start")
+            await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+            return
+        # The mic is live NOW — sound the cue and show LISTENING only after
+        # connect, so the start of the question is never clipped.
+        self._earcon("listen")
+        await self._show_hotkey_overlay(
+            "listening", detail=f"⌁ ask {self._assistant_name()}… (release to send)"
+        )
+
+    async def _converse_stop(self) -> None:
+        """End the spoken question and hand the turn off the hotkey lock."""
+        if not self._converse_capture:
+            return
+        self._earcon("captured")
+        await self._show_hotkey_overlay(
+            "processing", detail=f"⌁ {self._assistant_name()}…"
+        )
+        # _stop_recording drains STT, then schedules self._converse_task.
+        await self._stop_recording()
+
+    async def _converse_cancel(self) -> None:
+        """Barge-in: cut off Kai's answer, or discard a live question."""
+        try:
+            self._tts_client.stop_playback()
+        except Exception:
+            pass
+        task = self._converse_task
+        self._converse_task = None
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        if self._converse_capture and self._recording:
+            # A question was still being captured — tear it down WITHOUT the
+            # type-at-stop path, so nothing is injected.
+            self._converse_capture = False
+            self._converse_pcm = []
+            try:
+                await self._cleanup_after_failed_start()
+            except Exception:
+                logger.exception("Error discarding live capture on cancel")
+        await self._show_hotkey_overlay("empty", detail="⌁ cancelled", timeout_ms=1200)
+
+    async def _converse_turn(self, pcm: bytes, transcript: str) -> None:
+        """Run one Kai turn to completion, owning its own overlay. Runs as a
+        task off the hotkey lock; cancellable for barge-in."""
+        try:
+            await self._run_converse_audio(pcm, transcript)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception("Kai turn failed")
+            self._last_error = str(exc)
+            await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+        finally:
+            self._converse_task = None
+
+    def _earcon(self, kind: str) -> None:
+        """A short offline tone when Kai starts listening / captures your
+        question — eyes-free confirmation. Non-blocking; never fatal."""
+        if not bool(self._config.get("assistant", {}).get("earcon", True)):
+            return
+        try:
+            from voice_keyboard.earcon import play_earcon
+
+            play_earcon(kind)
+        except Exception as exc:
+            logger.debug("earcon unavailable: %s", exc)
+
     async def _run_converse_audio(self, pcm: bytes, transcript: str) -> str:
         """A spoken query to Kai, routed by where you are:
 
@@ -1510,8 +1703,11 @@ class Daemon:
         ):
             self._auto_stop_started = True
             logger.info("Auto-stop: %dms of silence", gate.auto_stop_ms)
+            # A hands-free Kai question ends via its own path (which schedules
+            # the turn off-lock and owns its overlay); dictation ends normally.
+            action = "converse_stop" if self._converse_capture else "stop"
             asyncio.get_running_loop().create_task(
-                self._handle_hotkey_action("stop")
+                self._handle_hotkey_action(action)
             )
 
     async def _receive_events(self) -> None:

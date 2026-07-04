@@ -215,6 +215,23 @@ class TTSClient:
         resp.raise_for_status()
         return resp.content
 
+    def stop_playback(self) -> None:
+        """Cut off any in-flight speech immediately — the barge-in path.
+        Safe to call when nothing is playing."""
+        try:
+            import sounddevice as sd
+
+            sd.stop()
+        except Exception:
+            pass
+        try:
+            import pygame
+
+            if pygame.mixer.get_init():
+                pygame.mixer.music.stop()
+        except Exception:
+            pass
+
     def synthesize_and_play(self, text: str) -> None:
         self.play_audio(self.synthesize(text))
 
