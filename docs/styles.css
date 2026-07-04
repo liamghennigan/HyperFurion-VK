@@ -646,6 +646,20 @@ pre.config:focus { border-color: var(--wave); }
     linear-gradient(135deg, var(--spec-1), var(--spec-2), var(--spec-3), var(--spec-4)) border-box;
 }
 
+/* hosted-tier checkout: hidden until the Stripe links are set (checkout.js) */
+.buy-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.buybtn {
+  font: 600 12px var(--mono);
+  letter-spacing: .04em;
+  text-decoration: none;
+  color: var(--bg);
+  background: var(--wave);
+  border: 1px solid var(--wave);
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+.buybtn:hover { filter: brightness(1.08); }
+
 /* copy-on-click: the install command is the primary CTA */
 .prewrap { position: relative; }
 .hero .prewrap { max-width: 100%; }
