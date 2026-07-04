@@ -228,6 +228,12 @@ earcon = true
 # Draw an always-on clickable Kai orb on screen (the GNOME overlay extension
 # renders it, bottom-right); click it to summon. Set false to hide it.
 button = true
+# On Wayland the daemon often can't see the focused app (GPU terminals like
+# Ghostty/kitty expose no AT-SPI, and GNOME denies window introspection).
+# When focus is UNKNOWN, still attempt the terminal command route — the
+# classifier answers questions and only types actual commands (never Enter).
+# Set false to always answer by voice when focus can't be resolved.
+terminal_fallback = true
 # local = never send file contents to the brain; cloud = send excerpts of
 # files you explicitly name. Your selection and memory are always allowed.
 privacy_mode = "local"

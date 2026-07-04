@@ -301,6 +301,64 @@ class TestConverseIntegration:
         assert daemon._injector.flag_at_type == [True]
         assert daemon._injector.suppress_enter is False
 
+    def test_unknown_focus_falls_back_to_command_route(self) -> None:
+        # Wayland reality: probe returns None (no AT-SPI on GPU terminals),
+        # so the register is 'prose'. With terminal_fallback on, a command
+        # still gets compiled and typed — no Enter.
+        daemon = self._kai(
+            _config(enabled=True, brain="auto", terminal_fallback=True), register="prose"
+        )
+        daemon._session_focus = None  # focus genuinely unknown
+        daemon._brain = mock.Mock()
+        daemon._focus_changed_since_session = mock.AsyncMock(return_value=False)
+        llm = mock.Mock()
+        llm.route_terminal_request.return_value = "ls -R ~"
+        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
+            result = asyncio.run(daemon._run_converse_audio(b"pcm", "list all folders in home"))
+        assert result == "ls -R ~"
+        assert daemon._injector.typed == ["ls -R ~"]
+        assert daemon._injector.flag_at_type == [True]  # Enter suppressed
+
+    def test_unknown_focus_question_still_answered(self) -> None:
+        # The classifier returns None for a question even under fallback, so
+        # it's answered aloud, never typed.
+        daemon = self._kai(
+            _config(enabled=True, brain="auto", terminal_fallback=True), register="prose"
+        )
+        daemon._session_focus = None
+        brain = mock.Mock()
+        brain.remember_interaction = mock.Mock()
+        brain.respond_audio = mock.AsyncMock(
+            return_value=mock.Mock(text="Paris.", audio=b"", audio_sample_rate=24000, brain="local")
+        )
+        daemon._brain = brain
+        daemon._run_tts = mock.AsyncMock()
+        llm = mock.Mock()
+        llm.route_terminal_request.return_value = None  # question
+        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
+            result = asyncio.run(daemon._run_converse_audio(b"pcm", "capital of France"))
+        assert result == "Paris."
+        assert daemon._injector.typed == []
+
+    def test_fallback_off_answers_when_focus_unknown(self) -> None:
+        daemon = self._kai(
+            _config(enabled=True, brain="auto", terminal_fallback=False), register="prose"
+        )
+        daemon._session_focus = None
+        brain = mock.Mock()
+        brain.remember_interaction = mock.Mock()
+        brain.respond_audio = mock.AsyncMock(
+            return_value=mock.Mock(text="ok", audio=b"", audio_sample_rate=24000, brain="local")
+        )
+        daemon._brain = brain
+        daemon._run_tts = mock.AsyncMock()
+        llm = mock.Mock()
+        llm.route_terminal_request.return_value = "rm -rf /"  # must NOT run
+        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
+            asyncio.run(daemon._run_converse_audio(b"pcm", "delete everything"))
+        llm.route_terminal_request.assert_not_called()
+        assert daemon._injector.typed == []
+
     def test_terminal_question_is_answered_not_typed(self) -> None:
         # In a terminal but it's a QUESTION → the router returns None, so
         # Kai answers aloud and types nothing into the shell.
