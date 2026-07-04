@@ -14,8 +14,8 @@
 import { $ } from "./env.js";
 
 export const CHECKOUT = {
-  basic: "PASTE_STRIPE_PAYMENT_LINK_FOR_5_DOLLAR_TIER",
-  pro: "PASTE_STRIPE_PAYMENT_LINK_FOR_10_DOLLAR_TIER",
+  basic: "https://buy.stripe.com/00w4gA89yaVI6Twgfm2oE00",
+  pro: "https://buy.stripe.com/14A00k4Xm6Fs3Hk7IQ2oE01",
 };
 
 // A tier counts as live only once its placeholder becomes a real https URL.
