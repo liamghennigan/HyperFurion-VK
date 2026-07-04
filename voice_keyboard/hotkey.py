@@ -59,9 +59,12 @@ def create_hotkey_listener(
     on_toggle: Callable[[], None],
     on_hold_start: Callable[[], None],
     on_hold_stop: Callable[[], None],
+    on_hold_cancel: Optional[Callable[[], None]] = None,
 ):
     """Platform factory: evdev on Linux, a Quartz event tap on macOS, a
-    low-level keyboard hook on Windows."""
+    low-level keyboard hook on Windows. on_hold_cancel (bare-key gesture
+    aborted by another key) is a Linux/evdev concept; other backends fall
+    back to on_hold_stop semantics."""
     if sys.platform == "darwin":
         from voice_keyboard.macos.hotkey import MacHotkeyListener
 
@@ -85,15 +88,18 @@ def create_hotkey_listener(
         on_toggle=on_toggle,
         on_hold_start=on_hold_start,
         on_hold_stop=on_hold_stop,
+        on_hold_cancel=on_hold_cancel,
     )
 
 IGNORED_DEVICE_NAMES = {"voice-keyboard"}
 
 
 class HotkeySpec:
-    def __init__(self, key: str):
+    def __init__(self, key: str, *, allow_bare: bool = False):
         parts = [part.strip().lower() for part in key.split("+") if part.strip()]
-        if len(parts) < 2:
+        if not parts:
+            raise ValueError("hotkey.key is empty")
+        if len(parts) < 2 and not allow_bare:
             raise ValueError("hotkey.key must include at least one modifier and one key")
 
         modifier_parts = parts[:-1]
@@ -106,6 +112,14 @@ class HotkeySpec:
 
         self.trigger_code = _key_code(key_part)
         self.key = key
+
+    @property
+    def is_bare(self) -> bool:
+        """A single bare key (e.g. rightctrl) with no modifiers. Bare
+        MODIFIER triggers are the terminal-safe summon: a modifier alone
+        never produces terminal input, so holding it can't spray escape
+        codes into a shell the way a held symbol chord (Ctrl+Alt+.) does."""
+        return not self.modifier_groups
 
     def is_pressed(self, pressed: set[int]) -> bool:
         return (
@@ -154,12 +168,16 @@ class HotkeyListener:
         on_toggle: Callable[[], None],
         on_hold_start: Callable[[], None],
         on_hold_stop: Callable[[], None],
+        on_hold_cancel: Optional[Callable[[], None]] = None,
     ):
         self._enabled = bool(config.get("enabled", True))
         self._mode = str(config.get("mode", "auto")).lower()
         self._hold_threshold_s = (
             float(config.get("hold_threshold_ms", self.DEFAULT_HOLD_THRESHOLD_MS)) / 1000.0
         )
+        # A bare-modifier binding (e.g. rightctrl) is allowed when the
+        # caller opts in — the assistant's terminal-safe summon key.
+        self._allow_bare = bool(config.get("allow_bare", False))
         # Subclasses override _make_spec to parse the combo into their
         # platform's keycodes; everything else — the tap/hold/auto state
         # machine — is shared, so they can call super().__init__().
@@ -167,10 +185,14 @@ class HotkeyListener:
         self._on_toggle = on_toggle
         self._on_hold_start = on_hold_start
         self._on_hold_stop = on_hold_stop
+        # Fired instead of on_hold_stop when a bare-key gesture is aborted
+        # by another key (the user was really doing Ctrl+<something>).
+        self._on_hold_cancel = on_hold_cancel or on_hold_stop
         self._pressed: set[int] = set()
         self._combo_latched = False
         self._auto_combo_pending = False
         self._hold_active = False
+        self._gesture_aborted = False
         self._auto_hold_timer: Optional[threading.Timer] = None
         self._devices: list = []
         self._thread: Optional[threading.Thread] = None
@@ -179,7 +201,7 @@ class HotkeyListener:
 
     def _make_spec(self, key: str):
         """The Linux (evdev) spec. macOS/Windows backends override this."""
-        return HotkeySpec(key)
+        return HotkeySpec(key, allow_bare=self._allow_bare)
 
     def start(self) -> None:
         if not self._enabled or self._mode == "disabled":
@@ -223,7 +245,9 @@ class HotkeyListener:
                 if self._spec.trigger_code not in key_codes:
                     device.close()
                     continue
-                if not any(group & key_codes for group in self._spec.modifier_groups):
+                if self._spec.modifier_groups and not any(
+                    group & key_codes for group in self._spec.modifier_groups
+                ):
                     device.close()
                     continue
                 devices.append(device)
@@ -294,8 +318,34 @@ class HotkeyListener:
             else:
                 return
 
+            # A bare-key gesture (e.g. hold rightctrl) must not swallow real
+            # modifier use: any OTHER key pressed mid-gesture means the user
+            # was doing Ctrl+<something>, so the gesture aborts — a pending
+            # tap fizzles, an active hold cancels (not sends).
+            if (
+                getattr(self._spec, "is_bare", False)  # mac/win specs: chords only
+                and value == 1
+                and code != self._spec.trigger_code
+                and (self._combo_latched or self._hold_active)
+                and not self._gesture_aborted
+            ):
+                self._gesture_aborted = True
+                self._auto_combo_pending = False
+                self._cancel_auto_hold_timer()
+                if self._hold_active:
+                    self._hold_active = False
+                    callback = self._on_hold_cancel
+
             combo_pressed = self._spec.is_pressed(self._pressed)
-            if self._mode == "toggle":
+
+            if callback:
+                pass  # abort already decided; fire it outside the lock
+            elif self._gesture_aborted:
+                # Swallow everything until the trigger is released.
+                if self._spec.trigger_code not in self._pressed:
+                    self._gesture_aborted = False
+                    self._combo_latched = False
+            elif self._mode == "toggle":
                 if combo_pressed and not self._combo_latched:
                     self._combo_latched = True
                     callback = self._on_toggle

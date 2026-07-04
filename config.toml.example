@@ -208,9 +208,15 @@ api_key = ""
 # the voice agent for spoken answers when configured, local otherwise.
 # (`voice-keyboard summon` toggles a turn from the CLI, same as the hotkey.)
 brain = "auto"
-# The summon hotkey (a second global binding; dictation keeps Ctrl+Alt+V).
-# Restart to change — it owns a listener.
-hotkey = "control+alt+."
+# The summon binding (a second global binding; dictation keeps Ctrl+Alt+V).
+# Default is a BARE modifier — hold Right Ctrl to talk — because a modifier
+# alone never reaches the focused app. Held symbol chords (e.g.
+# "control+alt+.") work too, but terminals encode them as escape codes
+# (CSI-u), so holding one at a shell prompt sprays junk like `6;7u6;7u`.
+# While a bare-key gesture is active, pressing any OTHER key aborts it, so
+# real Right-Ctrl shortcuts still work. Restart to change — it owns a
+# listener.
+hotkey = "rightctrl"
 # How the summon key behaves, like [hotkey].mode:
 #   auto   = HOLD to talk / release to send (walkie-talkie), or a quick TAP
 #            to toggle; a tap while Kai is answering cuts her off (barge-in).

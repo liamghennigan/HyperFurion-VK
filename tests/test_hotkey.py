@@ -103,3 +103,82 @@ class TestHotkeyListener:
 
         assert events == ["start", "stop"]
         listener.stop()
+
+
+def _bare_listener(events: list[str]) -> HotkeyListener:
+    """The terminal-safe summon: bare rightctrl, auto mode."""
+    return HotkeyListener(
+        {
+            "enabled": True,
+            "key": "rightctrl",
+            "mode": "auto",
+            "hold_threshold_ms": 10_000,
+            "allow_bare": True,
+        },
+        on_toggle=lambda: events.append("toggle"),
+        on_hold_start=lambda: events.append("start"),
+        on_hold_stop=lambda: events.append("stop"),
+        on_hold_cancel=lambda: events.append("cancel"),
+    )
+
+
+class TestBareModifierGesture:
+    def test_bare_spec_requires_opt_in(self) -> None:
+        from voice_keyboard.hotkey import HotkeySpec
+        import pytest
+
+        assert HotkeySpec("rightctrl", allow_bare=True).is_bare
+        with pytest.raises(ValueError):
+            HotkeySpec("rightctrl")  # dictation stays chord-only
+
+    def test_bare_tap_and_hold_fire(self) -> None:
+        events: list[str] = []
+        listener = _bare_listener(events)
+        # Quick tap → toggle on release.
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 1)
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 0)
+        # Hold past threshold → start, release → stop.
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 1)
+        listener._auto_hold_elapsed()
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 0)
+        assert events == ["toggle", "start", "stop"]
+        listener.stop()
+
+    def test_other_key_aborts_pending_tap(self) -> None:
+        # RightCtrl+C is real modifier use, not a summon: the gesture
+        # fizzles and nothing fires.
+        events: list[str] = []
+        listener = _bare_listener(events)
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 1)
+        listener._handle_key_event(e.KEY_C, 1)
+        listener._handle_key_event(e.KEY_C, 0)
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 0)
+        assert events == []
+        # And the gesture re-arms cleanly afterwards.
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 1)
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 0)
+        assert events == ["toggle"]
+        listener.stop()
+
+    def test_other_key_cancels_active_hold(self) -> None:
+        # A slow Ctrl+<key> after the hold engaged must CANCEL (discard),
+        # never send the accidental capture.
+        events: list[str] = []
+        listener = _bare_listener(events)
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 1)
+        listener._auto_hold_elapsed()
+        listener._handle_key_event(e.KEY_C, 1)
+        listener._handle_key_event(e.KEY_RIGHTCTRL, 0)
+        assert events == ["start", "cancel"]
+        listener.stop()
+
+    def test_chord_specs_ignore_extra_keys_unchanged(self) -> None:
+        # The abort rule is bare-only: chords keep their subset-match
+        # behavior (extra keys never break a chord).
+        events: list[str] = []
+        listener = _listener("toggle", events)
+        listener._handle_key_event(e.KEY_LEFTCTRL, 1)
+        listener._handle_key_event(e.KEY_A, 1)
+        listener._handle_key_event(e.KEY_SPACE, 1)
+        assert events == ["toggle"]
+        listener.stop()

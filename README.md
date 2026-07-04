@@ -15,9 +15,10 @@ desktop, sends that selected text to the configured TTS provider, and plays the
 returned audio locally.
 
 **New in 2.0: Kai — a voice assistant in the keyboard.** Summon Kai three
-ways — **hold** the summon key (`Ctrl+Alt+.`) walkie-talkie style and
-release to send, **click** the always-on Kai orb on screen, or (opt-in) say
-the **wake word "Kai"** — and it routes your spoken query by where you are:
+ways — **hold Right Ctrl** walkie-talkie style and release to send (a bare
+modifier, so nothing ever leaks into the focused app — configurable),
+**click** the always-on Kai orb on screen, or (opt-in) say the **wake word
+"Kai"** — and it routes your spoken query by where you are:
 focused on a terminal, it turns your words into a command and types it at
 the prompt — never pressing Enter, only you can; anywhere else, it answers
 or searches the web, spoken back. An earcon confirms the mic is live, the
@@ -424,10 +425,12 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
   session, only utterances that start with the address word are typed;
   room speech never reaches the engine.
 - **Kai — the voice assistant** (`[assistant]`) — the keyboard grows a voice
-  assistant, on by default and push-to-talk. Summon it three ways: **hold**
-  the summon key (`Ctrl+Alt+.`) and release to send, **click** the always-on
-  Kai orb the overlay draws on screen, or (opt-in `[wake]`) say the local
-  **wake word "Kai"**. Kai routes your query by where you are: **in a
+  assistant, on by default and push-to-talk. Summon it three ways: **hold
+  Right Ctrl** and release to send (a bare modifier never reaches the
+  focused app, so nothing leaks into a terminal; configurable — chords like
+  `control+alt+.` work but terminals see escape codes when they're held),
+  **click** the always-on Kai orb the overlay draws on screen, or (opt-in
+  `[wake]`) say the local **wake word "Kai"**. Kai routes your query by where you are: **in a
   terminal**, it turns your words into a command, types it at the prompt,
   and **never presses Enter — only you can**; **anywhere else**, it searches
   the web / answers you, spoken back through your xAI Voice Agent Builder

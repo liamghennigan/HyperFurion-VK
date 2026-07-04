@@ -49,6 +49,9 @@ class ConverseResult:
     text: str
     citations: list[Citation] = field(default_factory=list)
     audio: bytes = b""
+    # `audio` is RAW s16le mono PCM at this rate (the realtime agent's
+    # output format) — play it with play_pcm, never the MP3 path.
+    audio_sample_rate: int = 24000
     action: str = ""
     brain: str = ""  # which brain answered: realtime | local
     warnings: list[str] = field(default_factory=list)

@@ -51,6 +51,9 @@ FOCUS_WATCHDOG_S = 1.5
 # A hands-free Kai question (a tap, or the wake word) ends after this much
 # trailing silence — you just stop talking, no second press.
 CONVERSE_AUTO_STOP_MS = 1500
+# Hard cap on one Kai turn (route + answer + speech). A wedged LLM endpoint
+# or a hung websocket must surface as a visible error, never a stuck overlay.
+CONVERSE_TURN_TIMEOUT_S = 90.0
 CAPTION_MAX_CHARS = 46
 # A held rewrite that is neither kept nor discarded evaporates.
 PENDING_REWRITE_TTL_S = 120.0
@@ -228,6 +231,13 @@ class Daemon:
             return
         mode = str(assistant_cfg.get("mode", "auto")).strip().lower() or "auto"
         hold_ms = int(self._config.get("hotkey", {}).get("hold_threshold_ms", 280))
+        # A bare-modifier binding (default: rightctrl) is the terminal-safe
+        # summon — a modifier alone never reaches the focused app, so holding
+        # it can't spray escape codes into a shell the way a held symbol
+        # chord (Ctrl+Alt+.) does. A bare TAP is ignored when idle (too easy
+        # to brush); it still ends a capture or barges in on a running turn.
+        bare = "+" not in binding
+        tap_action = "converse_tap" if bare else "converse_toggle"
         try:
             self._assistant_hotkey_listener = create_hotkey_listener(
                 {
@@ -235,10 +245,12 @@ class Daemon:
                     "key": binding,
                     "mode": mode,
                     "hold_threshold_ms": hold_ms,
+                    "allow_bare": True,
                 },
-                on_toggle=lambda: self._schedule_hotkey_action("converse_toggle"),
+                on_toggle=lambda: self._schedule_hotkey_action(tap_action),
                 on_hold_start=lambda: self._schedule_hotkey_action("converse_start"),
                 on_hold_stop=lambda: self._schedule_hotkey_action("converse_stop"),
+                on_hold_cancel=lambda: self._schedule_hotkey_action("converse_cancel"),
             )
             self._assistant_hotkey_listener.start()
             logger.info("Assistant hotkey listening: %s (%s)", binding, mode)
@@ -308,10 +320,34 @@ class Daemon:
                         )
                     else:
                         await self._converse_start(hands_free=True)
+                elif action == "converse_tap":
+                    # A bare-modifier tap: barge in or end a capture, but
+                    # NEVER open the mic — a stray Right-Ctrl tap is too easy
+                    # to brush. Summon = hold (or the orb / wake word).
+                    if self._converse_task and not self._converse_task.done():
+                        await self._converse_cancel()
+                    elif self._converse_capture:
+                        await self._converse_stop()
             except Exception as exc:
                 logger.exception("Hotkey action failed: %s", action)
                 self._last_error = str(exc)
                 await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+
+    async def _locked_start_recording(self) -> None:
+        """IPC `start` under the same lock as the hotkeys. A GNOME custom
+        shortcut spawning the CLI races the evdev listener on the very same
+        keypress; without this, two _start_recording coroutines interleave
+        and fight over one STT websocket (ConcurrencyError)."""
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            await self._start_recording()
+
+    async def _locked_stop_recording(self) -> str:
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            return await self._stop_recording()
 
     async def _show_hotkey_overlay(
         self,
@@ -393,7 +429,7 @@ class Daemon:
 
                 elif command == "start":
                     future = asyncio.run_coroutine_threadsafe(
-                        self._start_recording(), self._loop
+                        self._locked_start_recording(), self._loop
                     )
                     try:
                         future.result(timeout=12)
@@ -420,7 +456,7 @@ class Daemon:
                 elif command == "stop":
                     stop_timeout = self._stop_recording_ipc_timeout()
                     future = asyncio.run_coroutine_threadsafe(
-                        self._stop_recording(), self._loop
+                        self._locked_stop_recording(), self._loop
                     )
                     try:
                         result = future.result(timeout=stop_timeout)
@@ -1426,11 +1462,21 @@ class Daemon:
 
     async def _converse_turn(self, pcm: bytes, transcript: str) -> None:
         """Run one Kai turn to completion, owning its own overlay. Runs as a
-        task off the hotkey lock; cancellable for barge-in."""
+        task off the hotkey lock; cancellable for barge-in; hard-capped so a
+        wedged brain/LLM can never leave the overlay stuck on PROCESSING."""
         try:
-            await self._run_converse_audio(pcm, transcript)
+            await asyncio.wait_for(
+                self._run_converse_audio(pcm, transcript),
+                timeout=CONVERSE_TURN_TIMEOUT_S,
+            )
         except asyncio.CancelledError:
             raise
+        except asyncio.TimeoutError:
+            logger.error("Kai turn timed out after %ss", CONVERSE_TURN_TIMEOUT_S)
+            self._last_error = "Kai timed out"
+            await self._show_hotkey_overlay(
+                "error", detail="⌁ Kai timed out", timeout_ms=3000
+            )
         except Exception as exc:
             logger.exception("Kai turn failed")
             self._last_error = str(exc)
@@ -1489,9 +1535,24 @@ class Daemon:
         self._last_answer = answer
         if transcript:
             self._brain.remember_interaction(transcript, answer)
-        # The voice agent returns its own spoken audio; otherwise TTS the text.
-        if result.audio and hasattr(self._tts_client, "play_audio"):
-            await asyncio.to_thread(self._tts_client.play_audio, result.audio)
+        # Show the answer BEFORE speaking it — playback takes seconds and the
+        # persistent PROCESSING pill must never outlive the thinking.
+        if answer:
+            await self._show_hotkey_overlay(
+                "inserted", detail=f"⌁ {answer[:64]}", timeout_ms=6000
+            )
+        else:
+            await self._show_hotkey_overlay(
+                "empty", detail="⌁ no answer", timeout_ms=2200
+            )
+        # The voice agent speaks its own answer as RAW PCM (s16le), not an
+        # MP3 container — play it as PCM or the decoder chews static.
+        if result.audio and hasattr(self._tts_client, "play_pcm"):
+            await asyncio.to_thread(
+                self._tts_client.play_pcm,
+                result.audio,
+                getattr(result, "audio_sample_rate", 24000),
+            )
         elif answer:
             try:
                 await self._run_tts(answer)
