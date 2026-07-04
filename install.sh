@@ -330,7 +330,9 @@ if ! config_has_required_api_keys "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TT
 elif [ "$NEEDS_RELOGIN" -eq 1 ]; then
     echo "Service enabled but not started: log out and back in so 'input' group access applies."
 else
-    systemctl --user start voice-keyboard-daemon.service
+    # restart, not start: on upgrades the daemon is already running and would
+    # otherwise keep serving the old code from memory.
+    systemctl --user restart voice-keyboard-daemon.service
     echo "Daemon started."
 fi
 

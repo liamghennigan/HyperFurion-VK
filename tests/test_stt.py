@@ -109,6 +109,34 @@ class TestSTTClient:
             with pytest.raises(RuntimeError, match="Could not connect to xAI STT"):
                 asyncio.run(client.connect(sample_rate=16000))
 
+    def test_connect_rejection_surfaces_http_response_body(self) -> None:
+        # A rejected handshake (e.g. bad API key) answers with an HTTP body
+        # that names the problem; the raised error must carry it.
+        from websockets.datastructures import Headers
+        from websockets.exceptions import InvalidStatus
+        from websockets.http11 import Response
+
+        client = stt.STTClient(api_key="k", connect_timeout=1.0)
+        response = Response(
+            400,
+            "Bad Request",
+            Headers(),
+            b'{"error":"Incorrect API key provided: co***ce."}',
+        )
+
+        async def reject(*args, **kwargs):
+            raise InvalidStatus(response)
+
+        with mock.patch(
+            "voice_keyboard.stt.websockets.connect",
+            side_effect=reject,
+        ), mock.patch(
+            "voice_keyboard.stt.asyncio.sleep",
+            new=mock.AsyncMock(),
+        ):
+            with pytest.raises(RuntimeError, match="Incorrect API key provided"):
+                asyncio.run(client.connect(sample_rate=16000))
+
     def test_receive_events_skips_invalid_json(self) -> None:
         client = stt.STTClient(api_key="k")
 
