@@ -22,12 +22,15 @@ Stripe webhooks (checkout → key issued, invoice → usage reset,
 
 | Tier  | Price | Streaming STT | TTS characters | Worst-case upstream cost |
 |-------|-------|---------------|----------------|--------------------------|
-| basic | $5/mo | 20 h/month    | 250,000/month  | ~$5.05 (median user ~$1) |
-| pro   | $10/mo| 60 h/month    | 1,000,000/month| capped, median ~$2       |
+| basic | $5/mo | 20 h/month    | 10,000/month   | ~$4.15 (median user ~$1) |
+| pro   | $10/mo| 40 h/month    | 50,000/month   | ~$8.75 (median ~$2)      |
 
 Caps are hard: STT refuses (and cuts off mid-session) past the limit, TTS
 returns 429, both with a message naming the reset date. A subscriber cannot
-run up your bill. Edit `hyperfurion_relay/tiers.py` to change the numbers.
+run up your bill — the caps are derived from xAI list prices (streaming STT
+$0.20/h, TTS $15/M chars, verified 2026-07-04) so a maxed-out month never
+exceeds what the subscription nets after Stripe fees. Re-derive in
+`hyperfurion_relay/tiers.py` whenever xAI pricing changes.
 
 ## Endpoints
 

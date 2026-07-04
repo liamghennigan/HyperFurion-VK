@@ -1,8 +1,13 @@
 """Subscription tiers and how Stripe events map onto them.
 
-Caps are the profit-protection mechanism: xAI streaming STT costs
-$0.20/hour and TTS $4.20 per million characters, so at these caps a
-maxed-out subscriber still costs less than their subscription.
+Caps are the no-loss guarantee: at xAI list prices (verified 2026-07-04:
+streaming STT $0.20/hour, TTS $15.00 per million characters) a maxed-out
+subscriber must cost LESS than the subscription nets after Stripe fees
+(~$4.45 on $5, ~$9.19 on $10, assuming worst-case international card +
+FX). Re-derive these caps whenever xAI pricing changes:
+
+    basic: 20 h x $0.20 = $4.00  +  10k chars x $15/M = $0.15  -> $4.15
+    pro:   40 h x $0.20 = $8.00  +  50k chars x $15/M = $0.75  -> $8.75
 """
 
 from dataclasses import dataclass
@@ -17,11 +22,10 @@ class Tier:
 
 
 TIERS: dict[str, Tier] = {
-    # $5/mo: 20 h streaming STT (~$4.00 worst case) + 250k TTS chars (~$1.05).
-    "basic": Tier("basic", 5, 20 * 3600, 250_000),
-    # $10/mo: 60 h streaming STT (~$12 worst case is above price, but a
-    # subscriber dictating 2 h/day is an outlier; median cost ~ $1-2).
-    "pro": Tier("pro", 10, 60 * 3600, 1_000_000),
+    # $5/mo: worst case $4.15 — never exceeds what the subscription nets.
+    "basic": Tier("basic", 5, 20 * 3600, 10_000),
+    # $10/mo: worst case $8.75 — same guarantee, no outlier exposure.
+    "pro": Tier("pro", 10, 40 * 3600, 50_000),
 }
 
 DEFAULT_TIER = "basic"
