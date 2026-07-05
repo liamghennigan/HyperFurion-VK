@@ -44,6 +44,7 @@ export const Config = (() => {
     return cfg.voice ? cfg.voice.name : "no match → browser default";
   }
   function apply() {
+    if (!cfgEl) return;              // live-config panel may be absent on a streamlined page
     const text = cfgEl.textContent;
     const grab = (re) => { const m = text.match(re); return m ? m[1] : null; };
     const errs = [];
@@ -117,9 +118,11 @@ export const Config = (() => {
     // the demo re-renders on this event (registers, molten window, wake word)
     bus.emit("cfg:change", cfg);
   }
-  cfgEl.addEventListener("input", apply);
-  if (synth && "onvoiceschanged" in synth) {
-    synth.addEventListener("voiceschanged", () => { if (!cfgStatus.hidden) apply(); }, { once: true });
+  if (cfgEl) {
+    cfgEl.addEventListener("input", apply);
+    if (synth && "onvoiceschanged" in synth) {
+      synth.addEventListener("voiceschanged", () => { if (cfgStatus && !cfgStatus.hidden) apply(); }, { once: true });
+    }
   }
   return { cfg, apply };
 })();

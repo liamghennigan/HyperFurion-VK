@@ -1920,9 +1920,6 @@
       <span class="sigcap hero-cap" id="hero-cap" hidden>signal: test pattern</span>
     </header>
 
-    <!-- ============ fact tape ============ -->
-    <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · words land while you speak · <b>molten, then frozen</b> · say “scratch that” · say “VK, make that formal” · hold right ctrl for kai, the assistant · registers per app · <b>it never presses enter</b> · full unicode on linux · offline with a local model · self-hosted relay · zero analytics · mit licensed · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · words land while you speak · <b>molten, then frozen</b> · say “scratch that” · say “VK, make that formal” · hold right ctrl for kai, the assistant · registers per app · <b>it never presses enter</b> · full unicode on linux · offline with a local model · self-hosted relay · zero analytics · mit licensed · your keys stay yours &nbsp;·&nbsp; </span></div>
-
     <!-- ============ the proof — a working instance ============ -->
     <section class="proof" id="proof" aria-label="Live demo — windows that really type, molten">
       <div class="wrap">
@@ -1974,18 +1971,6 @@
       </div>
     </section>
 
-    <!-- ============ keycap strip ============ -->
-    <div class="strip">
-      <div class="wrap keys-row" aria-label="What the voice keyboard's keys sound like">
-        <div class="keycap"><span class="legend">Text</span><b>speak naturally</b></div>
-        <div class="keycap"><span class="legend">Edit</span><b>scratch that</b></div>
-        <div class="keycap"><span class="legend">Format</span><b>new line, period</b></div>
-        <div class="keycap wide"><span class="legend">Rewrite</span><b>VK, make that formal</b></div>
-        <div class="keycap"><span class="legend">Read</span><b>voice-keyboard tts</b></div>
-        <div class="keycap wide"><span class="legend">Terminal</span><b>find every TODO in this repo</b></div>
-      </div>
-    </div>
-
     <!-- ============ thesis ============ -->
     <section aria-labelledby="thesis-title">
       <div class="wrap">
@@ -2009,28 +1994,6 @@
             <p>A local daemon with a virtual keyboard. Spoken intent becomes keystrokes — typed, repaired, rewritten, or drafted wherever your cursor already is.</p>
           </article>
         </div>
-        <div class="compare" style="margin-top:30px;">
-          <div class="compare-col">
-            <h3><span>Ordinary</span> dictation</h3>
-            <div class="compare-list">
-              <div class="compare-row"><span class="ico">–</span><span>Converts speech into text, then stops.</span></div>
-              <div class="compare-row"><span class="ico">–</span><span>Works best inside its own dedicated text box.</span></div>
-              <div class="compare-row"><span class="ico">–</span><span>Leaves every mistake for your hands to repair.</span></div>
-              <div class="compare-row"><span class="ico">–</span><span>Treats corrections, commands, and rewrites as edge cases.</span></div>
-              <div class="compare-row"><span class="ico">–</span><span>Feels like a microphone feature.</span></div>
-            </div>
-          </div>
-          <div class="compare-col vk">
-            <h3>HyperFurion <span>VK</span></h3>
-            <div class="compare-list">
-              <div class="compare-row"><span class="ico y">✓</span><span>Turns speech into text, edits, rewrites, drafts, and readback.</span></div>
-              <div class="compare-row"><span class="ico y">✓</span><span>Acts system-wide, through the app you already focused.</span></div>
-              <div class="compare-row"><span class="ico y">✓</span><span>Repairs itself: “scratch that” works on text it already typed.</span></div>
-              <div class="compare-row"><span class="ico y">✓</span><span>Treats command drafting, recall, and the assistant as native keys.</span></div>
-              <div class="compare-row"><span class="ico y">✓</span><span>Feels like a new input device.</span></div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -2039,7 +2002,7 @@
       <div class="wrap">
         <span class="eyebrow">how dictation works — molten <span class="cfg">— [flow]</span></span>
         <h2 id="molten-title">Text is worked like metal.</h2>
-        <p class="lede">With a streaming provider, words land in the focused field <strong>while you speak</strong>. Each word stays molten for a stability window — 1.5&nbsp;seconds by default. If the provider revises it, the daemon backspaces to the divergence point and retypes. Once a word survives the window it freezes, and is never touched again.</p>
+        <p class="lede">Words land <strong>while you speak</strong>. Each stays molten for ~1.5&nbsp;seconds — long enough to repair itself in place — then freezes and is never touched again.</p>
         <div class="molten-grid">
           <article class="state s1">
             <span class="glyph">t &lt; 1.5 s</span>
@@ -2060,176 +2023,6 @@
             <p>Survived the window. Frozen words are permanent — your caret never runs away, and no late revision can rewrite what already set.</p>
           </article>
         </div>
-
-        <figure class="moltenfig" aria-label="Three moments of one molten line: everything molten, a repair, then frozen text">
-          <div class="mrow">
-            <span class="mt">t + 0.4 s</span>
-            <span class="mtext">fixed the race <em>addition in</em></span>
-            <span class="mnote">everything is molten — still revisable</span>
-          </div>
-          <div class="mrow">
-            <span class="mt">t + 1.1 s</span>
-            <span class="mtext">fixed the race <em class="rep">condition</em> <em>in the audio</em></span>
-            <span class="mnote">the provider revised — backspace to the divergence, retype</span>
-          </div>
-          <div class="mrow">
-            <span class="mt">t + 2.6 s</span>
-            <span class="mtext">fixed the race condition in the audio <em>thread</em></span>
-            <span class="mnote">survivors froze — never touched again</span>
-          </div>
-          <figcaption class="sigcap">the stability window — 1.5 s by default — is the whole trick</figcaption>
-        </figure>
-
-        <div class="register-row">
-          <div class="register-head">
-            <b>Context registers — [registers]</b>
-            <span>the daemon probes the focused app at recording start (AT-SPI / Quartz / Win32) and picks how speech is rendered</span>
-          </div>
-          <div class="registers">
-            <div class="register"><b>prose</b><span>Smart capitalization and punctuation spacing. The default.</span></div>
-            <div class="register"><b>terminal</b><span>No auto-caps, spoken numbers as digits, pastes with Ctrl+Shift+V. Known terminals map here automatically.</span></div>
-            <div class="register"><b>verbatim</b><span>Grammar off; words exactly as recognized. Password fields force this — always.</span></div>
-            <div class="register"><b>python</b><span>Compiles speech, no model in the loop.</span><code>"for i in range ten colon" → for i in range(10):</code></div>
-            <div class="register"><b>shell</b><span>Same, for the pipe-and-flag dialect.</span><code>"pipe grep dash i error" → | grep -i error</code></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ grammar ============ -->
-    <section id="grammar" aria-labelledby="grammar-title">
-      <div class="wrap">
-        <span class="eyebrow">the spoken grammar <span class="cfg">— [flow.commands]</span></span>
-        <h2 id="grammar-title">Edits are commands, not text.</h2>
-        <p class="lede">Corrections, punctuation, and escapes are parsed <strong>deterministically, before anything is typed</strong> — on every provider, streaming or not. The same phrase does the same thing every time, because the grammar runs in the daemon, not in a model.</p>
-        <div class="grammar-grid">
-          <div class="grammar-table">
-            <table>
-              <thead><tr><th scope="col">You say</th><th scope="col">You get</th></tr></thead>
-              <tbody>
-                <tr><td>“scratch that” · “delete that”</td><td>deletes the last utterance — even after it’s been typed</td></tr>
-                <tr><td>“new line” · “new paragraph”</td><td>a line break · a blank line</td></tr>
-                <tr><td>“period” · “comma” · “em dash” · “open quote”</td><td>the glyph, correctly spaced — thirty-odd phrases</td></tr>
-                <tr><td>“literal period”</td><td>the word “period” — the escape hatch</td></tr>
-                <tr><td>“twenty three” · “three point one four”</td><td><code>23</code> · <code>3.14</code> — in the terminal register, or with <code>numbers = "always"</code></td></tr>
-                <tr><td>“VK, make that formal”</td><td>rewrites what you just dictated, in place</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="grammar-side">
-            <pre data-copy><span class="c"># every phrase is yours to remap</span>
-[flow.commands]
-scratch_that = ["nuke it", "scratch that"]
-
-[flow.punctuation]
-"comma" = ""   <span class="c"># fine, have it your way</span>
-
-[flow.vocabulary]
-"hyper furion" = "HyperFurion"</pre>
-            <p>Phrases are remappable and removable, and your own vocabulary grows as you speak.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ providers ============ -->
-    <section aria-labelledby="prov-title">
-      <div class="wrap">
-        <span class="eyebrow">the engine room <span class="cfg">— [providers]</span></span>
-        <h2 id="prov-title">Any brain. Local hands.</h2>
-        <p class="lede">A local daemon owns the hotkeys, the microphone, and a virtual keyboard — uinput on Linux, Quartz on macOS, SendInput on Windows. Speech recognition is a config value, not a lock-in.</p>
-
-        <figure class="pipeline" id="pipeline" aria-label="Signal path: microphone to daemon to provider, back through the flow engine and virtual keyboard into the focused app; and selected text out to speech">
-          <svg viewBox="0 0 760 240" role="img" aria-labelledby="pl-title">
-            <title id="pl-title">HyperFurion VK signal path</title>
-            <defs>
-              <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0 0 L8 4 L0 8 z" class="pl-arrow"/>
-              </marker>
-            </defs>
-
-            <text x="25" y="48" class="pl-lane">dictation — speech in, molten keystrokes out, live</text>
-            <g>
-              <rect class="pl-node n-mic" x="25" y="62" width="110" height="46" rx="8"/>
-              <text class="pl-node-label" x="80" y="82" text-anchor="middle">microphone</text>
-              <text class="pl-node-sub" x="80" y="97" text-anchor="middle">local capture</text>
-
-              <rect class="pl-node n-daemon" x="175" y="62" width="110" height="46" rx="8"/>
-              <text class="pl-node-label" x="230" y="82" text-anchor="middle">daemon</text>
-              <text class="pl-node-sub" x="230" y="97" text-anchor="middle">flow engine inside</text>
-
-              <rect class="pl-node n-provider" x="325" y="62" width="110" height="46" rx="8"/>
-              <text class="pl-node-label" x="380" y="82" text-anchor="middle">STT provider</text>
-              <text class="pl-node-sub" id="pl-engine" x="380" y="97" text-anchor="middle">xAI · local · …</text>
-
-              <rect class="pl-node n-uinput" x="475" y="62" width="110" height="46" rx="8"/>
-              <text class="pl-node-label" x="530" y="82" text-anchor="middle">virtual keyboard</text>
-              <text class="pl-node-sub" x="530" y="97" text-anchor="middle">uinput · Quartz · SendInput</text>
-
-              <rect class="pl-node n-app" x="625" y="62" width="110" height="46" rx="8"/>
-              <text class="pl-node-label" x="680" y="82" text-anchor="middle">focused app</text>
-              <text class="pl-node-sub" x="680" y="97" text-anchor="middle">molten → frozen</text>
-            </g>
-            <path id="pl-e1" class="pl-edge sttlane e-mic" d="M135 85 H173" marker-end="url(#arr)"/>
-            <path id="pl-e2" class="pl-edge sttlane e-prov" d="M285 85 H323" marker-end="url(#arr)"/>
-            <path id="pl-e3" class="pl-edge sttlane e-ret" d="M435 85 H473" marker-end="url(#arr)"/>
-            <path id="pl-e4" class="pl-edge sttlane e-type" d="M585 85 H623" marker-end="url(#arr)"/>
-            <text class="pl-note" x="530" y="127" text-anchor="middle">grammar · register · repair —</text>
-            <text class="pl-note" x="530" y="139" text-anchor="middle">interim tokens type while you speak</text>
-
-            <text x="25" y="164" class="pl-lane">readback — selected text in, speech out</text>
-            <g>
-              <rect class="pl-node" x="625" y="176" width="110" height="42" rx="8"/>
-              <text class="pl-node-label" x="680" y="195" text-anchor="middle">selected text</text>
-              <text class="pl-node-sub" x="680" y="209" text-anchor="middle">primary selection</text>
-
-              <rect class="pl-node" x="325" y="176" width="110" height="42" rx="8"/>
-              <text class="pl-node-label" x="380" y="195" text-anchor="middle">TTS provider</text>
-              <text class="pl-node-sub" x="380" y="209" text-anchor="middle">xAI · OpenAI · ElevenLabs</text>
-
-              <rect class="pl-node" x="25" y="176" width="110" height="42" rx="8"/>
-              <text class="pl-node-label" x="80" y="195" text-anchor="middle">speaker</text>
-              <text class="pl-node-sub" x="80" y="209" text-anchor="middle">local playback</text>
-            </g>
-            <path class="pl-edge ttslane t-sel" d="M623 197 H437" marker-end="url(#arr)"/>
-            <path class="pl-edge ttslane t-out" d="M323 197 H137" marker-end="url(#arr)"/>
-            <path class="pl-edge ttslane" d="M230 110 V197"/>
-            <text class="pl-node-sub" x="240" y="130">via daemon</text>
-            <g id="pl-live-layer"></g>
-          </svg>
-          <figcaption class="sigcap">one daemon owns the long-lived resources — the cli just sends one ipc command over a unix socket and exits</figcaption>
-          <span class="sigcap" id="pl-status" aria-live="polite" style="position:absolute;left:-9999px;"></span>
-        </figure>
-
-        <div class="prov-grid">
-          <article class="prov-card">
-            <h3>Pick a provider</h3>
-            <p>xAI is the default and what VK is daily-driven on. Swap providers or models in config — no code changes.</p>
-            <div class="chips">
-              <span class="chip hot">xai — default</span>
-              <span class="chip">openai</span>
-              <span class="chip">groq</span>
-              <span class="chip">deepgram</span>
-              <span class="chip">assemblyai</span>
-              <span class="chip">elevenlabs (tts)</span>
-              <span class="chip">hyperfurion (coming soon)</span>
-            </div>
-            <p>The <b>hyperfurion</b> provider is one <span class="mono">hfk_</span> key instead of provider accounts — same streaming protocol, relay fully self-hostable.</p>
-          </article>
-          <article class="prov-card">
-            <h3>Or go fully offline</h3>
-            <p>Point the OpenAI-compatible provider at any local server — Whisper, Parakeet, Voxtral, Kokoro. No key, no network, nothing leaves the machine.</p>
-            <pre data-copy><span class="c"># ~/.config/voice-keyboard/config.toml</span>
-[providers.openai]
-base_url = "http://localhost:8000/v1"
-
-[stt]
-provider = "openai"   <span class="c"># local Whisper</span>
-
-[tts]
-provider = "openai"   <span class="c"># local Kokoro</span></pre>
-          </article>
-        </div>
       </div>
     </section>
 
@@ -2238,8 +2031,7 @@ provider = "openai"   <span class="c"># local Kokoro</span></pre>
       <div class="wrap">
         <span class="eyebrow">the full board</span>
         <h2 id="keys-title">Every behavior is a key.</h2>
-        <p class="lede">One mental model for the whole product: spoken phrases press different kinds of keys. All of them remappable in config; each one shipped, tested, and documented.</p>
-        <p class="lede" style="margin-top:32px;">Press a voice key to see how it routes — literal text, an edit, a transformation, a readback, a drafted command, or an assistant turn.</p>
+        <p class="lede">Every spoken phrase presses a kind of key — all remappable. Press one to see how it routes.</p>
         <div class="demo-shell">
           <div class="demo-grid">
             <div class="command-list" role="tablist" aria-label="Voice key examples">
@@ -2284,15 +2076,16 @@ provider = "openai"   <span class="c"># local Kokoro</span></pre>
           </div>
         </div>
         <div class="mode-grid">
-          <article class="mode-card"><div><small>Text</small><h3>Type</h3><p>Speak naturally into any focused application. Tap to toggle, hold to talk, silence auto-stops.</p></div><code>ctrl+alt+v</code></article>
-          <article class="mode-card"><div><small>Edit</small><h3>Repair</h3><p>“Scratch that”, punctuation, new lines, spoken numbers as digits, your own vocabulary — a real edit grammar, applied before anything is typed.</p></div><code>[flow.commands]</code></article>
-          <article class="mode-card"><div><small>Rewrite</small><h3>Transform</h3><p>“VK, make that formal” routes the just-typed text through an LLM and repairs it in place. Optionally held pending until you say “keep it”.</p></div><code>VK, …</code></article>
-          <article class="mode-card"><div><small>Context</small><h3>Register</h3><p>Prose, terminal, verbatim, python, shell — picked by probing the focused app, overridable per app.</p></div><code>[registers.map]</code></article>
-          <article class="mode-card"><div><small>Read</small><h3>Speak back</h3><p>Select text anywhere on the desktop and the keyboard reads it aloud. Bind it to a shortcut if you like.</p></div><code>voice-keyboard tts</code></article>
-          <article class="mode-card"><div><small>Recall</small><h3>Remember</h3><p>An opt-in local ledger of everything you dictated. List it, re-type an entry, or search it — semantically, fully on-box, with a local embeddings endpoint.</p></div><code>voice-keyboard recall 2</code></article>
-          <article class="mode-card"><div><small>Terminal</small><h3>Draft</h3><p>Speak intent at a prompt and one command line is typed for review. It cannot press Enter — the refusal is enforced inside the injector.</p></div><code>[intent]</code></article>
-          <article class="mode-card"><div><small>Assistant</small><h3>Kai</h3><p>Hold Right Ctrl and ask. In a terminal it drafts the command; anywhere else it answers or searches, spoken back. A second tap barges in and cuts it off.</p></div><code>hold rightctrl</code></article>
+          <article class="mode-card"><div><small>Text</small><h3>Type</h3><p>Speak into any focused app. Tap to toggle, hold to talk.</p></div><code>ctrl+alt+v</code></article>
+          <article class="mode-card"><div><small>Edit</small><h3>Repair</h3><p>“Scratch that”, punctuation, spoken numbers, your vocabulary — a real edit grammar.</p></div><code>[flow.commands]</code></article>
+          <article class="mode-card"><div><small>Rewrite</small><h3>Transform</h3><p>“VK, make that formal” rewrites the just-typed text in place.</p></div><code>VK, …</code></article>
+          <article class="mode-card"><div><small>Context</small><h3>Register</h3><p>Prose, terminal, verbatim, python, shell — picked from the focused app.</p></div><code>[registers.map]</code></article>
+          <article class="mode-card"><div><small>Read</small><h3>Speak back</h3><p>Select any text and the keyboard reads it aloud.</p></div><code>voice-keyboard tts</code></article>
+          <article class="mode-card"><div><small>Recall</small><h3>Remember</h3><p>An opt-in local ledger of what you dictated — list, re-type, or search it on-box.</p></div><code>voice-keyboard recall 2</code></article>
+          <article class="mode-card"><div><small>Terminal</small><h3>Draft</h3><p>Speak intent at a prompt; one line is typed for review. It can’t press Enter.</p></div><code>[intent]</code></article>
+          <article class="mode-card"><div><small>Assistant</small><h3>Kai</h3><p>Hold Right Ctrl and ask. In a terminal it drafts; elsewhere it answers, spoken back.</p></div><code>hold rightctrl</code></article>
         </div>
+        <span class="sigcap" style="display:block;margin-top:22px;">works with any provider — xAI, OpenAI, Groq, Deepgram — or fully offline against a local server. nothing leaves your machine unless you send it.</span>
       </div>
     </section>
 
@@ -2309,33 +2102,12 @@ provider = "openai"   <span class="c"># local Kokoro</span></pre>
             <span class="enter"><span class="held-chip">⏎ held — yours</span><span>voice → drafted keystrokes → you press Enter</span></span>
           </div>
           <div class="guarantees">
-            <div class="guarantee"><span class="ico">⏎</span><div><b>It never presses Enter for you</b><span>Command drafting types one line and stops. The refusal is enforced inside the keystroke injector on every path — keycode, newline, clipboard paste. Your keypress is the consent.</span></div></div>
-            <div class="guarantee"><span class="ico">◉</span><div><b>Push-to-talk, by default</b><span>Nothing is captured until you summon it. The wake word is a tiny local detector, opt-in and off by default — and the hotkey remains the hard mute.</span></div></div>
-            <div class="guarantee"><span class="ico">▣</span><div><b>Password fields are sacred</b><span>The focus probe sees the widget: a password field always forces <code>verbatim</code>, is never written to history, and never biases recognition.</span></div></div>
-            <div class="guarantee"><span class="ico">⌖</span><div><b>It never types into the wrong window</b><span>If focus moves mid-dictation, typing freezes instantly and the transcript lands on the clipboard instead.</span></div></div>
-            <div class="guarantee"><span class="ico">◌</span><div><b>Audio lives in memory</b><span>Recorded speech is held in memory while it is transcribed and never written to disk. The optional history ledger is a local file, mode 600, off by default.</span></div></div>
+            <div class="guarantee"><span class="ico">⏎</span><div><b>It never presses Enter for you</b><span>Command drafting types one line and stops — the refusal is enforced inside the injector, on every path. Your keypress is the consent.</span></div></div>
+            <div class="guarantee"><span class="ico">◉</span><div><b>Push-to-talk, by default</b><span>Nothing is captured until you summon it. The wake word is opt-in and off by default; the hotkey is the hard mute.</span></div></div>
+            <div class="guarantee"><span class="ico">◌</span><div><b>Audio lives in memory</b><span>Speech is held in memory while transcribed, never written to disk. Password fields always force <code>verbatim</code> and are never logged.</span></div></div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- ============ limits ============ -->
-    <section id="limits" aria-labelledby="limits-title">
-      <div class="wrap">
-        <span class="eyebrow">known limits — stated, not hidden</span>
-        <h2 id="limits-title">Honest limitations.</h2>
-        <p class="lede">A keyboard you trust with every window has to be honest about its edges. These are the current ones.</p>
-        <div class="limits">
-          <div class="limit"><b>Linux first.</b> Python 3.11+, systemd user services, uinput access. macOS and Windows are beta — native Quartz / SendInput backends that say so plainly.</div>
-          <div class="limit"><b>Cloud by default.</b> No speech model ships in the box. Fully offline is one config line: point <code>providers.openai.base_url</code> at a local server.</div>
-          <div class="limit"><b>Live typing needs streaming.</b> REST providers land the text on stop — the grammar still applies, the words just arrive together.</div>
-          <div class="limit"><b>Repairs assume a still field.</b> Type or click into the text mid-dictation and a repair can land wrong. The stability window and <code>max_molten_chars</code> bound the damage.</div>
-          <div class="limit"><b>“Scratch that” respects Unicode.</b> It declines to delete across emoji and combining marks, where backspace-per-character isn’t reliable.</div>
-          <div class="limit"><b>Frozen means frozen.</b> A late revision that disagrees with an already-frozen word loses; only the molten tail adopts changes.</div>
-          <div class="limit"><b>Non-ASCII pastes on Linux.</b> Accents, CJK, and emoji go through the clipboard (<code>wl-copy</code> / <code>xclip</code>); clipboard managers may glimpse the transient entry.</div>
-          <div class="limit"><b>The overlay is GNOME’s.</b> The recording pill with live molten captions is GNOME Shell on Wayland; other desktops get ordinary notifications.</div>
-          <div class="limit" id="page-note" hidden><b>This page runs on your browser’s engines.</b> Dictation uses the browser’s speech engine the way the daemon uses its provider; no engine or no mic, and the page says so and improvises — honestly labeled. Type <code>real</code> in the proof terminal to opt into the actual xAI engine, rate-limited and labeled while it runs.</div>
-        </div>
+        <p class="sigcap" style="margin-top:26px;">honest about the edges: Linux-first (macOS &amp; Windows in beta) · cloud by default, fully offline in one config line · live typing needs a streaming provider. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">full list on GitHub →</a></p>
       </div>
     </section>
 
@@ -2362,49 +2134,6 @@ provider = "openai"   <span class="c"># local Kokoro</span></pre>
             </div>
             <span class="tier-note">the hosted subscription isn't live yet — every feature is free today with your own provider key.</span>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ live config ============ -->
-    <section id="config-h" aria-labelledby="config-title">
-      <div class="wrap">
-        <span class="eyebrow">the live config <span class="cfg">— ~/.config/voice-keyboard/config.toml</span></span>
-        <h2 id="config-title">Edit it. The page re-binds.</h2>
-        <p class="lede">On the desktop, <span class="mono">[flow]</span>, <span class="mono">[registers]</span>, and <span class="mono">[llm]</span> hot-reload at the next recording. <span id="cfg-live-note" hidden>This copy is <strong>live</strong>: slow <span class="mono">stability_ms</span> to 4000 and watch words stay molten longer, set <span class="mono">auto_stop_ms = 1200</span> and just stop talking, rename the <span class="mono">wake_word</span> — then dictate again up in the proof.</span></p>
-        <div class="config-wrap">
-<pre class="config" id="config" spellcheck="false">[hotkey]
-key = "control+alt+v"
-# auto = tap to toggle, hold to talk
-mode = "auto"
-hold_threshold_ms = 280
-
-[flow]
-# false = the old behavior: record, stop, then type
-live = true
-# a molten word freezes after surviving this long
-stability_ms = 1500
-# 1200 = hands-free: tap, speak, done (0 = off)
-auto_stop_ms = 0
-# spoken cardinals → digits: auto | always | off
-numbers = "auto"
-# "&lt;wake_word&gt;, &lt;instruction&gt;" rewrites via [llm]
-wake_word = "vk"
-
-[registers]
-# prose | terminal | verbatim — the daemon probes the
-# focused app; the proof's terminal is always "terminal"
-default = "prose"
-
-[stt]
-language = "en"
-interim_results = true
-
-[tts]
-voice_id = "eve"
-rate = 1.0
-pitch = 1.0</pre>
-          <p class="cfgstatus" id="cfgstatus" hidden></p>
         </div>
       </div>
     </section>

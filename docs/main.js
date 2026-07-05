@@ -45,7 +45,6 @@ import "./js/config.js";
 import { Demo } from "./js/demo-relay.js";
 import "./js/terminal.js";
 import "./js/dictation.js";
-import "./js/pipeline.js";
 import "./js/tts.js";
 import "./js/hotkeys.js";
 import { Hints } from "./js/hints.js";
@@ -67,9 +66,14 @@ window.__vk.autopilot = Autopilot;
 // Without WebGL2 — or with reduced motion — the old instrument stays on.
 if (Field.active) $("hero-canvas").style.display = "none";
 $("hero-live").hidden = false;   // the claim is only true with JS running
-$("cfg-live-note").hidden = $("page-note").hidden = false;
-cfgEl.contentEditable = "plaintext-only";
-if (cfgEl.contentEditable !== "plaintext-only") cfgEl.contentEditable = "true";
+// live-config panel + honesty page-note were removed in the streamlined page;
+// re-bind them only if present so this page and a fuller one share one boot.
+if (cfgEl) {
+  cfgEl.contentEditable = "plaintext-only";
+  if (cfgEl.contentEditable !== "plaintext-only") cfgEl.contentEditable = "true";
+}
+$("cfg-live-note")?.removeAttribute("hidden");
+$("page-note")?.removeAttribute("hidden");
 Hints.set();
 // colophon: the real size, measured, not claimed — and counted up like
 // a meter settling, when motion is welcome. If you opted into the hosted
