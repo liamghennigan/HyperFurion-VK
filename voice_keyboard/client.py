@@ -559,6 +559,118 @@ def _run_intent_cli(client: "IPCClient", extra_args: list[str]) -> None:
         sys.exit(1)
 
 
+# ── hosted sign-in: seamless, no key to lose ─────────────────────────────
+# `voice-keyboard login <email>` proves the subscription email against the
+# relay (one-time code) and writes the (re)issued key into config.toml. Run
+# it any time — a lost key or a new machine just needs another login.
+
+DEFAULT_RELAY_BASE = "https://api.hyperfurion.com"
+
+
+def _relay_base(config: dict) -> str:
+    raw = str(
+        config.get("providers", {}).get("hyperfurion", {}).get("base_url", "") or ""
+    ).strip()
+    base = (raw or DEFAULT_RELAY_BASE).rstrip("/")
+    # The STT/TTS base_url may carry a /v1 suffix; auth lives at the root.
+    if base.endswith("/v1"):
+        base = base[:-3].rstrip("/")
+    return base
+
+
+def _set_toml_value(text: str, table: str, key: str, value: str) -> str:
+    """Set `key = "value"` under `[table]` in a TOML document, preserving the
+    rest of the file (comments, other tables) verbatim. Inserts the key or the
+    whole table if missing. Kept deliberately simple — it only ever sets the
+    three flat string keys the hosted login needs."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    line = f'{key} = "{escaped}"'
+    lines = text.splitlines()
+    header = f"[{table}]"
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == header), None)
+    if start is None:
+        block = "" if not text or text.endswith("\n") else "\n"
+        return text + f"{block}\n{header}\n{line}\n"
+    # Scan the table body up to the next table header.
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].lstrip().startswith("["):
+            end = i
+            break
+    for i in range(start + 1, end):
+        stripped = lines[i].lstrip()
+        if stripped.startswith(f"{key} ") or stripped.startswith(f"{key}="):
+            lines[i] = line
+            return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    lines.insert(start + 1, line)
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
+
+def _apply_hosted_login(text: str, key: str) -> str:
+    """Return config text with the hosted key + provider selection applied."""
+    text = _set_toml_value(text, "providers.hyperfurion", "api_key", key)
+    text = _set_toml_value(text, "stt", "provider", "hyperfurion")
+    text = _set_toml_value(text, "tts", "provider", "hyperfurion")
+    return text
+
+
+def _write_hosted_login(key: str) -> Path:
+    from voice_keyboard.config import _config_dir
+
+    path = _config_dir() / "config.toml"
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_apply_hosted_login(existing, key), encoding="utf-8")
+    return path
+
+
+def _run_login(config: dict, argv: list) -> None:
+    import requests
+
+    base = _relay_base(config)
+    email = (argv[0].strip() if argv else "") or input(
+        "Email on your subscription: "
+    ).strip()
+    if "@" not in email:
+        print("That doesn't look like an email address.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        resp = requests.post(f"{base}/auth/request", json={"email": email}, timeout=20)
+    except requests.RequestException as exc:
+        print(f"Couldn't reach the relay ({base}): {exc}", file=sys.stderr)
+        sys.exit(1)
+    if resp.status_code != 200:
+        print(f"Sign-in request failed: {resp.status_code} {resp.text[:200]}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"We emailed a 6-digit code to {email} (check spam if it's slow).")
+    code = input("Enter the code: ").strip()
+    try:
+        resp = requests.post(
+            f"{base}/auth/verify", json={"email": email, "code": code}, timeout=20
+        )
+    except requests.RequestException as exc:
+        print(f"Couldn't reach the relay: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if resp.status_code != 200:
+        try:
+            message = resp.json().get("error", resp.text)
+        except ValueError:
+            message = resp.text
+        print(f"Sign-in failed: {message}", file=sys.stderr)
+        sys.exit(1)
+
+    key = str(resp.json().get("api_key", ""))
+    if not key:
+        print("The relay didn't return a key — try again.", file=sys.stderr)
+        sys.exit(1)
+    path = _write_hosted_login(key)
+    print(f"✓ Signed in. Key saved to {path}; speech + dictation set to the hosted service.")
+    print("  Apply it:  systemctl --user restart voice-keyboard-daemon")
+    print("  Lost your key or on a new machine? Just run `voice-keyboard login` again.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="voice-keyboard",
@@ -572,6 +684,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
+            "login",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -593,6 +706,12 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_config()
+
+    if args.command == "login":
+        # Talks to the relay over HTTP + writes config — never the daemon.
+        _run_login(config, args.args)
+        return
+
     socket_path = args.socket or config["daemon"]["socket_path"]
     client = IPCClient(socket_path)
 

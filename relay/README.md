@@ -39,10 +39,22 @@ exceeds what the subscription nets after Stripe fees. Re-derive in
 - `GET /v1/usage` — quota status for the presented key
 - `GET /healthz` — liveness + tier catalog
 - `POST /stripe/webhook` — signature-verified Stripe events
-- `GET /welcome?session_id=…` — one-time key pickup after checkout
+- `POST /auth/request` — email a 6-digit sign-in code to a subscriber
+  (generic 200 either way — no user enumeration; 30s resend throttle)
+- `POST /auth/verify` — redeem the code; (re)issues that subscriber's key
+- `GET /welcome?session_id=…` — landing after checkout (points at login)
 
 Auth everywhere: `Authorization: Bearer hfk_…`. Keys are stored as SHA-256
 hashes; the plaintext exists only in the moment it is issued.
+
+**Seamless login (no key to lose).** The hosted tier is the "no setup"
+option, so the key is never a secret the user must save. Identity is the
+Stripe email; `voice-keyboard login <email>` proves it with a one-time code
+and writes the (re)issued key into `config.toml`. Lose a key or move
+machines → just log in again. Sending the code needs an email transport,
+pluggable and env-driven (see the config table): set `RESEND_API_KEY`
+(recommended) or `SMTP_HOST`+creds. With neither set, the code is logged at
+WARNING so the flow still works in dev.
 
 ## Landing-page demo endpoints
 
@@ -104,6 +116,10 @@ subscribers is a few requests per second at peak.
 | `XAI_API_KEY` | *(required)* | master upstream key |
 | `RELAY_DB` | `relay.db` | SQLite path (WAL mode) |
 | `STRIPE_WEBHOOK_SECRET` | *(empty)* | webhook signature secret |
+| `RESEND_API_KEY` | *(empty)* | primary sign-in-code email transport (Resend) |
+| `EMAIL_FROM` | `HyperFurion VK <login@hyperfurion.com>` | From: on the sign-in email (use a verified sender/domain) |
+| `SMTP_HOST` / `SMTP_PORT` | *(empty)* / `587` | fallback email transport (STARTTLS) |
+| `SMTP_USER` / `SMTP_PASS` | *(empty)* | SMTP auth, if the host needs it |
 | `UPSTREAM_STT_URL` | `wss://api.x.ai/v1/stt` | override for tests/self-host |
 | `UPSTREAM_TTS_URL` | `https://api.x.ai/v1/tts` | override for tests/self-host |
 | `UPSTREAM_CHAT_URL` | `https://api.x.ai/v1/chat/completions` | for the demo `ask` |

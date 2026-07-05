@@ -2,6 +2,9 @@
 api_key = "xai-your-api-key-here"
 
 # Hosted subscription — one key, no provider accounts. See relay/README.md.
+# No setup: run `voice-keyboard login <your email>` and this fills itself in
+# (emails you a code, writes the key, switches stt/tts here). Lose the key or
+# move machines? Just log in again — there's nothing to save by hand.
 [providers.hyperfurion]
 api_key = "hfk-your-subscription-key-here"
 # Only set base_url if you run your own relay.
