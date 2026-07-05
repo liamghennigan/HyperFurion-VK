@@ -309,7 +309,7 @@
     .hero { padding: 88px 0 40px; }
     .hero-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.04fr) minmax(380px, .96fr);
+      grid-template-columns: minmax(0, 760px);
       gap: 52px;
       align-items: center;
     }
@@ -1830,7 +1830,7 @@
       /* keep the highest-intent wayfinding on phones; hide only the secondary links */
       .nav-links a:not(.nav-cta):not(.nav-keep) { display: none; }
       .nav-links { gap: 14px; }
-      .nav-links a.nav-keep { font-size: 13px; }
+      .nav-links a.nav-keep { font-size: 13px; white-space: nowrap; }
       section { padding: 68px 0; }
       .keys-row, .command-list, .mode-grid, .registers { grid-template-columns: 1fr; }
       .keycap.wide { grid-column: span 1; }
@@ -1892,32 +1892,7 @@
             Tap <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> and speak. Hold it to talk; release to stop.
           </div>
         </div>
-
-        <aside class="console" aria-label="Live molten dictation demonstration">
-          <div class="console-top">
-            <span>voice-keyboard-daemon</span>
-            <span class="rec"><i></i> recording</span>
-          </div>
-          <div class="field">
-            <div class="field-bar"><b>notes.md</b><span>register: prose</span></div>
-            <p class="script" id="script" aria-live="off"><span class="caret" id="caret"></span></p>
-          </div>
-          <div class="wave" aria-hidden="true">
-            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-          </div>
-          <div class="gauges" aria-hidden="true">
-            <div class="gauge hot">molten <b id="gMolten">0</b></div>
-            <div class="gauge">frozen <b id="gFrozen">0</b></div>
-            <div class="gauge">window <b>1.5 s</b></div>
-          </div>
-          <div class="console-hints">
-            <span>“scratch that”</span>
-            <span>“new line”</span>
-            <span>“VK, make that formal”</span>
-          </div>
-        </aside>
       </div>
-      <span class="sigcap hero-cap" id="hero-cap" hidden>signal: test pattern</span>
     </header>
 
     <!-- ============ the proof — a working instance ============ -->
@@ -2186,98 +2161,6 @@ chmod +x install-hyperfurion-vk.sh
 
   <script type="module" src="./main.js"></script>
   <script>
-    /* ---------- hero: live molten dictation ---------- */
-    (function () {
-      const scriptEl = document.getElementById('script');
-      const caret = document.getElementById('caret');
-      const gMolten = document.getElementById('gMolten');
-      const gFrozen = document.getElementById('gFrozen');
-      const WINDOW_MS = 1500;
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-      // token stream: strings type as words; {bs:n} backspaces n chars; {pause:ms} waits
-      const UTTERANCE = [
-        'The ', 'keyboard ', 'was ', 'nevr ', { bs: 5 }, 'never ', 'the ', 'limit ', '— ',
-        { pause: 500 },
-        'speak, ', 'and ', 'the ', 'words ', 'land ', 'where ', 'your ',
-        'curser ', { bs: 7 }, 'cursor ', 'already ', 'is.',
-        { pause: 2600 }, { clear: true }, { pause: 700 },
-        'Molten ', 'while ', 'you ', 'speak. ', { pause: 400 },
-        'Frozen ', 'when ', 'it ', 'sets. ', { pause: 400 },
-        'Yours ', 'the ', 'whole ', 'time.',
-        { pause: 3200 }, { clear: true }, { pause: 700 }
-      ];
-
-      if (reduced) {
-        scriptEl.innerHTML = '<span class="w frozen">The keyboard was never the limit — speak, and the words land where your cursor already is.</span>';
-        gFrozen.textContent = '18';
-        return;
-      }
-
-      let idx = 0;
-      let current = null; // span being typed
-      const molten = []; // {el, born}
-
-      function freezeTick() {
-        const now = performance.now();
-        for (let i = molten.length - 1; i >= 0; i--) {
-          if (now - molten[i].born >= WINDOW_MS) {
-            molten[i].el.classList.remove('molten');
-            molten[i].el.classList.add('frozen');
-            molten.splice(i, 1);
-          }
-        }
-        gMolten.textContent = molten.length;
-        gFrozen.textContent = scriptEl.querySelectorAll('.frozen').length;
-      }
-      setInterval(freezeTick, 220);
-
-      function typeChar(ch, done) {
-        current.textContent += ch;
-        setTimeout(done, 34 + Math.random() * 46);
-      }
-
-      function step() {
-        if (document.hidden) { setTimeout(step, 600); return; }
-        const tok = UTTERANCE[idx % UTTERANCE.length];
-        idx++;
-        if (typeof tok === 'string') {
-          current = document.createElement('span');
-          current.className = 'w molten';
-          scriptEl.insertBefore(current, caret);
-          let i = 0;
-          (function next() {
-            if (i < tok.length) { typeChar(tok[i++], next); }
-            else { molten.push({ el: current, born: performance.now() }); setTimeout(step, 60); }
-          })();
-        } else if (tok.bs) {
-          // backspace-repair: remove n chars from the tail (may consume spans)
-          let n = tok.bs;
-          (function back() {
-            if (n <= 0) { setTimeout(step, 160); return; }
-            const spans = scriptEl.querySelectorAll('.w');
-            const last = spans[spans.length - 1];
-            if (!last) { setTimeout(step, 160); return; }
-            last.textContent = last.textContent.slice(0, -1);
-            if (!last.textContent) {
-              const mi = molten.findIndex(m => m.el === last);
-              if (mi >= 0) molten.splice(mi, 1);
-              last.remove();
-            }
-            n--;
-            setTimeout(back, 42);
-          })();
-        } else if (tok.pause) {
-          setTimeout(step, tok.pause);
-        } else if (tok.clear) {
-          scriptEl.querySelectorAll('.w').forEach(el => el.remove());
-          molten.length = 0;
-          setTimeout(step, 60);
-        }
-      }
-      setTimeout(step, 900);
-    })();
-
     /* ---------- demo switcher ---------- */
     const demos = {
       type: {

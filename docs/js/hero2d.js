@@ -69,6 +69,7 @@ export const Hero = (() => {
     ctx.globalAlpha = 1;
   }
   function caption() {
+    if (!heroCap) return;            // hero signal caption removed on the streamlined page
     heroCap.hidden = false;
     // mode is only ever "rec" after boot, so Dictation exists by then
     const relayTag = mode === "rec" && Dictation.engine === "relay"
@@ -84,6 +85,7 @@ export const Hero = (() => {
   // reduced-motion recording readout: a state change, not motion
   let meterInt = 0;
   function meterOn() {
+    if (!heroCap) return;
     meterInt = setInterval(() => {
       const f = Signal.frame();
       const bars = "▮".repeat(1 + Math.round(f.peak * 5)) + "▯".repeat(5 - Math.round(f.peak * 5));
