@@ -1,572 +1,2388 @@
 <!doctype html>
-<!-- Auto-deployed to GitHub Pages from docs/ on push to main. -->
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script>document.documentElement.className = "js";</script>
-<title>HyperFurion VK — a voice keyboard for Linux · words appear while you speak</title>
-<meta name="description" content="Speak. It types — while you speak. A Linux voice keyboard: press Ctrl+Alt+V and words land molten in the focused app, repair themselves as the transcript firms up, and freeze once they're sure. Say 'scratch that'. Say 'furion, make that formal'. This page is a working instance.">
-<meta property="og:title" content="HyperFurion VK — Speak. It types. While you speak.">
-<meta property="og:description" content="A voice keyboard for Linux. Words land in the focused app while you're still speaking — molten, self-repairing, frozen once they're sure. Spoken edits, per-app registers, a wake-word rewrite. Try it on this page — it actually listens.">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/">
-<link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/">
-<meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0a0a0d" media="(prefers-color-scheme: dark)">
-<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8E%99%3C/text%3E%3C/svg%3E">
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "HyperFurion VK",
-  "operatingSystem": "Linux; macOS (beta); Windows (beta)",
-  "applicationCategory": "UtilitiesApplication",
-  "softwareVersion": "1.2.1",
-  "license": "https://opensource.org/licenses/MIT",
-  "url": "https://liamghennigan.github.io/HyperFurion-VK/",
-  "description": "A Linux-first voice keyboard. Press Ctrl+Alt+V and words type into the focused app while you speak — molten at first, repairing in place, frozen once stable. Spoken edit grammar, per-app registers, spoken numbers, a wake-word LLM rewrite, full Unicode, and text-to-speech for any selection.",
-  "offers": [
-    { "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" },
-    { "@type": "Offer", "name": "Hosted — 20 h dictation + 10k spoken characters / month", "price": "5.00", "priceCurrency": "USD" },
-    { "@type": "Offer", "name": "Hosted — 40 h dictation + 50k spoken characters / month", "price": "10.00", "priceCurrency": "USD" }
-  ]
-}
-</script>
-<link rel="preload" href="./fonts/fraunces-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="./fonts/jetbrains-mono-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="./styles.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HyperFurion VK — Your voice is the keyboard</title>
+  <meta name="description" content="HyperFurion VK is an open-source, Linux-first voice keyboard: a system-wide input device that turns speech into text, edits, rewrites, terminal drafts, readback, recall, and assistant actions — typed into the app you already have focused. This page is a working instance." />
+  <meta property="og:title" content="HyperFurion VK — Your voice is the keyboard" />
+  <meta property="og:description" content="A voice keyboard, not a dictation app: words land in the focused app while you speak — molten, self-repairing, frozen once they're sure. Spoken edits, registers, a rewrite lane, and an Enter key that stays yours. Try it — this page actually listens." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/" />
+  <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/" />
+  <meta name="theme-color" content="#0b0a10" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "HyperFurion VK",
+    "operatingSystem": "Linux; macOS (beta); Windows (beta)",
+    "applicationCategory": "UtilitiesApplication",
+    "softwareVersion": "2.1.2",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://liamghennigan.github.io/HyperFurion-VK/",
+    "description": "A Linux-first voice keyboard. Press Ctrl+Alt+V and words type into the focused app while you speak — molten at first, repairing in place, frozen once stable. Spoken edit grammar, per-app registers, spoken numbers, a wake-word LLM rewrite, full Unicode, text-to-speech for any selection, and a push-to-talk assistant.",
+    "offers": [
+      { "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Hosted — 20 h dictation + 10k spoken characters / month", "price": "5.00", "priceCurrency": "USD" },
+      { "@type": "Offer", "name": "Hosted — 40 h dictation + 50k spoken characters / month", "price": "10.00", "priceCurrency": "USD" }
+    ]
+  }
+  </script>
+  <link rel="preload" href="./fonts/fraunces-var.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./fonts/jetbrains-mono-var.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8E%99%3C/text%3E%3C/svg%3E" />
+  <style>
+    @font-face {
+      font-family: "Fraunces";
+      src: url("./fonts/fraunces-var.woff2") format("woff2-variations"),
+           url("https://liamghennigan.github.io/HyperFurion-VK/fonts/fraunces-var.woff2") format("woff2-variations");
+      font-weight: 100 900;
+      font-display: swap;
+    }
+    @font-face {
+      /* metric-matched stand-in so headings don't shift when Fraunces arrives */
+      font-family: "Fraunces-fallback";
+      src: local("Georgia"), local("Times New Roman");
+      size-adjust: 106%;
+      ascent-override: 98%;
+      descent-override: 25.5%;
+      line-gap-override: 0%;
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("./fonts/jetbrains-mono-var.woff2") format("woff2-variations"),
+           url("https://liamghennigan.github.io/HyperFurion-VK/fonts/jetbrains-mono-var.woff2") format("woff2-variations");
+      font-weight: 100 800;
+      font-display: swap;
+    }
+
+    :root {
+      color-scheme: dark;
+      /* the ledger holds the forge: blue-black ink paper and cool hairlines
+         carry the structure; ember = molten, the machine's voice at work;
+         ivory/steel = frozen; gold leaf = consent, reserved for what stays
+         human — the same law the Seneschal deck lives by. */
+      --carbon: #0b0a10;
+      --soot: #12111a;
+      --well: #08090d;
+      --ember: #ff5c1f;
+      --heat: #ffb347;
+      --brass: #f0d29c;
+      --ivory: #f2e9da;
+      --muted: rgba(242,233,218,.66);
+      --faint: rgba(242,233,218,.42);
+      --steel: #91b4d8;
+      --line: rgba(197,208,232,.09);
+      --line-strong: rgba(197,208,232,.22);
+      --panel: rgba(197,208,232,.035);
+      --panel-2: rgba(197,208,232,.06);
+      --gilt: #e7c983;
+      --gilt-bright: #f2dca4;
+      --gilt-line: rgba(231,201,131,.3);
+      --gilt-wash: rgba(231,201,131,.07);
+      --held: #14120e;
+      /* instrument tokens the live engine (js/) reads */
+      --wave: #ffb347;
+      --hot: #ffe8c2;
+      --rec: #ff5c1f;
+      --ok: #63b98a;
+      --glow: rgba(255,143,64,.18);
+      --molten-win: #ffb347;
+      --molten-soft: rgba(255,179,71,.16);
+      --spec-1: #3a1406;
+      --spec-2: #93300a;
+      --spec-3: #ff5c1f;
+      --spec-4: #ffb347;
+      --spec-5: #ffe8c2;
+      --field-alpha: .8;
+      --max: 1160px;
+      --r-xl: 28px;
+      --r-lg: 20px;
+      --r-md: 14px;
+      --serif: "Fraunces", "Fraunces-fallback", Georgia, "Times New Roman", serif;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--carbon);
+      color: var(--ivory);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.55;
+      font-variant-numeric: tabular-nums;
+      overflow-x: hidden;
+    }
+    code, kbd, pre { font-feature-settings: 'zero' 1; }
+    /* forge horizon + grain */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background:
+        radial-gradient(120rem 44rem at 50% 118%, rgba(255,92,31,.16), transparent 60%),
+        radial-gradient(70rem 30rem at 82% -8%, rgba(145,180,216,.05), transparent 60%),
+        linear-gradient(180deg, #0d0c13 0%, #0b0a10 45%, #08080d 100%);
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      opacity: .5;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.85 0 0 0 0 0.7 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    a { color: inherit; text-decoration: none; }
+    a:focus-visible, button:focus-visible {
+      outline: 2px solid var(--ember);
+      outline-offset: 3px;
+      border-radius: 6px;
+    }
+    .wrap { width: min(var(--max), calc(100% - 44px)); margin-inline: auto; }
+    ::selection { background: rgba(255,92,31,.35); }
+
+    /* ---------- nav ---------- */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(11,10,16,.72);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-inner {
+      height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-family: var(--serif);
+      font-size: 19px;
+      font-variation-settings: "opsz" 40, "wght" 620;
+      letter-spacing: -.01em;
+    }
+    .brand-key {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--carbon);
+      background: linear-gradient(180deg, var(--heat), var(--ember) 82%);
+      box-shadow: 0 4px 0 rgba(120,32,0,.9), 0 8px 22px rgba(255,92,31,.35), inset 0 1px 0 rgba(255,255,255,.55);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+    .nav-links a:hover { color: var(--ivory); }
+    .nav-cta {
+      border: 1px solid rgba(255,179,71,.45);
+      background: rgba(255,92,31,.12);
+      color: var(--brass);
+      padding: 8px 15px;
+      border-radius: 999px;
+    }
+    .nav-cta:hover { background: rgba(255,92,31,.2); color: var(--ivory); }
+
+    /* ---------- shared ---------- */
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--heat);
+    }
+    .eyebrow::before {
+      content: "";
+      width: 22px;
+      height: 1px;
+      background: linear-gradient(90deg, var(--ember), transparent);
+    }
+    .eyebrow .cfg { color: var(--faint); text-transform: none; letter-spacing: .04em; }
+    /* the ledger's signature double hairline rule */
+    h2::after {
+      content: "";
+      display: block;
+      width: 76px;
+      height: 4px;
+      margin-top: 22px;
+      background:
+        linear-gradient(var(--line-strong), var(--line-strong)) 0 0 / 100% 1px no-repeat,
+        linear-gradient(var(--line), var(--line)) 0 3px / 100% 1px no-repeat;
+    }
+    .sigcap {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+    /* physically-modeled status dot, deck-style */
+    .led {
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), currentColor 55%, rgba(0,0,0,.35));
+      box-shadow: 0 0 6px -1px currentColor;
+    }
+    h2 {
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 120, "wght" 520;
+      font-weight: 520;
+      font-size: clamp(34px, 4.6vw, 60px);
+      line-height: 1.02;
+      letter-spacing: -.022em;
+      margin: 16px 0 0;
+      max-width: 21ch;
+    }
+    .lede {
+      color: var(--muted);
+      font-size: 17.5px;
+      max-width: 62ch;
+      margin: 18px 0 0;
+    }
+    .lede strong, p strong { color: var(--ivory); font-weight: 600; }
+    section { padding: 96px 0; }
+    .mono { font-family: var(--mono); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 48px;
+      padding: 0 20px;
+      border-radius: 12px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel-2);
+      color: var(--ivory);
+      font-weight: 600;
+      font-size: 15px;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+    .btn:hover { transform: translateY(-2px); background: rgba(255,240,220,.1); }
+    .btn.primary {
+      border-color: rgba(255,179,71,.6);
+      background: linear-gradient(180deg, var(--heat), var(--ember) 90%);
+      color: #1c0c02;
+      box-shadow: 0 5px 0 rgba(110,28,0,.85), 0 18px 44px rgba(255,92,31,.28), inset 0 1px 0 rgba(255,255,255,.5);
+    }
+    .btn.primary:hover { transform: translateY(-2px); box-shadow: 0 7px 0 rgba(110,28,0,.85), 0 22px 50px rgba(255,92,31,.34), inset 0 1px 0 rgba(255,255,255,.5); }
+    .btn.primary:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(110,28,0,.85), 0 10px 30px rgba(255,92,31,.25); }
+
+    kbd {
+      display: inline-grid;
+      place-items: center;
+      min-width: 30px;
+      height: 27px;
+      padding-inline: 8px;
+      border-radius: 7px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--brass);
+      background: linear-gradient(180deg, rgba(197,208,232,.13), rgba(197,208,232,.04));
+      border: 1px solid var(--line-strong);
+      box-shadow: 0 3px 0 rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.12);
+    }
+
+    /* ---------- hero ---------- */
+    .hero { padding: 88px 0 40px; }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.04fr) minmax(380px, .96fr);
+      gap: 52px;
+      align-items: center;
+    }
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 999px;
+      padding: 8px 14px;
+    }
+    .hero-pill .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      color: var(--ember);
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), currentColor 55%, rgba(0,0,0,.35));
+      box-shadow: 0 0 8px currentColor;
+    }
+    h1 {
+      margin: 26px 0 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 144, "wght" 480, "WONK" 1;
+      font-weight: 480;
+      font-size: clamp(58px, 8.2vw, 118px);
+      line-height: .92;
+      letter-spacing: -.028em;
+      max-width: 9ch;
+    }
+    h1 em {
+      font-style: italic;
+      font-variation-settings: "opsz" 144, "wght" 430, "WONK" 1;
+      background: linear-gradient(100deg, var(--brass) 5%, var(--heat) 45%, var(--ember) 90%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero-sub {
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: clamp(17px, 1.7vw, 20px);
+      line-height: 1.5;
+      max-width: 54ch;
+    }
+    .hero-sub strong { color: var(--ivory); }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 13px;
+      margin-top: 34px;
+    }
+    .hero-hint {
+      margin-top: 26px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--faint);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+
+    /* the forge console — live molten dictation */
+    .console {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
+      background:
+        radial-gradient(30rem 16rem at 85% 110%, rgba(255,92,31,.14), transparent 70%),
+        linear-gradient(180deg, rgba(197,208,232,.05), rgba(197,208,232,.02));
+      box-shadow: 0 40px 90px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+      padding: 20px;
+    }
+    .console-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--faint);
+      padding: 2px 4px 16px;
+    }
+    .rec {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--heat);
+    }
+    .rec i {
+      width: 8px; height: 8px; border-radius: 50%;
+      color: var(--ember);
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.6), currentColor 55%, rgba(120,30,0,.6));
+      animation: pulse 1.4s ease-out infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255,92,31,.7); }
+      100% { box-shadow: 0 0 0 11px rgba(255,92,31,0); }
+    }
+    .field {
+      border-radius: var(--r-lg);
+      border: 1px solid var(--line-strong);
+      background: var(--well);
+      padding: 20px 22px 16px;
+      min-height: 178px;
+      box-shadow: inset 0 2px 18px rgba(0,0,0,.5), inset 0 0 0 1px rgba(197,208,232,.04);
+    }
+    .field-bar {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--faint);
+      margin-bottom: 14px;
+    }
+    .field-bar b { color: var(--brass); font-weight: 500; }
+    .script {
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 36, "wght" 460;
+      font-size: clamp(20px, 2.1vw, 25px);
+      line-height: 1.42;
+      letter-spacing: .002em;
+      min-height: 108px;
+    }
+    .script .w { transition: color .7s ease, text-shadow .7s ease; }
+    .script .molten {
+      color: var(--heat);
+      text-shadow: 0 0 18px rgba(255,122,40,.45);
+    }
+    .script .frozen { color: var(--ivory); text-shadow: none; }
+    .script .caret {
+      display: inline-block;
+      width: 2px;
+      height: 1.05em;
+      margin-left: 1px;
+      background: var(--ember);
+      vertical-align: -.16em;
+      box-shadow: 0 0 12px rgba(255,92,31,.8);
+      animation: blink 1.05s steps(2, start) infinite;
+    }
+    @keyframes blink { 50% { opacity: .1; } }
+    .gauges {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 9px;
+    }
+    .gauge {
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: var(--panel);
+      padding: 10px 13px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--faint);
+    }
+    .gauge b {
+      display: block;
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 3px;
+      color: var(--brass);
+    }
+    .gauge.hot b { color: var(--heat); }
+    .wave {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      height: 30px;
+      margin-top: 16px;
+      padding: 0 4px;
+    }
+    .wave i {
+      flex: 1;
+      height: 24%;
+      border-radius: 99px;
+      background: linear-gradient(180deg, var(--heat), var(--ember));
+      opacity: .75;
+      animation: vu 1.3s ease-in-out infinite;
+    }
+    .wave i:nth-child(2n) { animation-delay: -.42s; height: 62%; }
+    .wave i:nth-child(3n) { animation-delay: -.74s; height: 40%; }
+    .wave i:nth-child(5n) { animation-delay: -.2s; height: 84%; }
+    .wave i:nth-child(7n) { animation-delay: -1s; height: 30%; }
+    @keyframes vu { 50% { transform: scaleY(.32); opacity: .38; } }
+    .console-hints {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .console-hints span {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 11px;
+      background: var(--panel);
+    }
+
+    /* ---------- keycap strip ---------- */
+    .strip { padding: 54px 0 10px; }
+    .keys-row {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 12px;
+    }
+    .keycap {
+      border-radius: 15px;
+      padding: 13px 14px 15px;
+      min-height: 86px;
+      background: linear-gradient(180deg, #1f1e28, #13121a);
+      border: 1px solid rgba(197,208,232,.16);
+      box-shadow: 0 7px 0 #050409, 0 20px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(236,237,242,.1);
+      transition: transform .12s ease, box-shadow .12s ease;
+      cursor: default;
+    }
+    .keycap:hover {
+      transform: translateY(4px);
+      box-shadow: 0 3px 0 #050409, 0 10px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(236,237,242,.1), 0 14px 34px rgba(255,92,31,.16);
+    }
+    .keycap .legend {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--heat);
+      margin-bottom: 8px;
+    }
+    .keycap b {
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 24, "wght" 500;
+      font-weight: 500;
+      font-size: 15px;
+      letter-spacing: -.01em;
+      color: var(--ivory);
+    }
+    .keycap.wide { grid-column: span 2; }
+
+    /* ---------- thesis / category ---------- */
+    .thesis-grid {
+      margin-top: 44px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .thesis-card {
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--panel);
+      padding: 24px;
+      min-height: 190px;
+    }
+    .thesis-card .tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--faint);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 26px;
+    }
+    .thesis-card .tag .strike {
+      width: 20px; height: 2px;
+      background: var(--ember);
+      transform: rotate(-18deg);
+      box-shadow: 0 0 10px rgba(255,92,31,.6);
+    }
+    .thesis-card h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 40, "wght" 540;
+      font-weight: 540;
+      font-size: 24px;
+      letter-spacing: -.015em;
+    }
+    .thesis-card p { color: var(--muted); margin: 11px 0 0; font-size: 14.5px; }
+    .thesis-card.yes {
+      border-color: rgba(255,179,71,.34);
+      background:
+        radial-gradient(20rem 12rem at 20% 0%, rgba(255,179,71,.1), transparent 70%),
+        var(--panel-2);
+    }
+    .thesis-card.yes .tag { color: var(--heat); }
+    .thesis-card.yes .tag .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      color: var(--heat);
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), currentColor 55%, rgba(0,0,0,.35));
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    /* ---------- molten mechanic ---------- */
+    .molten-grid {
+      margin-top: 46px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .state {
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      background: var(--panel);
+      position: relative;
+      overflow: hidden;
+    }
+    .state small {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .state h3 {
+      margin: 12px 0 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 60, "wght" 500;
+      font-weight: 500;
+      font-size: 30px;
+      letter-spacing: -.015em;
+    }
+    .state p { color: var(--muted); font-size: 14.5px; margin: 12px 0 0; }
+    .state.s1 small { color: var(--heat); }
+    .state.s1 h3 { color: var(--heat); text-shadow: 0 0 24px rgba(255,122,40,.35); }
+    .state.s2 small { color: var(--brass); }
+    .state.s3 small { color: var(--steel); }
+    .state.s3 h3 { color: var(--ivory); }
+    .state .glyph {
+      position: absolute;
+      right: 18px;
+      top: 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--faint);
+    }
+    .register-row {
+      margin-top: 40px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .register-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 14px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--faint);
+    }
+    .register-head b { color: var(--brass); font-weight: 500; font-size: 13px; }
+    .registers {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+    }
+    .register {
+      padding: 18px 20px 20px;
+      border-right: 1px solid var(--line);
+      min-height: 128px;
+    }
+    .register:last-child { border-right: none; }
+    .register b {
+      display: block;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--heat);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .register span { color: var(--muted); font-size: 13px; line-height: 1.45; display: block; }
+    .register code {
+      display: block;
+      margin-top: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--brass);
+      overflow-wrap: break-word;
+    }
+
+    /* ---------- demo ---------- */
+    .demo-shell {
+      margin-top: 44px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
+      background:
+        radial-gradient(34rem 18rem at 8% 0%, rgba(255,92,31,.09), transparent 70%),
+        var(--panel);
+      padding: 18px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.4);
+    }
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 16px;
+    }
+    .command-list { display: flex; flex-direction: column; gap: 10px; }
+    .command {
+      text-align: left;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: var(--panel);
+      color: var(--ivory);
+      padding: 14px 16px;
+      cursor: pointer;
+      font: inherit;
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .command:hover, .command.active {
+      transform: translateX(4px);
+      border-color: rgba(255,179,71,.45);
+      background: rgba(255,148,60,.08);
+    }
+    .command .kind {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--heat);
+      margin-bottom: 7px;
+    }
+    .command b {
+      display: block;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 24, "wght" 480;
+      font-weight: 480;
+      font-size: 16px;
+      line-height: 1.3;
+      letter-spacing: -.01em;
+    }
+    .signal {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 10px;
+      align-items: stretch;
+      margin-bottom: 14px;
+    }
+    .signal-box {
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: var(--well);
+      padding: 13px 15px;
+    }
+    .signal-box.hears strong { color: var(--steel); }
+    .signal-box small {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--faint);
+      margin-bottom: 8px;
+    }
+    .signal-box strong {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: -.01em;
+      color: var(--brass);
+    }
+    .signal-arrow {
+      display: grid;
+      place-items: center;
+      color: var(--ember);
+      font-family: var(--mono);
+    }
+    .stage {
+      display: grid;
+      grid-template-columns: 1.06fr .94fr;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--panel);
+      overflow: hidden;
+      min-height: 380px;
+    }
+    .stage-pane { padding: 20px; }
+    .stage-pane + .stage-pane { border-left: 1px solid var(--line); }
+    .stage-title {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--faint);
+      margin-bottom: 14px;
+    }
+    .editor {
+      border-radius: var(--r-md);
+      border: 1px solid var(--line-strong);
+      background: var(--well);
+      overflow: hidden;
+      box-shadow: inset 0 2px 18px rgba(0,0,0,.45), inset 0 0 0 1px rgba(197,208,232,.04);
+    }
+    .editor-top {
+      display: flex;
+      justify-content: space-between;
+      padding: 11px 15px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--faint);
+    }
+    .editor-body {
+      padding: 18px;
+      min-height: 240px;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .editor-body h4 {
+      margin: 0 0 10px;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 40, "wght" 540;
+      font-weight: 540;
+      font-size: 18px;
+      color: var(--ivory);
+      letter-spacing: -.01em;
+    }
+    .editor-body .hl-hot {
+      color: var(--heat);
+      text-shadow: 0 0 16px rgba(255,122,40,.35);
+    }
+    .editor-body .hl-cool {
+      color: var(--steel);
+    }
+    .editor-body .mono { font-size: 13.5px; color: var(--brass); }
+    .editor-body .dim { color: var(--faint); font-size: 13.5px; }
+    .cursor-line {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      background: var(--ember);
+      margin-left: 2px;
+      vertical-align: -.18em;
+      box-shadow: 0 0 10px rgba(255,92,31,.8);
+      animation: blink 1.05s steps(2,start) infinite;
+    }
+    .action-stack { display: flex; flex-direction: column; gap: 11px; }
+    .action-item {
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: var(--panel);
+      padding: 13px 15px;
+    }
+    .action-item small {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--heat);
+    }
+    .action-item p { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+    .action-item p strong { color: var(--ivory); }
+
+    /* ---------- compare ---------- */
+    .compare {
+      margin-top: 44px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
+      overflow: hidden;
+      background: var(--panel);
+    }
+    .compare-col { padding: 30px; }
+    .compare-col.vk {
+      border-left: 1px solid var(--line);
+      background:
+        radial-gradient(26rem 16rem at 80% 0%, rgba(255,179,71,.09), transparent 70%),
+        var(--panel-2);
+    }
+    .compare-col h3 {
+      margin: 0 0 20px;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 60, "wght" 520;
+      font-weight: 520;
+      font-size: 27px;
+      letter-spacing: -.015em;
+    }
+    .compare-col h3 span { color: var(--faint); }
+    .compare-list { display: flex; flex-direction: column; gap: 13px; }
+    .compare-row {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .ico {
+      width: 24px; height: 24px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      border: 1px solid var(--line);
+      color: var(--faint);
+    }
+    .ico.y {
+      color: #1c0c02;
+      background: linear-gradient(180deg, var(--heat), var(--ember));
+      border-color: rgba(255,179,71,.5);
+    }
+
+    /* ---------- keys grid ---------- */
+    .mode-grid {
+      margin-top: 44px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 13px;
+    }
+    .mode-card {
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: linear-gradient(180deg, rgba(197,208,232,.05), rgba(197,208,232,.02));
+      box-shadow: 0 6px 0 rgba(3,3,7,.8), inset 0 1px 0 rgba(236,237,242,.07);
+      padding: 20px;
+      min-height: 212px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform .14s ease, box-shadow .14s ease;
+    }
+    .mode-card:hover {
+      transform: translateY(3px);
+      box-shadow: 0 3px 0 rgba(3,3,7,.8), inset 0 1px 0 rgba(236,237,242,.07), 0 16px 36px rgba(255,92,31,.12);
+    }
+    .mode-card small {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--heat);
+    }
+    .mode-card h3 {
+      margin: 12px 0 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 40, "wght" 540;
+      font-weight: 540;
+      font-size: 23px;
+      letter-spacing: -.015em;
+    }
+    .mode-card p { margin: 10px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+    .mode-card code {
+      display: inline-block;
+      align-self: flex-start;
+      margin-top: 16px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--brass);
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.25);
+      border-radius: 999px;
+      padding: 6px 10px;
+    }
+
+    /* ---------- consent ---------- */
+    .consent {
+      margin-top: 44px;
+      display: grid;
+      grid-template-columns: .92fr 1.08fr;
+      gap: 16px;
+    }
+    /* the gate card: gold is reserved for what stays human */
+    .consent-lead {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--gilt-line);
+      border-radius: var(--r-xl);
+      padding: 30px;
+      background:
+        radial-gradient(26rem 18rem at 0% 100%, rgba(231,201,131,.07), transparent 70%),
+        var(--held);
+      box-shadow: 0 0 0 1px rgba(231,201,131,.12), 0 0 34px rgba(231,201,131,.06), 0 24px 60px rgba(0,0,0,.4);
+    }
+    .consent-lead::before {
+      content: "";
+      display: block;
+      height: 4px;
+      margin-bottom: 24px;
+      background:
+        linear-gradient(var(--gilt-line), var(--gilt-line)) 0 0 / 100% 1px no-repeat,
+        linear-gradient(rgba(231,201,131,.14), rgba(231,201,131,.14)) 0 3px / 100% 1px no-repeat;
+      transform-origin: left center;
+      animation: gate-rule 1.3s cubic-bezier(.22,1,.36,1) both .25s;
+    }
+    @keyframes gate-rule { from { transform: scaleX(0); } }
+    .consent-lead .cap {
+      float: left;
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      margin: 5px 11px 2px 0;
+      border: 1px solid var(--gilt-line);
+      border-radius: 8px;
+      background: var(--gilt-wash);
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 90, "wght" 560;
+      font-size: 33px;
+      line-height: 1;
+      color: var(--gilt-bright);
+    }
+    .consent-lead .aphorism {
+      margin: 26px 0 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 60, "wght" 460;
+      font-style: italic;
+      font-size: 18px;
+      line-height: 1.5;
+      color: rgba(231,201,131,.62);
+      max-width: 30ch;
+    }
+    .consent-lead h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 90, "wght" 500;
+      font-weight: 500;
+      font-size: clamp(30px, 3.4vw, 44px);
+      line-height: 1.04;
+      letter-spacing: -.02em;
+    }
+    .consent-lead p { color: var(--muted); margin: 18px 0 0; font-size: 15.5px; }
+    .consent-lead .enter {
+      margin-top: auto;
+      padding-top: 26px;
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--gilt);
+    }
+    .held-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--gilt-line);
+      background: var(--gilt-wash);
+      color: var(--gilt);
+      border-radius: 999px;
+      padding: 6px 13px;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      animation: held-breathe 3s ease-in-out infinite;
+    }
+    @keyframes held-breathe { 0%, 100% { opacity: .95; } 50% { opacity: .6; } }
+    .guarantees { display: grid; gap: 11px; }
+    .guarantee {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 13px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: var(--panel);
+      padding: 15px 16px;
+    }
+    .guarantee .ico { width: 30px; height: 30px; border-radius: 9px; color: var(--gilt); border-color: var(--gilt-line); background: var(--gilt-wash); }
+    .guarantee b { display: block; font-size: 15px; margin-bottom: 3px; }
+    .guarantee span { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+    .guarantee code { font-family: var(--mono); font-size: 12px; color: var(--brass); }
+
+    /* ---------- providers ---------- */
+    .prov-grid {
+      margin-top: 44px;
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 16px;
+    }
+    .prov-card {
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
+      background: var(--panel);
+      padding: 28px;
+    }
+    .prov-card h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 60, "wght" 520;
+      font-weight: 520;
+      font-size: 27px;
+      letter-spacing: -.015em;
+    }
+    .prov-card > p { color: var(--muted); margin: 13px 0 0; font-size: 15px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .chip {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.22);
+      border-radius: 999px;
+      padding: 7px 12px;
+    }
+    .chip.hot { color: var(--heat); border-color: rgba(255,179,71,.4); }
+    .prov-card pre {
+      margin: 20px 0 0;
+      padding: 16px 18px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--line);
+      background: var(--well);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--brass);
+      overflow-x: auto;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+    }
+    .prov-card pre .c { color: rgba(159,180,192,.6); }
+
+    /* ---------- sustain ---------- */
+    .sustain {
+      margin-top: 44px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
+      background: var(--panel);
+      padding: 30px;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 28px;
+      align-items: center;
+    }
+    .sustain h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 90, "wght" 500;
+      font-weight: 500;
+      font-size: clamp(28px, 3vw, 40px);
+      line-height: 1.05;
+      letter-spacing: -.02em;
+    }
+    .sustain p { color: var(--muted); margin: 15px 0 0; font-size: 15px; }
+    .tiers { display: grid; gap: 11px; }
+    .tier {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: rgba(0,0,0,.2);
+      padding: 15px 18px;
+      transition: border-color .16s ease, background .16s ease;
+    }
+    .tier:hover { border-color: rgba(255,179,71,.45); background: rgba(255,148,60,.07); }
+    .tier b { font-size: 16px; display: block; }
+    .tier span { color: var(--faint); font-family: var(--mono); font-size: 11.5px; display: block; margin-top: 3px; }
+    .tier .price {
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 40, "wght" 560;
+      font-size: 22px;
+      color: var(--brass);
+      white-space: nowrap;
+    }
+    .tier-note { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+
+    /* ---------- install ---------- */
+    .install-card {
+      margin-top: 44px;
+      display: grid;
+      grid-template-columns: 1fr .92fr;
+      gap: 26px;
+      border: 1px solid rgba(255,179,71,.3);
+      border-radius: 34px;
+      background:
+        radial-gradient(30rem 20rem at 0% 0%, rgba(255,179,71,.1), transparent 70%),
+        radial-gradient(34rem 22rem at 100% 100%, rgba(255,92,31,.14), transparent 70%),
+        var(--panel-2);
+      padding: 34px;
+      box-shadow: 0 34px 90px rgba(0,0,0,.45);
+    }
+    .install-copy h3 {
+      margin: 14px 0 0;
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 120, "wght" 500;
+      font-weight: 500;
+      font-size: clamp(34px, 4vw, 54px);
+      line-height: 1;
+      letter-spacing: -.022em;
+    }
+    .install-copy p { color: var(--muted); margin: 18px 0 0; font-size: 16px; max-width: 48ch; }
+    .terminal {
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--well);
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,.4), inset 0 0 0 1px rgba(197,208,232,.04);
+      align-self: center;
+    }
+    .terminal-bar .copy {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: color .12s ease, border-color .12s ease;
+    }
+    .terminal-bar .copy:hover { color: var(--heat); border-color: rgba(255,179,71,.5); }
+    .terminal-bar .copy.ok { color: var(--gilt); border-color: var(--gilt-line); }
+    .terminal-bar {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--faint);
+    }
+    .terminal pre {
+      margin: 0;
+      padding: 18px 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--ivory);
+      overflow-x: auto;
+    }
+    .terminal .c { color: rgba(159,180,192,.55); }
+    .terminal .a { color: var(--heat); }
+
+    /* ---------- fact tape (carried over from the live site) ---------- */
+    .tape {
+      overflow: hidden;
+      white-space: nowrap;
+      border-block: 1px solid var(--line);
+      padding: 9px 0;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--faint);
+      user-select: none;
+      -webkit-mask: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+      mask: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    }
+    .tape span { display: inline-block; will-change: transform; animation: tapescroll 46s linear infinite; }
+    .tape b { color: var(--heat); font-weight: 500; }
+    @keyframes tapescroll { to { transform: translateX(-50%); } }
+
+    /* ---------- three moments of one molten line ---------- */
+    .moltenfig {
+      margin: 14px 0 0;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--well);
+      padding: 8px 22px 14px;
+      box-shadow: inset 0 2px 18px rgba(0,0,0,.45);
+    }
+    .mrow {
+      display: grid;
+      grid-template-columns: 84px 1fr;
+      column-gap: 18px;
+      align-items: baseline;
+      padding: 13px 0 11px;
+      border-bottom: 1px solid var(--line);
+    }
+    .mrow:last-of-type { border-bottom: 0; }
+    .mt { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--faint); white-space: nowrap; }
+    .mtext { font-family: var(--mono); font-size: 13.5px; line-height: 1.7; color: var(--ivory); overflow-wrap: anywhere; }
+    .mtext em { font-style: normal; color: var(--heat); text-shadow: 0 0 14px rgba(255,122,40,.35); }
+    .mtext em.rep {
+      background: rgba(255,92,31,.14);
+      border-radius: 3px;
+      padding: 0 3px;
+      text-decoration: underline wavy;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 4px;
+    }
+    .mnote { grid-column: 2; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .moltenfig figcaption { display: block; margin-top: 12px; }
+
+    /* ---------- spoken grammar ---------- */
+    .grammar-grid {
+      margin-top: 44px;
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .grammar-table {
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .grammar-table table { width: 100%; border-collapse: collapse; }
+    .grammar-table th {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--heat);
+      text-align: left;
+      padding: 15px 20px 11px;
+      border-bottom: 1px solid var(--line);
+    }
+    .grammar-table td {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .grammar-table tr:last-child td { border-bottom: 0; }
+    .grammar-table td:first-child {
+      font-family: var(--serif);
+      font-variation-settings: "opsz" 24, "wght" 500;
+      font-size: 15px;
+      color: var(--ivory);
+    }
+    .grammar-table tbody tr { transition: background-color .12s ease; }
+    .grammar-table tbody tr:hover { background: rgba(255,148,60,.05); }
+    .grammar-table code { font-family: var(--mono); font-size: 12px; color: var(--brass); }
+    .grammar-side pre {
+      margin: 0;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--well);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--brass);
+      overflow-x: auto;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+    }
+    .grammar-side .c { color: rgba(145,180,216,.55); }
+    .grammar-side p { color: var(--muted); font-size: 14px; margin: 14px 2px 0; }
+
+    /* ---------- signal path ---------- */
+    .pipeline {
+      margin: 40px 0 0;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--well);
+      padding: 18px 14px 12px;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+    }
+    .pipeline svg { display: block; width: 100%; height: auto; }
+    .pl-node { fill: rgba(197,208,232,.045); stroke: var(--line-strong); stroke-width: 1.1; }
+    .pl-node-label { font: 600 12.5px var(--mono); fill: var(--ivory); }
+    .pl-node-sub { font: 8.5px var(--mono); fill: var(--faint); letter-spacing: .02em; }
+    .pl-lane { font: 600 10px var(--mono); fill: var(--faint); letter-spacing: .14em; text-transform: uppercase; }
+    .pl-edge { stroke: rgba(145,180,216,.55); stroke-width: 1.4; fill: none; }
+    .pl-edge.sttlane { stroke-dasharray: 6 5; animation: dashdrift 9s linear infinite; }
+    .pl-edge.ttslane { stroke-dasharray: 2 5; opacity: .55; }
+    .pl-edge.e-type { stroke: var(--heat); }
+    .pl-arrow { fill: rgba(145,180,216,.7); }
+    .pl-note { font: 9.5px var(--mono); fill: var(--heat); letter-spacing: .06em; }
+    @keyframes dashdrift { to { stroke-dashoffset: -110; } }
+    .pipeline figcaption { display: block; margin: 10px 6px 2px; }
+
+    /* ---------- honest limitations ---------- */
+    .limits {
+      margin-top: 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .limit {
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: var(--panel);
+      padding: 15px 17px;
+      color: var(--muted);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+    .limit b { color: var(--ivory); font-weight: 600; }
+    .limit code { font-family: var(--mono); font-size: 12px; color: var(--brass); }
+
+    .sustain .sigcap { display: block; margin-top: 16px; color: var(--heat); }
+
+    /* ═══ the live instruments (ported from the running site) ═══════════ */
+    #field {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      pointer-events: none;
+    }
+    .hero { position: relative; overflow: hidden; }
+    .hero > canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+      opacity: .75;
+    }
+    .hero .wrap { position: relative; z-index: 1; }
+    .hero .hero-cap { position: absolute; left: 22px; bottom: 12px; z-index: 1; }
+    .live-row { display: flex; align-items: center; gap: 14px; margin-top: 24px; flex-wrap: wrap; }
+    .mic {
+      font: inherit;
+      font-size: 34px;
+      line-height: 1;
+      background: none;
+      border: 0;
+      padding: 8px;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .mic.live { animation: micpulse 1.2s ease-in-out infinite; }
+    @keyframes micpulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,92,31,0); }
+      50% { box-shadow: 0 0 0 12px rgba(255,92,31,.22); }
+    }
+    .watchbtn {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      padding: 7px 15px;
+      cursor: pointer;
+      transition: color .12s ease, border-color .12s ease;
+    }
+    .watchbtn:hover { color: var(--heat); border-color: rgba(255,179,71,.5); }
+    .hero-live { font-family: var(--mono); font-size: 12px; color: var(--heat); }
+
+    /* the desktop: two windows, two registers, one focus */
+    section.proof { padding-top: 72px; }
+    .desktop { margin-top: 40px; }
+    .dwin {
+      display: none;
+      flex-direction: column;
+      text-align: left;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+    }
+    .dwin.focused {
+      display: flex;
+      border-color: rgba(255,143,64,.5);
+      box-shadow: 0 18px 60px rgba(0,0,0,.42), 0 0 26px var(--glow);
+    }
+    .dwin-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 9px 15px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--faint);
+    }
+    .dwin-title { flex: 1; min-width: 120px; }
+    .dwin-dockbar { display: inline-flex; align-items: center; gap: 10px; }
+    .demo-live { display: inline-flex; align-items: center; gap: 10px; }
+    .dwin-scope:empty { display: none; }
+    .dwin-body { flex: 1; overflow-y: auto; }
+    .dwin .dwin-body, .dwin .term-body { min-height: 210px; max-height: 340px; }
+    .scope-wrap { position: relative; border-bottom: 1px solid var(--line); }
+    canvas.scope { display: block; width: 100%; height: 64px; }
+    .scope-label {
+      position: absolute;
+      right: 10px;
+      bottom: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--faint);
+      pointer-events: none;
+    }
+    .ebody {
+      padding: 13px 16px 15px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.85;
+      color: var(--ivory);
+      counter-reset: eline;
+      cursor: text;
+    }
+    .eline { counter-increment: eline; overflow-wrap: anywhere; }
+    .eline::before {
+      content: counter(eline);
+      display: inline-block;
+      width: 2ch;
+      margin-right: 14px;
+      color: rgba(242,233,218,.28);
+      text-align: right;
+    }
+    .eline span { white-space: pre-wrap; }
+    .eline:first-child span { color: var(--faint); }
+    .term-body {
+      padding: 13px 16px 15px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--ivory);
+      cursor: text;
+    }
+    .term-body .tline { overflow-wrap: anywhere; }
+    .term-body .dim { color: var(--faint); }
+    .term-body .err { color: #ff8a80; }
+    .tcur { display: flex; align-items: baseline; position: relative; }
+    .tcur .cli {
+      flex: 1;
+      min-width: 40px;
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 0;
+      outline: none;
+      caret-color: var(--ivory);
+    }
+    .tcur .cli::placeholder { color: rgba(242,233,218,.3); opacity: 1; }
+    .tcur.rec .cli { position: absolute; opacity: 0; pointer-events: none; width: 1px; }
+    .dwin .caret {
+      display: inline-block;
+      width: 7px;
+      height: 14px;
+      background: var(--ivory);
+      vertical-align: -2px;
+      margin: 0;
+      box-shadow: none;
+      animation: blink 1.1s steps(1) infinite;
+    }
+    /* molten in the windows: heat, breathing; a repair flashes then cools */
+    .dwin .molten { color: var(--molten-win); }
+    .dwin .molten:empty { display: none; }
+    .repair { border-radius: 3px; }
+    @media (prefers-reduced-motion: no-preference) {
+      .dwin .molten { animation: moltenbreathe 1.7s ease-in-out infinite; }
+      .repair { animation: repairflash .48s ease-out !important; }
+    }
+    @keyframes moltenbreathe { 0%, 100% { opacity: 1; } 50% { opacity: .74; } }
+    @keyframes repairflash {
+      0% { background: var(--molten-soft); box-shadow: 0 0 14px var(--molten-soft); }
+      100% { background: transparent; box-shadow: none; }
+    }
+    .dwin .instr {
+      color: var(--molten-win);
+      font-style: italic;
+      opacity: .85;
+      text-decoration: underline dashed;
+      text-underline-offset: 4px;
+      text-decoration-thickness: 1px;
+    }
+    .dwin .instr:empty { display: none; }
+    .probechip {
+      color: var(--molten-win);
+      border: 1px solid rgba(255,179,71,.45);
+      border-radius: 999px;
+      padding: 2px 9px;
+      letter-spacing: .1em;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--rec);
+      white-space: nowrap;
+    }
+    .pill i {
+      width: 3px;
+      height: 11px;
+      border-radius: 2px;
+      background: var(--rec);
+      animation: vubar .9s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .pill.real i { animation: none; }
+    .pill i:nth-child(2) { animation-delay: -.3s; }
+    .pill i:nth-child(3) { animation-delay: -.6s; }
+    .pill i:nth-child(4) { animation-delay: -.15s; }
+    @keyframes vubar { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+    .stopbtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: #ffd9c4;
+      background: rgba(255,92,31,.16);
+      border: 1px solid rgba(255,92,31,.6);
+      border-radius: 999px;
+      padding: 7px 16px;
+      min-height: 32px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .stopbtn::before { content: ""; width: 9px; height: 9px; border-radius: 2px; background: var(--rec); }
+    .stopbtn:hover { background: rgba(255,92,31,.3); }
+    .demo-foot { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .saychips { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .saychip {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ivory);
+      background: var(--panel);
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      padding: 6px 13px;
+      cursor: pointer;
+      transition: color .12s ease, border-color .12s ease;
+    }
+    .saychip:hover { color: var(--heat); border-color: rgba(255,179,71,.5); }
+    .dtoggle {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      padding: 6px 13px;
+      margin-left: auto;
+      cursor: pointer;
+      transition: color .12s ease, border-color .12s ease;
+    }
+    .dtoggle:hover { color: var(--heat); border-color: rgba(255,179,71,.5); }
+    .hint { color: var(--muted); font-size: 13.5px; margin: 12px 0 0; }
+    .hint .engine-live, .engine-live { color: var(--heat); }
+    .hint .molten-word, .molten-word { color: var(--heat); font-weight: 600; }
+    .funnel-card {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 13px 17px;
+      border: 1px solid rgba(255,179,71,.35);
+      border-radius: var(--r-md);
+      background: rgba(255,148,60,.06);
+      font-size: 13.5px;
+      color: var(--muted);
+    }
+    .funnel-card span { flex: 1; min-width: 220px; }
+    .funnel-card a { font-family: var(--mono); font-size: 12px; color: var(--heat); white-space: nowrap; }
+
+    /* copy-on-click for marked snippets (cta.js) */
+    .prewrap { position: relative; }
+    .copybtn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--soot);
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      padding: 4px 11px;
+      cursor: pointer;
+      transition: color .12s ease, border-color .12s ease;
+    }
+    .copybtn:hover { color: var(--heat); border-color: rgba(255,179,71,.5); }
+    .copybtn.ok { color: var(--gilt); border-color: var(--gilt-line); }
+    .copybtn.inline { position: static; }
+
+    /* the live config */
+    .config-wrap { margin-top: 40px; }
+    pre.config {
+      margin: 0;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--well);
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--brass);
+      overflow-x: auto;
+      outline: none;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+    }
+    pre.config:focus { border-color: rgba(255,179,71,.5); }
+    .cfgstatus { color: var(--ok); font-size: 13px; margin: 10px 2px 0; font-family: var(--mono); }
+    .cfgstatus.err { color: var(--rec); }
+
+    /* pipeline: live overlays (pipeline.js) */
+    .pl-edge { transition: stroke .25s, opacity .25s; }
+    .pipeline.rec .pl-edge.e-mic { stroke: var(--heat); opacity: 1; }
+    .pipeline.rec .pl-node.n-mic, .pipeline.rec .pl-node.n-daemon { stroke: var(--heat); }
+    .pipeline.speak .pl-edge.ttslane { stroke: var(--heat); opacity: 1; }
+    .pipeline.speak .pl-edge.t-out.word { stroke-width: 2.4; }
+    .pl-packet { fill: var(--heat); }
+    .pl-rain text { font: 11px var(--mono); fill: var(--heat); will-change: transform, opacity; }
+
+    /* the autopilot's ghost keyboard */
+    .ghostkbd {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      transform: translateX(-50%);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      align-items: center;
+      background: rgba(11,10,16,.88);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-md);
+      padding: 10px 18px;
+      backdrop-filter: blur(6px);
+      max-width: min(92vw, 560px);
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .ghostkbd .keys kbd { font-size: 13px; padding: 3px 9px; }
+
+    /* the tts chip + read-aloud highlight */
+    .ttschip {
+      position: absolute;
+      z-index: 60;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ivory);
+      background: var(--soot);
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      padding: 5px 11px;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,.3);
+    }
+    ::highlight(vk-tts) { background: rgba(255,179,71,.3); }
+
+    /* the page's kbd glyphs press themselves under your real fingers */
+    kbd { transition: background-color .12s, border-color .12s, box-shadow .12s, translate .12s; }
+    kbd.down {
+      background: rgba(255,179,71,.22);
+      border-color: var(--heat);
+      box-shadow: 0 0 12px var(--glow);
+      translate: 0 1px;
+    }
+
+    /* sections develop as they enter the viewport (scrollfx.js) */
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal { opacity: 0; transform: translateY(22px); }
+      .reveal.in {
+        opacity: 1;
+        transform: none;
+        transition: opacity .8s ease, transform .8s cubic-bezier(.2,.7,.2,1);
+      }
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 36px 0 48px;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: 12.5px;
+    }
+    .footer-grid {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
+    .footer-links a { color: var(--muted); }
+    .footer-links a:hover { color: var(--ivory); }
+
+    @media (max-width: 1020px) {
+      .hero-grid, .consent, .prov-grid, .sustain, .install-card { grid-template-columns: 1fr; }
+      .keys-row { grid-template-columns: repeat(4, 1fr); }
+      .thesis-grid, .molten-grid { grid-template-columns: 1fr; }
+      .registers { grid-template-columns: repeat(2, 1fr); }
+      .register { border-bottom: 1px solid var(--line); }
+      .demo-grid { grid-template-columns: 1fr; }
+      .command-list { display: grid; grid-template-columns: repeat(2, 1fr); }
+      .mode-grid { grid-template-columns: repeat(2, 1fr); }
+      .stage { grid-template-columns: 1fr; }
+      .stage-pane + .stage-pane { border-left: none; border-top: 1px solid var(--line); }
+      .compare { grid-template-columns: 1fr; }
+      .compare-col.vk { border-left: none; border-top: 1px solid var(--line); }
+      .grammar-grid { grid-template-columns: 1fr; }
+      .limits { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .wrap { width: calc(100% - 32px); }
+      .nav-links a:not(.nav-cta) { display: none; }
+      section { padding: 68px 0; }
+      .keys-row, .command-list, .mode-grid, .registers { grid-template-columns: 1fr; }
+      .keycap.wide { grid-column: span 1; }
+      .signal { grid-template-columns: 1fr; }
+      .signal-arrow { transform: rotate(90deg); padding: 2px 0; }
+      .gauges { grid-template-columns: 1fr 1fr; }
+      h1 { font-size: clamp(52px, 15vw, 78px); }
+      .mrow { grid-template-columns: 1fr; row-gap: 2px; }
+      .mnote { grid-column: 1; }
+      .grammar-table td:first-child { display: block; border-bottom: 0; padding-bottom: 0; }
+      .grammar-table td { display: block; }
+      .grammar-table tr { display: block; border-bottom: 1px solid var(--line); }
+      .grammar-table thead { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+      html { scroll-behavior: auto; }
+    }
+  </style>
 </head>
 <body>
-
-<a class="skip" href="#molten">Skip to documentation</a>
-
-<main>
-
-  <!-- ═══ HERO — the master gauge ═══════════════════════════════════════
-       Behind everything: the field, a WebGL particle system driven by the
-       same signal as every other gauge — synthetic while idle, your live
-       microphone while you dictate. Without WebGL2 this canvas draws the
-       2D trace/spectrogram instead. The caption at the lower left always
-       says which signal you are seeing. The lede types itself once, the
-       way the product types: molten, repaired, frozen (lede.js).
-  ════════════════════════════════════════════════════════════════════ -->
-  <header class="hero" id="hero">
-    <canvas id="hero-canvas" aria-hidden="true"></canvas>
-    <noscript><p class="nojs">The demos on this page need JavaScript; everything below is the real documentation.</p></noscript>
-    <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">🎙️</button>
-    <button class="watchbtn" id="watch" type="button" hidden>▶ watch it work</button>
-    <h1>HyperFurion&nbsp;VK</h1>
-    <p class="lede" id="lede">Speak. It types.</p>
-    <p class="tagline">A voice keyboard for Linux — macOS and Windows in beta.
-    Press <code>Ctrl+Alt+V</code> and words land in whatever app has focus
-    <i>while you&rsquo;re still speaking</i>: molten at first, repairing themselves
-    as the transcript firms up, frozen once they&rsquo;re sure. Say
-    &ldquo;scratch&nbsp;that&rdquo;. Say &ldquo;furion, make that formal&rdquo;.
-    And the reverse: select text anywhere and hear it read aloud.</p>
-    <p class="hero-live" id="hero-live" hidden>this page is a working instance —
-    <b>tap the mic, speak, tap again</b> · it listens, and it types</p>
-    <pre data-copy id="install-cmd"><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
-chmod +x install-hyperfurion-vk.sh
-./install-hyperfurion-vk.sh</code></pre>
-    <nav aria-label="Project links">
-      <a href="https://github.com/liamghennigan/HyperFurion-VK">GitHub</a>
-      <a href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest">Releases</a>
-      <a href="https://github.com/liamghennigan/HyperFurion-VK#quick-install">Docs</a>
-      <a href="https://github.com/sponsors/liamghennigan">Sponsor</a>
-    </nav>
-    <span class="sigcap hero-cap" id="hero-cap" hidden>signal: test pattern</span>
-    <a class="scrolldown" href="#app" aria-hidden="true" tabindex="-1">↓</a>
-  </header>
-
-  <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · words appear while you speak · molten, then frozen · say &ldquo;scratch that&rdquo; · say &ldquo;furion, make that formal&rdquo; · registers per app · full unicode on linux · self-hosted · zero analytics · mit licensed · offline with a local model · xai by default · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · words appear while you speak · molten, then frozen · say &ldquo;scratch that&rdquo; · say &ldquo;furion, make that formal&rdquo; · registers per app · full unicode on linux · self-hosted · zero analytics · mit licensed · offline with a local model · xai by default · your keys stay yours &nbsp;·&nbsp; </span></div>
-
-  <!-- ═══ 00 / THE FOCUSED APP — two windows, two registers ═════════════
-       Dictation lands in the window below, molten — the whole pitch,
-       acted out. The editor renders prose; the terminal behind the
-       toggle renders the terminal register (no auto-caps, numbers as
-       digits) and is a working CLI. Switch windows mid-dictation and
-       typing freezes — the focus guard, demonstrated.
-  ════════════════════════════════════════════════════════════════════ -->
-  <section class="wide demo" id="app" aria-label="Live demo — windows that really type, molten">
-    <div class="desktop" id="desktop" hidden>
-      <div class="dwin" id="win-editor" data-app="editor">
-        <div class="dwin-bar">
-          <span class="dwin-title">release-notes.md — editor</span>
-          <span class="probechip sigcap" hidden></span>
-          <span class="dwin-dockbar"></span>
-        </div>
-        <div class="dwin-scope"></div>
-        <div class="dwin-body ebody" id="ebody" aria-live="polite"></div>
+  <nav class="nav" aria-label="Primary">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top">
+        <span class="brand-key" aria-hidden="true">VK</span>
+        <span>HyperFurion&nbsp;VK</span>
+      </a>
+      <div class="nav-links">
+        <a href="#molten">molten</a>
+        <a href="#grammar">grammar</a>
+        <a href="#demo">demo</a>
+        <a href="#keys">keys</a>
+        <a href="#consent">consent</a>
+        <a href="#limits">limits</a>
+        <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">github</a>
+        <a class="nav-cta" href="#install">install</a>
       </div>
+    </div>
+  </nav>
 
-      <div class="dwin term" id="win-term" data-app="terminal">
-        <div class="dwin-bar term-bar">
-          <span class="dwin-title term-title">the focused app — bash</span>
-          <span class="probechip sigcap" hidden></span>
-          <span class="dwin-dockbar"></span>
-        </div>
-        <div class="dwin-scope">
-          <div class="scope-wrap">
-            <canvas class="scope" id="scope" aria-hidden="true"></canvas>
-            <span class="scope-label" id="scope-label">signal</span>
+  <main id="top">
+    <!-- ============ hero ============ -->
+    <header class="hero">
+      <canvas id="hero-canvas" aria-hidden="true"></canvas>
+      <div class="wrap hero-grid">
+        <div>
+          <span class="hero-pill"><span class="dot"></span> Linux-first · macOS &amp; Windows beta · MIT · open source</span>
+          <h1>Your voice is <em>the keyboard.</em></h1>
+          <p class="hero-sub"><strong>Dictation is one key.</strong> HyperFurion VK is a system-wide input device: speech becomes text, edits, rewrites, terminal drafts, readback, recall, and a voice assistant — pressed into whatever app you already have focused.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="#install">Install HyperFurion VK</a>
+            <a class="btn" href="#demo">Watch voice press keys</a>
+          </div>
+          <div class="live-row">
+            <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">🎙️</button>
+            <button class="watchbtn" id="watch" type="button" hidden>▶ watch it work</button>
+            <span class="hero-live" id="hero-live" hidden>this page listens — tap the mic, speak, and the proof below types</span>
+          </div>
+          <div class="hero-hint">
+            Tap <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> and speak. Hold it to talk; release to stop.
           </div>
         </div>
-        <div class="term-body" id="tbody" aria-live="polite"></div>
+
+        <aside class="console" aria-label="Live molten dictation demonstration">
+          <div class="console-top">
+            <span>voice-keyboard-daemon</span>
+            <span class="rec"><i></i> recording</span>
+          </div>
+          <div class="field">
+            <div class="field-bar"><b>notes.md</b><span>register: prose</span></div>
+            <p class="script" id="script" aria-live="off"><span class="caret" id="caret"></span></p>
+          </div>
+          <div class="wave" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <div class="gauges" aria-hidden="true">
+            <div class="gauge hot">molten <b id="gMolten">0</b></div>
+            <div class="gauge">frozen <b id="gFrozen">0</b></div>
+            <div class="gauge">window <b>1.5 s</b></div>
+          </div>
+          <div class="console-hints">
+            <span>“scratch that”</span>
+            <span>“new line”</span>
+            <span>“furion, make that formal”</span>
+          </div>
+        </aside>
       </div>
+      <span class="sigcap hero-cap" id="hero-cap" hidden>signal: test pattern</span>
+    </header>
 
-      <!-- the recording controls dock into whichever window is open -->
-      <span class="demo-live" id="demo-live">
-        <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
-        <button class="stopbtn" id="stopbtn" hidden>stop</button>
-      </span>
-    </div>
-    <div class="demo-foot">
-      <div class="saychips" id="saychips" hidden></div>
-      <button class="dtoggle" id="dtoggle" type="button" hidden></button>
-    </div>
-    <p class="hint" id="hint" hidden></p>
-    <div class="funnel-card" id="funnel-card" hidden>
-      <span>that just typed itself — molten, repaired in place, frozen. the
-      desktop version does this in every app you own, while you speak.</span>
-      <button class="copybtn inline" id="funnel-copy" type="button">copy the install command</button>
-      <a href="#install">install notes →</a>
-    </div>
-  </section>
+    <!-- ============ fact tape ============ -->
+    <div class="tape" aria-hidden="true"><span>press ctrl+alt+v · words land while you speak · <b>molten, then frozen</b> · say “scratch that” · say “furion, make that formal” · hold right ctrl for kai · registers per app · <b>it never presses enter</b> · full unicode on linux · offline with a local model · self-hosted relay · zero analytics · mit licensed · your keys stay yours &nbsp;·&nbsp; press ctrl+alt+v · words land while you speak · <b>molten, then frozen</b> · say “scratch that” · say “furion, make that formal” · hold right ctrl for kai · registers per app · <b>it never presses enter</b> · full unicode on linux · offline with a local model · self-hosted relay · zero analytics · mit licensed · your keys stay yours &nbsp;·&nbsp; </span></div>
 
-  <!-- ═══ 01 / MOLTEN DICTATION ═════════════════════════════════════════ -->
-  <section class="prose" id="molten">
-    <h2><span class="num" aria-hidden="true">01</span>Molten dictation</h2>
-    <p>With a streaming provider, words land in the focused field while
-    you&rsquo;re still speaking. Each word arrives <b class="molten-word">molten</b> —
-    the provider is allowed to change its mind about it. When it does, the
-    daemon backspaces to the divergence and retypes: the text repairs itself
-    in front of you, in the real field, as real keystrokes.</p>
+    <!-- ============ the proof — a working instance ============ -->
+    <section class="proof" id="proof" aria-label="Live demo — windows that really type, molten">
+      <div class="wrap">
+        <span class="eyebrow">this page is a working instance <span class="cfg">— tap the mic above, or press ctrl+alt+v</span></span>
+        <h2 id="proof-title">Don’t take the page’s word for it.</h2>
+        <p class="lede">Speak, and words land in the window below <strong>while you talk</strong> — molten, repaired, frozen — through your browser’s speech engine, the same way the daemon rides its provider. No mic handy? The chips dictate for you, honestly labeled. The terminal is real, too.</p>
 
-    <figure class="moltenfig" aria-label="Three moments of one molten line: everything molten, a repair, then frozen text">
-      <div class="mrow">
-        <span class="mt">t + 0.4 s</span>
-        <span class="mtext">fixed the race <em>addition in</em></span>
-        <span class="mnote">everything is molten — still revisable</span>
+        <div class="desktop" id="desktop" hidden>
+          <div class="dwin" id="win-editor" data-app="editor">
+            <div class="dwin-bar">
+              <span class="dwin-title">release-notes.md — editor</span>
+              <span class="probechip sigcap" hidden></span>
+              <span class="dwin-dockbar"></span>
+            </div>
+            <div class="dwin-scope"></div>
+            <div class="dwin-body ebody" id="ebody" aria-live="polite"></div>
+          </div>
+
+          <div class="dwin term" id="win-term" data-app="terminal">
+            <div class="dwin-bar term-bar">
+              <span class="dwin-title term-title">the focused app — bash</span>
+              <span class="probechip sigcap" hidden></span>
+              <span class="dwin-dockbar"></span>
+            </div>
+            <div class="dwin-scope">
+              <div class="scope-wrap">
+                <canvas class="scope" id="scope" aria-hidden="true"></canvas>
+                <span class="scope-label" id="scope-label">signal</span>
+              </div>
+            </div>
+            <div class="term-body" id="tbody" aria-live="polite"></div>
+          </div>
+
+          <span class="demo-live" id="demo-live">
+            <span class="pill" id="pill" hidden><i></i><i></i><i></i><i></i>recording</span>
+            <button class="stopbtn" id="stopbtn" hidden>stop</button>
+          </span>
+        </div>
+        <div class="demo-foot">
+          <div class="saychips" id="saychips" hidden></div>
+          <button class="dtoggle" id="dtoggle" type="button" hidden></button>
+        </div>
+        <p class="hint" id="hint" hidden></p>
+        <div class="funnel-card" id="funnel-card" hidden>
+          <span>that just typed itself — molten, repaired in place, frozen. the desktop version does this in every app you own, while you speak.</span>
+          <button class="copybtn inline" id="funnel-copy" type="button">copy the install command</button>
+          <a href="#install">install notes →</a>
+        </div>
       </div>
-      <div class="mrow">
-        <span class="mt">t + 1.1 s</span>
-        <span class="mtext">fixed the race <em class="rep">condition</em> <em>in the audio</em></span>
-        <span class="mnote">the provider revised — backspace to the divergence, retype</span>
-      </div>
-      <div class="mrow">
-        <span class="mt">t + 2.6 s</span>
-        <span class="mtext">fixed the race condition in the audio <em>thread</em></span>
-        <span class="mnote">survivors froze — never touched again</span>
-      </div>
-      <figcaption class="sigcap">the stability window — 1.5 s and two updates, by default — is the whole trick</figcaption>
-    </figure>
+    </section>
 
-    <p>A word that survives the stability window <b>freezes</b> and is never
-    touched again — repairs stay short, and your caret never runs away.
-    <code>max_molten_chars</code> bounds the revisable tail outright. While you
-    record, the GNOME overlay pill becomes a live caption: a small VU meter
-    plus the molten tail of the transcript.</p>
-    <p class="muted">Live typing needs a streaming provider (<code>xai</code>,
-    <code>hyperfurion</code>) — or any local server via
-    <code>live_rest</code>, which re-transcribes the growing recording on an
-    interval. REST providers still get the whole grammar below; their words
-    just land on stop. And <code>flow.enabled = false</code> restores the old
-    record&nbsp;→&nbsp;wait&nbsp;→&nbsp;type behavior, exactly.</p>
-    <p class="muted">Try it above — and try slowing <code>stability_ms</code>
-    to 4000 in the <a href="#config-h">live config</a> to watch words stay
-    molten longer. Hands-free: <code>auto_stop_ms = 1200</code> ends the
-    recording by itself after ~1.2&nbsp;s of silence. Tap, speak, done.</p>
-  </section>
-
-  <!-- ═══ 02 / THE SPOKEN GRAMMAR ═══════════════════════════════════════ -->
-  <section class="prose" id="grammar">
-    <h2><span class="num" aria-hidden="true">02</span>The spoken grammar</h2>
-    <p>Edits, punctuation, and escapes are <b>commands, not text</b> — parsed
-    deterministically before anything is typed, on every provider, streaming
-    or not. Everything below works in the demo up top; say it, or press a chip.</p>
-    <div class="tblwrap">
-    <table>
-      <thead><tr><th scope="col">You say</th><th scope="col">You get</th></tr></thead>
-      <tbody>
-        <tr><td>&ldquo;scratch that&rdquo; · &ldquo;delete that&rdquo;</td>
-            <td>deletes the last utterance — even after it&rsquo;s been typed</td></tr>
-        <tr><td>&ldquo;new line&rdquo; · &ldquo;new paragraph&rdquo;</td>
-            <td>a line break · a blank line</td></tr>
-        <tr><td>&ldquo;period&rdquo; · &ldquo;comma&rdquo; · &ldquo;em dash&rdquo; · &ldquo;open quote&rdquo; · …</td>
-            <td><code>.</code> <code>,</code> <code>—</code> <code>&quot;</code> — the glyph, correctly spaced (30-odd phrases)</td></tr>
-        <tr><td>&ldquo;literal period&rdquo;</td>
-            <td>the word &ldquo;period&rdquo; — the escape hatch</td></tr>
-        <tr><td>&ldquo;twenty three&rdquo;</td>
-            <td><code>23</code> — in the terminal register, or with <code>numbers = "always"</code>.
-                Decimals too (&ldquo;three point one four&rdquo; → <code>3.14</code>) and digit runs
-                (&ldquo;one two seven&rdquo; → <code>127</code>)</td></tr>
-        <tr><td>&ldquo;furion, make that formal&rdquo;</td>
-            <td>rewrites what you just dictated, in place — <a href="#rewrite">the rewrite lane</a></td></tr>
-      </tbody>
-    </table>
+    <!-- ============ keycap strip ============ -->
+    <div class="strip">
+      <div class="wrap keys-row" aria-label="What the voice keyboard's keys sound like">
+        <div class="keycap"><span class="legend">Text</span><b>speak naturally</b></div>
+        <div class="keycap"><span class="legend">Edit</span><b>scratch that</b></div>
+        <div class="keycap"><span class="legend">Format</span><b>new line, period</b></div>
+        <div class="keycap wide"><span class="legend">Rewrite</span><b>furion, make that formal</b></div>
+        <div class="keycap"><span class="legend">Read</span><b>voice-keyboard tts</b></div>
+        <div class="keycap wide"><span class="legend">Terminal</span><b>find every TODO in this repo</b></div>
+      </div>
     </div>
-    <p>Every phrase is remappable and removable, and your own vocabulary
-    expands as you speak:</p>
-<pre data-copy><code>[flow.commands]
+
+    <!-- ============ thesis ============ -->
+    <section aria-labelledby="thesis-title">
+      <div class="wrap">
+        <span class="eyebrow">the claim</span>
+        <h2 id="thesis-title">Transcription types words. A keyboard does everything else.</h2>
+        <p class="lede">Every voice tool you've tried produces text and stops. A keyboard corrects, selects, formats, navigates, and commands — so a <strong>voice keyboard</strong> has to do the same, system-wide, in the app you're already in.</p>
+        <div class="thesis-grid">
+          <article class="thesis-card">
+            <div class="tag"><span class="strike"></span> not this</div>
+            <h3>A dictation box</h3>
+            <p>A microphone pointed at a text area. You speak, it types, you grab the keyboard to clean up the mess.</p>
+          </article>
+          <article class="thesis-card">
+            <div class="tag"><span class="strike"></span> not this</div>
+            <h3>A chat window</h3>
+            <p>An assistant that answers in its own app and leaves you to copy-paste the result to where you actually work.</p>
+          </article>
+          <article class="thesis-card yes">
+            <div class="tag"><span class="dot"></span> this</div>
+            <h3>An input device</h3>
+            <p>A local daemon with a virtual keyboard. Spoken intent becomes keystrokes — typed, repaired, rewritten, or drafted wherever your cursor already is.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ molten ============ -->
+    <section id="molten" aria-labelledby="molten-title">
+      <div class="wrap">
+        <span class="eyebrow">molten dictation <span class="cfg">— [flow]</span></span>
+        <h2 id="molten-title">Text is worked like metal.</h2>
+        <p class="lede">With a streaming provider, words land in the focused field <strong>while you speak</strong>. Each word stays molten for a stability window — 1.5&nbsp;seconds by default. If the provider revises it, the daemon backspaces to the divergence point and retypes. Once a word survives the window it freezes, and is never touched again.</p>
+        <div class="molten-grid">
+          <article class="state s1">
+            <span class="glyph">t &lt; 1.5 s</span>
+            <small>State one</small>
+            <h3>Molten</h3>
+            <p>Just typed, still glowing. The provider may still change its mind about these words, and the daemon is allowed to reshape them.</p>
+          </article>
+          <article class="state s2">
+            <span class="glyph">backspace → retype</span>
+            <small>State two</small>
+            <h3>Repaired</h3>
+            <p>A revision arrives: backspace to the divergence point, retype the corrected tail. The text heals itself in front of you, and repairs stay short by construction.</p>
+          </article>
+          <article class="state s3">
+            <span class="glyph">t ≥ 1.5 s</span>
+            <small>State three</small>
+            <h3>Frozen</h3>
+            <p>Survived the window. Frozen words are permanent — your caret never runs away, and no late revision can rewrite what already set.</p>
+          </article>
+        </div>
+
+        <figure class="moltenfig" aria-label="Three moments of one molten line: everything molten, a repair, then frozen text">
+          <div class="mrow">
+            <span class="mt">t + 0.4 s</span>
+            <span class="mtext">fixed the race <em>addition in</em></span>
+            <span class="mnote">everything is molten — still revisable</span>
+          </div>
+          <div class="mrow">
+            <span class="mt">t + 1.1 s</span>
+            <span class="mtext">fixed the race <em class="rep">condition</em> <em>in the audio</em></span>
+            <span class="mnote">the provider revised — backspace to the divergence, retype</span>
+          </div>
+          <div class="mrow">
+            <span class="mt">t + 2.6 s</span>
+            <span class="mtext">fixed the race condition in the audio <em>thread</em></span>
+            <span class="mnote">survivors froze — never touched again</span>
+          </div>
+          <figcaption class="sigcap">the stability window — 1.5 s by default — is the whole trick</figcaption>
+        </figure>
+
+        <div class="register-row">
+          <div class="register-head">
+            <b>Context registers — [registers]</b>
+            <span>the daemon probes the focused app at recording start (AT-SPI / Quartz / Win32) and picks how speech is rendered</span>
+          </div>
+          <div class="registers">
+            <div class="register"><b>prose</b><span>Smart capitalization and punctuation spacing. The default.</span></div>
+            <div class="register"><b>terminal</b><span>No auto-caps, spoken numbers as digits, pastes with Ctrl+Shift+V. Known terminals map here automatically.</span></div>
+            <div class="register"><b>verbatim</b><span>Grammar off; words exactly as recognized. Password fields force this — always.</span></div>
+            <div class="register"><b>python</b><span>Compiles speech, no model in the loop.</span><code>"for i in range ten colon" → for i in range(10):</code></div>
+            <div class="register"><b>shell</b><span>Same, for the pipe-and-flag dialect.</span><code>"pipe grep dash i error" → | grep -i error</code></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ grammar ============ -->
+    <section id="grammar" aria-labelledby="grammar-title">
+      <div class="wrap">
+        <span class="eyebrow">the spoken grammar <span class="cfg">— [flow.commands]</span></span>
+        <h2 id="grammar-title">Edits are commands, not text.</h2>
+        <p class="lede">Corrections, punctuation, and escapes are parsed <strong>deterministically, before anything is typed</strong> — on every provider, streaming or not. The same phrase does the same thing every time, because the grammar runs in the daemon, not in a model.</p>
+        <div class="grammar-grid">
+          <div class="grammar-table">
+            <table>
+              <thead><tr><th scope="col">You say</th><th scope="col">You get</th></tr></thead>
+              <tbody>
+                <tr><td>“scratch that” · “delete that”</td><td>deletes the last utterance — even after it’s been typed</td></tr>
+                <tr><td>“new line” · “new paragraph”</td><td>a line break · a blank line</td></tr>
+                <tr><td>“period” · “comma” · “em dash” · “open quote”</td><td>the glyph, correctly spaced — thirty-odd phrases</td></tr>
+                <tr><td>“literal period”</td><td>the word “period” — the escape hatch</td></tr>
+                <tr><td>“twenty three” · “three point one four”</td><td><code>23</code> · <code>3.14</code> — in the terminal register, or with <code>numbers = "always"</code></td></tr>
+                <tr><td>“furion, make that formal”</td><td>rewrites what you just dictated, in place</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="grammar-side">
+            <pre data-copy><span class="c"># every phrase is yours to remap</span>
+[flow.commands]
 scratch_that = ["nuke it", "scratch that"]
 
 [flow.punctuation]
-"comma" = ""                    # fine, have it your way
+"comma" = ""   <span class="c"># fine, have it your way</span>
 
 [flow.vocabulary]
-"hyper furion" = "HyperFurion"  # live in the demo above — try saying it</code></pre>
-  </section>
-
-  <!-- ═══ 03 / REGISTERS & THE FOCUS PROBE ══════════════════════════════ -->
-  <section class="prose" id="registers">
-    <h2><span class="num" aria-hidden="true">03</span>Registers &amp; the focus probe</h2>
-    <p>Prose wants capital letters; a shell does not. At recording start the
-    daemon <b>probes the focused app</b> — AT-SPI on Linux, Quartz on macOS,
-    Win32 on Windows — and picks how dictation should render there:</p>
-    <div class="tblwrap">
-    <table>
-      <thead><tr><th scope="col">Register</th><th scope="col">Behavior</th></tr></thead>
-      <tbody>
-        <tr><td>prose <span class="default-badge">default</span></td>
-            <td>smart capitalization, punctuation spacing</td></tr>
-        <tr><td>terminal</td>
-            <td>no auto-caps, spoken numbers become digits, pastes with
-                <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td></tr>
-        <tr><td>verbatim</td>
-            <td>grammar off — words exactly as recognized</td></tr>
-      </tbody>
-    </table>
-    </div>
-    <p>Known terminals map automatically — kitty, alacritty, foot, konsole,
-    GNOME&nbsp;Terminal, wezterm, ghostty, Windows&nbsp;Terminal, iTerm2, and
-    friends — and you can override or extend per app:</p>
-<pre data-copy><code>[registers.map]
-kitty = "terminal"
-code = "verbatim"</code></pre>
-    <p>The demo&rsquo;s two windows carry different registers — dictate
-    &ldquo;twenty three failed tests&rdquo; into both and the register is the
-    difference you see.</p>
-    <p><b>The focus guard.</b> If focus moves to a different app mid-dictation,
-    typing freezes immediately and the transcript lands on the clipboard
-    instead. Dictation never types into the wrong window — toggle the demo&rsquo;s
-    windows while recording and watch it refuse.</p>
-    <h3>Full Unicode on Linux</h3>
-    <p>The uinput injector now types anything: plain ASCII takes the fast key
-    path, and any other run — accents, CJK, emoji, em-dashes — is pasted
-    through the clipboard (<code>wl-copy</code> on Wayland, <code>xclip</code>
-    on X11) with your previous clipboard contents restored afterwards.
-    Terminals get the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> chord via
-    the register. The macOS and Windows backends always typed full Unicode
-    natively; now Linux keeps up.</p>
-  </section>
-
-  <!-- ═══ 04 / THE REWRITE LANE ═════════════════════════════════════════ -->
-  <section class="prose" id="rewrite">
-    <h2><span class="num" aria-hidden="true">04</span>The rewrite lane</h2>
-    <p>End an utterance with the wake word — or speak it alone — and what you
-    just dictated is rewritten <b>in place</b>, on screen, by an LLM:</p>
-    <p class="rewrite-ex"><span class="muted">&ldquo;we fixed a bunch of bugs and it works now&rdquo;</span><br>
-    <b>&ldquo;… furion, make that formal&rdquo;</b><br>
-    <span class="molten-word">→ &ldquo;We resolved several defects and it functions correctly.&rdquo;</span></p>
-    <p>The instruction is anything you can say — make that formal, friendlier,
-    shorter, a bullet list. The same channel is a command, any time:</p>
-<pre data-copy><code>voice-keyboard transform "make it friendlier"
-voice-keyboard history 10    # the ledger (opt-in)
-voice-keyboard recall 2      # re-type an entry</code></pre>
-    <p>The rewrite goes through <code>[llm]</code> — any OpenAI-compatible
-    chat endpoint. The default is xAI&rsquo;s <code>grok-4-fast</code>; point
-    <code>base_url</code> at a local llama.cpp or vLLM server and rewrites are
-    fully local:</p>
-<pre data-copy><code>[llm]
-provider = "xai"          # or any /chat/completions endpoint
-model = "grok-4-fast"
-# base_url = "http://localhost:8080/v1"   # fully-local rewrites</code></pre>
-    <p class="muted">The just-typed text and your instruction leave for the
-    <code>[llm]</code> provider only when you invoke the wake word or
-    <code>transform</code> — never otherwise. The dictation ledger is
-    <b>off by default</b>; opt in with <code>history = true</code> and it is a
-    local file, mode 600. <code>voice-keyboard status</code> reports provider,
-    register, flow state, focused app, and the last error. Edits to
-    <code>[flow]</code>, <code>[registers]</code>, and <code>[llm]</code>
-    hot-reload at the next recording — no daemon restart.</p>
-  </section>
-
-  <!-- ═══ 05 / WHAT LEAVES YOUR MACHINE ═════════════════════════════════ -->
-  <section class="prose" id="trust-h">
-    <h2><span class="num" aria-hidden="true">05</span>What leaves your machine</h2>
-    <p>If you tried the demo, you just spoke into a web page — and the section
-    above mentioned an LLM. A fair moment to ask where everything goes. Both
-    halves of the answer are short.</p>
-    <div class="trust">
-      <div>
-        <h3>The daemon</h3>
-        <ul>
-          <li>Dictated audio goes to your chosen STT provider; selected text goes to your TTS provider. Nothing else, nowhere else.</li>
-          <li>Wake-word rewrites send that one utterance plus your instruction to your <code>[llm]</code> provider — only when you invoke them.</li>
-          <li>Recorded audio is held in memory while it is being transcribed — not written to disk.</li>
-          <li>TTS audio is a temporary MP3, deleted after playback.</li>
-          <li>The dictation ledger is opt-in, local, mode 600 — off by default.</li>
-          <li>API keys sit in <code>config.toml</code>, mode 600. The IPC socket is mode 600.</li>
-          <li>Default logs record state and transcript <i>lengths</i>, not transcript text.</li>
-          <li><code>input</code>-group membership is broad input access — that is the honest price of global hotkeys.</li>
-        </ul>
+"hyper furion" = "HyperFurion"</pre>
+            <p>Phrases are remappable and removable, and your own vocabulary grows as you speak.</p>
+          </div>
+        </div>
       </div>
-      <div>
-        <h3>This page</h3>
-        <ul>
-          <li>Dictation audio goes to your browser&rsquo;s speech engine, the same way the daemon sends audio to its provider.</li>
-          <li>TTS uses your browser&rsquo;s speech synthesis.</li>
-          <li>The wake-word rewrite here is a deterministic page stand-in — labeled in the terminal, nothing leaves.</li>
-          <li>No scripts loaded from anyone, no analytics, no cookies, no storage.</li>
-          <li>Nothing is loaded, stored, or sent — until you opt in: the terminal&rsquo;s
-          <code>real</code>, <code>ask</code>, <code>say</code>, and <code>demo</code> commands
-          talk to <code>api.hyperfurion.com</code> (real xAI engines, rate-limited, labeled in
-          place). Nothing else on this page touches the network, ever.</li>
-          <li>Transcripts exist only on your screen and die on reload.</li>
-        </ul>
+    </section>
+
+    <!-- ============ demo ============ -->
+    <section id="demo" aria-labelledby="demo-title">
+      <div class="wrap">
+        <span class="eyebrow">six keys, one surface</span>
+        <h2 id="demo-title">Voice should look like keypresses.</h2>
+        <p class="lede">Every phrase maps to a key: literal text, an edit, a transformation, a readback, a drafted command, or an assistant turn. Press a voice key to see how it routes.</p>
+
+        <div class="demo-shell">
+          <div class="demo-grid">
+            <div class="command-list" role="tablist" aria-label="Voice key examples">
+              <button class="command active" data-demo="type"><span class="kind">Text key</span><b>“draft a reply saying I’ll send it today”</b></button>
+              <button class="command" data-demo="edit"><span class="kind">Edit key</span><b>“scratch that”</b></button>
+              <button class="command" data-demo="rewrite"><span class="kind">Rewrite key</span><b>“furion, make that direct and confident”</b></button>
+              <button class="command" data-demo="terminal"><span class="kind">Terminal key</span><b>“find every TODO in this repo”</b></button>
+              <button class="command" data-demo="tts"><span class="kind">Read key</span><b>select text → voice-keyboard tts</b></button>
+              <button class="command" data-demo="kai"><span class="kind">Kai key</span><b>hold Right Ctrl — “what broke in this stack trace?”</b></button>
+            </div>
+
+            <div class="demo-output">
+              <div class="signal" aria-label="How the phrase routes">
+                <div class="signal-box"><small>You say</small><strong id="sayText">“draft a reply saying I’ll send it today”</strong></div>
+                <div class="signal-arrow">→</div>
+                <div class="signal-box hears"><small>It hears</small><strong id="hearText">intent: compose text</strong></div>
+                <div class="signal-arrow">→</div>
+                <div class="signal-box"><small>It presses</small><strong id="pressText">literal text at your cursor</strong></div>
+              </div>
+
+              <div class="stage">
+                <div class="stage-pane">
+                  <div class="stage-title"><span>focused app</span><span id="appName">mail — reply</span></div>
+                  <div class="editor">
+                    <div class="editor-top"><span id="windowTitle">reply.eml</span><span>HyperFurion typing</span></div>
+                    <div class="editor-body" id="editorBody">
+                      <h4>Reply</h4>
+                      <p>I’ll send it today and follow up with the notes once I’ve reviewed the final pass.<span class="cursor-line"></span></p>
+                    </div>
+                  </div>
+                </div>
+                <div class="stage-pane">
+                  <div class="stage-title"><span>action log</span><span>keyboard surface</span></div>
+                  <div class="action-stack" id="actionStack">
+                    <div class="action-item"><small>Target</small><p><strong>Your cursor</strong>, in the reply you already had focused.</p></div>
+                    <div class="action-item"><small>Action</small><p>Types the phrase as text — no separate dictation window, no paste step.</p></div>
+                    <div class="action-item"><small>Result</small><p>The app receives input exactly as if it came from a keyboard. It did.</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ═══ 06 / SIGNAL PATH ══════════════════════════════════════════════ -->
-  <section class="wide" id="path">
-    <div class="prose" style="padding:0">
-    <h2><span class="num" aria-hidden="true">06</span>Signal path</h2>
-    <p>A local daemon owns the long-lived resources: microphone capture, the
-    speech-to-text client, the flow engine, a uinput virtual keyboard, the
-    global hotkey listener, and an IPC socket. When you dictate, audio streams
-    to the provider you configured; the transcript comes back token by token,
-    passes through the grammar and the focused app&rsquo;s register, and is typed
-    into that app as real keystrokes — terminals, IDEs, browsers, anything,
-    on Wayland and X11.</p>
-    <p>The reverse lane reads your desktop&rsquo;s primary selection, sends it to a
-    text-to-speech provider, and plays the audio locally.</p>
-    </div>
-
-    <figure class="pipeline" id="pipeline">
-      <svg viewBox="0 0 760 240" role="img" aria-labelledby="pl-title pl-desc">
-        <title id="pl-title">HyperFurion VK signal path</title>
-        <desc id="pl-desc">Dictation: microphone to daemon to speech-to-text provider, back through the daemon's flow engine, then through a uinput virtual keyboard into the focused app, live while you speak. Text-to-speech: selected text to the daemon, to the TTS provider, then to the local speaker.</desc>
-        <defs>
-          <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0 0 L8 4 L0 8 z" class="pl-arrow"/>
-          </marker>
-        </defs>
-
-        <text x="25" y="48" class="pl-lane">dictation — speech in, molten keystrokes out, live</text>
-
-        <!-- STT lane nodes: 5 columns at x 25/175/325/475/625, y 62, 110×46 -->
-        <g>
-          <rect class="pl-node n-mic" x="25" y="62" width="110" height="46" rx="8"/>
-          <text class="pl-node-label" x="80" y="82" text-anchor="middle">microphone</text>
-          <text class="pl-node-sub" x="80" y="97" text-anchor="middle">PortAudio capture</text>
-
-          <rect class="pl-node n-daemon" x="175" y="62" width="110" height="46" rx="8"/>
-          <text class="pl-node-label" x="230" y="82" text-anchor="middle">daemon</text>
-          <text class="pl-node-sub" x="230" y="97" text-anchor="middle">flow engine inside</text>
-
-          <rect class="pl-node n-provider" x="325" y="62" width="110" height="46" rx="8"/>
-          <text class="pl-node-label" x="380" y="82" text-anchor="middle">STT provider</text>
-          <text class="pl-node-sub" id="pl-engine" x="380" y="97" text-anchor="middle">xAI · OpenAI · …</text>
-
-          <rect class="pl-node n-uinput" x="475" y="62" width="110" height="46" rx="8"/>
-          <text class="pl-node-label" x="530" y="82" text-anchor="middle">uinput</text>
-          <text class="pl-node-sub" x="530" y="97" text-anchor="middle">virtual keyboard</text>
-
-          <rect class="pl-node n-app" x="625" y="62" width="110" height="46" rx="8"/>
-          <text class="pl-node-label" x="680" y="82" text-anchor="middle">focused app</text>
-          <text class="pl-node-sub" x="680" y="97" text-anchor="middle">molten → frozen</text>
-        </g>
-
-        <!-- STT lane edges -->
-        <path id="pl-e1" class="pl-edge sttlane e-mic"  d="M135 85 H173" marker-end="url(#arr)"/>
-        <path id="pl-e2" class="pl-edge sttlane e-prov" d="M285 85 H323" marker-end="url(#arr)"/>
-        <path id="pl-e3" class="pl-edge sttlane e-ret"  d="M435 85 H473" marker-end="url(#arr)"/>
-        <path id="pl-e4" class="pl-edge sttlane e-type" d="M585 85 H623" marker-end="url(#arr)"/>
-        <text class="pl-note" x="530" y="127" text-anchor="middle">grammar · register · repair —</text>
-        <text class="pl-note" x="530" y="139" text-anchor="middle">interim tokens type while you speak</text>
-
-        <text x="25" y="164" class="pl-lane">tts — selected text in, speech out</text>
-
-        <!-- TTS lane nodes: 3 columns aligned under 5/3/1, y 176, 110×42 -->
-        <g>
-          <rect class="pl-node" x="625" y="176" width="110" height="42" rx="8"/>
-          <text class="pl-node-label" x="680" y="195" text-anchor="middle">selected text</text>
-          <text class="pl-node-sub" x="680" y="209" text-anchor="middle">primary selection</text>
-
-          <rect class="pl-node" x="325" y="176" width="110" height="42" rx="8"/>
-          <text class="pl-node-label" x="380" y="195" text-anchor="middle">TTS provider</text>
-          <text class="pl-node-sub" x="380" y="209" text-anchor="middle">xAI · OpenAI · ElevenLabs</text>
-
-          <rect class="pl-node" x="25" y="176" width="110" height="42" rx="8"/>
-          <text class="pl-node-label" x="80" y="195" text-anchor="middle">speaker</text>
-          <text class="pl-node-sub" x="80" y="209" text-anchor="middle">local playback</text>
-        </g>
-
-        <!-- TTS lane edges (right to left), with a stub up to the daemon -->
-        <path class="pl-edge ttslane t-sel" d="M623 197 H437" marker-end="url(#arr)"/>
-        <path class="pl-edge ttslane t-out" d="M323 197 H137" marker-end="url(#arr)"/>
-        <path class="pl-edge ttslane" d="M230 110 V197" />
-        <text class="pl-node-sub" x="238" y="150">via daemon</text>
-
-        <!-- live overlays (packets, keystroke rain) are added here by JS -->
-        <g id="pl-live-layer"></g>
-      </svg>
-      <figcaption class="sigcap pl-cap" id="pl-cap">on this page, the provider node is your browser&rsquo;s speech engine — on the desktop, the provider you configured</figcaption>
-      <span class="sigcap" id="pl-status" aria-live="polite" style="position:absolute;left:-9999px"></span>
-    </figure>
-
-    <div class="prose" style="padding:0">
-    <p class="muted">With a streaming provider the transcript types while you
-    speak; a REST provider lands it on stop. ASCII goes through the fast
-    uinput key path; everything else — accents, CJK, emoji — pastes through
-    the clipboard and your clipboard is restored after. The daemon is one
-    process; the CLI is deliberately small — it reads config, sends one IPC
-    command over a Unix socket, and exits.</p>
-    </div>
-  </section>
-
-  <!-- ═══ 07 / PROVIDERS ════════════════════════════════════════════════ -->
-  <section class="prose" id="providers">
-    <h2><span class="num" aria-hidden="true">07</span>Providers</h2>
-    <p><b>xAI is the default</b>, for speech-to-text and text-to-speech both —
-    it&rsquo;s what this project is built and daily-driven on, and its streaming
-    protocol is what molten dictation rides. Every provider below is one line
-    of config; model IDs are plain config values. How you pay for one — or
-    don&rsquo;t — is <a href="#pricing">the next section</a>.</p>
-
-    <h3>Speech-to-text</h3>
-    <div class="tblwrap">
-    <table>
-      <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th><th scope="col">Live typing</th></tr></thead>
-      <tbody>
-        <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td><td><span class="molten-word">streaming — molten</span></td></tr>
-        <tr><td>hyperfurion <span class="default-badge">subscription</span></td><td>provider default (xAI)</td><td><span class="molten-word">streaming — molten</span></td></tr>
-        <tr><td>openai</td><td><code>gpt-4o-transcribe</code></td><td>on stop · molten via local <code>live_rest</code></td></tr>
-        <tr><td>groq</td><td><code>whisper-large-v3-turbo</code></td><td>on stop — grammar still applies</td></tr>
-        <tr><td>deepgram</td><td><code>nova-3</code></td><td>on stop — grammar still applies</td></tr>
-        <tr><td>assemblyai</td><td>provider default</td><td>on stop — grammar still applies</td></tr>
-      </tbody>
-    </table>
-    </div>
-
-    <h3>Text-to-speech</h3>
-    <div class="tblwrap">
-    <table>
-      <thead><tr><th scope="col">Provider</th><th scope="col">Default model</th><th scope="col">Default voice</th></tr></thead>
-      <tbody>
-        <tr><td>xai <span class="default-badge">default</span></td><td>provider default</td><td><code>eve</code></td></tr>
-        <tr><td>hyperfurion <span class="default-badge">subscription</span></td><td>provider default (xAI)</td><td><code>eve</code></td></tr>
-        <tr><td>openai</td><td><code>gpt-4o-mini-tts</code></td><td><code>coral</code></td></tr>
-        <tr><td>elevenlabs</td><td><code>eleven_multilingual_v2</code></td><td><code>JBFqnCBsd6RMkjVDRZzb</code></td></tr>
-      </tbody>
-    </table>
-    </div>
-
-    <p class="muted">For AssemblyAI, <code>language = "en"</code> is sent as
-    <code>en_us</code>. <code>live_rest = "auto"</code> pseudo-streams only
-    against a <i>local</i> OpenAI-compatible server, where re-transcribing is
-    free; <code>"always"</code> opts in cloud REST providers too — each interim
-    probe re-bills, which is why it isn&rsquo;t the default.</p>
-  </section>
-
-  <!-- ═══ 08 / THREE WAYS TO RUN IT ════════════════════════════════════ -->
-  <section class="wide" id="pricing">
-    <div class="prose" style="padding:0">
-    <h2><span class="num" aria-hidden="true">08</span>Three ways to run it</h2>
-    <p>All three run the same product — molten dictation, the grammar, the
-    registers, the rewrite lane, all of it. Nothing on this page is
-    feature-gated, and nothing below changes that.</p>
-    </div>
-
-    <div class="plans">
-      <div class="plan">
-        <h3>Your own key</h3>
-        <p class="plan-price">$0 <span>forever</span></p>
-        <ul>
-          <li>every feature, every provider above</li>
-          <li>one line in the config</li>
-          <li>your key, your bill, your business</li>
-        </ul>
-        <p class="sigcap plan-cap">paying unlocks nothing — that is the point</p>
+    <!-- ============ compare ============ -->
+    <section aria-labelledby="compare-title">
+      <div class="wrap">
+        <span class="eyebrow">the category line</span>
+        <h2 id="compare-title">Speech-to-text gives you words. This gives you keys.</h2>
+        <div class="compare">
+          <div class="compare-col">
+            <h3><span>Ordinary</span> dictation</h3>
+            <div class="compare-list">
+              <div class="compare-row"><span class="ico">–</span><span>Converts speech into text, then stops.</span></div>
+              <div class="compare-row"><span class="ico">–</span><span>Works best inside its own dedicated text box.</span></div>
+              <div class="compare-row"><span class="ico">–</span><span>Leaves every mistake for your hands to repair.</span></div>
+              <div class="compare-row"><span class="ico">–</span><span>Treats corrections, commands, and rewrites as edge cases.</span></div>
+              <div class="compare-row"><span class="ico">–</span><span>Feels like a microphone feature.</span></div>
+            </div>
+          </div>
+          <div class="compare-col vk">
+            <h3>HyperFurion <span>VK</span></h3>
+            <div class="compare-list">
+              <div class="compare-row"><span class="ico y">✓</span><span>Turns speech into text, edits, rewrites, drafts, and readback.</span></div>
+              <div class="compare-row"><span class="ico y">✓</span><span>Acts system-wide, through the app you already focused.</span></div>
+              <div class="compare-row"><span class="ico y">✓</span><span>Repairs itself: “scratch that” works on text it already typed.</span></div>
+              <div class="compare-row"><span class="ico y">✓</span><span>Treats command drafting, recall, and the assistant as native keys.</span></div>
+              <div class="compare-row"><span class="ico y">✓</span><span>Feels like a new input device.</span></div>
+            </div>
+          </div>
+        </div>
       </div>
+    </section>
 
-      <div class="plan hosted">
-        <p class="sigcap plan-badge">hosted · one hfk_ key, no provider accounts</p>
-        <h3>Hosted</h3>
-        <p class="plan-price">$5 <span>or</span> $10 <span>/ month</span></p>
-        <ul>
-          <li><b>$5</b> — 20 hours of dictation + 10k spoken characters</li>
-          <li><b>$10</b> — 40 hours + 50k characters</li>
-          <li>hard-capped, so nobody can run up a bill — yours or ours</li>
-          <li>same path as the default provider: a metered relay to xAI —
-              streaming, so molten dictation works; audio held in memory,
-              never written to disk</li>
-          <li>the relay is <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay">open
-              source and self-hostable</a></li>
-          <li>what&rsquo;s left over funds this project</li>
-        </ul>
-        <div class="buy-row" id="buy-row" hidden></div>
-        <p class="sigcap plan-cap" id="hosted-soon">subscribe —
-        <a href="https://buy.stripe.com/00w4gA89yaVI6Twgfm2oE00" rel="noopener">$5/mo basic</a> ·
-        <a href="https://buy.stripe.com/14A00k4Xm6Fs3Hk7IQ2oE01" rel="noopener">$10/mo pro</a> —
-        secure checkout on stripe; your <code>hfk_</code> key is shown once on the welcome page</p>
+    <!-- ============ keys ============ -->
+    <section id="keys" aria-labelledby="keys-title">
+      <div class="wrap">
+        <span class="eyebrow">the full board</span>
+        <h2 id="keys-title">Every behavior is a key.</h2>
+        <p class="lede">One mental model for the whole product: spoken phrases press different kinds of keys. All of them remappable in config; each one shipped, tested, and documented.</p>
+        <div class="mode-grid">
+          <article class="mode-card"><div><small>Text</small><h3>Type</h3><p>Speak naturally into any focused application. Tap to toggle, hold to talk, silence auto-stops.</p></div><code>ctrl+alt+v</code></article>
+          <article class="mode-card"><div><small>Edit</small><h3>Repair</h3><p>“Scratch that”, punctuation, new lines, spoken numbers as digits, your own vocabulary — a real edit grammar, applied before anything is typed.</p></div><code>[flow.commands]</code></article>
+          <article class="mode-card"><div><small>Rewrite</small><h3>Transform</h3><p>“Furion, make that formal” routes the just-typed text through an LLM and repairs it in place. Optionally held pending until you say “keep it”.</p></div><code>furion, …</code></article>
+          <article class="mode-card"><div><small>Context</small><h3>Register</h3><p>Prose, terminal, verbatim, python, shell — picked by probing the focused app, overridable per app.</p></div><code>[registers.map]</code></article>
+          <article class="mode-card"><div><small>Read</small><h3>Speak back</h3><p>Select text anywhere on the desktop and the keyboard reads it aloud. Bind it to a shortcut if you like.</p></div><code>voice-keyboard tts</code></article>
+          <article class="mode-card"><div><small>Recall</small><h3>Remember</h3><p>An opt-in local ledger of everything you dictated. List it, re-type an entry, or search it — semantically, fully on-box, with a local embeddings endpoint.</p></div><code>voice-keyboard recall 2</code></article>
+          <article class="mode-card"><div><small>Terminal</small><h3>Draft</h3><p>Speak intent at a prompt and one command line is typed for review. It cannot press Enter — the refusal is enforced inside the injector.</p></div><code>[intent]</code></article>
+          <article class="mode-card"><div><small>Assistant</small><h3>Kai</h3><p>Hold Right Ctrl and ask. In a terminal it drafts the command; anywhere else it answers or searches, spoken back. A second tap barges in and cuts it off.</p></div><code>hold rightctrl</code></article>
+        </div>
       </div>
+    </section>
 
-      <div class="plan">
-        <h3>Fully offline</h3>
-        <p class="plan-price">$0 <span>+ your hardware</span></p>
-        <ul>
-          <li>any OpenAI-compatible server counts as a provider — including one
-              on <code>localhost</code></li>
-          <li>no API key, nothing leaves your machine</li>
-          <li>molten included: <code>live_rest</code> pseudo-streams local
-              servers for free</li>
-        </ul>
-<pre data-copy><code>[providers.openai]
+    <!-- ============ consent ============ -->
+    <section id="consent" aria-labelledby="consent-title">
+      <div class="wrap">
+        <span class="eyebrow">the covenant <span class="cfg">— enforced in code, not in copy</span></span>
+        <h2 id="consent-title">A keyboard this powerful has to know its place.</h2>
+        <div class="consent">
+          <div class="consent-lead">
+            <h3 aria-label="You own the Enter key."><span class="cap" aria-hidden="true">Y</span><span aria-hidden="true">ou own the Enter&nbsp;key.</span></h3>
+            <p>An input device that can type anywhere must never act on its own. Every guarantee on the right is enforced mechanically — in the injector, the probe, and the defaults — not promised in marketing copy. Every claim on this page is lifted straight from the README the code ships with.</p>
+            <p class="aphorism">The machine may draft. Only a hand may send.</p>
+            <span class="enter"><span class="held-chip">⏎ held — yours</span><span>voice → drafted keystrokes → you press Enter</span></span>
+          </div>
+          <div class="guarantees">
+            <div class="guarantee"><span class="ico">⏎</span><div><b>It never presses Enter for you</b><span>Command drafting types one line and stops. The refusal is enforced inside the keystroke injector on every path — keycode, newline, clipboard paste. Your keypress is the consent.</span></div></div>
+            <div class="guarantee"><span class="ico">◉</span><div><b>Push-to-talk, by default</b><span>Nothing is captured until you summon it. The wake word is a tiny local detector, opt-in and off by default — and the hotkey remains the hard mute.</span></div></div>
+            <div class="guarantee"><span class="ico">▣</span><div><b>Password fields are sacred</b><span>The focus probe sees the widget: a password field always forces <code>verbatim</code>, is never written to history, and never biases recognition.</span></div></div>
+            <div class="guarantee"><span class="ico">⌖</span><div><b>It never types into the wrong window</b><span>If focus moves mid-dictation, typing freezes instantly and the transcript lands on the clipboard instead.</span></div></div>
+            <div class="guarantee"><span class="ico">◌</span><div><b>Audio lives in memory</b><span>Recorded speech is held in memory while it is transcribed and never written to disk. The optional history ledger is a local file, mode 600, off by default.</span></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ limits ============ -->
+    <section id="limits" aria-labelledby="limits-title">
+      <div class="wrap">
+        <span class="eyebrow">known limits — stated, not hidden</span>
+        <h2 id="limits-title">Honest limitations.</h2>
+        <p class="lede">A keyboard you trust with every window has to be honest about its edges. These are the current ones.</p>
+        <div class="limits">
+          <div class="limit"><b>Linux first.</b> Python 3.11+, systemd user services, uinput access. macOS and Windows are beta — native Quartz / SendInput backends that say so plainly.</div>
+          <div class="limit"><b>Cloud by default.</b> No speech model ships in the box. Fully offline is one config line: point <code>providers.openai.base_url</code> at a local server.</div>
+          <div class="limit"><b>Live typing needs streaming.</b> REST providers land the text on stop — the grammar still applies, the words just arrive together.</div>
+          <div class="limit"><b>Repairs assume a still field.</b> Type or click into the text mid-dictation and a repair can land wrong. The stability window and <code>max_molten_chars</code> bound the damage.</div>
+          <div class="limit"><b>“Scratch that” respects Unicode.</b> It declines to delete across emoji and combining marks, where backspace-per-character isn’t reliable.</div>
+          <div class="limit"><b>Frozen means frozen.</b> A late revision that disagrees with an already-frozen word loses; only the molten tail adopts changes.</div>
+          <div class="limit"><b>Non-ASCII pastes on Linux.</b> Accents, CJK, and emoji go through the clipboard (<code>wl-copy</code> / <code>xclip</code>); clipboard managers may glimpse the transient entry.</div>
+          <div class="limit"><b>The overlay is GNOME’s.</b> The recording pill with live molten captions is GNOME Shell on Wayland; other desktops get ordinary notifications.</div>
+          <div class="limit" id="page-note" hidden><b>This page runs on your browser’s engines.</b> Dictation uses the browser’s speech engine the way the daemon uses its provider; no engine or no mic, and the page says so and improvises — honestly labeled. Type <code>real</code> in the proof terminal to opt into the actual xAI engine, rate-limited and labeled while it runs.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ providers ============ -->
+    <section aria-labelledby="prov-title">
+      <div class="wrap">
+        <span class="eyebrow">the engine room <span class="cfg">— [providers]</span></span>
+        <h2 id="prov-title">Any brain. Local hands.</h2>
+        <p class="lede">A local daemon owns the hotkeys, the microphone, and a virtual keyboard — uinput on Linux, Quartz on macOS, SendInput on Windows. Speech recognition is a config value, not a lock-in.</p>
+
+        <figure class="pipeline" id="pipeline" aria-label="Signal path: microphone to daemon to provider, back through the flow engine and virtual keyboard into the focused app; and selected text out to speech">
+          <svg viewBox="0 0 760 240" role="img" aria-labelledby="pl-title">
+            <title id="pl-title">HyperFurion VK signal path</title>
+            <defs>
+              <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L8 4 L0 8 z" class="pl-arrow"/>
+              </marker>
+            </defs>
+
+            <text x="25" y="48" class="pl-lane">dictation — speech in, molten keystrokes out, live</text>
+            <g>
+              <rect class="pl-node n-mic" x="25" y="62" width="110" height="46" rx="8"/>
+              <text class="pl-node-label" x="80" y="82" text-anchor="middle">microphone</text>
+              <text class="pl-node-sub" x="80" y="97" text-anchor="middle">local capture</text>
+
+              <rect class="pl-node n-daemon" x="175" y="62" width="110" height="46" rx="8"/>
+              <text class="pl-node-label" x="230" y="82" text-anchor="middle">daemon</text>
+              <text class="pl-node-sub" x="230" y="97" text-anchor="middle">flow engine inside</text>
+
+              <rect class="pl-node n-provider" x="325" y="62" width="110" height="46" rx="8"/>
+              <text class="pl-node-label" x="380" y="82" text-anchor="middle">STT provider</text>
+              <text class="pl-node-sub" id="pl-engine" x="380" y="97" text-anchor="middle">xAI · local · …</text>
+
+              <rect class="pl-node n-uinput" x="475" y="62" width="110" height="46" rx="8"/>
+              <text class="pl-node-label" x="530" y="82" text-anchor="middle">virtual keyboard</text>
+              <text class="pl-node-sub" x="530" y="97" text-anchor="middle">uinput · Quartz · SendInput</text>
+
+              <rect class="pl-node n-app" x="625" y="62" width="110" height="46" rx="8"/>
+              <text class="pl-node-label" x="680" y="82" text-anchor="middle">focused app</text>
+              <text class="pl-node-sub" x="680" y="97" text-anchor="middle">molten → frozen</text>
+            </g>
+            <path id="pl-e1" class="pl-edge sttlane e-mic" d="M135 85 H173" marker-end="url(#arr)"/>
+            <path id="pl-e2" class="pl-edge sttlane e-prov" d="M285 85 H323" marker-end="url(#arr)"/>
+            <path id="pl-e3" class="pl-edge sttlane e-ret" d="M435 85 H473" marker-end="url(#arr)"/>
+            <path id="pl-e4" class="pl-edge sttlane e-type" d="M585 85 H623" marker-end="url(#arr)"/>
+            <text class="pl-note" x="530" y="127" text-anchor="middle">grammar · register · repair —</text>
+            <text class="pl-note" x="530" y="139" text-anchor="middle">interim tokens type while you speak</text>
+
+            <text x="25" y="164" class="pl-lane">readback — selected text in, speech out</text>
+            <g>
+              <rect class="pl-node" x="625" y="176" width="110" height="42" rx="8"/>
+              <text class="pl-node-label" x="680" y="195" text-anchor="middle">selected text</text>
+              <text class="pl-node-sub" x="680" y="209" text-anchor="middle">primary selection</text>
+
+              <rect class="pl-node" x="325" y="176" width="110" height="42" rx="8"/>
+              <text class="pl-node-label" x="380" y="195" text-anchor="middle">TTS provider</text>
+              <text class="pl-node-sub" x="380" y="209" text-anchor="middle">xAI · OpenAI · ElevenLabs</text>
+
+              <rect class="pl-node" x="25" y="176" width="110" height="42" rx="8"/>
+              <text class="pl-node-label" x="80" y="195" text-anchor="middle">speaker</text>
+              <text class="pl-node-sub" x="80" y="209" text-anchor="middle">local playback</text>
+            </g>
+            <path class="pl-edge ttslane t-sel" d="M623 197 H437" marker-end="url(#arr)"/>
+            <path class="pl-edge ttslane t-out" d="M323 197 H137" marker-end="url(#arr)"/>
+            <path class="pl-edge ttslane" d="M230 110 V197"/>
+            <text class="pl-node-sub" x="240" y="130">via daemon</text>
+            <g id="pl-live-layer"></g>
+          </svg>
+          <figcaption class="sigcap">one daemon owns the long-lived resources — the cli just sends one ipc command over a unix socket and exits</figcaption>
+          <span class="sigcap" id="pl-status" aria-live="polite" style="position:absolute;left:-9999px;"></span>
+        </figure>
+
+        <div class="prov-grid">
+          <article class="prov-card">
+            <h3>Pick a provider</h3>
+            <p>xAI is the default and what VK is daily-driven on. Swap providers or models in config — no code changes.</p>
+            <div class="chips">
+              <span class="chip hot">xai — default</span>
+              <span class="chip">openai</span>
+              <span class="chip">groq</span>
+              <span class="chip">deepgram</span>
+              <span class="chip">assemblyai</span>
+              <span class="chip">elevenlabs (tts)</span>
+              <span class="chip">hyperfurion (subscription)</span>
+            </div>
+            <p>The <b>hyperfurion</b> provider is one <span class="mono">hfk_</span> key instead of provider accounts — same streaming protocol, relay fully self-hostable.</p>
+          </article>
+          <article class="prov-card">
+            <h3>Or go fully offline</h3>
+            <p>Point the OpenAI-compatible provider at any local server — Whisper, Parakeet, Voxtral, Kokoro. No key, no network, nothing leaves the machine.</p>
+            <pre data-copy><span class="c"># ~/.config/voice-keyboard/config.toml</span>
+[providers.openai]
 base_url = "http://localhost:8000/v1"
 
 [stt]
-provider = "openai"</code></pre>
+provider = "openai"   <span class="c"># local Whisper</span>
+
+[tts]
+provider = "openai"   <span class="c"># local Kokoro</span></pre>
+          </article>
+        </div>
+
+        <div class="sustain">
+          <div>
+            <h3>Free forever is the license, not a promo.</h3>
+            <p>Every feature is MIT and works with your own provider key — paying unlocks nothing. The subscription buys convenience: one key, no provider accounts, and what's left after upstream costs funds development.</p>
+            <span class="sigcap">paying unlocks nothing — that is the point</span>
+          </div>
+          <div class="tiers">
+            <a class="tier" href="https://buy.stripe.com/00w4gA89yaVI6Twgfm2oE00" rel="noopener">
+              <div><b>Basic</b><span>20 h dictation + 10k spoken characters / month</span></div>
+              <span class="price">$5/mo</span>
+            </a>
+            <a class="tier" href="https://buy.stripe.com/14A00k4Xm6Fs3Hk7IQ2oE01" rel="noopener">
+              <div><b>Pro</b><span>40 h dictation + 50k spoken characters / month</span></div>
+              <span class="price">$10/mo</span>
+            </a>
+            <span class="tier-note">secure checkout on Stripe · your hfk_ key is shown once on the welcome page</span>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <div class="prose" style="padding:0">
-    <p class="muted">It buys convenience, not capability: every feature is open
-    source and free forever with your own key. The hosted tier exists for
-    people who want one key instead of provider accounts — and to keep this
-    project maintained.</p>
-    <p>The strongest open models to serve locally right now:
-    <a href="https://github.com/speaches-ai/speaches">Speaches</a> is the
-    easiest single server — OpenAI-compatible STT <i>and</i> TTS, running
-    <a href="https://huggingface.co/openai/whisper-large-v3-turbo">Whisper
-    large-v3-turbo</a> for dictation and
-    <a href="https://huggingface.co/hexgrad/Kokoro-82M">Kokoro-82M</a> for
-    speech. <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">NVIDIA
-    Parakeet&nbsp;TDT</a> tops the
-    <a href="https://huggingface.co/spaces/hf-audio/open_asr_leaderboard">Open
-    ASR leaderboard</a> and is absurdly fast on a GPU;
-    <a href="https://huggingface.co/mistralai/Voxtral-Mini-3B-2507">Voxtral
-    Mini&nbsp;3B</a> (Apache-2.0) serves OpenAI-compatible via vLLM; and
-    <a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a> covers
-    CPU-only and edge boxes. For fully-local <i>rewrites</i>, point
-    <code>[llm] base_url</code> at llama.cpp or vLLM.</p>
-    </div>
-  </section>
-
-  <!-- ═══ 09 / CONFIGURATION ════════════════════════════════════════════ -->
-  <section class="prose" id="config-h">
-    <h2><span class="num" aria-hidden="true">09</span>Configuration</h2>
-    <p>The real config lives at <code>~/.config/voice-keyboard/config.toml</code>
-    (mode 600 — it holds your API keys). On the daemon, <code>[flow]</code>,
-    <code>[registers]</code>, and <code>[llm]</code> hot-reload at the next
-    recording.
-    <span id="cfg-live-note" hidden>The copy below is <b>live</b>: edit it and this
-    page re-binds itself. Slow <code>stability_ms</code>, set
-    <code>auto_stop_ms = 1200</code>, rename the <code>wake_word</code>, switch
-    the default register to <code>verbatim</code> — then dictate again.</span></p>
-    <div class="config-wrap">
+    <!-- ============ live config ============ -->
+    <section id="config-h" aria-labelledby="config-title">
+      <div class="wrap">
+        <span class="eyebrow">the live config <span class="cfg">— ~/.config/voice-keyboard/config.toml</span></span>
+        <h2 id="config-title">Edit it. The page re-binds.</h2>
+        <p class="lede">On the desktop, <span class="mono">[flow]</span>, <span class="mono">[registers]</span>, and <span class="mono">[llm]</span> hot-reload at the next recording. <span id="cfg-live-note" hidden>This copy is <strong>live</strong>: slow <span class="mono">stability_ms</span> to 4000 and watch words stay molten longer, set <span class="mono">auto_stop_ms = 1200</span> and just stop talking, rename the <span class="mono">wake_word</span> — then dictate again up in the proof.</span></p>
+        <div class="config-wrap">
 <pre class="config" id="config" spellcheck="false">[hotkey]
 key = "control+alt+v"
 # auto = tap to toggle, hold to talk
@@ -580,170 +2396,286 @@ live = true
 stability_ms = 1500
 # 1200 = hands-free: tap, speak, done (0 = off)
 auto_stop_ms = 0
-# spoken cardinals → digits: auto (terminal register),
-# always, or off
+# spoken cardinals → digits: auto | always | off
 numbers = "auto"
 # "&lt;wake_word&gt;, &lt;instruction&gt;" rewrites via [llm]
 wake_word = "furion"
 
 [registers]
-# the editor window's register: prose | terminal | verbatim
-# (the daemon probes the focused app; its terminal list is
-# built in — the demo's terminal is always "terminal")
+# prose | terminal | verbatim — the daemon probes the
+# focused app; the proof's terminal is always "terminal"
 default = "prose"
 
 [stt]
-# the daemon also takes provider = "xai" (default)
-#   | "hyperfurion" | "openai" | "groq" | "deepgram"
-#   | "assemblyai" — this page's provider is your
-#   browser's speech engine, so only these two apply:
 language = "en"
 interim_results = true
 
 [tts]
-# daemon keys: provider, model, voice_id, language;
-# here voice_id matches your browser's installed voices
 voice_id = "eve"
 rate = 1.0
 pitch = 1.0</pre>
-      <p class="cfgstatus" id="cfgstatus" hidden></p>
-    </div>
-    <p class="muted">On the desktop, provider/key/audio/hotkey changes still
-    want a restart: <code>systemctl --user restart voice-keyboard-daemon</code>.</p>
-  </section>
+          <p class="cfgstatus" id="cfgstatus" hidden></p>
+        </div>
+      </div>
+    </section>
 
-  <!-- ═══ 10 / SHORTCUTS & COMMANDS ═════════════════════════════════════ -->
-  <section class="prose" id="keys">
-    <h2><span class="num" aria-hidden="true">10</span>Shortcuts &amp; commands</h2>
-    <div class="tblwrap">
-    <table>
-      <thead><tr><th scope="col">Input</th><th scope="col">What happens</th><th scope="col">CLI equivalent</th></tr></thead>
-      <tbody>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> tap</td><td>toggle dictation</td><td><code>voice-keyboard toggle</code></td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> hold</td><td>talk until release (after <code>hold_threshold_ms</code>)</td><td><code>voice-keyboard start</code> / <code>stop</code></td></tr>
-        <tr><td>~1.2 s of silence</td><td>stops by itself, when <code>auto_stop_ms = 1200</code></td><td>—</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td><td>read the selection aloud — built into this page; on the desktop it&rsquo;s a shortcut you bind yourself</td><td><code>voice-keyboard tts</code></td></tr>
-        <tr><td>&ldquo;furion, &lt;instruction&gt;&rdquo;</td><td>rewrite the last dictation in place</td><td><code>voice-keyboard transform "…"</code></td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>stop recording or speech (page)</td><td><code>voice-keyboard stop</code></td></tr>
-      </tbody>
-    </table>
-    </div>
-    <p class="muted"><code>voice-keyboard status</code> reports provider,
-    register, flow state, focused app, and the last error.
-    <code>history</code> and <code>recall</code> work once you opt into the
-    ledger — try all three in the demo terminal above.</p>
-    <h3>Hotkey modes</h3>
-    <div class="tblwrap">
-    <table>
-      <thead><tr><th scope="col">Mode</th><th scope="col">Behavior</th></tr></thead>
-      <tbody>
-        <tr><td>auto</td><td>Tap toggles. Hold records until release.</td></tr>
-        <tr><td>toggle</td><td>Every press toggles start/stop.</td></tr>
-        <tr><td>hold</td><td>Press starts, release stops.</td></tr>
-        <tr><td>disabled</td><td>No hotkey listener; manual CLI still works.</td></tr>
-      </tbody>
-    </table>
-    </div>
-    <p class="muted">The desktop hotkey listener reads Linux input events
-    directly — that is why your user needs <code>input</code>-group access, and why
-    you log out and back in once after install. On macOS it&rsquo;s an event tap;
-    on Windows, a low-level keyboard hook — which is also why the daemon&rsquo;s own
-    typing can never re-trigger the hotkey there.</p>
-  </section>
+    <!-- ============ install ============ -->
+    <section id="install" aria-labelledby="install-title" style="padding-bottom: 110px;">
+      <div class="wrap">
+        <div class="install-card">
+          <div class="install-copy">
+            <span class="eyebrow">two minutes to first words</span>
+            <h3 id="install-title">Install the input device you already have.</h3>
+            <p>One installer sets up the daemon, the hotkey, and the GNOME overlay. Then tap the hotkey and speak — VK decides whether your phrase is text, a correction, a rewrite, a readback, a recall, a terminal draft, or a question for Kai.</p>
+            <div class="hero-actions">
+              <a class="btn primary" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest" rel="noopener">Get the latest release</a>
+              <a class="btn" href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">Read the source</a>
+            </div>
+          </div>
+          <div class="terminal">
+            <div class="terminal-bar"><span>install-hyperfurion-vk.sh</span><button class="copy" id="copyInstall" type="button">copy</button></div>
+            <pre id="install-cmd"><code><span class="c"># download the release installer</span>
+curl -L https://github.com/liamghennigan/HyperFurion-VK\
+/releases/latest/download/install-hyperfurion-vk.sh \
+  -o install-hyperfurion-vk.sh
 
-  <!-- ═══ 11 / HONEST LIMITATIONS ═══════════════════════════════════════ -->
-  <section class="prose" id="limits">
-    <h2><span class="num" aria-hidden="true">11</span>Honest limitations</h2>
-    <p class="sigcap limits-cap">known limits — stated, not hidden</p>
-    <ul>
-      <li>Linux first — Python 3.11+, systemd user services, uinput access.
-      macOS and Windows are <b>beta</b> (native Quartz/SendInput backends; see the
-      <a href="https://github.com/liamghennigan/HyperFurion-VK#macos-beta">README</a>).
-      iOS can&rsquo;t host a system-wide keyboard, and this page won&rsquo;t pretend
-      otherwise.</li>
-      <li>Cloud by default; no speech model ships in the box. Fully offline is
-      one config line — point <code>providers.openai.base_url</code> at a local
-      OpenAI-compatible server (see Providers above).</li>
-      <li>Live typing needs a streaming provider; REST providers land the text
-      on stop. <code>live_rest = "always"</code> re-bills a cloud REST provider
-      on every interim probe — that is why only local servers get it by
-      default.</li>
-      <li>Live repairs assume nothing else edits the field mid-dictation: type
-      or click into the text while speaking and a repair can land in the wrong
-      place. The stability window and <code>max_molten_chars</code> bound the
-      damage.</li>
-      <li>&ldquo;scratch that&rdquo; declines to delete across complex Unicode —
-      emoji, combining marks — where backspace-per-character isn&rsquo;t reliable.</li>
-      <li>A finalize that retro-revises an already-frozen word keeps the frozen
-      form; only the still-molten tail adopts late revisions.</li>
-      <li>Non-ASCII on Linux types through a clipboard paste (needs
-      <code>wl-copy</code> or <code>xclip</code>); clipboard managers may
-      glimpse the transient entry before the old contents are restored.</li>
-      <li>The near-field recording overlay — and its live molten caption — is
-      GNOME Shell 50 on Wayland; other desktops get ordinary notifications.</li>
-      <li>Stop-to-text latency depends on your provider; with a streaming
-      provider the wait mostly disappears, because the text is already there.</li>
-      <li>IPC commands are handled one at a time; a slow TTS request can delay the next command.</li>
-      <li id="page-note" hidden>This page runs on your browser&rsquo;s speech engines, the same
-      way the daemon runs on its providers. When the browser has no speech engine
-      or you deny the mic, the page says so and improvises — honestly labeled.
-      Type <code>real</code> in the terminal to switch the mic to the actual xAI
-      engine via the hosted demo — opt-in, rate-limited, and labeled while it runs.</li>
-    </ul>
-  </section>
-
-  <!-- ═══ 12 / INSTALL ══════════════════════════════════════════════════ -->
-  <section class="prose" id="install">
-    <h2><span class="num" aria-hidden="true">12</span>Install</h2>
-    <h3>Linux</h3>
-    <pre data-copy><code>curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
-./install-hyperfurion-vk.sh</code></pre>
-    <h3>First run (Linux)</h3>
-    <ol>
-      <li>Make sure <code>~/.local/bin</code> is on your <code>PATH</code>: <code>command -v voice-keyboard</code></li>
-      <li>Log out and back in once, so <code>input</code>-group access takes effect.</li>
-      <li><code>systemctl --user restart voice-keyboard-daemon</code></li>
-      <li><code>voice-keyboard status</code> — it prints <code>idle</code> or <code>recording</code>.</li>
-    </ol>
-    <p class="muted">Upgrading is the same command — the installer restarts the
-    daemon so the version you installed is the version that&rsquo;s running.</p>
-    <h3>macOS — beta</h3>
-    <pre data-copy><code>git clone https://github.com/liamghennigan/HyperFurion-VK
-cd HyperFurion-VK
-./packaging/macos/install-macos.sh</code></pre>
-    <p class="muted">Native Quartz injection (full Unicode) and event-tap hotkeys,
-    running as a launchd agent. macOS will ask for two permissions —
-    <b>Accessibility</b> and <b>Microphone</b> — the installer walks you through
-    both. Status arrives as notification-center toasts.</p>
-    <h3>Windows — beta</h3>
-    <pre data-copy><code>git clone https://github.com/liamghennigan/HyperFurion-VK
-cd HyperFurion-VK
-powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1</code></pre>
-    <p class="muted">Native <code>SendInput</code> injection (full Unicode) and a
-    low-level keyboard hook, started at login from your Startup folder — no
-    admin required. IPC runs on loopback TCP guarded by a per-session token
-    file, so other local processes can&rsquo;t drive your keyboard. Beta on both
-    platforms means exactly that: unit-tested, honest about being young.</p>
-    <p class="muted">Linux needs the <code>uinput</code> module, Python 3.11+, and
-    systemd user services; the installer supports <code>apt-get</code>,
-    <code>dnf</code>, and <code>pacman</code>. Full walkthroughs, non-interactive
-    install, and troubleshooting live in the
-    <a href="https://github.com/liamghennigan/HyperFurion-VK#quick-install">README</a>.</p>
-    <p>Free and MIT-licensed. If it earns a place in your keymap,
-    <a href="https://github.com/sponsors/liamghennigan">sponsoring</a> keeps it maintained.</p>
-  </section>
+./install-hyperfurion-vk.sh
 
-</main>
+<span class="c"># then tap</span> <span class="a">Ctrl + Alt + V</span>
+<span class="c"># and speak into the app already focused.</span></code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 
-<footer id="foot">
-  <span class="sigcap"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · works offline once loaded · the hosted demo speaks only when spoken to</span>
-  MIT License · <a href="https://github.com/liamghennigan/HyperFurion-VK">liamghennigan/HyperFurion-VK</a> ·
-  <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/docs">view source — it&rsquo;s all readable</a> ·
-  <a href="https://github.com/sponsors/liamghennigan">sponsor</a>
-</footer>
+  <footer>
+    <div class="wrap">
+      <span class="sigcap" style="display:block;margin-bottom:14px;"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · works offline once loaded · the hosted demo speaks only when spoken to</span>
+    </div>
+    <div class="wrap footer-grid">
+      <div>HyperFurion VK · MIT · a voice keyboard, not a dictation app</div>
+      <div class="footer-links">
+        <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">github</a>
+        <a href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest" rel="noopener">releases</a>
+        <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay" rel="noopener">relay</a>
+        <a href="#top">back to top</a>
+      </div>
+    </div>
+  </footer>
 
-<script type="module" src="./main.js"></script>
+  <script type="module" src="./main.js"></script>
+  <script>
+    /* ---------- hero: live molten dictation ---------- */
+    (function () {
+      const scriptEl = document.getElementById('script');
+      const caret = document.getElementById('caret');
+      const gMolten = document.getElementById('gMolten');
+      const gFrozen = document.getElementById('gFrozen');
+      const WINDOW_MS = 1500;
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+      // token stream: strings type as words; {bs:n} backspaces n chars; {pause:ms} waits
+      const UTTERANCE = [
+        'The ', 'keyboard ', 'was ', 'nevr ', { bs: 5 }, 'never ', 'the ', 'limit ', '— ',
+        { pause: 500 },
+        'speak, ', 'and ', 'the ', 'words ', 'land ', 'where ', 'your ',
+        'curser ', { bs: 7 }, 'cursor ', 'already ', 'is.',
+        { pause: 2600 }, { clear: true }, { pause: 700 },
+        'Molten ', 'while ', 'you ', 'speak. ', { pause: 400 },
+        'Frozen ', 'when ', 'it ', 'sets. ', { pause: 400 },
+        'Yours ', 'the ', 'whole ', 'time.',
+        { pause: 3200 }, { clear: true }, { pause: 700 }
+      ];
+
+      if (reduced) {
+        scriptEl.innerHTML = '<span class="w frozen">The keyboard was never the limit — speak, and the words land where your cursor already is.</span>';
+        gFrozen.textContent = '18';
+        return;
+      }
+
+      let idx = 0;
+      let current = null; // span being typed
+      const molten = []; // {el, born}
+
+      function freezeTick() {
+        const now = performance.now();
+        for (let i = molten.length - 1; i >= 0; i--) {
+          if (now - molten[i].born >= WINDOW_MS) {
+            molten[i].el.classList.remove('molten');
+            molten[i].el.classList.add('frozen');
+            molten.splice(i, 1);
+          }
+        }
+        gMolten.textContent = molten.length;
+        gFrozen.textContent = scriptEl.querySelectorAll('.frozen').length;
+      }
+      setInterval(freezeTick, 220);
+
+      function typeChar(ch, done) {
+        current.textContent += ch;
+        setTimeout(done, 34 + Math.random() * 46);
+      }
+
+      function step() {
+        if (document.hidden) { setTimeout(step, 600); return; }
+        const tok = UTTERANCE[idx % UTTERANCE.length];
+        idx++;
+        if (typeof tok === 'string') {
+          current = document.createElement('span');
+          current.className = 'w molten';
+          scriptEl.insertBefore(current, caret);
+          let i = 0;
+          (function next() {
+            if (i < tok.length) { typeChar(tok[i++], next); }
+            else { molten.push({ el: current, born: performance.now() }); setTimeout(step, 60); }
+          })();
+        } else if (tok.bs) {
+          // backspace-repair: remove n chars from the tail (may consume spans)
+          let n = tok.bs;
+          (function back() {
+            if (n <= 0) { setTimeout(step, 160); return; }
+            const spans = scriptEl.querySelectorAll('.w');
+            const last = spans[spans.length - 1];
+            if (!last) { setTimeout(step, 160); return; }
+            last.textContent = last.textContent.slice(0, -1);
+            if (!last.textContent) {
+              const mi = molten.findIndex(m => m.el === last);
+              if (mi >= 0) molten.splice(mi, 1);
+              last.remove();
+            }
+            n--;
+            setTimeout(back, 42);
+          })();
+        } else if (tok.pause) {
+          setTimeout(step, tok.pause);
+        } else if (tok.clear) {
+          scriptEl.querySelectorAll('.w').forEach(el => el.remove());
+          molten.length = 0;
+          setTimeout(step, 60);
+        }
+      }
+      setTimeout(step, 900);
+    })();
+
+    /* ---------- demo switcher ---------- */
+    const demos = {
+      type: {
+        say: '“draft a reply saying I’ll send it today”',
+        hear: 'intent: compose text',
+        press: 'literal text at your cursor',
+        app: 'mail — reply', title: 'reply.eml',
+        body: '<h4>Reply</h4><p>I’ll send it today and follow up with the notes once I’ve reviewed the final pass.<span class="cursor-line"></span></p>',
+        actions: [
+          ['Target', '<strong>Your cursor</strong>, in the reply you already had focused.'],
+          ['Action', 'Types the phrase as text — no separate dictation window, no paste step.'],
+          ['Result', 'The app receives input exactly as if it came from a keyboard. It did.']
+        ]
+      },
+      edit: {
+        say: '“scratch that”',
+        hear: 'intent: delete last utterance',
+        press: 'backspace over the last segment',
+        app: 'notes.md', title: 'release-notes.md',
+        body: '<h4>Release notes</h4><p>The streaming provider lands words while you speak.</p><p><span class="hl-hot">Last dictated segment removed.</span><span class="cursor-line"></span></p>',
+        actions: [
+          ['Target', '<strong>The last utterance segment</strong> — even text it already typed.'],
+          ['Action', 'Runs the spoken edit grammar: scratch, delete, punctuate, new line.'],
+          ['Result', 'Correction is part of dictating, not a manual cleanup step afterwards.']
+        ]
+      },
+      rewrite: {
+        say: '“furion, make that direct and confident”',
+        hear: 'intent: transform previous text',
+        press: 'rewrite and repair in place',
+        app: 'proposal.txt', title: 'proposal.txt',
+        body: '<h4>Proposal</h4><p><span class="hl-hot">Ship the Linux build first. Expand the native keyboard layer to macOS and Windows once it has earned it.</span><span class="cursor-line"></span></p><p class="dim">optionally held pending — say “keep it” or “scratch that”</p>',
+        actions: [
+          ['Target', '<strong>The just-typed text</strong> in the focused application.'],
+          ['Action', 'Routes the span through the [llm] rewrite channel and repairs it on screen.'],
+          ['Result', 'LLM help behaves like a keyboard transformation, not a chatbot detour.']
+        ]
+      },
+      terminal: {
+        say: '“find every TODO in this repo”',
+        hear: 'intent: draft shell command',
+        press: 'one line typed — Enter withheld',
+        app: 'terminal', title: '~/HyperFurion-VK',
+        body: '<h4 class="mono">$</h4><p class="mono">rg -n "TODO|FIXME" .<span class="cursor-line"></span></p><p class="dim">Drafted for review. The injector cannot press Enter — that key is yours.</p>',
+        actions: [
+          ['Target', '<strong>The focused terminal</strong>, detected as a command context.'],
+          ['Action', 'Turns spoken intent into one command line at the prompt.'],
+          ['Result', 'The refusal to press Enter is enforced in the injector, on every path.']
+        ]
+      },
+      tts: {
+        say: 'select text → voice-keyboard tts',
+        hear: 'intent: read selection aloud',
+        press: 'primary selection → speech',
+        app: 'any app', title: 'selection',
+        body: '<h4>Article</h4><p><span class="hl-cool">HyperFurion VK is a voice keyboard: an input device, not a dictation box.</span></p><p class="dim">The primary selection is synthesized and played locally — no copy step needed.</p>',
+        actions: [
+          ['Target', '<strong>The primary selection</strong>, anywhere on the desktop.'],
+          ['Action', 'Sends the selected text to the configured TTS voice and plays it.'],
+          ['Result', 'Readback is just another key — bindable to Ctrl+Alt+T if you want it.']
+        ]
+      },
+      kai: {
+        say: 'hold Right Ctrl — “what broke in this stack trace?”',
+        hear: 'intent: assistant turn',
+        press: 'answer aloud, or draft the fix',
+        app: 'developer terminal', title: 'kai — push-to-talk',
+        body: '<h4>Kai</h4><p>Names the failing module, explains the error path aloud, and offers the next debugging command as editable text at your prompt.<span class="cursor-line"></span></p><p class="dim">a bare modifier — nothing leaks into the focused app; a second tap barges in</p>',
+        actions: [
+          ['Target', '<strong>A reasoning task</strong>, routed by where you are.'],
+          ['Action', 'In a terminal Kai drafts the command; anywhere else it answers or searches, spoken back.'],
+          ['Result', 'Voice in, voice or a drafted line out — and Enter still belongs to you.']
+        ]
+      }
+    };
+
+    const buttons = Array.from(document.querySelectorAll('.command'));
+    const els = ['sayText','hearText','pressText','appName','windowTitle','editorBody','actionStack']
+      .reduce((acc, id) => (acc[id] = document.getElementById(id), acc), {});
+
+    function setDemo(key) {
+      const d = demos[key];
+      if (!d) return;
+      buttons.forEach(b => b.classList.toggle('active', b.dataset.demo === key));
+      els.sayText.textContent = d.say;
+      els.hearText.textContent = d.hear;
+      els.pressText.textContent = d.press;
+      els.appName.textContent = d.app;
+      els.windowTitle.textContent = d.title;
+      els.editorBody.innerHTML = d.body;
+      els.actionStack.innerHTML = d.actions.map(([l, t]) =>
+        `<div class="action-item"><small>${l}</small><p>${t}</p></div>`).join('');
+    }
+    buttons.forEach(b => b.addEventListener('click', () => setDemo(b.dataset.demo)));
+
+    let autoIdx = 0;
+    const order = buttons.map(b => b.dataset.demo);
+    const cycle = setInterval(() => {
+      if (document.hidden) return;
+      autoIdx = (autoIdx + 1) % order.length;
+      setDemo(order[autoIdx]);
+    }, 5200);
+    buttons.forEach(b => b.addEventListener('pointerdown', () => clearInterval(cycle), { once: true }));
+
+    /* ---------- copy the install command ---------- */
+    const copyBtn = document.getElementById('copyInstall');
+    const INSTALL_CMD = 'curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh\nchmod +x install-hyperfurion-vk.sh\n./install-hyperfurion-vk.sh';
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(INSTALL_CMD);
+        copyBtn.textContent = 'copied';
+        copyBtn.classList.add('ok');
+      } catch {
+        copyBtn.textContent = 'select it';
+      }
+      setTimeout(() => { copyBtn.textContent = 'copy'; copyBtn.classList.remove('ok'); }, 1800);
+    });
+  </script>
 </body>
 </html>

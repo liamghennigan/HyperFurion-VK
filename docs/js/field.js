@@ -194,7 +194,7 @@ export const Field = (() => {
     for (let i = 0; i < 5; i++) spec.set(cssColor("--spec-" + (i + 1)), i * 3);
     gl.uniform3fv(uni.uSpec, spec);
     gl.uniform1f(uni.uAlpha, parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--field-alpha")) || .5);
-    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    const dark = true;  // this page is always the dark instrument
     gl.uniform1f(uni.uInk, dark ? 0 : 1);
     // dark: pure additive phosphor; light: premultiplied ink over paper
     if (dark) gl.blendFunc(gl.ONE, gl.ONE);
