@@ -31,44 +31,60 @@ const SOCKET_PATH = GLib.build_filenamev(
     [GLib.get_user_config_dir(), 'voice-keyboard', 'socket']);
 const ORB_SIZE = 46;
 
+// ── Phosphor & Paper — the landing page's instrument aesthetic ───────────
+// The overlay is a dark oscilloscope panel in every scheme (like the demo
+// windows on the site): near-black glass, a thin accent hairline, a soft
+// phosphor glow in the state's signal colour. Colour lives in the SIGNAL —
+// the engraved label, the equalizer bars, the glow — never in a flooded
+// fill. Amber (molten) only ever means "text still allowed to change".
+const INSTRUMENT_BG = '#0c0c11';
+
 const STATE_STYLES = {
     starting: {
         label: 'STARTING',
         detail: 'Opening microphone',
-        bg: '#164e63',
-        accent: '#22d3ee',
+        accent: '#22d3ee',                  // --wave: the signal, warming up
+        glow: 'rgba(34, 211, 238, 0.30)',
     },
     listening: {
         label: 'LISTENING',
-        detail: 'Press Ctrl+Alt+V again to stop',
-        bg: '#7f1d1d',
-        accent: '#f87171',
+        detail: 'Press again to stop',
+        accent: '#e5484d',                  // --rec: the recording colour
+        glow: 'rgba(229, 72, 77, 0.32)',
     },
     processing: {
-        label: 'PROCESSING SPEECH',
-        detail: 'Transcribing and typing',
-        bg: '#78350f',
-        accent: '#fbbf24',
+        label: 'PROCESSING',
+        detail: 'Transcribing',
+        accent: '#fbbf24',                  // --molten: still allowed to change
+        glow: 'rgba(251, 191, 36, 0.30)',
     },
     inserted: {
-        label: 'TEXT INSERTED',
+        label: 'INSERTED',
         detail: '',
-        bg: '#14532d',
-        accent: '#4ade80',
+        accent: '#51cf66',                  // --ok: cooled to ink
+        glow: 'rgba(81, 207, 102, 0.28)',
     },
     empty: {
-        label: 'NO SPEECH DETECTED',
+        label: 'NO SIGNAL',
         detail: 'Try again',
-        bg: '#334155',
-        accent: '#cbd5e1',
+        accent: '#8a8a95',                  // --muted: a flat line
+        glow: 'rgba(138, 138, 149, 0.18)',
     },
     error: {
         label: 'ERROR',
         detail: '',
-        bg: '#581c87',
-        accent: '#d8b4fe',
+        accent: '#a78bfa',                  // --spec-2: spectral violet
+        glow: 'rgba(124, 58, 237, 0.30)',
     },
 };
+
+const ACTIVE_STATES = ['starting', 'listening', 'processing'];
+
+// the equalizer: the landing page's signature four-bar recording motion.
+const BAR_COUNT = 4;
+const BAR_SLOT = 24;                        // px field the bars are anchored in
+const BAR_WAVE = [6, 10, 16, 22, 16, 10];   // one cycle, staggered across bars
+const BAR_STATIC = [11, 17, 13, 8];         // a frozen little skyline at rest
 
 export default class VoiceKeyboardOverlayExtension extends Extension {
     enable() {
@@ -128,19 +144,11 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             reactive: true,
             can_focus: true,
             track_hover: true,
-            style: [
-                `width: ${ORB_SIZE}px`,
-                `height: ${ORB_SIZE}px`,
-                'border-radius: 999px',
-                'background-color: rgba(14, 116, 144, 0.92)',
-                'border: 2px solid #22d3ee',
-                'box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5)',
-                'color: #e0fbff',
-                'font-size: 20px',
-                'font-weight: bold',
-            ].join('; '),
+            style: this._orbStyle(false),
         });
         orb.connect('clicked', () => this._summon());
+        // phosphor node: brightens its cyan ring + halo under the pointer.
+        orb.connect('notify::hover', () => orb.set_style(this._orbStyle(orb.hover)));
         // Reactive (unlike the click-through pill) so it receives clicks.
         Main.layoutManager.addChrome(orb, {
             affectsStruts: false,
@@ -160,6 +168,20 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             this._button.destroy();
             this._button = null;
         }
+    }
+
+    _orbStyle(hover) {
+        return [
+            `width: ${ORB_SIZE}px`,
+            `height: ${ORB_SIZE}px`,
+            'border-radius: 999px',
+            `background-color: ${INSTRUMENT_BG}`,
+            `border: 2px solid ${hover ? '#7de9f7' : '#22d3ee'}`,
+            `box-shadow: 0 8px 26px rgba(34, 211, 238, ${hover ? '0.42' : '0.26'})`,
+            `color: ${hover ? '#eafcff' : '#22d3ee'}`,
+            'font-size: 22px',
+            'font-weight: bold',
+        ].join('; ');
     }
 
     _summon() {
@@ -264,8 +286,8 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         const [targetX, targetY] = this._constrainPosition(actor, x, y);
         actor.set_position(targetX, targetY);
 
-        if (['starting', 'listening', 'processing'].includes(state))
-            this._startPulse(actor);
+        if (ACTIVE_STATES.includes(state))
+            this._startBars(actor);
 
         if (timeoutMs > 0) {
             this._timeoutId = GLib.timeout_add(
@@ -283,38 +305,57 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         const box = new St.BoxLayout({
             orientation: Clutter.Orientation.HORIZONTAL,
             style: [
-                `background-color: ${style.bg}`,
+                `background-color: ${INSTRUMENT_BG}`,
                 'border-radius: 12px',
-                `border: 2px solid ${style.accent}`,
-                'padding: 12px 16px',
-                'box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45)',
+                `border: 1px solid ${style.accent}`,
+                'padding: 13px 18px',
+                `box-shadow: 0 10px 34px ${style.glow}`,
             ].join('; '),
         });
 
-        this._dotBaseStyle = [
-            `background-color: ${style.accent}`,
-            'border-radius: 999px',
-            'margin-right: 14px',
-        ].join('; ');
-        this._dot = new St.Widget({
-            style: `${this._dotBaseStyle}; width: 18px; height: 18px; margin-top: 9px;`,
+        // four thin phosphor bars, the state's signal colour, bottom-anchored
+        // in a fixed field so they read as a live level meter.
+        this._accent = style.accent;
+        this._bars = new St.BoxLayout({
+            orientation: Clutter.Orientation.HORIZONTAL,
+            style: 'margin-right: 16px;',
         });
-        box.add_child(this._dot);
+        this._barWidgets = [];
+        for (let i = 0; i < BAR_COUNT; i++) {
+            const bar = new St.Widget({style: this._barStyle(BAR_STATIC[i])});
+            this._bars.add_child(bar);
+            this._barWidgets.push(bar);
+        }
+        box.add_child(this._bars);
 
         const textBox = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
         });
         box.add_child(textBox);
 
+        // the engraved-label voice: mono, tracked, uppercase (the .sigcap
+        // voice from the landing page).
         const title = new St.Label({
             text: 'VOICE KEYBOARD',
-            style: 'color: rgba(255,255,255,0.75); font-size: 10pt; font-weight: bold;',
+            style: [
+                'color: #8a8a95',
+                'font-family: monospace',
+                'font-size: 9pt',
+                'font-weight: bold',
+                'letter-spacing: 2px;',
+            ].join('; '),
         });
         textBox.add_child(title);
 
         const label = new St.Label({
             text: style.label,
-            style: 'color: white; font-size: 18pt; font-weight: bold;',
+            style: [
+                `color: ${style.accent}`,
+                'font-family: monospace',
+                'font-size: 16pt',
+                'font-weight: bold',
+                'letter-spacing: 1px;',
+            ].join('; '),
         });
         textBox.add_child(label);
 
@@ -324,6 +365,18 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             this._setDetail(detail);
 
         return box;
+    }
+
+    _barStyle(height) {
+        const h = Math.max(3, Math.round(height));
+        return [
+            'width: 3px',
+            `height: ${h}px`,
+            `margin-top: ${BAR_SLOT - h}px`,
+            'margin-right: 3px',
+            'border-radius: 2px',
+            `background-color: ${this._accent}`,
+        ].join('; ');
     }
 
     _setDetail(detail) {
@@ -342,22 +395,26 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             return;
         this._detailLabel = new St.Label({
             text: detail,
-            style: 'color: rgba(255,255,255,0.9); font-size: 10pt;',
+            style: [
+                'color: rgba(232, 232, 236, 0.72)',
+                'font-family: monospace',
+                'font-size: 9.5pt',
+                'margin-top: 2px;',
+            ].join('; '),
         });
         this._textBox.add_child(this._detailLabel);
     }
 
-    _startPulse(actor) {
-        let large = false;
-        this._pulseId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 420, () => {
-            if (!this._dot || !actor)
+    _startBars(actor) {
+        let phase = 0;
+        this._pulseId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 130, () => {
+            if (!this._barWidgets || !actor)
                 return GLib.SOURCE_REMOVE;
-            large = !large;
-            this._dot.set_style(`${this._dotBaseStyle}; ${
-                large
-                    ? 'width: 26px; height: 26px; margin-top: 5px;'
-                    : 'width: 18px; height: 18px; margin-top: 9px;'
-            }`);
+            phase = (phase + 1) % BAR_WAVE.length;
+            for (let i = 0; i < this._barWidgets.length; i++) {
+                const h = BAR_WAVE[(phase + i * 2) % BAR_WAVE.length];
+                this._barWidgets[i].set_style(this._barStyle(h));
+            }
             return GLib.SOURCE_CONTINUE;
         });
     }
