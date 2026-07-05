@@ -116,16 +116,16 @@ class TestWakeWord:
     def test_instruction_extracted_at_finalize(self) -> None:
         engine = make_engine()
         engine.on_transcript("send the invoice", is_final=True, now=0.0)
-        result = engine.finalize("send the invoice furion make that formal", now=1.0)
+        result = engine.finalize("send the invoice vk make that formal", now=1.0)
         assert result.text == "Send the invoice"
         assert result.instruction == "make that formal"
 
     def test_instruction_words_are_never_typed_live(self) -> None:
         engine = make_engine(stability_ms=50, stability_updates=1, adaptive=False)
-        engine.on_transcript("hello furion delete everything", is_final=False, now=0.0)
+        engine.on_transcript("hello vk delete everything", is_final=False, now=0.0)
         engine.on_tick(now=5.0)  # far past any horizon or holdback expiry
         assert "delete" not in engine.desired_text()
-        assert "furion" not in engine.desired_text()
+        assert "vk" not in engine.desired_text()
         assert "⌁" in engine.caption()
 
 

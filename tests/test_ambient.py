@@ -27,46 +27,46 @@ def no_overlay(monkeypatch: pytest.MonkeyPatch):
 
 class TestAmbientGate:
     def test_unaddressed_partial_shows_nothing(self) -> None:
-        gate = AmbientGate("furion")
+        gate = AmbientGate("vk")
         assert gate.filter("go grab some lunch", is_final=False) == ""
 
     def test_unaddressed_final_is_contained_forever(self) -> None:
-        gate = AmbientGate("furion")
+        gate = AmbientGate("vk")
         assert gate.filter("go grab some lunch", is_final=True) == ""
         assert gate.filter("go grab some lunch more talk", is_final=False) == ""
 
     def test_addressed_partial_streams_molten(self) -> None:
-        gate = AmbientGate("furion")
-        assert gate.filter("furion write hello", is_final=False) == "write hello"
+        gate = AmbientGate("vk")
+        assert gate.filter("vk write hello", is_final=False) == "write hello"
 
     def test_addressed_tail_revises(self) -> None:
-        gate = AmbientGate("furion")
-        assert gate.filter("furion right hello", is_final=False) == "right hello"
-        assert gate.filter("furion write hello", is_final=False) == "write hello"
+        gate = AmbientGate("vk")
+        assert gate.filter("vk right hello", is_final=False) == "right hello"
+        assert gate.filter("vk write hello", is_final=False) == "write hello"
 
     def test_addressed_final_keeps_then_room_speech_contained(self) -> None:
-        gate = AmbientGate("furion")
-        assert gate.filter("furion write hello", is_final=True) == "write hello"
-        merged = "furion write hello someone talking in the room"
+        gate = AmbientGate("vk")
+        assert gate.filter("vk write hello", is_final=True) == "write hello"
+        merged = "vk write hello someone talking in the room"
         assert gate.filter(merged, is_final=False) == "write hello"
         assert gate.filter(merged, is_final=True) == "write hello"
 
     def test_second_addressed_segment_appends(self) -> None:
-        gate = AmbientGate("furion")
-        assert gate.filter("furion write hello", is_final=True) == "write hello"
+        gate = AmbientGate("vk")
+        assert gate.filter("vk write hello", is_final=True) == "write hello"
         assert (
-            gate.filter("furion write hello furion and more", is_final=True)
+            gate.filter("vk write hello vk and more", is_final=True)
             == "write hello and more"
         )
 
     def test_address_matches_with_caps_and_punctuation(self) -> None:
-        gate = AmbientGate("furion")
-        assert gate.filter("Furion, take a note", is_final=False) == "take a note"
+        gate = AmbientGate("vk")
+        assert gate.filter("vk, take a note", is_final=False) == "take a note"
 
     def test_bare_address_word_alone_is_calm(self) -> None:
-        gate = AmbientGate("furion")
-        assert gate.filter("furion", is_final=False) == ""
-        assert gate.filter("furion", is_final=True) == ""
+        gate = AmbientGate("vk")
+        assert gate.filter("vk", is_final=False) == ""
+        assert gate.filter("vk", is_final=True) == ""
 
     def test_empty_address_word_contains_everything(self) -> None:
         gate = AmbientGate("")
@@ -112,12 +112,12 @@ class TestDaemonWiring:
         daemon = self._daemon(cfg)
         self._setup(daemon)
         assert daemon._ambient_gate is not None
-        assert daemon._ambient_gate._address == "furion"
+        assert daemon._ambient_gate._address == "vk"
         assert daemon._status_response()["ambient"] is True
 
     def test_feed_flow_contains_room_speech(self) -> None:
         daemon = self._daemon(_valid_config())
-        daemon._ambient_gate = AmbientGate("furion")
+        daemon._ambient_gate = AmbientGate("vk")
         engine = mock.Mock()
         daemon._flow_engine = engine
         daemon._final_text = ""
@@ -127,11 +127,11 @@ class TestDaemonWiring:
 
     def test_feed_flow_passes_addressed_speech(self) -> None:
         daemon = self._daemon(_valid_config())
-        daemon._ambient_gate = AmbientGate("furion")
+        daemon._ambient_gate = AmbientGate("vk")
         engine = mock.Mock()
         daemon._flow_engine = engine
         daemon._final_text = ""
-        daemon._interim_text = "furion write hello"
+        daemon._interim_text = "vk write hello"
         daemon._feed_flow(is_final=False)
         assert engine.on_transcript.call_args.args[0] == "write hello"
 

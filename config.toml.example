@@ -118,14 +118,14 @@ history = false
 # grammar vocabulary. Dormant until you accept something; your explicit
 # [flow.vocabulary] entries always win.
 personal_dictionary = true
-# Molten diffs: hold a "furion, ..." rewrite as PENDING instead of
+# Molten diffs: hold a "vk, ..." rewrite as PENDING instead of
 # landing it — say "keep it" (or `voice-keyboard keep`) to apply,
 # "scratch that" (or `discard`) to drop; unkept rewrites evaporate
 # after two minutes. false = rewrites land immediately, as before.
 rewrite_pending = false
 # Say "<wake_word>, <instruction>" at the end of an utterance to rewrite
-# it through [llm]: "... furion, make that formal".
-wake_word = "furion"
+# it through [llm]: "... vk, make that formal".
+wake_word = "vk"
 
 [flow.vocabulary]
 # Spoken phrase -> replacement (multi-word keys fine).
@@ -159,7 +159,7 @@ probe = true
 # code = "verbatim"
 
 [llm]
-# The interactive brain: "furion, ..." rewrites, `voice-keyboard
+# The interactive brain: "vk, ..." rewrites, `voice-keyboard
 # transform`, intent command compilation, and Kai's terminal
 # command-vs-question routing. Fully model-agnostic — ANY
 # OpenAI-compatible /chat/completions endpoint works.
@@ -248,7 +248,7 @@ can_act = false
 home_root = ""
 
 [ask]
-# Talk to any app: "furion, ask why does this fail" answers about the
+# Talk to any app: "vk, ask why does this fail" answers about the
 # PRIMARY SELECTION through [llm]. mode "say" speaks the answer via TTS;
 # "type" types it at the caret (newline-suppressed). This gates only the
 # voice trigger; `voice-keyboard ask "…"` is always available.
@@ -283,7 +283,7 @@ token = ""
 
 [ambient]
 # EXPERIMENTAL containment for long-open sessions: when on, only
-# utterances that START with the address word are typed ("furion write
+# utterances that START with the address word are typed ("vk write
 # ..."); room speech never reaches the engine and evaporates. Does NOT
 # start background capture — sessions still begin explicitly, and the
 # hotkey stays the hard mute.
@@ -292,7 +292,7 @@ enabled = false
 address_word = ""
 
 [intent]
-# The voice→command channel: "furion, run …" compiles ONE command line
+# The voice→command channel: "vk, run …" compiles ONE command line
 # through [llm], types it at the caret, and NEVER presses Enter — the
 # refusal is enforced inside the keystroke injector, so nothing the model
 # says can execute anything. You review the line and press Enter yourself.

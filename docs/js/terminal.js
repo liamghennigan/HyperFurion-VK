@@ -87,7 +87,7 @@ export const Terminal = (() => {
     ["  page-only: help · clear · sponsor · subscribe", "dim"],
     ["  hosted demo (real xai): real · ask <q> · say <text> · demo", "dim"],
     ["say, while dictating: \"scratch that\" · \"new line\" · \"period\" ·", "dim"],
-    ["  \"literal <word>\" · \"twenty three\" → 23 · \"furion, make that formal\"", "dim"],
+    ["  \"literal <word>\" · \"twenty three\" → 23 · \"VK, make that formal\"", "dim"],
   ];
   function doAsk(q) {
     if (!q) { print("usage: ask <a question about the product>", "dim"); return; }

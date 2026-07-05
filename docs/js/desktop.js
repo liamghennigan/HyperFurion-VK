@@ -35,8 +35,8 @@ export const Desktop = (() => {
         script: { text: "fixed the race condition in the audio thread period",
                   revise: { at: 3, wrong: "addition" } },
         title: "watch the third word arrive wrong, repair itself, then freeze" },
-      { label: "… it works now furion, make that formal",
-        script: { text: "we fixed a bunch of bugs and it works now furion, make that formal" },
+      { label: "… it works now VK, make that formal",
+        script: { text: "we fixed a bunch of bugs and it works now VK, make that formal" },
         title: "the wake word rewrites what you just dictated, in place" },
     ],
     terminal: [

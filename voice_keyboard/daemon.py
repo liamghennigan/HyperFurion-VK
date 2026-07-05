@@ -721,7 +721,7 @@ class Daemon:
             commands=flow_cfg.get("commands") or {},
             punctuation=flow_cfg.get("punctuation") or {},
             vocabulary=vocabulary,
-            wake_word=str(flow_cfg.get("wake_word", "furion")),
+            wake_word=str(flow_cfg.get("wake_word", "vk")),
             numbers=str(flow_cfg.get("numbers", "auto")).lower(),
             numbers_on=register.numbers_on,
             numbers_min=register.numbers_min,
@@ -825,7 +825,7 @@ class Daemon:
         ambient_cfg = self._config.get("ambient", {})
         if bool(ambient_cfg.get("enabled", False)):
             address = str(ambient_cfg.get("address_word", "")).strip() or str(
-                flow_cfg.get("wake_word", "furion")
+                flow_cfg.get("wake_word", "vk")
             ).strip()
             if address:
                 self._ambient_gate = AmbientGate(address)
@@ -1212,7 +1212,7 @@ class Daemon:
         return final
 
     async def _transform_previous_or_report(self, instruction: str) -> str:
-        """A standalone "furion, ..." utterance, routed by precedence:
+        """A standalone "vk, ..." utterance, routed by precedence:
         an exact macro name types its saved text; an intent verb types a
         command (never Enter); an ask verb answers about the selection; a
         recall verb searches the ledger; anything else rewrites the

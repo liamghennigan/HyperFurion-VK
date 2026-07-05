@@ -34,7 +34,7 @@ themselves in place as the transcript firms up. A spoken edit grammar
 (prose / terminal / verbatim / python / shell, picked by probing the focused
 app), spoken
 numbers as digits, silence auto-stop, full Unicode on Linux via clipboard
-paste, and a wake-word rewrite channel ("… furion, make that formal") that
+paste, and a wake-word rewrite channel ("… VK, make that formal") that
 routes the just-typed text through an LLM and repairs it on screen.
 
 ## Fast Answer
@@ -44,7 +44,7 @@ routes the just-typed text through an LLM and repairs it on screen.
 - **Hold-to-talk:** hold `Ctrl+Alt+V`; release it to stop.
 - **Watch words appear as you speak:** on by default with a streaming
   provider — see [Flow](#flow--molten-dictation). Say "scratch that",
-  "new line", "period"; say "furion, make that formal" to rewrite in place.
+  "new line", "period"; say "VK, make that formal" to rewrite in place.
 - **Read selected text aloud:** select text in any app, then run
   `voice-keyboard tts`. You can bind this to `Ctrl+Alt+T` in your desktop.
 - **Type a command without running it:** `voice-keyboard intent "find every
@@ -366,7 +366,7 @@ meter plus the molten tail of the transcript, updating as you speak.
 | `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
-| `furion, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
+| `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
 
 Every phrase is remappable and removable in config (`[flow.commands]`,
 `[flow.punctuation]`), `[flow.vocabulary]` expands your own phrases
@@ -414,11 +414,11 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
   `~/.local/state/voice-keyboard/dictionary.json`, mode 600.
 - **Semantic registers** (`python`, `shell`) — deterministic spoken-code
   compilation, no model in the loop.
-- **Molten diffs** (`[flow] rewrite_pending`) — a "furion, …" rewrite is
+- **Molten diffs** (`[flow] rewrite_pending`) — a "VK, …" rewrite is
   held pending; say "keep it" or "scratch that" (CLI: `keep` /
   `discard`). No edit is real until it freezes.
 - **Type, never execute** (`[intent]`, `voice-keyboard intent "…"`) —
-  "furion, run …" types ONE command line at your prompt and cannot press
+  "VK, run …" types ONE command line at your prompt and cannot press
   Enter: the refusal is enforced inside the keystroke injector on every
   path (keycode, newline, clipboard paste). Your keypress is the consent.
 - **Ambient containment** (`[ambient]`, experimental) — in a long-open
@@ -449,14 +449,14 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
 - **Total recall** (`[recall]`, `voice-keyboard find "…"`) — search
   everything you ever dictated. Keyword search out of the box; point it
   at a local Ollama `/embeddings` endpoint and it becomes semantic,
-  fully on-box. "furion, recall the relay caps" speaks the best match.
+  fully on-box. "VK, recall the relay caps" speaks the best match.
 - **The multiplayer keyboard** (`[remote_mic]`, experimental) — the
   daemon serves a one-page LAN mic over self-signed HTTPS; your phone
   streams audio into a normal dictation session on the desktop. Audio
   never leaves your network.
 - **Procedural memory** (`voice-keyboard learned`) — texts you dictate
   again and again surface as macro candidates; name one
-  (`learned macro N trailer`) and "furion, trailer" types it verbatim.
+  (`learned macro N trailer`) and "VK, trailer" types it verbatim.
   Offered, never imposed — the same consent gate as corrections.
 - **Speculative TTS** (`[tts] prefetch`) — the primary selection is
   synthesized *while you are still highlighting it*, so `voice-keyboard

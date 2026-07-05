@@ -79,7 +79,7 @@ class TestGrammar:
 
     def test_wake_word_pending_until_flush(self) -> None:
         g = Grammar()
-        tokens = "fix this furion make it formal".split()
+        tokens = "fix this vk make it formal".split()
         live = g.parse(tokens)
         assert live.pending_from == 2
 

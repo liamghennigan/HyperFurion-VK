@@ -286,14 +286,14 @@ export const Dictation = (() => {
       const rewritten = pageRewrite(text, r.instr);
       setTimeout(() => {
         Desktop.setLine(rewritten, "", { repair: true });
-        Terminal.print("✦ " + (Config.cfg.wakeWord || "furion") + ", " + r.instr +
+        Terminal.print("✦ " + (Config.cfg.wakeWord || "vk") + ", " + r.instr +
           " — rewritten in place. page stand-in; the daemon sends it through your [llm]", "dim");
         setTimeout(() => { const t = Desktop.commit(); if (t) done(t); }, reduced ? 0 : 420);
       }, reduced ? 0 : 520);
       return rewritten;
     }
     if (r.instr && !text) {
-      Terminal.print("✦ “" + (Config.cfg.wakeWord || "furion") + ", " + r.instr +
+      Terminal.print("✦ “" + (Config.cfg.wakeWord || "vk") + ", " + r.instr +
         "” — nothing typed yet to rewrite. dictate first, then speak the wake word", "dim");
       return "";
     }

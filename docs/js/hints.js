@@ -31,7 +31,7 @@ export const Hints = (() => {
       if (!Demo.want) add(" · or type <code>real</code> in the terminal — the mic switches to " +
           "the actual xai engine this product ships with");
     } else if (state.dictations === 2) {
-      add("end a sentence with <b>“" + (Config.cfg.wakeWord || "furion") +
+      add("end a sentence with <b>“" + (Config.cfg.wakeWord || "vk") +
           ", make that formal”</b> — the wake word routes what you just typed through an " +
           "LLM and repairs it on screen. try the second chip if your mic is shy");
     } else if (state.dictations === 3) {

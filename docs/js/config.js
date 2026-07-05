@@ -11,7 +11,7 @@ export const Config = (() => {
     lang: "en", interim: true, voiceId: "eve", voice: null, rate: 1, pitch: 1,
     // [flow] — the molten dictation knobs, all live on this page
     flowLive: true, stabilityMs: 1500, autoStopMs: 0,
-    numbers: "auto", wakeWord: "furion",
+    numbers: "auto", wakeWord: "vk",
     // [registers]
     regDefault: "prose",
   };

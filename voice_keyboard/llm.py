@@ -1,6 +1,6 @@
 """OpenAI-compatible chat client for the voice-transform channel.
 
-Says who: "furion, make that formal" — the instruction and the just-typed
+Says who: "vk, make that formal" — the instruction and the just-typed
 text go to a chat completion, and the rewrite replaces the text in place.
 Any OpenAI-compatible /chat/completions endpoint works, including a local
 llama.cpp/vLLM server via base_url; xAI Grok is the default.
@@ -72,7 +72,7 @@ ROUTE_SYSTEM_PROMPT = (
     "command: git checkout -b test"
 )
 
-# Explicit intent ("furion, run …"): always a command, never NONE.
+# Explicit intent ("vk, run …"): always a command, never NONE.
 INTENT_SYSTEM_PROMPT = (
     "Convert the user's spoken request into a single shell command line. "
     "Output ONLY the command — no prose, no markdown, no leading $. "

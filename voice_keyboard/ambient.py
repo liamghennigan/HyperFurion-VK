@@ -3,7 +3,7 @@
 The blocker for always-on dictation is trust — a mishearing keyboard
 types garbage into reality. Molten rendering already gives text a pending
 state; this gate adds the missing addressing layer: an utterance types
-ONLY when it starts with the address word ("furion write ..."). Room
+ONLY when it starts with the address word ("vk write ..."). Room
 speech never reaches the flow engine at all, so it can never be typed,
 never committed, never remembered. Unaddressed audio evaporates at each
 segment boundary.
@@ -14,7 +14,7 @@ start continuous background capture — sessions still begin explicitly
 what a long-running session is allowed to type.
 
 Known v0 quirk: the address word is consumed by the gate, so an in-stream
-wake-word instruction needs the word twice ("furion furion, make that
+wake-word instruction needs the word twice ("vk vk, make that
 formal").
 """
 

@@ -129,7 +129,7 @@ export function parse(tokens, { flush = false, frozen = 0, register, cfg }) {
     return { items: tokens.map((t, i) => ({ kind: "word", text: t, s: i, e: i + 1 })),
              pendingFrom: null };
   }
-  const wake = ((cfg && cfg.wakeWord) || "furion").toLowerCase();
+  const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
   const cores = tokens.map(core);
   const items = [];
   let pendingFrom = null, i = 0;
@@ -327,7 +327,7 @@ export function moltenLine({ register, cfg }) {
     const moltenR = render(live.slice(cut), register, { ...fold.st });
     // the wake word holds the tail back while an instruction is forming —
     // surface it so the caption can show instruction-listening state
-    const wake = ((cfg && cfg.wakeWord) || "furion").toLowerCase();
+    const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
     let instr = instrIt ? instrIt.text : "";
     if (!instr && !flush) {
       const tailNow = all.slice(committed);

@@ -390,7 +390,7 @@ def _run_learned(extra_args: list[str]) -> None:
         if data["hotwords"]:
             print("hotwords: " + ", ".join(sorted(data["hotwords"])))
         if data["macros"]:
-            print("macros (say \"furion, <name>\"):")
+            print("macros (say \"VK, <name>\"):")
             for name, body in sorted(data["macros"].items()):
                 preview = body if len(body) <= 50 else body[:47] + "…"
                 print(f'  "{name}" -> "{preview}"')
@@ -460,7 +460,7 @@ def _run_learned(extra_args: list[str]) -> None:
             sys.exit(2)
         data["macros"][name] = text
         dictionary.save_dictionary(data)
-        print(f'macro saved — say "furion, {name}" to type it')
+        print(f'macro saved — say "VK, {name}" to type it')
     elif action == "reject-macro" and len(extra_args) > 1:
         text, _count = _pick(macro_candidates, extra_args[1], "macro")
         data["rejected"].append(dictionary.candidate_key("macro", text))

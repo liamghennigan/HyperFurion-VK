@@ -105,13 +105,13 @@ DEFAULT_CONFIG: dict = {
         # Merge accepted `voice-keyboard learned` overrides into the
         # grammar vocabulary. Dormant until entries are accepted.
         "personal_dictionary": True,
-        # Molten diffs: a "furion, ..." rewrite is HELD as pending instead
+        # Molten diffs: a "vk, ..." rewrite is HELD as pending instead
         # of landing — say "keep it" (or `voice-keyboard keep`) to apply,
         # "scratch that" (or `discard`) to drop. Off = rewrites land
         # immediately, exactly as before.
         "rewrite_pending": False,
-        # Wake word for in-stream instructions ("furion, make that formal").
-        "wake_word": "furion",
+        # Wake word for in-stream instructions ("vk, make that formal").
+        "wake_word": "vk",
         # "spoken phrase" = "Replacement" (multi-word keys fine).
         "vocabulary": {},
         # Remap command phrases: scratch_that / new_line / new_paragraph /
@@ -137,7 +137,7 @@ DEFAULT_CONFIG: dict = {
     "ambient": {
         # EXPERIMENTAL containment layer for long-open sessions: when on,
         # only utterances that START with the address word are typed
-        # ("furion write ..."); everything else never reaches the engine
+        # ("vk write ..."); everything else never reaches the engine
         # and evaporates. Does NOT start background capture — sessions
         # still begin explicitly, and the hotkey stays the hard mute.
         "enabled": False,
@@ -145,7 +145,7 @@ DEFAULT_CONFIG: dict = {
         "address_word": "",
     },
     "assistant": {
-        # The conversational MIND: "furion, …" (or the assistant hotkey)
+        # The conversational MIND: "vk, …" (or the assistant hotkey)
         # holds a conversation with memory, instead of typing. Brain is
         # the xAI realtime voice agent when configured, else the local
         # [llm]. Off by default; the daemon is a keyboard until you turn
@@ -197,7 +197,7 @@ DEFAULT_CONFIG: dict = {
         "home_root": "",
     },
     "ask": {
-        # Talk to any app: "furion, ask why does this fail" answers about
+        # Talk to any app: "vk, ask why does this fail" answers about
         # the PRIMARY SELECTION through [llm], spoken via TTS ("say") or
         # typed at the caret ("type", newline-suppressed). This switch
         # gates only the voice trigger; `voice-keyboard ask "…"` is
@@ -231,7 +231,7 @@ DEFAULT_CONFIG: dict = {
         "token": "",
     },
     "intent": {
-        # Voice→command channel: "furion, run …" compiles ONE command line,
+        # Voice→command channel: "vk, run …" compiles ONE command line,
         # types it at the caret, and never presses Enter — the refusal is
         # enforced inside the keystroke injector, not by the model. This
         # switch gates only the VOICE trigger; `voice-keyboard intent "…"`

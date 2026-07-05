@@ -102,7 +102,7 @@ class Grammar:
         commands: Optional[dict] = None,
         punctuation: Optional[dict] = None,
         vocabulary: Optional[dict] = None,
-        wake_word: str = "furion",
+        wake_word: str = "vk",
         numbers: str = "auto",
         numbers_on: bool = False,
         numbers_min: int = 10,

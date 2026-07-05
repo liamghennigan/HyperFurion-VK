@@ -10,7 +10,7 @@
 //                 stability window — the same flow engine the daemon
 //                 runs (./js/flow.js is a port of voice_keyboard/flow/)
 //   grammar    -> "scratch that" · "new line" · "period" · "literal x" ·
-//                 "twenty three" -> 23 · "furion, make that formal" —
+//                 "twenty three" -> 23 · "VK, make that formal" —
 //                 parsed before anything is typed, per-window registers
 //                 (the editor renders prose; the terminal, terminal)
 //   tts        -> select text, Ctrl+Alt+T speaks it; where the browser
