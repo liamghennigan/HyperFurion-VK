@@ -104,6 +104,10 @@
     }
 
     * { box-sizing: border-box; }
+    /* the hidden attribute must always win — several toggled elements (.pill,
+       .rec, chips…) set their own display, which would otherwise override it
+       and leave e.g. the "recording" pill showing when nothing is recording */
+    [hidden] { display: none !important; }
     html { scroll-behavior: smooth; }
     body {
       margin: 0;
