@@ -7,6 +7,7 @@ short-lived and never block the event loop for meaningful time.
 """
 
 import hashlib
+import hmac
 import secrets
 import sqlite3
 import threading
@@ -34,6 +35,13 @@ CREATE TABLE IF NOT EXISTS pending_keys (
     session_id TEXT PRIMARY KEY,
     api_key TEXT NOT NULL,
     created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS login_codes (
+    email TEXT PRIMARY KEY,
+    code_hash TEXT NOT NULL,
+    expires_at REAL NOT NULL,
+    sent_at REAL NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS demo_usage (
     day TEXT NOT NULL,
@@ -291,3 +299,94 @@ class Store:
             )
             self._conn.commit()
         return str(row["api_key"])
+
+    # -- email-verified self-serve login ----------------------------------
+    # The key stops being a secret the user must guard: identity is the
+    # subscription email (already captured from Stripe), proven by a one-time
+    # code, and the key is (re)issued on demand. Losing a key is a non-event.
+
+    def user_by_email(self, email: str) -> Optional[dict]:
+        """The active subscriber for an email (case-insensitive), or None.
+
+        If someone somehow has two rows for one email, the newest active one
+        wins — that's the subscription they'd expect to sign into.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM users WHERE lower(email) = lower(?) AND status = 'active'"
+                " ORDER BY id DESC LIMIT 1",
+                (email,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def put_login_code(
+        self,
+        email: str,
+        code: str,
+        ttl_seconds: float,
+        resend_min_interval: float,
+    ) -> str:
+        """Store a fresh one-time code for an email. Returns "" if stored, or
+        "rate" if a code was issued too recently (throttles email spam). A new
+        code always supersedes any prior one and resets the attempt counter."""
+        now = self._clock()
+        with self._lock:
+            prior = self._conn.execute(
+                "SELECT sent_at FROM login_codes WHERE lower(email) = lower(?)",
+                (email,),
+            ).fetchone()
+            if prior is not None and now - prior["sent_at"] < resend_min_interval:
+                return "rate"
+            self._conn.execute(
+                "INSERT OR REPLACE INTO login_codes"
+                " (email, code_hash, expires_at, sent_at, attempts)"
+                " VALUES (?, ?, ?, ?, 0)",
+                (email.lower(), hash_key(code), now + ttl_seconds, now),
+            )
+            self._conn.commit()
+        return ""
+
+    def check_login_code(self, email: str, code: str, max_attempts: int = 5) -> bool:
+        """Validate and CONSUME a one-time code. A correct code is deleted (so
+        it can't be replayed); a wrong code burns one of the limited attempts;
+        an expired or exhausted code is discarded. Constant-time compare."""
+        now = self._clock()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT code_hash, expires_at, attempts FROM login_codes"
+                " WHERE lower(email) = lower(?)",
+                (email,),
+            ).fetchone()
+            if row is None:
+                return False
+            if now > row["expires_at"] or row["attempts"] >= max_attempts:
+                self._conn.execute(
+                    "DELETE FROM login_codes WHERE lower(email) = lower(?)", (email,)
+                )
+                self._conn.commit()
+                return False
+            if hmac.compare_digest(row["code_hash"], hash_key(code)):
+                self._conn.execute(
+                    "DELETE FROM login_codes WHERE lower(email) = lower(?)", (email,)
+                )
+                self._conn.commit()
+                return True
+            self._conn.execute(
+                "UPDATE login_codes SET attempts = attempts + 1"
+                " WHERE lower(email) = lower(?)",
+                (email,),
+            )
+            self._conn.commit()
+            return False
+
+    def rotate_key(self, user_id: int) -> str:
+        """Issue a fresh key for a user and return the plaintext. The old key
+        stops authenticating immediately (only its hash was ever stored)."""
+        api_key = generate_key()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE users SET key_hash = ?, key_hint = ? WHERE id = ?",
+                (hash_key(api_key), api_key[-4:], user_id),
+            )
+            self._conn.commit()
+        return api_key

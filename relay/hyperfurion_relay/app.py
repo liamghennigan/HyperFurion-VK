@@ -6,7 +6,9 @@ Endpoints
     POST /v1/tts           TTS, proxied to xAI (same request/response)
     GET  /v1/usage         quota status for the presented key
     POST /stripe/webhook   Stripe events (signature-verified)
-    GET  /welcome          one-time key pickup after Stripe checkout
+    POST /auth/request     email a one-time sign-in code to a subscriber
+    POST /auth/verify      redeem the code — (re)issues the subscriber's key
+    GET  /welcome          landing after Stripe checkout (points at login)
 
 Auth is `Authorization: Bearer hfk_...` everywhere — identical in shape
 to xAI's own auth, which is what lets the daemon reuse its xAI clients.
@@ -18,12 +20,13 @@ import html
 import json
 import logging
 import os
+import secrets
 from urllib.parse import urlencode
 
 import aiohttp
 from aiohttp import WSMsgType, web
 
-from . import demo, stripe_webhook
+from . import demo, mailer, stripe_webhook
 from .db import PERIOD_SECONDS, Store
 from .tiers import TIERS, tier_named
 
@@ -54,6 +57,14 @@ def _config_from_env() -> dict:
         "upstream_tts_url": os.environ.get("UPSTREAM_TTS_URL", DEFAULT_UPSTREAM_TTS_URL),
         "upstream_chat_url": os.environ.get("UPSTREAM_CHAT_URL", DEFAULT_UPSTREAM_CHAT_URL),
         "stripe_webhook_secret": os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
+        # Seamless-login email transport (pluggable — see mailer.py). Resend
+        # is primary; SMTP is the fallback; neither set = codes are logged.
+        "resend_api_key": os.environ.get("RESEND_API_KEY", ""),
+        "email_from": os.environ.get("EMAIL_FROM", "HyperFurion VK <login@hyperfurion.com>"),
+        "smtp_host": os.environ.get("SMTP_HOST", ""),
+        "smtp_port": int(os.environ.get("SMTP_PORT", "587") or 587),
+        "smtp_user": os.environ.get("SMTP_USER", ""),
+        "smtp_pass": os.environ.get("SMTP_PASS", ""),
         "demo_daily_budget_usd": float(os.environ.get("DEMO_DAILY_BUDGET_USD", "1.0")),
         "demo_chat_model": os.environ.get("DEMO_CHAT_MODEL", "grok-4-fast"),
         # Only honor X-Forwarded-For when a trusted reverse proxy sets it;
@@ -313,13 +324,92 @@ async def stripe_events(request: web.Request) -> web.Response:
     return web.json_response(summary)
 
 
+# -- seamless login: email-verified, self-serve key (re)issue ---------------
+# The hosted tier is the "no setup" option, so the key must never be a thing
+# a user can lose. Identity is the subscription email (proven by a one-time
+# code); the key is issued to whoever proves it, as many times as needed.
+
+LOGIN_CODE_TTL_SECONDS = 600.0     # a code is good for 10 minutes
+LOGIN_RESEND_INTERVAL = 30.0       # at most one code per email per 30s
+LOGIN_MAX_ATTEMPTS = 5             # wrong codes burn fast
+
+# Generic answer for /auth/request — identical whether or not the email maps
+# to a subscriber, so the endpoint can't be used to enumerate customers.
+_AUTH_REQUEST_OK = {
+    "status": "ok",
+    "message": "If that email has an active subscription, a sign-in code is on its way.",
+}
+
+
+def _new_login_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+async def auth_request(request: web.Request) -> web.Response:
+    """Start a login: email a one-time code to an active subscriber."""
+    store: Store = request.app["store"]
+    cfg = request.app["cfg"]
+    try:
+        payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _json_error(400, "request body must be JSON")
+    email = str(payload.get("email", "")).strip()
+    if "@" not in email or len(email) > 320:
+        return _json_error(400, "a valid email is required")
+
+    user = store.user_by_email(email)
+    if user is not None:
+        code = _new_login_code()
+        throttled = store.put_login_code(
+            email, code, LOGIN_CODE_TTL_SECONDS, LOGIN_RESEND_INTERVAL
+        )
+        if throttled == "":
+            send = cfg.get("send_login_code") or mailer.send_login_code
+            error = await send(request.app["http"], cfg, email, code)
+            if error:
+                logger.warning("login email to %s failed: %s", email, error)
+    # Always the same response — no user enumeration, no delivery signal.
+    return web.json_response(_AUTH_REQUEST_OK)
+
+
+async def auth_verify(request: web.Request) -> web.Response:
+    """Finish a login: a correct code (re)issues the key for that email."""
+    store: Store = request.app["store"]
+    try:
+        payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _json_error(400, "request body must be JSON")
+    email = str(payload.get("email", "")).strip()
+    code = str(payload.get("code", "")).strip()
+    if not email or not code:
+        return _json_error(400, "email and code are required")
+    if not store.check_login_code(email, code, LOGIN_MAX_ATTEMPTS):
+        return _json_error(400, "that code is invalid or expired — request a new one")
+    user = store.user_by_email(email)
+    if user is None:
+        return _json_error(400, "no active subscription for that email")
+    api_key = store.rotate_key(int(user["id"]))
+    tier = tier_named(user["tier"])
+    return web.json_response(
+        {"api_key": api_key, "tier": tier.name, "email": str(user["email"])}
+    )
+
+
 _WELCOME_PAGE = """<!doctype html>
-<meta charset="utf-8"><title>HyperFurion VK — your key</title>
+<meta charset="utf-8"><title>HyperFurion VK — you're in</title>
 <body style="font-family: monospace; max-width: 640px; margin: 48px auto; line-height: 1.6">
 <h1>Welcome to HyperFurion VK</h1>
-<p>Your subscription key — shown <strong>once</strong>, save it now:</p>
+<p><strong>No setup, nothing to save.</strong> Install VK, then run:</p>
+<pre style="background:#f4f4f4;padding:12px;border-radius:4px">voice-keyboard login &lt;your email&gt;</pre>
+<p>We email you a 6-digit code, it writes your key and switches speech +
+dictation to the hosted service for you. Lose the key, get a new machine,
+reinstall — just run <code>voice-keyboard login</code> again. There is no
+key to misplace.</p>
+<hr>
+<details><summary>Prefer to paste a key by hand?</summary>
+<p>Your key (shown once):</p>
 <pre style="background:#f4f4f4;padding:12px;border-radius:4px">{key}</pre>
-<p>Put this in <code>~/.config/voice-keyboard/config.toml</code>:</p>
+<p>In <code>~/.config/voice-keyboard/config.toml</code>:</p>
 <pre style="background:#f4f4f4;padding:12px;border-radius:4px">[providers.hyperfurion]
 api_key = "{key}"
 
@@ -329,14 +419,18 @@ provider = "hyperfurion"
 [tts]
 provider = "hyperfurion"</pre>
 <p>Then: <code>systemctl --user restart voice-keyboard-daemon</code></p>
+</details>
 </body>"""
 
 _WELCOME_GONE = """<!doctype html>
 <meta charset="utf-8"><title>HyperFurion VK</title>
-<body style="font-family: monospace; max-width: 640px; margin: 48px auto">
-<h1>Key already collected</h1>
-<p>This link works exactly once. If you lost your key, reply to your
-receipt email and a replacement will be issued.</p>
+<body style="font-family: monospace; max-width: 640px; margin: 48px auto; line-height: 1.6">
+<h1>You're all set — no key to collect</h1>
+<p>Your key isn't something you have to save. On the machine where you want
+HyperFurion VK, just run:</p>
+<pre style="background:#f4f4f4;padding:12px;border-radius:4px">voice-keyboard login &lt;your email&gt;</pre>
+<p>We email a 6-digit code and set everything up. Run it again any time you
+lose access or move machines.</p>
 </body>"""
 
 
@@ -377,6 +471,8 @@ def make_app(overrides: dict | None = None) -> web.Application:
     app.router.add_post("/v1/tts", tts)
     app.router.add_get("/v1/usage", usage)
     app.router.add_post("/stripe/webhook", stripe_events)
+    app.router.add_post("/auth/request", auth_request)
+    app.router.add_post("/auth/verify", auth_verify)
     app.router.add_get("/welcome", welcome)
     demo.register(app)
     return app
