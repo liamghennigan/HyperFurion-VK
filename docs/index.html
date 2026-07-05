@@ -23,9 +23,7 @@
     "url": "https://liamghennigan.github.io/HyperFurion-VK/",
     "description": "A Linux-first voice keyboard. Press Ctrl+Alt+V and words type into the focused app while you speak — molten at first, repairing in place, frozen once stable. Spoken edit grammar, per-app registers, spoken numbers, a wake-word LLM rewrite, full Unicode, text-to-speech for any selection, and a push-to-talk assistant.",
     "offers": [
-      { "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" },
-      { "@type": "Offer", "name": "Hosted — 20 h dictation + 10k spoken characters / month", "price": "5.00", "priceCurrency": "USD" },
-      { "@type": "Offer", "name": "Hosted — 40 h dictation + 50k spoken characters / month", "price": "10.00", "priceCurrency": "USD" }
+      { "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" }
     ]
   }
   </script>
@@ -2214,7 +2212,7 @@ scratch_that = ["nuke it", "scratch that"]
               <span class="chip">deepgram</span>
               <span class="chip">assemblyai</span>
               <span class="chip">elevenlabs (tts)</span>
-              <span class="chip">hyperfurion (subscription)</span>
+              <span class="chip">hyperfurion (coming soon)</span>
             </div>
             <p>The <b>hyperfurion</b> provider is one <span class="mono">hfk_</span> key instead of provider accounts — same streaming protocol, relay fully self-hostable.</p>
           </article>
@@ -2353,15 +2351,16 @@ provider = "openai"   <span class="c"># local Kokoro</span></pre>
             <span class="sigcap">paying unlocks nothing — that is the point</span>
           </div>
           <div class="tiers">
-            <a class="tier" href="https://buy.stripe.com/00w4gA89yaVI6Twgfm2oE00" rel="noopener">
+            <span class="sigcap" style="color:var(--heat);display:block;margin-bottom:4px;">subscription — coming soon</span>
+            <div class="tier" style="opacity:.66;cursor:default;">
               <div><b>Basic</b><span>20 h dictation + 10k spoken characters / month</span></div>
               <span class="price">$5/mo</span>
-            </a>
-            <a class="tier" href="https://buy.stripe.com/14A00k4Xm6Fs3Hk7IQ2oE01" rel="noopener">
+            </div>
+            <div class="tier" style="opacity:.66;cursor:default;">
               <div><b>Pro</b><span>40 h dictation + 50k spoken characters / month</span></div>
               <span class="price">$10/mo</span>
-            </a>
-            <span class="tier-note">secure checkout on Stripe · your hfk_ key is shown once on the welcome page</span>
+            </div>
+            <span class="tier-note">the hosted subscription isn't live yet — every feature is free today with your own provider key.</span>
           </div>
         </div>
       </div>

@@ -13,9 +13,13 @@
 // checkout.session.completed, and /welcome shows it exactly once.
 import { $ } from "./env.js";
 
+// TEMPORARILY DISABLED — subscription paused, showing "coming soon".
+// To re-enable: restore the two Stripe Payment Link URLs below (the live
+// values are in git history at commit b562a86). checkoutLive flips to true
+// automatically and every buy surface returns.
 export const CHECKOUT = {
-  basic: "https://buy.stripe.com/00w4gA89yaVI6Twgfm2oE00",
-  pro: "https://buy.stripe.com/14A00k4Xm6Fs3Hk7IQ2oE01",
+  basic: "coming-soon",
+  pro: "coming-soon",
 };
 
 // A tier counts as live only once its placeholder becomes a real https URL.

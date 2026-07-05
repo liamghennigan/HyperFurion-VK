@@ -239,7 +239,7 @@ export const Dictation = (() => {
   function funnel() {
     if (funneled) return;
     funneled = true;
-    Terminal.print("· that came through xai grok stt — the hosted tier. $5/mo, one key: type subscribe", "dim");
+    Terminal.print("· that came through xai grok stt — the hosted tier is coming soon; everything's free today with your own key", "dim");
   }
 
   // ── the landing: flush the grammar, run the rewrite lane, commit ────────

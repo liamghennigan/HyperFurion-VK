@@ -192,17 +192,17 @@ export const Terminal = (() => {
         print("https://github.com/sponsors/liamghennigan", "dim");
         break;
       case "subscribe":
-        print("hosted tier — $5/mo: one hfk_ key, no provider accounts, hard quotas", "dim");
-        print("convenience + supporting the project — you gain no abilities by paying;", "dim");
-        print("everything is open source, free forever with your own key", "dim");
+        print("everything is open source, free forever with your own key —", "dim");
+        print("you gain no abilities by paying; the hosted tier is just convenience.", "dim");
         if (checkoutLive) {
+          print("hosted tier — one hfk_ key, no provider accounts, hard quotas", "dim");
           if (live(CHECKOUT.basic)) print("$5/mo  basic — 20 h dictation + 10k chars:  " + CHECKOUT.basic, "dim");
           if (live(CHECKOUT.pro)) print("$10/mo pro   — 40 h dictation + 50k chars: " + CHECKOUT.pro, "dim");
           print("opening secure checkout on stripe…", "dim");
           const url = live(CHECKOUT.basic) ? CHECKOUT.basic : CHECKOUT.pro;
           window.open(url, "_blank", "noopener");
         } else {
-          print("launching soon · early access via sponsors: github.com/sponsors/liamghennigan", "dim");
+          print("hosted subscription — coming soon · early access via sponsors: github.com/sponsors/liamghennigan", "dim");
         }
         break;
       case "real": case "real on":
