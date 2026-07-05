@@ -5,7 +5,20 @@ from types import ModuleType
 # without needing Linux uinput bindings in the test environment.
 if "evdev" not in sys.modules:
     evdev_stub = ModuleType("evdev")
-    ecodes_stub = ModuleType("ecodes")
+
+    class _Ecodes(ModuleType):
+        # Unknown KEY_/EV_/BTN_ names get a stable synthetic code on first
+        # access, so new keycodes in the injector never break collection.
+        _next = 1000
+
+        def __getattr__(self, name):
+            if name.startswith(("KEY_", "EV_", "BTN_")):
+                _Ecodes._next += 1
+                setattr(self, name, _Ecodes._next)
+                return getattr(self, name)
+            raise AttributeError(name)
+
+    ecodes_stub = _Ecodes("ecodes")
 
     _keys = [
         "EV_KEY",
