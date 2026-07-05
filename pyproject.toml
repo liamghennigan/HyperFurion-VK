@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "voice-keyboard"
 # Bumping this on main cuts a GitHub release automatically (release.yml).
-version = "2.1.2"
+version = "2.1.3"
 description = "Universal Linux voice keyboard with selectable speech providers"
 requires-python = ">=3.11"
 authors = [{name = "Liam Hennigan"}]
