@@ -1,11 +1,50 @@
-# HyperFurion VK
+# HyperFurion VK — your voice is the keyboard
 
-**Website:** <https://liamghennigan.github.io/HyperFurion-VK/>
+[![Latest release](https://img.shields.io/github/v/release/liamghennigan/HyperFurion-VK)](https://github.com/liamghennigan/HyperFurion-VK/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Linux-first](https://img.shields.io/badge/Linux-first%20·%20Wayland%20%26%20X11-informational)](https://liamghennigan.github.io/HyperFurion-VK/)
+[![Stars](https://img.shields.io/github/stars/liamghennigan/HyperFurion-VK?style=social)](https://github.com/liamghennigan/HyperFurion-VK/stargazers)
 
-A Linux-first open-source voice keyboard — with beta macOS and Windows
-support — using xAI STT/TTS as the default provider, selectable cloud or
-local speech providers, global hotkeys, desktop status feedback, and native
-keystroke injection (uinput, Quartz, SendInput).
+**Type with your voice in any Linux app — including the terminal.** HyperFurion
+VK is a system-wide voice keyboard: your speech becomes real keystrokes,
+pressed into whatever app your cursor is already in. Words land *while you
+speak* and repair themselves as the sentence firms up ("molten dictation"). It
+runs **fully offline with a local model**, and it **never presses Enter — only
+you do.**
+
+▶ **See it work:** **<https://liamghennigan.github.io/HyperFurion-VK/>** — the
+landing page dictates itself, live, in your browser.
+
+<!-- TODO(demo): drop a 30–45s screen capture here once recorded — it is the
+     single most shareable asset. See launch/demo-shot-list.md for the script.
+![HyperFurion VK typing into a terminal by voice](docs/media/demo.gif)
+-->
+
+### Install on Linux — one line
+
+```bash
+curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash
+```
+
+Sets up a local daemon, the `uinput` virtual keyboard, and a systemd user
+service. Works offline with a local Whisper/OpenAI-compatible server, or point
+it at a cloud provider (xAI, OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs) —
+or the hosted tier: `voice-keyboard login <email>`, no key to manage.
+
+### Why it's different
+
+- **Everywhere, natively.** Real keystrokes via `uinput` — works in editors,
+  browsers, chat, and the **terminal**, not just a textbox in one app.
+- **Molten dictation.** With a streaming provider, words appear as you speak
+  and self-correct in place, then freeze — you watch the text think.
+- **You keep the trigger.** In the terminal it *drafts* the command and stops;
+  **Enter is always yours.** Nothing is captured until you press to talk.
+- **Private by default.** Run it 100% offline with a local model; zero
+  analytics; your keys stay on your machine.
+- **A voice assistant in the keyboard** — "Kai" (hold Right Ctrl, click the
+  orb, or the opt-in wake word), model-agnostic and local-first.
+
+---
 
 HyperFurion VK runs a local daemon. When you record speech, the daemon captures
 microphone audio, sends it to the configured speech-to-text provider, and types

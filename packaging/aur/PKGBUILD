@@ -1,0 +1,60 @@
+# Maintainer: Liam Hennigan <liam@hyperfurion.com>
+pkgname=hyperfurion-vk
+pkgver=2.1.3
+pkgrel=1
+pkgdesc="Linux-first voice keyboard — molten dictation + a voice assistant; your speech becomes real keystrokes in any app"
+arch=('any')
+url="https://github.com/liamghennigan/HyperFurion-VK"
+license=('MIT')
+depends=(
+  'python'
+  'python-evdev'
+  'python-pyaudio'
+  'python-requests'
+  'python-websockets'
+  'python-sounddevice'
+  'python-soundfile'
+  'python-numpy'
+  'portaudio'
+  'libsndfile'
+)
+optdepends=(
+  'wl-clipboard: full-Unicode paste on Wayland'
+  'xclip: full-Unicode paste on X11'
+  'libnotify: desktop status notifications'
+  'python-pygame: alternate audio playback backend'
+  'python-openwakeword: opt-in "Kai" wake word (AUR/pip)'
+)
+makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+install="$pkgname.install"
+source=(
+  "$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+  '99-uinput-hyperfurion.rules'
+  'uinput-hyperfurion.conf'
+  'voice-keyboard-daemon.service'
+)
+# Regenerate before publishing:  updpkgsums
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+build() {
+  cd "HyperFurion-VK-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "HyperFurion-VK-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 config.toml.example \
+    "$pkgdir/usr/share/doc/$pkgname/config.toml.example"
+
+  # /dev/uinput must be group-writable so the daemon can inject keystrokes.
+  install -Dm644 "$srcdir/99-uinput-hyperfurion.rules" \
+    "$pkgdir/usr/lib/udev/rules.d/99-uinput-hyperfurion.rules"
+  install -Dm644 "$srcdir/uinput-hyperfurion.conf" \
+    "$pkgdir/usr/lib/modules-load.d/uinput-hyperfurion.conf"
+  # Ship the daemon as a systemd *user* service (no root at runtime).
+  install -Dm644 "$srcdir/voice-keyboard-daemon.service" \
+    "$pkgdir/usr/lib/systemd/user/voice-keyboard-daemon.service"
+}

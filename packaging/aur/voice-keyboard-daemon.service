@@ -1,0 +1,14 @@
+[Unit]
+Description=HyperFurion VK — voice keyboard daemon
+Documentation=https://github.com/liamghennigan/HyperFurion-VK
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/voice-keyboard-daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HyperFurion VK vs Talon, Numen &amp; Dragon — open-source voice control for Linux</title>
+<meta name="description" content="An honest comparison of Linux voice typing and voice-control tools: HyperFurion VK, Talon, Numen, nerd-dictation, and Dragon. Which open-source voice keyboard fits dictation, coding, and accessibility on Wayland and X11?">
+<link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/compare.html">
+<meta property="og:title" content="HyperFurion VK vs Talon, Numen & Dragon — voice control for Linux">
+<meta property="og:description" content="Open-source, Linux-first voice keyboard: molten streaming dictation, terminal-safe command drafting, fully offline option. See how it compares.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="./styles.css">
+<style>
+  /* page-local tweaks on top of the shared instrument stylesheet */
+  .cmp-hero { text-align: center; }
+  .cmp-hero h1 { font-size: clamp(30px, 6.5vw, 60px); margin-top: 10px; }
+  .cmp-lede { max-width: 40em; margin: 8px auto 22px; }
+  .cmp-cta { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin: 8px 0 4px; }
+  .cmp-btn { font: 600 13px var(--mono); text-decoration: none; border-radius: 999px; padding: 9px 18px; }
+  .cmp-btn.primary { color: var(--bg); background: var(--wave); border: 1px solid var(--wave); }
+  .cmp-btn.ghost { color: var(--text); border: 1px solid var(--line); }
+  .cmp-btn:hover { filter: brightness(1.06); }
+  table td.yes { color: var(--ok); }
+  table td.no { color: var(--muted); }
+  table th:first-child, table td:first-child { position: sticky; left: 0; background: var(--bg); }
+  .shine { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 18px 0; }
+  @media (max-width: 640px) { .shine { grid-template-columns: 1fr; } }
+  .shine > div { border: 1px solid var(--line); border-radius: 12px; padding: 4px 18px 14px; background: var(--code-bg); }
+  .shine h3 { color: var(--wave); }
+  .fair { font: 11px var(--mono); color: var(--muted); letter-spacing: .04em; }
+</style>
+</head>
+<body>
+<a class="skip" href="#table">Skip to the comparison</a>
+
+<section class="prose cmp-hero">
+  <p class="sigcap">Voice control for Linux · an honest comparison</p>
+  <h1>The open, Linux-native voice keyboard</h1>
+  <p class="lede cmp-lede">Most voice tools are built for macOS and Windows, or
+  for hands-free <em>commands</em> rather than everyday typing. HyperFurion VK
+  is <b>MIT-licensed, Linux-first, and dictation-first</b> — your speech becomes
+  real keystrokes in any app, it can run fully offline, and it never presses
+  Enter for you.</p>
+  <div class="cmp-cta">
+    <a class="cmp-btn primary" href="./#install">Install HyperFurion VK</a>
+    <a class="cmp-btn ghost" href="./">See it type, live</a>
+    <a class="cmp-btn ghost" href="https://github.com/liamghennigan/HyperFurion-VK">GitHub</a>
+  </div>
+</section>
+
+<section class="wide" id="table">
+  <h2><span class="num">01</span>At a glance</h2>
+  <div class="tblwrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Approach</th>
+        <th>HyperFurion&nbsp;VK</th>
+        <th>Talon</th>
+        <th>Numen</th>
+        <th>nerd-dictation</th>
+        <th>Dragon</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Open source</td>
+        <td class="yes">MIT</td><td class="no">core closed</td>
+        <td class="yes">yes</td><td class="yes">yes</td><td class="no">commercial</td></tr>
+      <tr><td>Linux (Wayland &amp; X11)</td>
+        <td class="yes">first-class</td><td class="yes">supported</td>
+        <td class="yes">Linux-only</td><td class="yes">X11-focused</td><td class="no">Windows-only</td></tr>
+      <tr><td>Primary strength</td>
+        <td>dictation + commands</td><td>hands-free coding</td>
+        <td>voice commands</td><td>offline dictation</td><td>accuracy (Windows)</td></tr>
+      <tr><td>Streaming "molten" dictation</td>
+        <td class="yes">yes</td><td class="no">—</td>
+        <td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Types into any app (incl. terminal)</td>
+        <td class="yes">uinput</td><td class="yes">yes</td>
+        <td class="yes">uinput</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+      <tr><td>Runs fully offline</td>
+        <td class="yes">local model</td><td class="yes">local</td>
+        <td class="yes">local (VOSK)</td><td class="yes">local (VOSK)</td><td class="yes">local</td></tr>
+      <tr><td>Never auto-presses Enter</td>
+        <td class="yes">guaranteed</td><td>scriptable</td>
+        <td>scriptable</td><td class="no">n/a</td><td class="no">n/a</td></tr>
+      <tr><td>Built-in voice assistant</td>
+        <td class="yes">Kai</td><td class="no">—</td>
+        <td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Setup</td>
+        <td>one-line install</td><td>installer + scripts</td>
+        <td>config file</td><td>manual</td><td>installer</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="fair">Comparison reflects each project's stated design focus, not a
+  benchmark. Tools evolve fast — spot something out of date? <a
+  href="https://github.com/liamghennigan/HyperFurion-VK/issues">Open an issue</a>
+  and we'll fix it.</p>
+</section>
+
+<section class="prose">
+  <h2><span class="num">02</span>Where each one shines</h2>
+  <div class="shine">
+    <div>
+      <h3>Choose HyperFurion VK</h3>
+      <p>You want <b>everyday dictation on Linux</b> that just works in any app,
+      words that appear and self-correct as you speak, a terminal mode that
+      drafts commands without running them, and a local-first voice assistant —
+      installed in one line and MIT-licensed.</p>
+    </div>
+    <div>
+      <h3>Choose Talon</h3>
+      <p>You want the deepest <b>hands-free coding</b> toolkit — a mature
+      scripting language, eye-tracking, and a large voice-command community —
+      and you're comfortable investing in setup and its scripting model.</p>
+    </div>
+    <div>
+      <h3>Choose Numen</h3>
+      <p>You want a <b>lightweight, fully offline voice-command</b> layer for
+      Linux/Wayland, grammar-driven, with minimal moving parts.</p>
+    </div>
+    <div>
+      <h3>Choose nerd-dictation / Dragon</h3>
+      <p><b>nerd-dictation</b> for a simple offline VOSK dictation script on
+      Linux; <b>Dragon</b> if you're on Windows and need its accuracy and don't
+      need Linux or open source.</p>
+    </div>
+  </div>
+</section>
+
+<section class="prose">
+  <h2><span class="num">03</span>The short version</h2>
+  <p>If you live on Linux and want your <b>voice to be the keyboard</b> — real
+  typing in every app, private by default, with the trigger always in your
+  hands — that's what HyperFurion VK is built for.</p>
+  <div class="cmp-cta" style="justify-content:flex-start">
+    <a class="cmp-btn primary" href="./#install">Install it</a>
+    <a class="cmp-btn ghost" href="./">Watch the live demo</a>
+  </div>
+</section>
+
+<footer>
+  <span class="sigcap">HyperFurion VK · MIT · Linux-first</span>
+  <a href="./">home</a> ·
+  <a href="https://github.com/liamghennigan/HyperFurion-VK">github</a> ·
+  <a href="./#install">install</a>
+</footer>
+</body>
+</html>

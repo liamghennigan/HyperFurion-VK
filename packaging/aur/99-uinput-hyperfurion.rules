@@ -1,0 +1,3 @@
+# HyperFurion VK — make /dev/uinput writable by the 'input' group so the
+# voice keyboard daemon can inject keystrokes without root.
+KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

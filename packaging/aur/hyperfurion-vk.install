@@ -1,0 +1,26 @@
+post_install() {
+  cat <<'MSG'
+==> HyperFurion VK installed. Three one-time steps:
+
+    1. Join the 'input' group (for /dev/uinput), then log out and back in:
+         sudo usermod -aG input "$USER"
+
+    2. Load the uinput module now (or reboot):
+         sudo modprobe uinput
+
+    3. Pick a speech provider — the hosted "no setup" path is simplest:
+         voice-keyboard login <your-email>
+       ...or copy the sample config and set your own keys/local server:
+         mkdir -p ~/.config/voice-keyboard
+         cp /usr/share/doc/hyperfurion-vk/config.toml.example \
+            ~/.config/voice-keyboard/config.toml
+
+    Then start it and dictate with Ctrl+Alt+V:
+         systemctl --user enable --now voice-keyboard-daemon
+MSG
+}
+
+post_upgrade() {
+  systemctl --user daemon-reload 2>/dev/null || true
+  echo "==> Restart the daemon to apply:  systemctl --user restart voice-keyboard-daemon"
+}
