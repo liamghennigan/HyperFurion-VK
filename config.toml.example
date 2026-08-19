@@ -1,14 +1,13 @@
 [providers.xai]
 api_key = "xai-your-api-key-here"
 
-# Hosted subscription — one key, no provider accounts. See relay/README.md.
-# No setup: run `voice-keyboard login <your email>` and this fills itself in
-# (emails you a code, writes the key, switches stt/tts here). Lose the key or
-# move machines? Just log in again — there's nothing to save by hand.
+# Archived self-hosted relay only (see archive/relay/). There is no hosted
+# HyperFurion subscription, Stripe checkout, or `voice-keyboard login`.
+# Leave this unused unless you run the archived relay yourself and set
+# an explicit base_url — it will not talk to api.hyperfurion.com.
 [providers.hyperfurion]
 api_key = "hfk-your-subscription-key-here"
-# Only set base_url if you run your own relay.
-# base_url = "https://api.hyperfurion.com"
+# base_url = "http://127.0.0.1:8787"
 
 [providers.openai]
 api_key = "openai-your-api-key-here"
@@ -29,7 +28,8 @@ api_key = "assemblyai-your-api-key-here"
 api_key = "elevenlabs-your-api-key-here"
 
 [stt]
-# Choices: xai, hyperfurion, openai, groq, deepgram, assemblyai
+# Choices: xai, openai, groq, deepgram, assemblyai
+# (hyperfurion = archived self-hosted relay only; needs an explicit base_url)
 provider = "xai"
 # Defaults by provider:
 # openai = "gpt-4o-transcribe"
@@ -47,7 +47,8 @@ interim_results = true
 hotword_bias = false
 
 [tts]
-# Choices: xai, hyperfurion, openai, elevenlabs
+# Choices: xai, openai, elevenlabs
+# (hyperfurion = archived self-hosted relay only; needs an explicit base_url)
 provider = "xai"
 # Defaults by provider:
 # openai = "gpt-4o-mini-tts"
@@ -89,7 +90,8 @@ hold_threshold_ms = 280
 # behaves exactly as it did before Flow existed.
 enabled = true
 # Type words live while you speak, repairing in place as the transcript
-# firms up (streaming providers: xai, hyperfurion, live_rest).
+# firms up (streaming providers: xai, live_rest, or a self-hosted archived
+# hyperfurion relay with an explicit base_url).
 live = true
 # Spoken commands and punctuation: "scratch that", "new line", "period",
 # "literal <word>", ...
@@ -190,7 +192,7 @@ model = "grok-4.3"
 # Kai — the voice assistant. When enabled, a SECOND hotkey (below) takes a
 # spoken query and routes it by WHERE YOU ARE:
 #   • focused on a terminal  -> it turns your words into a command, types it
-#     at the prompt, and NEVER presses Enter (that stays yours);
+#     at the prompt, and on Linux NEVER presses Enter (that stays yours);
 #   • anywhere else          -> it answers / searches the web, spoken back.
 # Voice in, voice or a drafted command out — you never type to it (typed
 # interaction is a future Seneschal-computer thing). On by default: it's
@@ -212,13 +214,14 @@ api_key = ""
 # (`voice-keyboard summon` toggles a turn from the CLI, same as the hotkey.)
 brain = "auto"
 # The summon binding (a second global binding; dictation keeps Ctrl+Alt+V).
-# Default is a BARE modifier — hold Right Ctrl to talk — because a modifier
-# alone never reaches the focused app. Held symbol chords (e.g.
+# Linux only: default is a BARE modifier — hold Right Ctrl to talk — because
+# a modifier alone never reaches the focused app. Held symbol chords (e.g.
 # "control+alt+.") work too, but terminals encode them as escape codes
 # (CSI-u), so holding one at a shell prompt sprays junk like `6;7u6;7u`.
 # While a bare-key gesture is active, pressing any OTHER key aborts it, so
-# real Right-Ctrl shortcuts still work. Restart to change — it owns a
-# listener.
+# real Right-Ctrl shortcuts still work. macOS/Windows betas do not implement
+# this bare-modifier summon — pick a chord if you run those ports. Restart
+# to change — it owns a listener.
 hotkey = "rightctrl"
 # How the summon key behaves, like [hotkey].mode:
 #   auto   = HOLD to talk / release to send (walkie-talkie), or a quick TAP
@@ -296,9 +299,10 @@ address_word = ""
 
 [intent]
 # The voice→command channel: "vk, run …" compiles ONE command line
-# through [llm], types it at the caret, and NEVER presses Enter — the
-# refusal is enforced inside the keystroke injector, so nothing the model
-# says can execute anything. You review the line and press Enter yourself.
+# through [llm], types it at the caret, and NEVER presses Enter — on
+# Linux the refusal is enforced inside the uinput injector, so nothing
+# the model says can execute anything. macOS/Windows betas do not have
+# that injector guarantee. You review the line and press Enter yourself.
 # This switch gates only the voice trigger; `voice-keyboard intent "…"`
 # is explicit and always available.
 enabled = false

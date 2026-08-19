@@ -4,7 +4,8 @@ Channels for HyperFurion VK, in order of leverage for a Linux input tool:
 
 1. **curl installer (default)** — `releases/latest/download/install-hyperfurion-vk.sh`.
    Downloads the release tarball and runs `install.sh` (venv + uinput + systemd
-   user unit). This is what the landing page and README use.
+   user unit). This is what the landing page and README use. Linux-only full
+   features; there is no hosted login or subscription.
 2. **AUR** — [`packaging/aur/`](aur/README.md). Arch users are vocal early
    adopters, and the package handles the `uinput` udev rule + module load +
    systemd user service natively. Publishing it also creates a discovery page.

@@ -43,15 +43,18 @@ export const AudioOut = (() => {
   return { unlock, play, level };
 })();
 
-// ═══ DEMO — the hosted relay: real xAI engines, opt-in, always labeled ═════
-// The page never touches the network on its own. Every request here
-// happens because you ran a command (`real`, `ask`, `say`, `demo`) or
-// tapped the mic with `real` armed — and only ever to the relay host
-// below. `?relay=http://…` overrides the host (used by the test rig).
+// ═══ DEMO — optional local relay only (`?relay=`). Not a product path. ═══
+// The hosted api.hyperfurion.com demo is archived and not active. This
+// page uses the browser speech engine. `?relay=http://…` is left for
+// someone running the unpublished tree in archive/relay/ locally.
 export const Demo = (() => {
-  const base = new URLSearchParams(location.search).get("relay") || "https://api.hyperfurion.com";
+  const base = new URLSearchParams(location.search).get("relay") || "";
   const D = { want: false, status: null, base, wsBase: base.replace(/^http/, "ws") };
   D.check = async () => {
+    if (!base) {
+      D.status = { live: false, reason: "hosted demo is not active" };
+      return D.status;
+    }
     try {
       const r = await fetch(base + "/v1/demo/status", { signal: AbortSignal.timeout(4000) });
       D.status = await r.json();

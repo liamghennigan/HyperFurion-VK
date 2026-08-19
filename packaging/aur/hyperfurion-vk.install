@@ -8,9 +8,8 @@ post_install() {
     2. Load the uinput module now (or reboot):
          sudo modprobe uinput
 
-    3. Pick a speech provider — the hosted "no setup" path is simplest:
-         voice-keyboard login <your-email>
-       ...or copy the sample config and set your own keys/local server:
+    3. Copy the sample config and set a provider key or a local server
+       (there is no hosted login):
          mkdir -p ~/.config/voice-keyboard
          cp /usr/share/doc/hyperfurion-vk/config.toml.example \
             ~/.config/voice-keyboard/config.toml

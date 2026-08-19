@@ -6,7 +6,7 @@
   <title>HyperFurion VK — Your voice is the keyboard</title>
   <meta name="description" content="HyperFurion VK is an open-source, Linux-first voice keyboard: a system-wide input device that turns speech into text, edits, rewrites, terminal drafts, readback, recall, and assistant actions — typed into the app you already have focused. This page is a working instance." />
   <meta property="og:title" content="HyperFurion VK — Your voice is the keyboard" />
-  <meta property="og:description" content="A voice keyboard, not a dictation app: words land in the focused app while you speak — molten, self-repairing, frozen once they're sure. Spoken edits, registers, a rewrite lane, and an Enter key that stays yours. Try it — this page actually listens." />
+  <meta property="og:description" content="A Linux-first voice keyboard, not a dictation app: words land in the focused app while you speak — molten, self-repairing, frozen once they're sure. Full features are Linux-only; macOS and Windows are limited betas. Try it — this page actually listens." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/" />
   <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/" />
@@ -16,7 +16,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "HyperFurion VK",
-    "operatingSystem": "Linux; macOS (beta); Windows (beta)",
+    "operatingSystem": "Linux (full features); macOS (limited beta); Windows (limited beta)",
     "applicationCategory": "UtilitiesApplication",
     "softwareVersion": "2.1.3",
     "license": "https://opensource.org/licenses/MIT",
@@ -1879,7 +1879,7 @@
       <canvas id="hero-canvas" aria-hidden="true"></canvas>
       <div class="wrap hero-grid">
         <div>
-          <span class="hero-pill"><span class="dot"></span> Linux-first · macOS &amp; Windows beta · MIT · open source</span>
+          <span class="hero-pill"><span class="dot"></span> Linux-first · full features on Linux · macOS &amp; Windows limited beta · MIT</span>
           <h1>Your voice is <em>the keyboard.</em></h1>
           <p class="hero-sub"><strong>Type with your voice — in any app you're already in.</strong> HyperFurion VK is a system-wide input device: your speech types, edits, rewrites, drafts terminal commands, reads text back aloud, and remembers what you said — pressed into whatever app you already have focused.</p>
           <div class="hero-actions">
@@ -2018,7 +2018,7 @@
               <button class="command" data-demo="rewrite"><span class="kind">Rewrite key</span><b>“VK, make that direct and confident”</b></button>
               <button class="command" data-demo="terminal"><span class="kind">Terminal key</span><b>“find every TODO in this repo”</b></button>
               <button class="command" data-demo="tts"><span class="kind">Read key</span><b>select text → voice-keyboard tts</b></button>
-              <button class="command" data-demo="kai"><span class="kind">Assistant key</span><b>hold Right Ctrl — “what broke in this stack trace?” (that’s Kai)</b></button>
+              <button class="command" data-demo="kai"><span class="kind">Assistant key</span><b>hold Right Ctrl (Linux) — “what broke in this stack trace?” (that’s Kai)</b></button>
             </div>
 
             <div class="demo-output">
@@ -2061,7 +2061,7 @@
           <article class="mode-card"><div><small>Read</small><h3>Speak back</h3><p>Select any text and the keyboard reads it aloud.</p></div><code>voice-keyboard tts</code></article>
           <article class="mode-card"><div><small>Recall</small><h3>Remember</h3><p>An opt-in local ledger of what you dictated — list, re-type, or search it on-box.</p></div><code>voice-keyboard recall 2</code></article>
           <article class="mode-card"><div><small>Terminal</small><h3>Draft</h3><p>Speak intent at a prompt; one line is typed for review. It can’t press Enter.</p></div><code>[intent]</code></article>
-          <article class="mode-card"><div><small>Assistant</small><h3>Kai</h3><p>Hold Right Ctrl and ask. In a terminal it drafts; elsewhere it answers, spoken back.</p></div><code>hold rightctrl</code></article>
+          <article class="mode-card"><div><small>Assistant</small><h3>Kai</h3><p>On Linux, hold Right Ctrl and ask. In a terminal it drafts; elsewhere it answers, spoken back.</p></div><code>hold rightctrl</code></article>
         </div>
         <span class="sigcap" style="display:block;margin-top:22px;">works with any provider — xAI, OpenAI, Groq, Deepgram — or fully offline against a local server. nothing leaves your machine unless you send it.</span>
       </div>
@@ -2080,12 +2080,12 @@
             <span class="enter"><span class="held-chip">⏎ held — yours</span><span>voice → drafted keystrokes → you press Enter</span></span>
           </div>
           <div class="guarantees">
-            <div class="guarantee"><span class="ico">⏎</span><div><b>It never presses Enter for you</b><span>Command drafting types one line and stops — the refusal is enforced inside the injector, on every path. Your keypress is the consent.</span></div></div>
+            <div class="guarantee"><span class="ico">⏎</span><div><b>On Linux it never presses Enter for you</b><span>Command drafting types one line and stops — the refusal is enforced inside the Linux uinput injector. macOS and Windows betas do not have that guarantee. Your keypress is the consent.</span></div></div>
             <div class="guarantee"><span class="ico">◉</span><div><b>Push-to-talk, by default</b><span>Nothing is captured until you summon it. The wake word is opt-in and off by default; the hotkey is the hard mute.</span></div></div>
             <div class="guarantee"><span class="ico">◌</span><div><b>Audio lives in memory</b><span>Speech is held in memory while transcribed, never written to disk. Password fields always force <code>verbatim</code> and are never logged.</span></div></div>
           </div>
         </div>
-        <p class="sigcap" style="margin-top:26px;">honest about the edges: Linux-first (macOS &amp; Windows in beta) · cloud by default, fully offline in one config line · live typing needs a streaming provider. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">full list on GitHub →</a></p>
+        <p class="sigcap" style="margin-top:26px;">honest about the edges: full features are Linux-only for now (macOS &amp; Windows are limited betas) · cloud by default, fully offline in one config line · live typing needs a streaming provider. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">full list on GitHub →</a></p>
       </div>
     </section>
 
@@ -2097,7 +2097,7 @@
             <span class="eyebrow">two minutes to first words</span>
             <h3 id="install-title">Install the input device you already have.</h3>
             <p>One installer sets up the daemon, the hotkey, and the GNOME overlay. Then tap the hotkey and speak — VK decides whether your phrase is text, a correction, a rewrite, a readback, a recall, a terminal draft, or a question for Kai.</p>
-            <p><strong style="color:var(--ivory)">Free and open source forever.</strong> Every feature works with your own provider key — nothing is paywalled. <span style="color:var(--muted)">A hosted subscription is coming soon — entirely optional, to help support ongoing maintenance.</span></p>
+            <p><strong style="color:var(--ivory)">Free and open source forever.</strong> Every feature works with your own provider key — or a local server — nothing is paywalled. There is no hosted login or subscription.</p>
             <div class="hero-actions">
               <a class="btn primary" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest" rel="noopener">Get the latest release</a>
               <a class="btn" href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">Read the source</a>
@@ -2123,14 +2123,13 @@ chmod +x install-hyperfurion-vk.sh
 
   <footer>
     <div class="wrap">
-      <span class="sigcap" style="display:block;margin-bottom:14px;"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · works offline once loaded · the hosted demo speaks only when spoken to</span>
+      <span class="sigcap" style="display:block;margin-bottom:14px;"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · works offline once loaded · this page uses your browser’s speech engine</span>
     </div>
     <div class="wrap footer-grid">
       <div>HyperFurion VK · MIT · a voice keyboard, not a dictation app</div>
       <div class="footer-links">
         <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">github</a>
         <a href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest" rel="noopener">releases</a>
-        <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay" rel="noopener">relay</a>
         <a href="#top">back to top</a>
       </div>
     </div>
@@ -2181,11 +2180,11 @@ chmod +x install-hyperfurion-vk.sh
         hear: 'intent: draft shell command',
         press: 'one line typed — Enter withheld',
         app: 'terminal', title: '~/HyperFurion-VK',
-        body: '<h4 class="mono">$</h4><p class="mono">rg -n "TODO|FIXME" .<span class="cursor-line"></span></p><p class="dim">Drafted for review. The injector cannot press Enter — that key is yours.</p>',
+        body: '<h4 class="mono">$</h4><p class="mono">rg -n "TODO|FIXME" .<span class="cursor-line"></span></p><p class="dim">Drafted for review. On Linux the injector cannot press Enter — that key is yours.</p>',
         actions: [
           ['Target', '<strong>The focused terminal</strong>, detected as a command context.'],
           ['Action', 'Turns spoken intent into one command line at the prompt.'],
-          ['Result', 'The refusal to press Enter is enforced in the injector, on every path.']
+          ['Result', 'On Linux the refusal to press Enter is enforced in the uinput injector.']
         ]
       },
       tts: {
@@ -2201,7 +2200,7 @@ chmod +x install-hyperfurion-vk.sh
         ]
       },
       kai: {
-        say: 'hold Right Ctrl — “what broke in this stack trace?”',
+        say: 'hold Right Ctrl (Linux) — “what broke in this stack trace?”',
         hear: 'intent: assistant turn',
         press: 'answer aloud, or draft the fix',
         app: 'developer terminal', title: 'kai — push-to-talk',

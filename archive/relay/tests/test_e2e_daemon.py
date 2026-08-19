@@ -26,10 +26,12 @@ def _hf_config(api_key: str, base_url: str) -> dict:
 
 
 class TestProviderWiring:
-    def test_default_endpoints_point_at_hosted_relay(self) -> None:
+    def test_empty_base_url_does_not_default_to_hosted_api(self) -> None:
         cfg = _hf_config("hfk_x", "")
-        assert vk_stt.hyperfurion_ws_url(cfg) == "wss://api.hyperfurion.com/v1/stt"
-        assert vk_tts.hyperfurion_tts_url(cfg) == "https://api.hyperfurion.com/v1/tts"
+        with pytest.raises(RuntimeError, match="base_url is required"):
+            vk_stt.hyperfurion_ws_url(cfg)
+        with pytest.raises(RuntimeError, match="base_url is required"):
+            vk_tts.hyperfurion_tts_url(cfg)
 
     def test_base_url_override_maps_scheme(self) -> None:
         cfg = _hf_config("hfk_x", "http://127.0.0.1:9999/")

@@ -3,7 +3,6 @@ import { hint, coarse, SR } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
 import { Config } from "./config.js";
-import { Demo } from "./demo-relay.js";
 import { Dictation } from "./dictation.js";
 
 export const Hints = (() => {
@@ -28,8 +27,7 @@ export const Hints = (() => {
       add("the <span class='molten-word'>amber</span> words were <b>molten</b> — still allowed to " +
           "repair themselves. after <code>stability_ms</code> they froze to ink, never to be " +
           "touched again. now say <b>“scratch that”</b> — spoken edits are commands, not text");
-      if (!Demo.want) add(" · or type <code>real</code> in the terminal — the mic switches to " +
-          "the actual xai engine this product ships with");
+      add(" · this page uses your browser's speech engine; the desktop app talks to the provider you configure");
     } else if (state.dictations === 2) {
       add("end a sentence with <b>“" + (Config.cfg.wakeWord || "vk") +
           ", make that formal”</b> — the wake word routes what you just typed through an " +

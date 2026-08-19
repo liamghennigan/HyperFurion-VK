@@ -6,11 +6,14 @@
 [![Stars](https://img.shields.io/github/stars/liamghennigan/HyperFurion-VK?style=social)](https://github.com/liamghennigan/HyperFurion-VK/stargazers)
 
 **Type with your voice in any Linux app — including the terminal.** HyperFurion
-VK is a system-wide voice keyboard: your speech becomes real keystrokes,
-pressed into whatever app your cursor is already in. Words land *while you
-speak* and repair themselves as the sentence firms up ("molten dictation"). It
-runs **fully offline with a local model**, and it **never presses Enter — only
-you do.**
+VK is a Linux-first, system-wide voice keyboard: your speech becomes real
+keystrokes, pressed into whatever app your cursor is already in. Words land
+*while you speak* and repair themselves as the sentence firms up ("molten
+dictation"). It runs **fully offline with a local model**. On Linux it
+**never presses Enter — only you do.** Full features (uinput injection,
+the Enter-refusal guarantee, default Kai `rightctrl` summon, GNOME overlay)
+are Linux-only for now. macOS and Windows exist as limited betas, not as
+equivalent ports.
 
 ▶ **See it work:** **<https://liamghennigan.github.io/HyperFurion-VK/>** — the
 landing page dictates itself, live, in your browser.
@@ -28,8 +31,8 @@ curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/downl
 
 Sets up a local daemon, the `uinput` virtual keyboard, and a systemd user
 service. Works offline with a local Whisper/OpenAI-compatible server, or point
-it at a cloud provider (xAI, OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs) —
-or the hosted tier: `voice-keyboard login <email>`, no key to manage.
+it at a cloud provider (xAI, OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs).
+Bring your own key — there is no hosted login or subscription.
 
 ### Why it's different
 
@@ -38,11 +41,12 @@ or the hosted tier: `voice-keyboard login <email>`, no key to manage.
 - **Molten dictation.** With a streaming provider, words appear as you speak
   and self-correct in place, then freeze — you watch the text think.
 - **You keep the trigger.** In the terminal it *drafts* the command and stops;
-  **Enter is always yours.** Nothing is captured until you press to talk.
+  **on Linux, Enter is always yours** (enforced in the uinput injector).
+  Nothing is captured until you press to talk.
 - **Private by default.** Run it 100% offline with a local model; zero
   analytics; your keys stay on your machine.
-- **A voice assistant in the keyboard** — "Kai" (hold Right Ctrl, click the
-  orb, or the opt-in wake word), model-agnostic and local-first.
+- **A voice assistant in the keyboard** — "Kai" (on Linux: hold Right Ctrl,
+  click the orb, or the opt-in wake word), model-agnostic and local-first.
 
 ---
 
@@ -53,18 +57,20 @@ When you ask for text-to-speech, it reads the primary selection from your
 desktop, sends that selected text to the configured TTS provider, and plays the
 returned audio locally.
 
-**New in 2.0: Kai — a voice assistant in the keyboard.** Summon Kai three
-ways — **hold Right Ctrl** walkie-talkie style and release to send (a bare
-modifier, so nothing ever leaks into the focused app — configurable),
-**click** the always-on Kai orb on screen, or (opt-in) say the **wake word
-"Kai"** — and it routes your spoken query by where you are:
+**New in 2.0: Kai — a voice assistant in the keyboard.** On Linux, summon
+Kai three ways — **hold Right Ctrl** walkie-talkie style and release to send
+(a bare modifier, so nothing ever leaks into the focused app —
+configurable), **click** the always-on Kai orb on screen, or (opt-in) say
+the **wake word "Kai"** — and it routes your spoken query by where you are:
 focused on a terminal, it turns your words into a command and types it at
-the prompt — never pressing Enter, only you can; anywhere else, it answers
-or searches the web, spoken back. An earcon confirms the mic is live, the
-turn runs off the hotkey path (so a second tap cuts Kai off mid-answer), and
-the `[llm]` brain is model-agnostic and local-first (a ~1 GB model handles
-the command work). On by default and push-to-talk — nothing is captured
-until you summon it. See `[assistant]` / `[wake]` in `config.toml.example`.
+the prompt — never pressing Enter, only you can (Linux injector); anywhere
+else, it answers or searches the web, spoken back. An earcon confirms the
+mic is live, the turn runs off the hotkey path (so a second tap cuts Kai
+off mid-answer), and the `[llm]` brain is model-agnostic and local-first
+(a ~1 GB model handles the command work). On by default and push-to-talk —
+nothing is captured until you summon it. See `[assistant]` / `[wake]` in
+`config.toml.example`. The default `rightctrl` summon and Enter-refusal
+are Linux-only.
 
 **Flow — [molten dictation](#flow--molten-dictation).** With a streaming
 provider, words appear in the focused field *while you speak* and repair
@@ -99,8 +105,9 @@ routes the just-typed text through an LLM and repairs it on screen.
 - **Config file:** `~/.config/voice-keyboard/config.toml`.
 - **Logs:** `journalctl --user -u voice-keyboard-daemon -f`.
 - **Core desktop support:** Linux desktop sessions with uinput access.
-- **macOS (beta):** Quartz keystroke injection + event-tap hotkeys —
-  `./packaging/macos/install-macos.sh` from a checkout. See [macOS](#macos-beta).
+- **macOS / Windows (limited beta):** injection and hotkeys exist; they are
+  not equivalent to Linux. See [macOS](#macos-beta) and
+  [Windows](#windows-beta).
 - **Best overlay support:** GNOME Shell 50 on Wayland. Other desktops fall back
   to ordinary desktop notifications.
 - **Works fully offline** — bring your own local provider. A cloud provider
@@ -213,12 +220,14 @@ Supported installer environment variables:
 When env vars are missing, `install.sh` prompts through `/dev/tty`, so prompts
 still work when it is launched by the release installer.
 
-## macOS (Beta)
+## macOS (limited beta)
 
-The daemon runs on macOS with native backends: keystroke injection uses
-Quartz CGEvents (full Unicode — accents, CJK, emoji, which the Linux uinput
-backend cannot do), the global hotkey uses a listen-only keyboard event tap,
-and the daemon runs as a launchd agent. From a checkout:
+macOS is a limited port, not a feature-complete peer of the Linux build.
+The daemon runs with native backends: keystroke injection uses Quartz
+CGEvents (full Unicode — accents, CJK, emoji), the global hotkey uses a
+listen-only keyboard event tap, and the daemon runs as a launchd agent.
+There is no uinput Enter-refusal, no default bare `rightctrl` Kai summon,
+and no GNOME overlay. From a checkout:
 
 ```bash
 git clone https://github.com/liamghennigan/HyperFurion-VK
@@ -231,17 +240,20 @@ System Settings → Privacy & Security: **Accessibility** (hotkeys and
 typing) and **Microphone**. There is no GNOME-style overlay; status
 arrives as notification-center toasts.
 
-Beta means beta: the platform layer is unit-tested, but it has not had the
-months of daily driving the Linux build has. Issues welcome.
+Limited beta: the platform layer is unit-tested, but it has not had the
+months of daily driving the Linux build has, and it does not claim the
+Linux injector or hotkey guarantees. Issues welcome.
 
-## Windows (Beta)
+## Windows (limited beta)
 
-Also native, also pure standard library: injection uses `SendInput` with
-Unicode events, the hotkey uses a low-level keyboard hook (so hold-to-talk
-works, and the daemon's own typing can never re-trigger it), IPC runs on
-loopback TCP (`127.0.0.1:48765` — Windows Python has no Unix sockets)
-guarded by a per-session token file (mode 600) so other local processes
-can't drive typing, and status arrives as toasts. From a checkout, in
+Windows is also a limited port, not an equivalent of the Linux build.
+Injection uses `SendInput` with Unicode events, the hotkey uses a
+low-level keyboard hook (so hold-to-talk works, and the daemon's own
+typing can never re-trigger it), IPC runs on loopback TCP
+(`127.0.0.1:48765` — Windows Python has no Unix sockets) guarded by a
+per-session token file (mode 600) so other local processes can't drive
+typing, and status arrives as toasts. There is no uinput Enter-refusal
+and no default bare `rightctrl` Kai summon. From a checkout, in
 PowerShell:
 
 ```powershell
@@ -251,7 +263,9 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1
 ```
 
 That installs to your user site, writes a starter config, and adds a
-Startup-folder launcher (no admin required). Same beta caveat as macOS.
+Startup-folder launcher (no admin required). Same limited-beta caveat as
+macOS: useful for trying the daemon, not a substitute for the Linux
+product.
 
 ## iOS — Why Not (Yet)
 
@@ -260,9 +274,8 @@ sandboxed away from other apps' input; there is no uinput, no SendInput, no
 event taps. The only sanctioned path is a **custom keyboard extension** — a
 separate Swift app distributed through the App Store, which is a different
 product with a different codebase, not a port of this daemon. It's a
-plausible future project (the relay and hosted tier would slot right in as
-its backend); it is not a checkbox. Nothing on this page will claim iOS
-support until that app exists.
+plausible future project; it is not a checkbox. Nothing on this page will
+claim iOS support until that app exists.
 
 ## First Run Checklist
 
@@ -384,8 +397,8 @@ Flow is on by default. It has two halves:
 
 - **The pipeline** (all providers): a spoken edit grammar and per-app
   rendering registers applied to every transcript before it is typed.
-- **Live molten injection** (streaming providers: `xai`, `hyperfurion`, and
-  local REST via `live_rest`): text streams into the focused field while you
+- **Live molten injection** (streaming providers: `xai` and local REST via
+  `live_rest`): text streams into the focused field while you
   speak. Words stay *molten* for a stability window (default 1.5 s); when the
   provider revises a molten word, the daemon backspaces to the divergence
   point and retypes — the text repairs itself in front of you. Once a word
@@ -457,9 +470,10 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
   held pending; say "keep it" or "scratch that" (CLI: `keep` /
   `discard`). No edit is real until it freezes.
 - **Type, never execute** (`[intent]`, `voice-keyboard intent "…"`) —
-  "VK, run …" types ONE command line at your prompt and cannot press
-  Enter: the refusal is enforced inside the keystroke injector on every
-  path (keycode, newline, clipboard paste). Your keypress is the consent.
+  "VK, run …" types ONE command line at your prompt. On Linux it cannot
+  press Enter: the refusal is enforced inside the uinput injector on
+  every path (keycode, newline, clipboard paste). macOS/Windows betas do
+  not have that injector guarantee. Your keypress is the consent.
 - **Ambient containment** (`[ambient]`, experimental) — in a long-open
   session, only utterances that start with the address word are typed;
   room speech never reaches the engine.
@@ -469,17 +483,20 @@ where behavior could change (see `ROADMAP.md` for the doctrine and
   focused app, so nothing leaks into a terminal; configurable — chords like
   `control+alt+.` work but terminals see escape codes when they're held),
   **click** the always-on Kai orb the overlay draws on screen, or (opt-in
-  `[wake]`) say the local **wake word "Kai"**. (On Wayland the daemon often
-  can't see the focused app — GPU terminals expose no accessibility — so
-  when focus is unknown Kai still compiles commands from clearly-runnable
-  requests and answers everything else; toggle with `terminal_fallback`.) Kai routes your query by where you are: **in a
-  terminal**, it turns your words into a command, types it at the prompt,
-  and **never presses Enter — only you can**; **anywhere else**, it searches
-  the web / answers you, spoken back through your xAI Voice Agent Builder
-  agent (memory unified with the dictation ledger). An earcon confirms the
-  mic is live; the turn runs off the hotkey path, so a second tap barges in
-  and cuts Kai off. Voice in, voice or a drafted command out — you never
-  type to it. Frontier brain, local hands, you own the Enter key.
+  `[wake]`) say the local **wake word "Kai"**. The default `rightctrl`
+  summon is Linux-only (macOS/Windows hotkey specs require a chord). (On
+  Wayland the daemon often can't see the focused app — GPU terminals
+  expose no accessibility — so when focus is unknown Kai still compiles
+  commands from clearly-runnable requests and answers everything else;
+  toggle with `terminal_fallback`.) Kai routes your query by where you
+  are: **in a terminal**, it turns your words into a command, types it at
+  the prompt, and **on Linux never presses Enter — only you can**;
+  **anywhere else**, it searches the web / answers you, spoken back
+  through your xAI Voice Agent Builder agent (memory unified with the
+  dictation ledger). An earcon confirms the mic is live; the turn runs
+  off the hotkey path, so a second tap barges in and cuts Kai off. Voice
+  in, voice or a drafted command out — you never type to it. Frontier
+  brain, local hands; on Linux you own the Enter key.
 - **Wake word "Kai"** (`[wake]`, opt-in, default off) — a tiny **local**
   openWakeWord detector summons Kai hands-free; nothing is transcribed and
   nothing leaves the box until it fires. It's the one path that keeps the
@@ -562,12 +579,6 @@ The installed config starts from `config.toml.example`. The default config is:
 [providers.xai]
 api_key = "xai-your-api-key-here"
 
-# Hosted subscription — one key, no provider accounts. See relay/README.md.
-[providers.hyperfurion]
-api_key = "hfk-your-subscription-key-here"
-# Only set base_url if you run your own relay.
-# base_url = "https://api.hyperfurion.com"
-
 [providers.openai]
 api_key = "openai-your-api-key-here"
 # Point at any OpenAI-compatible server (a local Whisper/Kokoro server
@@ -587,7 +598,7 @@ api_key = "assemblyai-your-api-key-here"
 api_key = "elevenlabs-your-api-key-here"
 
 [stt]
-# Choices: xai, hyperfurion, openai, groq, deepgram, assemblyai
+# Choices: xai, openai, groq, deepgram, assemblyai
 provider = "xai"
 # Leave empty for the provider default.
 model = ""
@@ -595,7 +606,7 @@ language = "en"
 interim_results = true
 
 [tts]
-# Choices: xai, hyperfurion, openai, elevenlabs
+# Choices: xai, openai, elevenlabs
 provider = "xai"
 # Leave empty for the provider default.
 model = ""
@@ -641,7 +652,6 @@ without code changes.
 | Provider | Config value | Default model |
 | --- | --- | --- |
 | xAI (default) | `xai` | Provider default. |
-| HyperFurion (subscription) | `hyperfurion` | Provider default. |
 | OpenAI | `openai` | `gpt-4o-transcribe` |
 | Groq | `groq` | `whisper-large-v3-turbo` |
 | Deepgram | `deepgram` | `nova-3` |
@@ -655,7 +665,6 @@ without code changes.
 | Provider | Config value | Default model | Default voice |
 | --- | --- | --- | --- |
 | xAI (default) | `xai` | Provider default. | `eve` |
-| HyperFurion (subscription) | `hyperfurion` | Provider default. | `eve` |
 | OpenAI | `openai` | `gpt-4o-mini-tts` | `coral` |
 | ElevenLabs | `elevenlabs` | `eleven_multilingual_v2` | `JBFqnCBsd6RMkjVDRZzb` |
 
@@ -693,18 +702,12 @@ The strongest open models to serve locally right now:
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | CPU-only and edge boxes; no GPU required. |
 | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) | Small, high-quality open TTS voice (what Speaches serves). |
 
-### The HyperFurion Subscription Provider
+### No hosted subscription
 
-`hyperfurion` buys convenience, not capability. Every feature of
-HyperFurion VK is open source and free forever — with your own provider
-API key you have all of it, and paying unlocks nothing. The subscription
-is a single `hfk_` key instead of a provider account, with xAI STT/TTS
-behind a metered relay; what's left over after upstream costs funds the
-project's development. It speaks the same streaming protocol as `xai`, so
-behavior is identical from the daemon's side. Audio for this provider
-transits the relay on its way to xAI; it is held in memory only and never
-written to disk. The relay is in `relay/` and is fully self-hostable —
-see `relay/README.md` for tiers, quotas, and deployment.
+There is no live HyperFurion checkout, Stripe tier, or
+`voice-keyboard login`. Use a provider API key or a local
+OpenAI-compatible server. An unpublished subscription relay is parked
+under `archive/relay/` for history; it is not a launch or install path.
 
 ## Hotkeys
 
@@ -986,10 +989,13 @@ status UI, IPC, playback, and keyboard injection are already local.
 
 ## Limitations
 
-- Linux is the primary, battle-tested platform; macOS and Windows support is
-  beta. iOS is not possible as a system-wide keyboard (see iOS — Why Not).
-- No speech model ships in the box: bring a provider key, the subscription, or
-  a local OpenAI-compatible server (see Fully Offline above).
+- Linux is the only platform with full features. macOS and Windows are
+  limited betas (injection + hotkeys + basic daemon; no Enter-refusal
+  guarantee, no default Kai `rightctrl` summon, no GNOME overlay). iOS is
+  not possible as a system-wide keyboard (see iOS — Why Not).
+- No speech model ships in the box: bring a provider key or a local
+  OpenAI-compatible server (see Fully Offline above). There is no hosted
+  subscription.
 - uinput injection on Linux types ASCII directly and everything else via a
   clipboard paste (needs `wl-copy`/`xclip`; the macOS and Windows backends
   type full Unicode natively).
@@ -1035,6 +1041,7 @@ voice-keyboard/
 |       |-- extension.js   # GNOME Shell near-field overlay + live caption
 |       `-- metadata.json
 |-- tests/
+|-- archive/relay/         # unpublished hosted relay — not a product path
 |-- config.toml.example
 |-- install.sh
 |-- packaging/install-hyperfurion-vk.sh

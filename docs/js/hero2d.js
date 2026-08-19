@@ -73,7 +73,7 @@ export const Hero = (() => {
     heroCap.hidden = false;
     // mode is only ever "rec" after boot, so Dictation exists by then
     const relayTag = mode === "rec" && Dictation.engine === "relay"
-      ? " · engine: xai grok stt (hosted demo)" : "";
+      ? " · engine: xai grok stt (local ?relay=)" : "";
     // when the field has taken over, this canvas is hidden and the signal
     // paints the particles instead of a waterfall — say so
     const gauge = heroCanvas.style.display === "none" ? "driving the field" : "spectrogram";

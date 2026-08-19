@@ -128,6 +128,14 @@ class TestPlayPygameMixerGuard:
 
 
 class TestHyperFurionTTSProvider:
+    def test_empty_base_url_does_not_default_to_hosted_api(self) -> None:
+        cfg = {
+            "providers": {"hyperfurion": {"api_key": "hfk_abc", "base_url": ""}},
+            "tts": {"provider": "hyperfurion"},
+        }
+        with pytest.raises(RuntimeError, match="base_url is required"):
+            tts.create_tts_client(cfg)
+
     def _client(self) -> "tts.TTSClient":
         cfg = {
             "providers": {
