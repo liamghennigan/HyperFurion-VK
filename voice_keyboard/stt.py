@@ -18,7 +18,6 @@ from urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 XAI_STT_WS_URL = "wss://api.x.ai/v1/stt"
-HYPERFURION_DEFAULT_BASE_URL = "https://api.hyperfurion.com"
 OPENAI_STT_URL = "https://api.openai.com/v1/audio/transcriptions"
 GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEEPGRAM_STT_URL = "https://api.deepgram.com/v1/listen"
@@ -81,15 +80,20 @@ def _provider_api_key(config: dict, provider: str) -> str:
 
 
 def hyperfurion_ws_url(config: dict) -> str:
-    """WebSocket STT endpoint for the hosted HyperFurion relay.
+    """WebSocket STT endpoint for a self-hosted HyperFurion relay.
 
-    The relay speaks the same wire protocol as xAI STT, so the streaming
-    client is reused as-is with a different endpoint and the user's
-    subscription key instead of a raw provider key.
+    The archived relay speaks the same wire protocol as xAI STT. There is
+    no hosted api.hyperfurion.com — `providers.hyperfurion.base_url` must
+    be set explicitly (see archive/relay/).
     """
     providers = config.get("providers", {})
     base = str(providers.get("hyperfurion", {}).get("base_url", "")).strip()
-    base = (base or HYPERFURION_DEFAULT_BASE_URL).rstrip("/")
+    if not base:
+        raise RuntimeError(
+            "providers.hyperfurion.base_url is required; there is no hosted "
+            "HyperFurion relay. Use a self-hosted URL or another provider."
+        )
+    base = base.rstrip("/")
     if base.startswith("https://"):
         base = "wss://" + base[len("https://"):]
     elif base.startswith("http://"):

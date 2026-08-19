@@ -1,6 +1,6 @@
 // ═══ DICTATION — the product's forward lane, now molten ═══════════════════
-// Every path — your browser's speech engine, the hosted xai relay, and the
-// scripted chips — feeds the same flow engine (flow.js), the same way every
+// Every path — your browser's speech engine, an optional local ?relay=,
+// and the scripted chips — feeds the same flow engine (flow.js), the same way every
 // provider feeds the daemon's. Words render molten, repair in place, freeze
 // on the stability window, honor the spoken grammar and the focused
 // window's register. flow.live = false in the live config restores the old
@@ -131,7 +131,7 @@ export const Dictation = (() => {
     engine = "sim";
   }
 
-  // — the hosted-relay dictation path: mic PCM → relay → xai grok stt —
+  // — optional local ?relay= dictation path: mic PCM → that host —
   async function startRelay(sigP) {
     try {
       await sigP;
@@ -224,8 +224,8 @@ export const Dictation = (() => {
     // assigned (mic denied, WebSocket ctor threw). Clean up only if built.
     if (relay) relayCleanup();
     clearTimeout(relayT);
-    state.lastError = "hosted demo: " + msg;
-    Terminal.print("hosted demo: " + msg, "err");
+    state.lastError = "demo relay: " + msg;
+    Terminal.print("demo relay: " + msg, "err");
     if (D.recording) {
       engine = "none";
       Terminal.print("falling back to your browser's engine", "dim");
@@ -239,7 +239,7 @@ export const Dictation = (() => {
   function funnel() {
     if (funneled) return;
     funneled = true;
-    Terminal.print("· that came through xai grok stt — the hosted tier is coming soon; everything's free today with your own key", "dim");
+    Terminal.print("· that came through a local ?relay= override — the desktop app is bring-your-own-key, no hosted subscription", "dim");
   }
 
   // ── the landing: flush the grammar, run the rewrite lane, commit ────────

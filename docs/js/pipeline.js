@@ -58,7 +58,7 @@ export const Pipeline = (() => {
   bus.on("rec:start", () => {
     fig.classList.add("rec");
     engineSub.textContent = Dictation.engine === "relay"
-      ? "xai grok stt (hosted)" : "browser speech engine";
+      ? "xai grok stt (local ?relay=)" : "browser speech engine";
     status.textContent = "capturing audio";
   });
   bus.on("rec:interim", () => {

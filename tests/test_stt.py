@@ -278,17 +278,14 @@ class TestBufferedRESTSTTClient:
 
 
 class TestHyperFurionSTTProvider:
-    def test_create_stt_client_targets_hosted_relay(self) -> None:
+    def test_empty_base_url_does_not_default_to_hosted_api(self) -> None:
         cfg = {
             "providers": {"hyperfurion": {"api_key": "hfk_abc", "base_url": ""}},
             "stt": {"provider": "hyperfurion", "language": "en", "interim_results": True},
         }
 
-        client = stt.create_stt_client(cfg)
-
-        assert isinstance(client, stt.STTClient)
-        assert client._api_key == "hfk_abc"
-        assert client._ws_url == "wss://api.hyperfurion.com/v1/stt"
+        with pytest.raises(RuntimeError, match="base_url is required"):
+            stt.create_stt_client(cfg)
 
     def test_base_url_override_maps_scheme_and_strips_slash(self) -> None:
         cfg = {

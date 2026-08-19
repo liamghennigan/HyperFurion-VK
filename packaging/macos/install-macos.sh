@@ -61,7 +61,9 @@ Then restart the daemon:
 Check:  voice-keyboard status      (add ~/.../bin to PATH if needed)
 Logs:   ~/Library/Logs/voice-keyboard-daemon.log
 
-macOS support is BETA: injection uses Quartz CGEvents (full Unicode —
-better than the Linux ASCII limit), hotkeys use a listen-only event
-tap. No GNOME-style overlay; you get notification-center toasts.
+macOS support is a LIMITED BETA. Full features (uinput Enter-refusal,
+default Kai rightctrl summon, GNOME overlay) are Linux-only.
+Injection uses Quartz CGEvents (full Unicode). Hotkeys use a
+listen-only event tap. No GNOME-style overlay; you get
+notification-center toasts.
 EOF

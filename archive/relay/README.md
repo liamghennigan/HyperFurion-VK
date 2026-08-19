@@ -1,4 +1,10 @@
-# HyperFurion relay
+# HyperFurion relay — **archived, not active**
+
+> This directory is parked under `archive/`. The hosted subscription,
+> Stripe checkout, email login, and `api.hyperfurion.com` demo were
+> **never launched**. Do not treat this as a live product path. The
+> voice keyboard is bring-your-own-key (or a local server). See
+> [`archive/README.md`](../README.md).
 
 A metered subscription relay in front of xAI STT/TTS. Subscribers get one
 `hfk_` key instead of a provider account; the relay authenticates it,
@@ -82,7 +88,7 @@ they are public and rate-limited by design.
 ## Run it
 
 ```bash
-cd relay
+cd archive/relay
 pip install .
 export XAI_API_KEY="xai-..."           # your master key
 export RELAY_DB="/var/lib/hyperfurion/relay.db"
@@ -93,7 +99,7 @@ hyperfurion-relay                       # listens on :8787
 Or Docker:
 
 ```bash
-docker build -t hyperfurion-relay relay/
+docker build -t hyperfurion-relay archive/relay/
 docker run -p 8787:8787 -v relay-data:/data \
   -e XAI_API_KEY=xai-... -e STRIPE_WEBHOOK_SECRET=whsec_... hyperfurion-relay
 ```
@@ -176,7 +182,7 @@ provider = "hyperfurion"
 
 ```bash
 pip install aiohttp pytest pytest-asyncio
-python3 -m pytest relay/tests -q
+python3 -m pytest tests -q
 ```
 
 The suite runs a fake xAI upstream and drives the daemon's own streaming

@@ -23,10 +23,8 @@
 //   terminal   -> the prompt is real: voice-keyboard toggle | start |
 //                 stop | status | tts | transform | history | recall |
 //                 version | --help
-//   hosted demo-> `real` reroutes the mic to actual xai grok stt through
-//                 a rate-limited relay; `say` plays the real eve voice;
-//                 `ask` answers questions via grok — all opt-in, all
-//                 labeled, all budget-capped server-side
+//   local demo  -> only if you pass ?relay= (unpublished archive/relay).
+//                 otherwise the page stays on the browser speech engine.
 //
 // When the browser has no speech engine or denies the mic, dictation
 // falls back to scripted playback and a synthesized signal — and every
@@ -54,7 +52,6 @@ import { Field } from "./js/field.js";
 import "./js/lede.js";
 import "./js/scrollfx.js";
 import "./js/cta.js";
-import "./js/checkout.js";
 
 // ═══ BOOT ════════════════════════════════════════════════════════════════
 window.__vk.demo = Demo;         // the proof harness steers the demo layer
@@ -76,8 +73,7 @@ $("cfg-live-note")?.removeAttribute("hidden");
 $("page-note")?.removeAttribute("hidden");
 Hints.set();
 // colophon: the real size, measured, not claimed — and counted up like
-// a meter settling, when motion is welcome. If you opted into the hosted
-// demo before scrolling here, its requests are counted and said out loud.
+// a meter settling, when motion is welcome.
 try {
   const nav = performance.getEntriesByType("navigation")[0];
   const htmlBytes = (nav && (nav.transferSize || nav.decodedBodySize)) ||

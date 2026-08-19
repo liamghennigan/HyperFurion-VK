@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 XAI_TTS_URL = "https://api.x.ai/v1/tts"
 OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
 ELEVENLABS_TTS_URL_TEMPLATE = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-HYPERFURION_DEFAULT_BASE_URL = "https://api.hyperfurion.com"
 
 SUPPORTED_TTS_PROVIDERS = {"xai", "hyperfurion", "openai", "elevenlabs"}
 
@@ -55,8 +54,12 @@ def _provider_api_key(config: dict, provider: str) -> str:
 def hyperfurion_tts_url(config: dict) -> str:
     providers = config.get("providers", {})
     base = str(providers.get("hyperfurion", {}).get("base_url", "")).strip()
-    base = (base or HYPERFURION_DEFAULT_BASE_URL).rstrip("/")
-    return f"{base}/v1/tts"
+    if not base:
+        raise RuntimeError(
+            "providers.hyperfurion.base_url is required; there is no hosted "
+            "HyperFurion relay. Use a self-hosted URL or another provider."
+        )
+    return f"{base.rstrip('/')}/v1/tts"
 
 
 def create_tts_client(config: dict):
@@ -102,7 +105,7 @@ class TTSClient:
         self._language = language
         self._timeout = timeout
         self._model = model or DEFAULT_TTS_MODELS.get(provider, "")
-        self._hyperfurion_url = hyperfurion_url or f"{HYPERFURION_DEFAULT_BASE_URL}/v1/tts"
+        self._hyperfurion_url = hyperfurion_url
         self._openai_url = (
             f"{openai_base_url.rstrip('/')}/audio/speech" if openai_base_url else OPENAI_TTS_URL
         )

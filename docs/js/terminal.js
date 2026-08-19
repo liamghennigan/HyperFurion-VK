@@ -7,7 +7,6 @@ import { AudioOut, Demo } from "./demo-relay.js";
 import { Dictation } from "./dictation.js";
 import { TTS } from "./tts.js";
 import { Hints } from "./hints.js";
-import { CHECKOUT, checkoutLive, live } from "./checkout.js";
 
 export const Terminal = (() => {
   const history = [];
@@ -84,8 +83,7 @@ export const Terminal = (() => {
     ["usage: voice-keyboard [command]", "dim"],
     ["  toggle (default) · start · stop · status · tts · version", "dim"],
     ["  transform \"<instruction>\" · history [n] · recall <n>", "dim"],
-    ["  page-only: help · clear · sponsor · subscribe", "dim"],
-    ["  hosted demo (real xai): real · ask <q> · say <text> · demo", "dim"],
+    ["  page-only: help · clear · sponsor", "dim"],
     ["say, while dictating: \"scratch that\" · \"new line\" · \"period\" ·", "dim"],
     ["  \"literal <word>\" · \"twenty three\" → 23 · \"VK, make that formal\"", "dim"],
   ];
@@ -95,34 +93,33 @@ export const Terminal = (() => {
       print("thinking…", "dim");
       Demo.ask(q).then((a) => {
         a.split("\n").forEach((line) => { if (line.trim()) print(line.trim()); });
-        print("· grok, via the hosted demo", "dim");
-      }).catch((e) => print("hosted demo: " + e.message, "err"));
+        print("· grok, via a local ?relay= override (not a hosted product)", "dim");
+      }).catch((e) => print("demo relay: " + e.message, "err"));
     };
     if (Demo.status && Demo.status.live) go();
     else Demo.check().then((st) => st.live ? go() :
-      print("hosted demo offline (" + (st.reason || "unreachable") +
-            ") — the README has answers: github.com/liamghennigan/HyperFurion-VK", "dim"));
+      print("no hosted demo — the README has answers: github.com/liamghennigan/HyperFurion-VK", "dim"));
   }
   function doSay(text) {
     const t = (text || "This is eve — the voice this keyboard ships with.").slice(0, 220);
     const browserVoice = () => {
       if (!synth) { print("no speech engine in this browser", "dim"); return; }
       synth.speak(new SpeechSynthesisUtterance(t));
-      print("speaking with your browser's voice — type `real` first to hear the actual eve", "dim");
+      print("speaking with your browser's voice", "dim");
     };
     AudioOut.unlock();  // synchronously, while we're still inside the keystroke
     const go = () => Demo.tts(t).then((blob) => {
-      print("▶ eve — xai grok tts, via the hosted demo", "dim");
+      print("▶ eve — xai grok tts, via a local ?relay= override", "dim");
       AudioOut.play(blob).catch(() =>
         print("(playback blocked — tap the page once and retry)", "dim"));
-    }).catch((e) => { print("hosted demo: " + e.message, "err"); browserVoice(); });
+    }).catch((e) => { print("demo relay: " + e.message, "err"); browserVoice(); });
     if (Demo.armed()) go();
     else if (Demo.want) Demo.check().then((st) => (st.live ? go() : browserVoice()));
     else browserVoice();
   }
   function doStatus() {
     print(Dictation.recording ? "recording" : "idle");
-    print("provider: " + (Demo.armed() ? "xai grok stt — hosted relay" : "browser speech engine (this page)"), "dim");
+    print("provider: " + (Demo.armed() ? "xai grok stt — local ?relay=" : "browser speech engine (this page)"), "dim");
     const app = state.focusedApp || "editor";
     const reg = app === "terminal" ? "terminal" : (Config.cfg.regDefault || "prose");
     print("register: " + reg + " · focused app: " + app, "dim");
@@ -192,29 +189,20 @@ export const Terminal = (() => {
         print("https://github.com/sponsors/liamghennigan", "dim");
         break;
       case "subscribe":
-        print("everything is open source, free forever with your own key —", "dim");
-        print("you gain no abilities by paying; the hosted tier is just convenience.", "dim");
-        if (checkoutLive) {
-          print("hosted tier — one hfk_ key, no provider accounts, hard quotas", "dim");
-          if (live(CHECKOUT.basic)) print("$5/mo  basic — 20 h dictation + 10k chars:  " + CHECKOUT.basic, "dim");
-          if (live(CHECKOUT.pro)) print("$10/mo pro   — 40 h dictation + 50k chars: " + CHECKOUT.pro, "dim");
-          print("opening secure checkout on stripe…", "dim");
-          const url = live(CHECKOUT.basic) ? CHECKOUT.basic : CHECKOUT.pro;
-          window.open(url, "_blank", "noopener");
-        } else {
-          print("hosted subscription — coming soon · early access via sponsors: github.com/sponsors/liamghennigan", "dim");
-        }
+        print("there is no hosted subscription or checkout.", "dim");
+        print("bring your own provider key, or a local OpenAI-compatible server.", "dim");
+        print("if the project earns it: github.com/sponsors/liamghennigan", "dim");
         break;
       case "real": case "real on":
         Demo.want = true;
-        print("checking the hosted demo…", "dim");
+        print("checking for a local ?relay= override…", "dim");
         Demo.check().then((st) => {
           if (st.live) {
-            print("hosted demo live — the mic now streams to xai grok stt, the engine this product ships with", "dim");
+            print("local demo relay live — mic streams to that host", "dim");
             print("(talks to " + Demo.base.replace(/^https?:\/\//, "") +
-                  " — nothing else on this page does · `real off` reverts)", "dim");
+                  " — `real off` reverts)", "dim");
           } else {
-            print("hosted demo offline (" + (st.reason || "unreachable") +
+            print("no hosted demo (" + (st.reason || "not active") +
                   ") — your browser's engine stays in charge", "dim");
           }
           Hints.set();
@@ -229,10 +217,9 @@ export const Terminal = (() => {
         Demo.check().then((st) => {
           if (st.live) {
             const s = st.served_today || {};
-            print("hosted demo: live · served today: " + (s.dictations | 0) + " dictations · " +
+            print("local demo relay: live · served today: " + (s.dictations | 0) + " dictations · " +
                   (s.tts | 0) + " voice lines · " + (s.asks | 0) + " questions", "dim");
-            print("caps: " + st.caps.dictation_seconds + " s per dictation, budget-limited per day — real xai, honestly rationed", "dim");
-          } else print("hosted demo: offline (" + (st.reason || "unreachable") + ")", "dim");
+          } else print("no hosted demo (" + (st.reason || "not active") + ")", "dim");
         });
         break;
       case "help": case "--help": case "-h": HELP.forEach(([t, c]) => print(t, c)); break;

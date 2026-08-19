@@ -124,17 +124,27 @@ def test_config_dir(monkeypatch: pytest.MonkeyPatch, xdg: str, expected: Path) -
 
 
 class TestHyperFurionProviderConfig:
-    def test_hyperfurion_config_passes_with_subscription_key(self) -> None:
+    def test_hyperfurion_config_passes_with_self_host_url(self) -> None:
         cfg = config._default_config_with_paths()
         cfg["stt"]["provider"] = "hyperfurion"
         cfg["tts"]["provider"] = "hyperfurion"
         cfg["providers"]["hyperfurion"]["api_key"] = "hfk_0123456789abcdef"
+        cfg["providers"]["hyperfurion"]["base_url"] = "http://127.0.0.1:8787"
         config.validate_config(cfg)
+
+    def test_hyperfurion_without_base_url_raises(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["stt"]["provider"] = "hyperfurion"
+        cfg["providers"]["hyperfurion"]["api_key"] = "hfk_0123456789abcdef"
+        cfg["providers"]["xai"]["api_key"] = "xai-key"
+        with pytest.raises(RuntimeError, match="base_url is required"):
+            config.validate_config(cfg)
 
     def test_hyperfurion_placeholder_key_raises(self) -> None:
         cfg = config._default_config_with_paths()
         cfg["stt"]["provider"] = "hyperfurion"
         cfg["providers"]["hyperfurion"]["api_key"] = "hfk-your-subscription-key-here"
+        cfg["providers"]["hyperfurion"]["base_url"] = "http://127.0.0.1:8787"
         cfg["providers"]["xai"]["api_key"] = "xai-key"
         with pytest.raises(RuntimeError, match="providers.hyperfurion.api_key"):
             config.validate_config(cfg)

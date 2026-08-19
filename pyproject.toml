@@ -37,3 +37,6 @@ voice-keyboard-daemon = "voice_keyboard.daemon:main"
 
 [tool.setuptools.packages.find]
 include = ["voice_keyboard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
