@@ -10,6 +10,8 @@ import ctypes
 import logging
 import time
 
+from voice_keyboard.injector import strip_line_breaks
+
 logger = logging.getLogger(__name__)
 
 INPUT_KEYBOARD = 1
@@ -75,6 +77,9 @@ class WinTextInjector:
 
     def __init__(self):
         self._user32 = None
+        # Same contract as Linux TextInjector: Kai/intent must never emit
+        # Return. Unicode SendInput would otherwise deliver \n as Enter.
+        self.suppress_enter = False
 
     def start(self) -> None:
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
@@ -93,6 +98,10 @@ class WinTextInjector:
     def type_text(self, text: str) -> None:
         if self._user32 is None:
             raise RuntimeError("Injector not started")
+        if self.suppress_enter:
+            text = strip_line_breaks(text)
+            if not text:
+                return
         units = utf16_units(text)
         for start in range(0, len(units), BATCH_UTF16_UNITS):
             batch = units[start : start + BATCH_UTF16_UNITS]

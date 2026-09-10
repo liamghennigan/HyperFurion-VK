@@ -29,6 +29,16 @@ placeholders = {
     "assemblyai-your-api-key-here",
     "elevenlabs-your-api-key-here",
 }
+if provider == "openai":
+    from urllib.parse import urlparse
+
+    base_url = str(config.get("providers", {}).get("openai", {}).get("base_url", "")).strip()
+    host = (urlparse(base_url).hostname or "").lower()
+    local = host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"} or host.endswith(".local")
+    local = local or host.startswith("127.") or host.startswith("10.") or host.startswith("192.168.")
+    local = local or any(host.startswith(f"172.{n}.") for n in range(16, 32))
+    if base_url and local:
+        raise SystemExit(0)
 raise SystemExit(0 if key and key not in placeholders else 1)
 PY
 }
@@ -38,7 +48,7 @@ config_has_required_api_keys() {
 }
 
 write_provider_config() {
-    CONFIG_PATH="$1" STT_PROVIDER_VALUE="$2" TTS_PROVIDER_VALUE="$3" STT_API_KEY_VALUE="$4" TTS_API_KEY_VALUE="$5" python3 - <<'PY'
+    CONFIG_PATH="$1" STT_PROVIDER_VALUE="$2" TTS_PROVIDER_VALUE="$3" STT_API_KEY_VALUE="$4" TTS_API_KEY_VALUE="$5" OPENAI_BASE_URL_VALUE="${6:-}" python3 - <<'PY'
 import os
 import re
 from pathlib import Path
@@ -80,6 +90,9 @@ if stt_key:
     text = set_section_value(text, f"providers.{stt_provider}", "api_key", stt_key)
 if tts_key:
     text = set_section_value(text, f"providers.{tts_provider}", "api_key", tts_key)
+openai_base = os.environ.get("OPENAI_BASE_URL_VALUE", "").strip()
+if openai_base:
+    text = set_section_value(text, "providers.openai", "base_url", openai_base)
 
 path.write_text(text)
 PY
@@ -161,17 +174,32 @@ prompt_api_key() {
     echo "$answer"
 }
 
+prompt_base_url() {
+    env_value="${VOICE_KEYBOARD_OPENAI_BASE_URL:-}"
+    if [ -n "$env_value" ]; then
+        echo "$env_value"
+        return
+    fi
+    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        echo ""
+        return
+    fi
+    printf "OpenAI-compatible base URL (blank = cloud; e.g. http://localhost:8000/v1): " > /dev/tty
+    IFS= read -r answer < /dev/tty || answer=""
+    echo "$answer"
+}
+
 # ── System dependencies ──────────────────────────────────────────────
 echo "[1/6] Installing system dependencies..."
 if command -v apt-get &>/dev/null; then
     sudo apt-get update -qq
-    sudo apt-get install -y portaudio19-dev python3-dev python3-pip python3-venv python3-tk libsndfile1 libnotify-bin wl-clipboard xclip
+    sudo apt-get install -y portaudio19-dev python3-dev python3-pip python3-venv python3-tk libsndfile1 libnotify-bin wl-clipboard xclip python3-gi gir1.2-atspi-2.0 at-spi2-core
 elif command -v dnf &>/dev/null; then
-    sudo dnf install -y portaudio-devel python3-devel python3-pip python3-venv python3-tkinter libsndfile libnotify wl-clipboard xclip
+    sudo dnf install -y portaudio-devel python3-devel python3-pip python3-venv python3-tkinter libsndfile libnotify wl-clipboard xclip python3-gobject at-spi2-core
 elif command -v pacman &>/dev/null; then
-    sudo pacman -S --noconfirm portaudio python-pip python-virtualenv tk libsndfile libnotify wl-clipboard xclip
+    sudo pacman -S --noconfirm portaudio python-pip python-virtualenv tk libsndfile libnotify wl-clipboard xclip python-gobject at-spi2-core
 else
-    echo "WARNING: Unrecognized package manager. Install portaudio, python3-venv, Python dev headers, Tkinter, and notify-send manually."
+    echo "WARNING: Unrecognized package manager. Install portaudio, python3-venv, Python dev headers, Tkinter, notify-send, and AT-SPI (python3-gi / Atspi) manually."
 fi
 
 # ── uinput setup ─────────────────────────────────────────────────────
@@ -279,6 +307,14 @@ STT_PROVIDER="$(prompt_provider "Speech-to-text" "xai" "xai openai groq deepgram
 TTS_PROVIDER="$(prompt_provider "Text-to-speech" "xai" "xai openai elevenlabs" "${VOICE_KEYBOARD_TTS_PROVIDER:-}")"
 STT_API_KEY=""
 TTS_API_KEY=""
+OPENAI_BASE_URL=""
+
+if [ "$STT_PROVIDER" = "openai" ] || [ "$TTS_PROVIDER" = "openai" ]; then
+    OPENAI_BASE_URL="$(prompt_base_url)"
+    if [ -n "$OPENAI_BASE_URL" ]; then
+        write_provider_config "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER" "" "" "$OPENAI_BASE_URL"
+    fi
+fi
 
 if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$STT_PROVIDER"; then
     STT_API_KEY="$(prompt_api_key "$STT_PROVIDER")"
@@ -291,7 +327,7 @@ if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$TTS_PROVIDER"; then
     fi
 fi
 
-write_provider_config "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER" "$STT_API_KEY" "$TTS_API_KEY"
+write_provider_config "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER" "$STT_API_KEY" "$TTS_API_KEY" "$OPENAI_BASE_URL"
 chmod 600 "$CONFIG_DIR/config.toml"
 echo "Configured STT provider: $STT_PROVIDER"
 echo "Configured TTS provider: $TTS_PROVIDER"
@@ -347,5 +383,11 @@ echo ""
 echo "Optional shortcuts:"
 echo "  Ctrl+Alt+T → $BIN_DIR/voice-keyboard tts"
 echo ""
+echo "  Check the install:  voice-keyboard doctor"
 echo "  Check daemon status: systemctl --user status voice-keyboard-daemon"
 echo "  Manual test: voice-keyboard start && sleep 3 && voice-keyboard stop"
+if ! printf '%s' "${XDG_CURRENT_DESKTOP:-}" | grep -qi gnome; then
+    echo ""
+    echo "This session is not GNOME. The near-field overlay is GNOME Shell 50"
+    echo "Wayland only; status will use desktop notifications instead."
+fi

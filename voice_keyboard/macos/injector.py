@@ -12,6 +12,8 @@ Requires the hosting Python process to have Accessibility permission
 import logging
 import time
 
+from voice_keyboard.injector import strip_line_breaks
+
 logger = logging.getLogger(__name__)
 
 # Practical per-event budget for CGEventKeyboardSetUnicodeString, counted
@@ -50,6 +52,9 @@ class MacTextInjector:
 
     def __init__(self):
         self._quartz = None
+        # Same contract as Linux TextInjector: Kai/intent must never emit
+        # Return. Unicode posting would otherwise deliver \n as Enter.
+        self.suppress_enter = False
 
     def start(self) -> None:
         import Quartz  # pyobjc-framework-Quartz; darwin only
@@ -64,6 +69,10 @@ class MacTextInjector:
     def type_text(self, text: str) -> None:
         if self._quartz is None:
             raise RuntimeError("Injector not started")
+        if self.suppress_enter:
+            text = strip_line_breaks(text)
+            if not text:
+                return
         q = self._quartz
         for chunk in chunk_text(text):
             units = _utf16_units(chunk)

@@ -93,6 +93,8 @@ routes the just-typed text through an LLM and repairs it on screen.
   mined from the opt-in ledger; accept what is right.
 - **Hold rewrites for approval:** `[flow] rewrite_pending = true`, then
   "keep it" / "scratch that" (or `voice-keyboard keep` / `discard`).
+- **Diagnose a fresh install:** `voice-keyboard doctor` — PATH, keys or
+  local `base_url`, systemd, uinput, input group, mic, AT-SPI, overlay.
 - **Check whether the daemon is recording:** `voice-keyboard status`.
 - **Check whether the daemon is running:**
   `systemctl --user status voice-keyboard-daemon`.
@@ -140,6 +142,8 @@ systemctl --user start voice-keyboard-daemon
 - systemd user services for the default daemon installation
 - Access to `/dev/uinput` for virtual keyboard injection
 - Read access to `/dev/input/event*` for the built-in global hotkey listener
+- System Python AT-SPI bindings (`python3-gi` / `gir1.2-atspi-2.0`) for
+  widget-aware focus; the installer now installs these
 - PortAudio and PyAudio for microphone capture
 - libsndfile, `sounddevice`, and `numpy` for TTS playback
 - `notify-send` for fallback status notifications
@@ -207,6 +211,7 @@ Supported installer environment variables:
 | `ASSEMBLYAI_API_KEY` | API key for AssemblyAI STT. |
 | `ELEVENLABS_API_KEY` | API key for ElevenLabs TTS. |
 | `VOICE_KEYBOARD_API_KEY` | Generic fallback API key for the selected provider(s). |
+| `VOICE_KEYBOARD_OPENAI_BASE_URL` | Local OpenAI-compatible `base_url` (no key needed). |
 | `VOICE_KEYBOARD_VENV` | Override the venv path. |
 | `VOICE_KEYBOARD_BIN` | Override the daemon binary used in the systemd unit. |
 
@@ -266,16 +271,22 @@ support until that app exists.
 
 ## First Run Checklist
 
-1. Make sure `~/.local/bin` is on your shell `PATH`.
+1. Make sure `~/.local/bin` is on your shell `PATH`, then run the preflight:
 
    ```bash
    command -v voice-keyboard
+   voice-keyboard doctor
    ```
 
-2. If the installer added you to the `input` group, log out and back in. Group
-   membership changes do not fully apply to the current desktop session.
+   Each line is `OK`, `WARN`, or `FAIL` with a one-line fix. Log out and back
+   in if doctor says the `input` group is configured but not yet effective.
 
-3. Start or restart the user service:
+2. If the installer added you to the `input` group and you have not logged
+   out yet, do that now. Group membership changes do not fully apply to the
+   current desktop session.
+
+3. Start or restart the user service (skip if doctor already reports the
+   daemon idle):
 
    ```bash
    systemctl --user restart voice-keyboard-daemon
@@ -321,6 +332,7 @@ voice-keyboard start
 voice-keyboard stop
 voice-keyboard toggle
 voice-keyboard status
+voice-keyboard doctor
 ```
 
 `voice-keyboard` with no command is the same as `voice-keyboard toggle`.
@@ -820,12 +832,14 @@ The user service is not running, the socket path is different from the config,
 or the daemon failed during startup.
 
 ```bash
+voice-keyboard doctor
 systemctl --user status voice-keyboard-daemon
 journalctl --user -u voice-keyboard-daemon -n 100 --no-pager
 ```
 
 Common causes are missing API keys, placeholder API keys still in the config, no
-effective `input` group access, or `/dev/uinput` access failure.
+effective `input` group access, or `/dev/uinput` access failure. `voice-keyboard
+doctor` names which of those is true.
 
 ### The Installer Enabled The Service But Did Not Start It
 
@@ -1011,6 +1025,8 @@ voice-keyboard/
 |-- voice_keyboard/
 |   |-- daemon.py          # Main daemon, recording state, IPC handling, hotkeys
 |   |-- client.py          # CLI, primary-selection reading, overlay calls
+|   |-- doctor.py          # voice-keyboard doctor (first-run preflight)
+|   |-- uninstall.py       # voice-keyboard uninstall (--purge / --system)
 |   |-- flow/
 |   |   |-- engine.py      # Molten dictation state machine (pure logic)
 |   |   |-- grammar.py     # Spoken commands, punctuation, vocabulary, wake word
@@ -1038,6 +1054,7 @@ voice-keyboard/
 |-- config.toml.example
 |-- install.sh
 |-- packaging/install-hyperfurion-vk.sh
+|-- packaging/uninstall-hyperfurion-vk.sh
 |-- pyproject.toml
 `-- README.md
 ```
@@ -1063,6 +1080,7 @@ python -m pytest -q
 python -m compileall -q voice_keyboard tests
 bash -n install.sh
 bash -n packaging/install-hyperfurion-vk.sh
+bash -n packaging/uninstall-hyperfurion-vk.sh
 ```
 
 Some tests intentionally skip when the environment cannot create Unix sockets
@@ -1070,23 +1088,34 @@ or when host input/uinput access is unavailable.
 
 ## Uninstall
 
-There is no dedicated uninstall script yet. To remove the user-local app files:
+User-local files (systemd unit, venv, CLI links, GNOME overlay copy):
 
 ```bash
-systemctl --user disable --now voice-keyboard-daemon.service
-rm -f ~/.config/systemd/user/voice-keyboard-daemon.service
-systemctl --user daemon-reload
-rm -f ~/.local/bin/voice-keyboard ~/.local/bin/voice-keyboard-daemon
-rm -rf ~/.local/share/voice-keyboard-venv
-rm -rf ~/.local/share/gnome-shell/extensions/voice-keyboard-overlay@liam-hennigan
+voice-keyboard uninstall
 ```
 
-Optional user data/config removal:
+Also delete config and the local state directory
+(`~/.config/voice-keyboard`, `~/.local/state/voice-keyboard`):
 
 ```bash
-rm -rf ~/.config/voice-keyboard
+voice-keyboard uninstall --purge
 ```
 
-The installer also may have added a uinput module-load file, a udev rule, and
-your user to the `input` group. Those are system-level changes and may be shared
-with other tools, so remove them only if you are sure nothing else needs them.
+From a checkout, if the CLI is already gone:
+
+```bash
+./packaging/uninstall-hyperfurion-vk.sh
+./packaging/uninstall-hyperfurion-vk.sh --purge
+```
+
+The installer may also have added a uinput module-load file, a udev rule, and
+your user to the `input` group. Those are system-level changes and may be
+shared with other tools. Remove the files the curl installer created only if
+you are sure nothing else needs them:
+
+```bash
+voice-keyboard uninstall --system
+```
+
+`--system` does not drop `input` group membership. If you added that only for
+this app: `sudo gpasswd -d "$USER" input`.
