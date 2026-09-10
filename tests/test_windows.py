@@ -24,7 +24,7 @@ from voice_keyboard.windows.hotkey import (
     WinHotkeySpec,
     vk_for_key,
 )
-from voice_keyboard.windows.injector import utf16_units
+from voice_keyboard.windows.injector import WinTextInjector, utf16_units
 
 
 class TestPlatformFactories:
@@ -80,6 +80,36 @@ class TestUtf16Units:
         assert len(units) == 2
         assert 0xD800 <= units[0] <= 0xDBFF
         assert 0xDC00 <= units[1] <= 0xDFFF
+
+
+class TestWinSuppressEnter:
+    def test_strips_newlines_before_utf16(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: list[str] = []
+
+        def fake_units(text: str) -> list[int]:
+            captured.append(text)
+            return []
+
+        monkeypatch.setattr("voice_keyboard.windows.injector.utf16_units", fake_units)
+        inj = WinTextInjector()
+        inj.suppress_enter = True
+        inj._user32 = mock.Mock()
+        inj.type_text("ls -la\npwd\r\n")
+        assert captured == ["ls -la pwd "]
+        inj._user32.SendInput.assert_not_called()
+
+    def test_flag_off_keeps_newline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: list[str] = []
+
+        def fake_units(text: str) -> list[int]:
+            captured.append(text)
+            return []
+
+        monkeypatch.setattr("voice_keyboard.windows.injector.utf16_units", fake_units)
+        inj = WinTextInjector()
+        inj._user32 = mock.Mock()
+        inj.type_text("a\n")
+        assert captured == ["a\n"]
 
 
 class TestWinHotkeySpec:

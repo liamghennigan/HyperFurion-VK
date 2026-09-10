@@ -684,7 +684,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login",
+            "login", "doctor", "uninstall",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -703,7 +703,27 @@ def main() -> None:
         default=None,
         help="Unix socket path (default: ~/.config/voice-keyboard/socket)",
     )
+    parser.add_argument(
+        "--purge",
+        action="store_true",
+        help="uninstall: also remove config and local state",
+    )
+    parser.add_argument(
+        "--system",
+        action="store_true",
+        help="uninstall: also remove installer udev/uinput files (needs sudo)",
+    )
     args = parser.parse_args()
+
+    if args.command == "doctor":
+        from voice_keyboard.doctor import main as doctor_main
+
+        sys.exit(doctor_main())
+
+    if args.command == "uninstall":
+        from voice_keyboard.uninstall import main as uninstall_main
+
+        sys.exit(uninstall_main(purge=args.purge, system=args.system))
 
     config = load_config()
 

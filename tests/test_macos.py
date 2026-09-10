@@ -77,6 +77,37 @@ class TestUnicodeChunking:
         with pytest.raises(RuntimeError, match="not started"):
             MacTextInjector().type_text("hi")
 
+    def test_suppress_enter_strips_newlines_from_unicode_posts(self) -> None:
+        quartz = ModuleType("Quartz")
+        quartz.kCGHIDEventTap = 0
+        quartz.CGEventCreateKeyboardEvent = mock.Mock(side_effect=lambda *_: object())
+        quartz.CGEventKeyboardSetUnicodeString = mock.Mock()
+        quartz.CGEventPost = mock.Mock()
+        inj = MacTextInjector()
+        inj.suppress_enter = True
+        with mock.patch.dict(sys.modules, {"Quartz": quartz}):
+            inj.start()
+            inj.type_text("ls -la\npwd\r\n")
+        posted = [
+            call.args[2] for call in quartz.CGEventKeyboardSetUnicodeString.call_args_list
+        ]
+        assert posted
+        assert all("\n" not in chunk and "\r" not in chunk for chunk in posted)
+        assert any("ls -la" in chunk for chunk in posted)
+
+    def test_suppress_enter_off_keeps_newline(self) -> None:
+        quartz = ModuleType("Quartz")
+        quartz.kCGHIDEventTap = 0
+        quartz.CGEventCreateKeyboardEvent = mock.Mock(side_effect=lambda *_: object())
+        quartz.CGEventKeyboardSetUnicodeString = mock.Mock()
+        quartz.CGEventPost = mock.Mock()
+        inj = MacTextInjector()
+        with mock.patch.dict(sys.modules, {"Quartz": quartz}):
+            inj.start()
+            inj.type_text("a\n")
+        posted = [call.args[2] for call in quartz.CGEventKeyboardSetUnicodeString.call_args_list]
+        assert any("\n" in chunk for chunk in posted)
+
 
 class TestMacHotkeySpec:
     def test_parses_the_default_combo(self) -> None:
