@@ -158,6 +158,73 @@ class TestHotplug:
         finally:
             listener.stop()
 
+    def test_a_keyboard_vanishing_mid_hold_releases_its_keys(self, devices) -> None:
+        plug, opened = devices
+        plug("/dev/input/event6")
+        started, stopped = threading.Event(), threading.Event()
+        listener = HotkeyListener(
+            {"enabled": True, "key": "control+space", "mode": "hold"},
+            on_toggle=lambda: None, on_hold_start=started.set, on_hold_stop=stopped.set,
+        )
+        listener.start()
+        try:
+            keyboard = opened("/dev/input/event6")
+            keyboard.press((e.KEY_LEFTCTRL, 1), (e.KEY_SPACE, 1))
+            assert started.wait(2)
+            keyboard.unplug()  # the key-ups will never arrive
+            assert stopped.wait(2), "the hold outlived the keyboard"
+            assert not listener._pressed
+        finally:
+            listener.stop()
+
+    def test_non_keyboards_are_not_reopened_every_rescan(self, devices, monkeypatch) -> None:
+        plug, _ = devices
+        signatures = {"/dev/input/event1": (13, 1, 1)}
+        monkeypatch.setattr(hotkey_mod, "_device_signature", lambda path: signatures.get(path))
+        plug("/dev/input/event1", name="Logitech mouse", caps=(e.BTN_LEFT,))
+        listener = _listener(threading.Event())
+        listener.start()
+        try:
+            time.sleep(0.4)  # ~8 rescans
+            assert len(FakeDevice.registry["/dev/input/event1"]["opened"]) == 1
+            # The node is recreated (a new device under the same number):
+            # it is looked at again.
+            FakeDevice.registry["/dev/input/event1"]["caps"] = KEYBOARD_CAPS
+            signatures["/dev/input/event1"] = (13, 2, 2)
+            for _ in range(100):
+                if listener._devices:
+                    break
+                time.sleep(0.02)
+            assert [d.path for d in listener._devices] == ["/dev/input/event1"]
+        finally:
+            listener.stop()
+
+    def test_a_broken_device_is_dropped_without_spinning(self, devices) -> None:
+        plug, opened = devices
+        plug("/dev/input/event8")
+        listener = _listener(threading.Event())
+        listener.start()
+        try:
+            broken = opened("/dev/input/event8")
+            for _ in range(100):
+                if broken in listener._devices:
+                    break
+                time.sleep(0.02)
+            # Its descriptor dies behind the listener's back: select() on
+            # the set fails with EBADF from now on.
+            os.close(broken._read_fd)
+            os.close(broken._write_fd)
+            broken.closed = True
+            broken.fileno = lambda: 1023  # stale: neither closed nor valid
+            for _ in range(100):
+                if broken not in listener._devices:
+                    break
+                time.sleep(0.02)
+            assert broken not in listener._devices
+            assert listener._thread.is_alive()
+        finally:
+            listener.stop()
+
     def test_stop_closes_everything(self, devices) -> None:
         plug, opened = devices
         plug("/dev/input/event5")

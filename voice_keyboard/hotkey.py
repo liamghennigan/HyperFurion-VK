@@ -1,4 +1,5 @@
 import logging
+import os
 import select
 import sys
 import threading
@@ -208,6 +209,20 @@ class HotkeySpec:
         return codes
 
 
+def _device_key(device):
+    return getattr(device, "path", None) or id(device)
+
+
+def _device_signature(path: str):
+    """Identity of an input node: a recreated node (unplug/replug reusing
+    the number) or changed permissions read as a different device."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_rdev, st.st_ino, st.st_ctime_ns)
+
+
 def _key_code(name: str) -> int:
     if name in KEY_ALIASES:
         return KEY_ALIASES[name]
@@ -268,6 +283,13 @@ class HotkeyListener:
         self._gesture_aborted = False
         self._auto_hold_timer: Optional[threading.Timer] = None
         self._devices: list = []
+        # Keys each device is holding down, so a keyboard that vanishes
+        # mid-press doesn't leave them "held" forever.
+        self._device_keys: dict = {}
+        # Input nodes that aren't a usable keyboard (mice, power buttons,
+        # unreadable), by node identity: the 3 s rescan skips them until the
+        # node is recreated or its permissions change.
+        self._rejected: dict = {}
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
@@ -314,25 +336,45 @@ class HotkeyListener:
         for path in list_devices():
             if path in skip_paths:
                 continue
+            signature = _device_signature(path)
+            if signature is not None and self._rejected.get(path) == signature:
+                continue
             try:
                 device = InputDevice(path)
-                name = (device.name or "").strip().lower()
-                if name in IGNORED_DEVICE_NAMES:
-                    device.close()
-                    continue
-                key_codes = _key_capability_codes(device)
-                if self._spec.trigger_code not in key_codes:
-                    device.close()
-                    continue
-                if self._spec.modifier_groups and not any(
-                    group & key_codes for group in self._spec.modifier_groups
-                ):
-                    device.close()
-                    continue
-                devices.append(device)
             except (OSError, PermissionError) as exc:
                 logger.debug("Skipping input device %s: %s", path, exc)
+                self._reject(path, signature)
+                continue
+            try:
+                usable = self._usable(device)
+            except (OSError, PermissionError) as exc:
+                logger.debug("Skipping input device %s: %s", path, exc)
+                usable = False
+            if usable:
+                devices.append(device)
+                self._rejected.pop(path, None)
+                continue
+            try:
+                device.close()
+            except OSError:
+                pass
+            self._reject(path, signature)
         return devices
+
+    def _usable(self, device) -> bool:
+        name = (device.name or "").strip().lower()
+        if name in IGNORED_DEVICE_NAMES:
+            return False
+        key_codes = _key_capability_codes(device)
+        if self._spec.trigger_code not in key_codes:
+            return False
+        return not self._spec.modifier_groups or any(
+            group & key_codes for group in self._spec.modifier_groups
+        )
+
+    def _reject(self, path: str, signature) -> None:
+        if signature is not None:
+            self._rejected[path] = signature
 
     def _schedule_auto_hold_timer(self) -> None:
         self._cancel_auto_hold_timer()
@@ -376,7 +418,8 @@ class HotkeyListener:
             self._devices.append(device)
 
     def _drop(self, device) -> None:
-        """Forget a device that went away (unplugged, suspended)."""
+        """Forget a device that went away (unplugged, suspended), releasing
+        any key it was holding: its key-ups will never come."""
         try:
             self._devices.remove(device)
         except ValueError:
@@ -386,6 +429,17 @@ class HotkeyListener:
         except OSError:
             pass
         logger.info("Hotkey: keyboard %s went away", getattr(device, "name", "") or device)
+        held = self._device_keys.pop(_device_key(device), set())
+        still_held = set().union(*self._device_keys.values()) if self._device_keys else set()
+        for code in held - still_held:
+            self._handle_key_event(code, 0)
+
+    def _note_key(self, device, code: int, value: int) -> None:
+        keys = self._device_keys.setdefault(_device_key(device), set())
+        if value == 1:
+            keys.add(code)
+        elif value == 0:
+            keys.discard(code)
 
     def _run(self) -> None:
         last_scan = time.monotonic()
@@ -403,20 +457,26 @@ class HotkeyListener:
             try:
                 readable, _, _ = select.select(devices, [], [], 0.5)
             except (OSError, ValueError):
-                # A device closed or vanished mid-select: drop the dead ones
-                # and keep listening on the rest.
+                # A device closed or vanished mid-select: find the bad ones
+                # one by one, drop them, and keep listening on the rest.
+                dropped = False
                 for device in devices:
                     try:
                         if device.fileno() < 0:
-                            self._drop(device)
+                            raise ValueError("closed")
+                        select.select([device], [], [], 0)
                     except (OSError, ValueError):
                         self._drop(device)
+                        dropped = True
+                if not dropped:
+                    self._stop_event.wait(0.5)  # transient: never spin on it
                 continue
 
             for device in readable:
                 try:
                     for event in device.read():
                         if event.type == e.EV_KEY:
+                            self._note_key(device, event.code, event.value)
                             self._handle_key_event(event.code, event.value)
                 except OSError:
                     self._drop(device)
