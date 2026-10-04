@@ -1284,8 +1284,8 @@ class WinShell:
                 lambda: self._with_focus_restored(self._cb.toggle_dictation),
             )
             if status.get("assistant", True):
-                add(f"Ask Kai\tHold {self._assistant_hotkey}",
-                    lambda: self._with_focus_restored(self._cb.summon))
+                kai = f"\tHold {self._assistant_hotkey}" if self._assistant_hotkey else ""
+                add(f"Ask Kai{kai}", lambda: self._with_focus_restored(self._cb.summon))
             read_label = "Read clipboard aloud"
             if self._read_hotkey:
                 read_label += f"\t(selection: {self._read_hotkey})"

@@ -48,8 +48,9 @@ jobs:
           # history under ~\.local\state. The install must clean up / move it.
           Set-Content -Path (Join-Path ([Environment]::GetFolderPath("Startup")) "hyperfurion-vk-daemon.cmd") -Value "@echo off"
           $legacy = Join-Path $HOME ".local\state\voice-keyboard"
-          New-Item -ItemType Directory -Force -Path $legacy | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $legacy "memory") | Out-Null
           Set-Content -Path (Join-Path $legacy "history.jsonl") -Value "{}"
+          Set-Content -Path (Join-Path $legacy "memory\kai.json") -Value "{}"
           # A dummy key passes config validation; nothing here talks to a
           # speech provider.
           .\packaging\windows\install-hyperfurion-vk.ps1 -Source . -NonInteractive -NoAutostart -NoLaunch -Provider xai -ApiKey ci-dummy-key
@@ -71,6 +72,7 @@ jobs:
           if (-not (Select-String -Path $config -Pattern "ci-dummy-key" -Quiet)) { throw "the config was not written" }
           if (Test-Path (Join-Path ([Environment]::GetFolderPath("Startup")) "hyperfurion-vk-daemon.cmd")) { throw "the beta's startup launcher was left behind" }
           if (-not (Test-Path (Join-Path $env:LOCALAPPDATA "voice-keyboard\history.jsonl"))) { throw "the beta's history was not moved" }
+          if (-not (Test-Path (Join-Path $env:LOCALAPPDATA "voice-keyboard\memory\kai.json"))) { throw "the beta's Kai memory folder was not moved" }
 
       - name: Start the app and talk to it
         run: |

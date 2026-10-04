@@ -70,8 +70,13 @@ def _token_path() -> Path:
     return paths.state_dir() / ("ipc-token" if session is None else f"ipc-token-{session}")
 
 
-def _legacy_token_path() -> Path:
-    return _config_dir() / "ipc-token"
+def _legacy_token_paths() -> list[Path]:
+    """Where older Windows daemons left their bare token: next to the
+    config (2.2 previews), or under ~/.config (the early beta, whatever
+    else holds the config now)."""
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    beta = (Path(xdg) if xdg else Path.home() / ".config") / paths.APP_DIR_NAME / "ipc-token"
+    return [_config_dir() / "ipc-token", beta]
 
 
 def read_ipc_endpoint() -> tuple[str, int]:
@@ -79,11 +84,14 @@ def read_ipc_endpoint() -> tuple[str, int]:
     try:
         raw = _token_path().read_text(encoding="utf-8").strip()
     except OSError:
-        try:
-            raw = _legacy_token_path().read_text(encoding="utf-8").strip()
-        except OSError:
-            return "", 0
-        return (raw, LEGACY_PORT) if raw else ("", 0)
+        for legacy in _legacy_token_paths():
+            try:
+                raw = legacy.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            if raw:
+                return raw, LEGACY_PORT
+        return "", 0
     try:
         data = json.loads(raw)
         return str(data.get("token", "")), int(data.get("port", 0))

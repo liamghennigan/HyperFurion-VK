@@ -963,6 +963,9 @@ class TestWindowsConfigDefaults:
         # The tray still gets labels (it is built before validation).
         assert hotkey_labels(cfg)["dictation_hotkey"] == "Ctrl+Alt+V"
         assert hotkey_labels({"tts": 3, "assistant": []})["assistant_hotkey"] == "Right Ctrl"
+        # Kai without a key (theirs, or a default that stepped aside): the
+        # tray and welcome never advertise one.
+        assert hotkey_labels({"assistant": {"hotkey": ""}})["assistant_hotkey"] == ""
 
 
 class TestPrettyBinding:

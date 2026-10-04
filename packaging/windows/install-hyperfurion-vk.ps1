@@ -370,10 +370,15 @@ function Get-LatestTag([string]$Repo, [string]$Fallback) {
 
 function Get-AppProcesses {
     # The app, a console daemon, and an early beta's voice-keyboard-daemon.exe
-    # - in this Windows session only: others signed in on this PC run their own.
-    $session = (Get-Process -Id $PID).SessionId
+    # - this user's, in any of their sessions (they share this install), and
+    # never another user's.
+    $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe' OR Name = 'voice-keyboard-daemon.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.SessionId -eq $session -and ($_.Name -eq "voice-keyboard-daemon.exe" -or $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*") }
+        Where-Object { $_.Name -eq "voice-keyboard-daemon.exe" -or $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*" } |
+        Where-Object {
+            $owner = Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid -ErrorAction SilentlyContinue
+            $owner -and $owner.Sid -eq $me
+        }
 }
 
 function Stop-HyperFurionVK([string]$VenvPython) {
@@ -391,11 +396,15 @@ function Stop-HyperFurionVK([string]$VenvPython) {
 function Remove-BetaLeftovers {
     # Early betas started voice-keyboard-daemon.exe from the Startup folder;
     # left there it would run alongside the app at the next sign-in.
+    # Best effort: nothing here may fail the install.
     $launcher = Join-Path ([Environment]::GetFolderPath("Startup")) "hyperfurion-vk-daemon.cmd"
     if (-not (Test-Path -LiteralPath $launcher)) { return }
     $betaExe = $null
-    $match = [regex]::Match((Get-Content -LiteralPath $launcher -Raw -ErrorAction SilentlyContinue), '"([^"]*voice-keyboard-daemon\.exe)"')
-    if ($match.Success) { $betaExe = $match.Groups[1].Value }
+    try {
+        $text = [string](Get-Content -LiteralPath $launcher -Raw -ErrorAction SilentlyContinue)
+        $match = [regex]::Match($text, '"([^"]*voice-keyboard-daemon\.exe)"')
+        if ($match.Success) { $betaExe = $match.Groups[1].Value }
+    } catch { }
     Write-Step "Removing the beta's startup launcher"
     Remove-Item -LiteralPath $launcher -Force -ErrorAction SilentlyContinue
     if ($betaExe) {
@@ -529,10 +538,15 @@ Set-Location $env:TEMP
 Write-Host "Uninstalling $AppName..." -ForegroundColor Cyan
 $python = Join-Path $InstallRoot "venv\Scripts\python.exe"
 if (Test-Path $python) { & $python -m voice_keyboard.client quit 2>$null | Out-Null }
-$session = (Get-Process -Id $PID).SessionId
+# This user's copies, in any of their sessions (they share this install).
+$me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 for ($i = 0; $i -lt 20; $i++) {
     $procs = Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.SessionId -eq $session -and ($_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*") }
+        Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*" } |
+        Where-Object {
+            $owner = Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid -ErrorAction SilentlyContinue
+            $owner -and $owner.Sid -eq $me
+        }
     if (-not $procs) { break }
     if ($i -eq 19) { $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
     Start-Sleep -Milliseconds 500

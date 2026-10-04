@@ -127,9 +127,12 @@ def hotkey_labels(config: dict) -> dict:
         return found.strip() if isinstance(found, str) else default
 
     read_key = value("tts", "hotkey", "")
+    # Empty when Kai has no key (the user's, or a default that stepped aside
+    # for one of their own bindings): only the orb summons Kai then.
+    kai_key = value("assistant", "hotkey", "rightctrl")
     return {
         "dictation_hotkey": pretty_binding(value("hotkey", "key", "") or "control+alt+v"),
-        "assistant_hotkey": pretty_binding(value("assistant", "hotkey", "") or "rightctrl"),
+        "assistant_hotkey": pretty_binding(kai_key) if kai_key else "",
         "read_hotkey": pretty_binding(read_key) if read_key else "",
     }
 
@@ -481,13 +484,12 @@ class WindowsApp:
         marker = paths.state_dir() / "welcomed"
         if marker.exists() or self._shell is None:
             return
-        from voice_keyboard.hotkey import pretty_binding
-
-        key = pretty_binding(config.get("hotkey", {}).get("key", "control+alt+v"))
-        kai = pretty_binding(config.get("assistant", {}).get("hotkey", "rightctrl") or "rightctrl")
+        labels = hotkey_labels(config)
+        kai = labels["assistant_hotkey"]
+        ask = f"Hold {kai} to ask Kai." if kai else "Click the orb to ask Kai."
         self._shell.notify(
             f"{APP_NAME} is running",
-            f"Press {key} to dictate into any app. Hold {kai} to ask Kai."
+            f"Press {labels['dictation_hotkey']} to dictate into any app. {ask}"
             " Right-click the tray icon for settings.",
         )
         try:

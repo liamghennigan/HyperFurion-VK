@@ -683,16 +683,34 @@ class TestPerSessionPort:
         assert server._sock is None and server.required_token is None
 
     def test_a_pre_2_2_daemon_is_still_reachable(self, monkeypatch, tmp_path) -> None:
-        # Mid-upgrade the old daemon still runs: bare token next to the
-        # config, fixed port 48765.
+        # Mid-upgrade the old daemon still runs: a bare token for the fixed
+        # port 48765, next to the config (2.2 previews)...
         from voice_keyboard import ipc
 
-        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-        legacy = tmp_path / "config" / "voice-keyboard"
-        legacy.mkdir(parents=True)
-        (legacy / "ipc-token").write_text("oldtoken")
-        assert ipc.read_ipc_endpoint() == ("oldtoken", ipc.LEGACY_PORT)
+        monkeypatch.setattr(sys, "platform", "win32")
+        for name in ("XDG_STATE_HOME", "XDG_CONFIG_HOME"):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+        monkeypatch.setattr(paths.Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(ipc, "_session_id", lambda: 1)
+        appdata = tmp_path / "Roaming" / "voice-keyboard"
+        appdata.mkdir(parents=True)
+        (appdata / "config.toml").write_text("")
+        (appdata / "ipc-token").write_text("preview")
+        assert ipc.read_ipc_endpoint() == ("preview", ipc.LEGACY_PORT)
+        # ...or under ~/.config (the early beta), even with the config now
+        # in %APPDATA%.
+        (appdata / "ipc-token").unlink()
+        beta = tmp_path / "home" / ".config" / "voice-keyboard"
+        beta.mkdir(parents=True)
+        (beta / "ipc-token").write_text("beta")
+        assert ipc.read_ipc_endpoint() == ("beta", ipc.LEGACY_PORT)
+        # A running 2.2 daemon's own file always wins.
+        local = tmp_path / "Local" / "voice-keyboard"
+        local.mkdir(parents=True)
+        (local / "ipc-token-1").write_text('{"token": "new", "port": 50123}')
+        assert ipc.read_ipc_endpoint() == ("new", 50123)
 
     def test_each_windows_session_has_its_own_token_file(self, monkeypatch, tmp_path) -> None:
         # The same person signed in twice (Remote Desktop) runs a daemon in

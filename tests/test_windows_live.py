@@ -279,6 +279,17 @@ class TestClipboard:
         assert clip.get_text() == "what was there before"
 
 
+class TestSession:
+    def test_the_ipc_token_is_named_for_this_windows_session(self) -> None:
+        # Never stubbed here: a broken lookup would quietly share one token
+        # file between sessions.
+        from voice_keyboard import ipc
+
+        session = ipc._session_id()
+        assert isinstance(session, int)
+        assert ipc._token_path().name == f"ipc-token-{session}"
+
+
 class TestFocusProbe:
     def test_our_own_window_is_not_the_app_being_dictated_to(self, edit_box) -> None:
         # The tray/orb menu brings our window to the front; the focus
