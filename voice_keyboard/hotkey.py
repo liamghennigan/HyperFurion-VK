@@ -2,6 +2,7 @@ import logging
 import select
 import sys
 import threading
+import time
 from collections.abc import Callable
 from typing import Optional
 
@@ -93,6 +94,9 @@ def create_hotkey_listener(
     )
 
 IGNORED_DEVICE_NAMES = {"voice-keyboard"}
+# How often the evdev listener looks for keyboards that appeared since it
+# started (plugged in, Bluetooth reconnect, re-enumerated after resume).
+RESCAN_INTERVAL_S = 3.0
 
 _PRETTY_KEYS = {
     "control": "Ctrl", "ctrl": "Ctrl", "alt": "Alt", "shift": "Shift",
@@ -249,8 +253,12 @@ class HotkeyListener:
 
         self._devices = self._open_devices()
         if not self._devices:
-            logger.warning("No readable keyboard devices found for hotkey %s", self._spec.key)
-            return
+            # Keep listening anyway: a keyboard plugged in (or permissions
+            # fixed) later is picked up by the periodic rescan.
+            logger.warning(
+                "No readable keyboard devices found for hotkey %s yet; watching for one",
+                self._spec.key,
+            )
 
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, name="voice-keyboard-hotkey", daemon=True)
@@ -271,9 +279,11 @@ class HotkeyListener:
         self._devices = []
         logger.info("Hotkey listener stopped")
 
-    def _open_devices(self) -> list[InputDevice]:
+    def _open_devices(self, skip_paths: frozenset = frozenset()) -> list[InputDevice]:
         devices = []
         for path in list_devices():
+            if path in skip_paths:
+                continue
             try:
                 device = InputDevice(path)
                 name = (device.name or "").strip().lower()
@@ -325,13 +335,53 @@ class HotkeyListener:
         if callback:
             callback()
 
+    def _rescan(self) -> None:
+        """Adopt keyboards that appeared since the last scan."""
+        known = frozenset(getattr(d, "path", None) for d in self._devices)
+        for device in self._open_devices(skip_paths=known):
+            if self._stop_event.is_set():
+                device.close()
+                return
+            logger.info("Hotkey: now listening on %s", getattr(device, "name", "") or device)
+            self._devices.append(device)
+
+    def _drop(self, device) -> None:
+        """Forget a device that went away (unplugged, suspended)."""
+        try:
+            self._devices.remove(device)
+        except ValueError:
+            return
+        try:
+            device.close()
+        except OSError:
+            pass
+        logger.info("Hotkey: keyboard %s went away", getattr(device, "name", "") or device)
+
     def _run(self) -> None:
-        devices = list(self._devices)
-        while devices and not self._stop_event.is_set():
+        last_scan = time.monotonic()
+        while not self._stop_event.is_set():
+            if time.monotonic() - last_scan >= RESCAN_INTERVAL_S:
+                last_scan = time.monotonic()
+                try:
+                    self._rescan()
+                except Exception:
+                    logger.debug("Hotkey device rescan failed", exc_info=True)
+            devices = list(self._devices)
+            if not devices:
+                self._stop_event.wait(0.5)
+                continue
             try:
                 readable, _, _ = select.select(devices, [], [], 0.5)
             except (OSError, ValueError):
-                break
+                # A device closed or vanished mid-select: drop the dead ones
+                # and keep listening on the rest.
+                for device in devices:
+                    try:
+                        if device.fileno() < 0:
+                            self._drop(device)
+                    except (OSError, ValueError):
+                        self._drop(device)
+                continue
 
             for device in readable:
                 try:
@@ -339,10 +389,7 @@ class HotkeyListener:
                         if event.type == e.EV_KEY:
                             self._handle_key_event(event.code, event.value)
                 except OSError:
-                    try:
-                        devices.remove(device)
-                    except ValueError:
-                        pass
+                    self._drop(device)
 
     def _handle_key_event(self, code: int, value: int) -> None:
         if value == 2:
