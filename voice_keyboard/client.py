@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 
 from voice_keyboard.config import load_config
 from voice_keyboard.ipc import IPCClient
@@ -87,9 +88,11 @@ def _notify(
     if sys.platform == "win32":
         if _local_shell is not None:
             _local_shell.notify(summary, body, error=urgency == "critical")
-        elif not _daemon_overlay_ok and not _in_daemon:
-            # The daemon's overlay already said it when forwarding worked.
-            _notify_windows_toast(summary, body)
+        elif not _daemon_overlay_ok and not _in_daemon and urgency == "critical":
+            # Only failures, and only when the daemon's overlay couldn't say
+            # it: progress toasts ("Listening…") from a CLI whose daemon is
+            # down would be wrong, and each one is a PowerShell spawn.
+            _toast_once(summary, body)
         return
     command = [
         "notify-send",
@@ -206,6 +209,21 @@ def _forward_overlay(state: str, detail: str, timeout_ms: int, x: int, y: int) -
     return _daemon_overlay_ok
 
 
+_last_toast: tuple[str, float] = ("", 0.0)
+
+
+def _toast_once(summary: str, body: str) -> None:
+    """A Windows toast, unless the same message was just shown (the
+    overlay fallback and the notification often carry the same error)."""
+    global _last_toast
+    text = body or summary
+    now = time.monotonic()
+    if _last_toast[0] == text and now - _last_toast[1] < 10.0:
+        return
+    _last_toast = (text, now)
+    _notify_windows_toast(summary, body)
+
+
 def _notify_windows_toast(summary: str, body: str) -> None:
     """Notification-center toast via WinRT from PowerShell — no extra deps.
 
@@ -266,7 +284,7 @@ def _show_overlay(
         }:
             # No daemon to draw it: a toast for outcomes only, never the
             # live states (those would be a toast storm).
-            _notify("HyperFurion VK", detail or state.replace("_", " ").title())
+            _toast_once("HyperFurion VK", detail or state.replace("_", " ").title())
         return
     if not _call_shell_overlay("Show", state, str(x), str(y), detail, str(timeout_ms)):
         _notify("Voice Keyboard", detail or state.replace("_", " ").title())
@@ -843,7 +861,8 @@ def main() -> None:
         default=None,
         help=(
             "daemon IPC endpoint: a Unix socket path, or tcp:HOST:PORT"
-            " (default: ~/.config/voice-keyboard/socket; tcp:127.0.0.1:48765 on Windows)"
+            " (default: ~/.config/voice-keyboard/socket; on Windows loopback TCP"
+            " on the port the daemon publishes)"
         ),
     )
     args = parser.parse_args()
@@ -901,9 +920,12 @@ def main() -> None:
 
     if args.command == "quit":
         try:
-            client.send_command("quit", timeout=5.0)
+            response = client.send_command("quit", timeout=5.0)
         except Exception as e:
             print(f"Daemon not running ({e})", file=sys.stderr)
+            sys.exit(1)
+        if response.get("status") != "ok":
+            print(f"Error: {response.get('message', 'quit failed')}", file=sys.stderr)
             sys.exit(1)
         print("Daemon stopping")
         return
@@ -978,14 +1000,15 @@ def main() -> None:
     if args.command == "status":
         try:
             response = client.send_command("status", timeout=5.0)
-            if response.get("recording"):
-                print("recording")
-            else:
-                print("idle")
-            _print_status_details(response)
         except Exception as e:
             _print_connect_failure(e)
             sys.exit(1)
+        if response.get("status", "ok") != "ok":
+            # e.g. "invalid IPC token": a daemon answered, but not ours.
+            print(f"Error: {response.get('message', 'status failed')}", file=sys.stderr)
+            sys.exit(1)
+        print("recording" if response.get("recording") else "idle")
+        _print_status_details(response)
         return
 
     if args.command == "toggle":

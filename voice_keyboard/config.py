@@ -316,7 +316,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
 def _default_socket_path() -> str:
     if sys.platform == "win32":
         # Windows Python has no AF_UNIX; loopback TCP is the IPC transport.
-        return "tcp:127.0.0.1:48765"
+        return "tcp:127.0.0.1:0"  # a free port per daemon (see ipc.py)
     return str(_config_dir() / "socket")
 
 

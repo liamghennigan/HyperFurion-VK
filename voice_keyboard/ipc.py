@@ -1,3 +1,4 @@
+import errno
 import json
 import logging
 import os
@@ -24,7 +25,10 @@ def _config_dir() -> Path:
 def _default_socket_path() -> str:
     if sys.platform == "win32":
         # Windows Python has no AF_UNIX; loopback TCP is the IPC transport.
-        return "tcp:127.0.0.1:48765"
+        # Port 0: each daemon binds a free port of its own and publishes it
+        # with its token, so people signed in side by side (fast user
+        # switching, Remote Desktop) never fight over one machine-wide port.
+        return "tcp:127.0.0.1:0"
     return str(_config_dir() / "socket")
 
 
@@ -32,21 +36,34 @@ DEFAULT_SOCKET_PATH = _default_socket_path()
 
 
 def _token_path() -> Path:
-    return _config_dir() / "ipc-token"
+    # Machine-local (never roams with a Windows profile): it names this
+    # machine's daemon and its port.
+    return paths.state_dir() / "ipc-token"
+
+
+def read_ipc_endpoint() -> tuple[str, int]:
+    """(token, port) the running daemon published; ("", 0) when none."""
+    try:
+        raw = _token_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return "", 0
+    try:
+        data = json.loads(raw)
+        return str(data.get("token", "")), int(data.get("port", 0))
+    except (ValueError, TypeError, AttributeError):
+        return raw, 0
 
 
 def read_ipc_token() -> str:
-    try:
-        return _token_path().read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
+    return read_ipc_endpoint()[0]
 
 
 def parse_endpoint(socket_path: str) -> tuple[str, object]:
     """Resolve a socket_path into ("unix", path) or ("inet", (host, port)).
 
     Unix sockets are the default. `tcp:HOST:PORT` selects loopback TCP —
-    the only option on Windows, where Python has no AF_UNIX.
+    the only option on Windows, where Python has no AF_UNIX. Port 0 means
+    "whatever port the daemon published" (see resolve_endpoint).
     """
     if socket_path.startswith("tcp:"):
         rest = socket_path[len("tcp:"):]
@@ -55,8 +72,22 @@ def parse_endpoint(socket_path: str) -> tuple[str, object]:
     return "unix", socket_path
 
 
-def _connect_socket(socket_path: str, timeout: float | None = None) -> socket.socket:
+def resolve_endpoint(socket_path: str) -> tuple[str, object]:
+    """parse_endpoint, with port 0 replaced by the running daemon's port.
+    No published port means no daemon: ConnectionRefusedError."""
     kind, target = parse_endpoint(socket_path)
+    if kind == "inet" and target[1] == 0:
+        port = read_ipc_endpoint()[1]
+        if not port:
+            raise ConnectionRefusedError(
+                errno.ECONNREFUSED, "the daemon is not running (no published port)"
+            )
+        target = (target[0], port)
+    return kind, target
+
+
+def _connect_socket(socket_path: str, timeout: float | None = None) -> socket.socket:
+    kind, target = resolve_endpoint(socket_path)
     if kind == "inet":
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     else:
@@ -84,11 +115,33 @@ def recv_all(conn: socket.socket) -> bytes:
     return b"".join(chunks)
 
 
+def _address_in_use(exc: OSError) -> bool:
+    return exc.errno in {errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", 10048)}
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Write a 0600 file atomically: a client never reads half a token."""
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}")
+    tmp.write_text(text, encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, path)
+
+
 class IPCServer:
     def __init__(self, socket_path: str = DEFAULT_SOCKET_PATH):
         self._socket_path = socket_path
         self._sock: Optional[socket.socket] = None
         self._token: Optional[str] = None
+        self._endpoint = socket_path
+
+    @property
+    def endpoint(self) -> str:
+        """Where the server listens (with the real port once started)."""
+        return self._endpoint
 
     @property
     def required_token(self) -> Optional[str]:
@@ -112,20 +165,21 @@ class IPCServer:
             except OSError as exc:
                 self._sock.close()
                 self._sock = None
+                if _address_in_use(exc):
+                    raise RuntimeError(
+                        f"Another daemon is already listening on {self._socket_path}"
+                    ) from exc
                 raise RuntimeError(
-                    f"Another daemon is already listening on {self._socket_path}"
+                    f"Could not open the command channel on {self._socket_path}:"
+                    f" {exc.strerror or exc}"
                 ) from exc
             self._sock.listen(5)
             self._sock.setblocking(True)
+            host, port = self._sock.getsockname()[:2]
+            self._endpoint = f"tcp:{host}:{port}"
             self._token = secrets.token_hex(16)
-            token_path = _token_path()
-            token_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-            token_path.write_text(self._token, encoding="utf-8")
-            try:
-                os.chmod(token_path, 0o600)
-            except OSError:
-                pass
-            logger.info("IPC server listening on %s", self._socket_path)
+            _write_private(_token_path(), json.dumps({"token": self._token, "port": port}))
+            logger.info("IPC server listening on %s", self._endpoint)
             return
 
         socket_path = Path(self._socket_path)
@@ -163,11 +217,13 @@ class IPCServer:
             self._sock.close()
             self._sock = None
         if parse_endpoint(self._socket_path)[0] == "inet":
+            if self._token is not None and read_ipc_token() == self._token:
+                # Only our own: another daemon may have published since.
+                try:
+                    os.unlink(_token_path())
+                except OSError:
+                    pass
             self._token = None
-            try:
-                os.unlink(_token_path())
-            except OSError:
-                pass
             logger.info("IPC server stopped")
             return
         socket_path = Path(self._socket_path)

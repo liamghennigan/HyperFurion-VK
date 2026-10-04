@@ -337,10 +337,12 @@ recording.
 | The app | `%LOCALAPPDATA%\HyperFurion-VK\` |
 
 The CLI works as on Linux (`voice-keyboard status`, `intent`, `ask`,
-`history`, `devices`, `quit`, …). It talks to the app over loopback TCP
-(`127.0.0.1:48765`) with a per-session token kept in your profile (other
-standard users can't read it), so other users can't drive your keyboard. `voice-keyboard-daemon`
-runs the app in a terminal with the log streaming alongside.
+`history`, `devices`, `quit`, …). It talks to the app over loopback TCP, on a
+free port the app picks each time it starts and publishes with a per-session
+token in `%LOCALAPPDATA%\voice-keyboard\ipc-token` (other standard users can't
+read it) — so nobody else can drive your keyboard, and several people signed in
+at once each get their own. `voice-keyboard-daemon` runs the app in a terminal
+with the log streaming alongside.
 
 ### Uninstall
 

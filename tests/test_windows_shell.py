@@ -665,7 +665,7 @@ class TestWindowsConfigDefaults:
         monkeypatch.setattr(sys, "platform", "win32")
         cfg = _default_config_with_paths()
         assert cfg["tts"]["hotkey"] == "control+alt+r"
-        assert cfg["daemon"]["socket_path"] == "tcp:127.0.0.1:48765"
+        assert cfg["daemon"]["socket_path"] == "tcp:127.0.0.1:0"  # a free port per daemon
         cfg["xai"]["api_key"] = "k"
         validate_config(cfg)  # the whole Windows default set validates
 

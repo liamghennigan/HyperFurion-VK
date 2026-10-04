@@ -63,8 +63,10 @@ Windows becomes a first-class platform, and the whole repo gets a polish pass.
 - Windows: the Kai hotkey (bare Right Ctrl) could not bind; Ctrl+Alt+V also
   reached the focused app (Paste Special in Office); every overlay update
   spawned a PowerShell toast; newlines typed as raw characters; Ctrl+Backspace
-  word-deletes during hold-to-talk molten repairs; a second daemon could bind
-  the IPC port; the hook could be silently dropped by Windows.
+  word-deletes during hold-to-talk molten repairs; the IPC port was one fixed
+  port for the whole machine, so a second signed-in user could never start
+  (each daemon now binds a free port of its own); the hook could be silently
+  dropped by Windows.
 - Linux: keyboards plugged in after the daemon started (or re-enumerated after
   resume) never triggered the hotkey, and a vanished device ended the listener.
 - The GNOME overlay now loads on GNOME 45–49 (it declared GNOME 50 only, and

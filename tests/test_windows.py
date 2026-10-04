@@ -134,8 +134,9 @@ class TestTcpIPC:
         assert parse_endpoint("tcp:9999") == ("inet", ("127.0.0.1", 9999))
         assert parse_endpoint("/run/user/1000/vk.sock") == ("unix", "/run/user/1000/vk.sock")
 
-    def test_roundtrip_over_loopback_tcp(self) -> None:
+    def test_roundtrip_over_loopback_tcp(self, monkeypatch, tmp_path) -> None:
         # The exact transport Windows uses, exercised live on any OS.
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
         endpoint = "tcp:127.0.0.1:48899"
         server = IPCServer(endpoint)
         server.start()
@@ -542,6 +543,10 @@ class TestWindowsPaths:
 
 
 class TestIpcSingleListener:
+    @pytest.fixture(autouse=True)
+    def private_state(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
     def test_second_daemon_on_the_port_fails_clearly(self) -> None:
         endpoint = "tcp:127.0.0.1:48911"
         first = IPCServer(endpoint)
@@ -551,6 +556,74 @@ class TestIpcSingleListener:
                 IPCServer(endpoint).start()
         finally:
             first.stop()
+
+    def test_other_bind_errors_say_what_happened(self, monkeypatch) -> None:
+        import errno
+        import socket as socket_mod
+
+        def refuse(self, address):
+            raise OSError(errno.EACCES, "forbidden by its access permissions")
+
+        monkeypatch.setattr(socket_mod.socket, "bind", refuse)
+        with pytest.raises(RuntimeError, match="Could not open the command channel.*forbidden"):
+            IPCServer("tcp:127.0.0.1:0").start()
+
+
+class TestPerSessionPort:
+    """Windows' default endpoint is tcp:127.0.0.1:0: every daemon binds a
+    free port and publishes it with its token (review finding: one fixed
+    port meant a second signed-in user could never start)."""
+
+    def _serve_one(self, server, reply: bytes) -> threading.Thread:
+        def serve() -> None:
+            conn = server.accept()
+            recv_all(conn)
+            conn.sendall(reply)
+            conn.close()
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        return thread
+
+    def test_two_users_side_by_side(self, monkeypatch, tmp_path) -> None:
+        servers = {}
+        for user in ("alice", "bob"):
+            monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / user))
+            server = IPCServer("tcp:127.0.0.1:0")
+            server.start()
+            servers[user] = server
+        try:
+            ports = {u: int(s.endpoint.rsplit(":", 1)[1]) for u, s in servers.items()}
+            assert ports["alice"] != ports["bob"] and 0 not in ports.values()
+            for user, server in servers.items():
+                monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / user))
+                thread = self._serve_one(server, b'{"status": "ok", "who": "%s"}' % user.encode())
+                reply = IPCClient("tcp:127.0.0.1:0", timeout=3.0).send_command("status")
+                thread.join(timeout=3.0)
+                assert reply == {"status": "ok", "who": user}
+        finally:
+            for user, server in servers.items():
+                monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / user))
+                server.stop()
+        assert not (tmp_path / "alice" / "voice-keyboard" / "ipc-token").exists()
+
+    def test_no_daemon_means_connection_refused(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+        with pytest.raises(ConnectionRefusedError):
+            IPCClient("tcp:127.0.0.1:0", timeout=1.0).send_command("status")
+
+    def test_stopping_leaves_a_newer_daemons_token_alone(self, monkeypatch, tmp_path) -> None:
+        from voice_keyboard import ipc
+
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+        old = IPCServer("tcp:127.0.0.1:0")
+        old.start()
+        new = IPCServer("tcp:127.0.0.1:0")
+        new.start()  # publishes over the old one's file
+        old.stop()
+        assert ipc.read_ipc_endpoint() == (new.required_token, int(new.endpoint.rsplit(":", 1)[1]))
+        new.stop()
+        assert ipc.read_ipc_endpoint() == ("", 0)
 
 
 class TestHookKeyStateQuirks:
