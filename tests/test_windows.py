@@ -515,3 +515,69 @@ class TestIpcSingleListener:
                 IPCServer(endpoint).start()
         finally:
             first.stop()
+
+
+class TestHookKeyStateQuirks:
+    """AltGr and missed key releases (review findings: AltGr was eaten as
+    Ctrl+Alt; releases on the secure desktop left Ctrl+Alt stuck)."""
+
+    LCTRL, LALT, RALT, V = 0xA2, 0xA4, 0xA5, ord("V")
+    FAKE_CTRL_SCAN = 0x21D  # AltGr's synthetic Left Ctrl
+
+    def test_altgr_is_not_ctrl_alt(self) -> None:
+        listener, cb = _win_listener()
+        # AltGr+V ('@' on Hungarian/Czech/... layouts): fake LCtrl + RAlt + V.
+        assert listener._on_hook_event(WM_KEYDOWN, self.LCTRL, 0, self.FAKE_CTRL_SCAN) is False
+        assert listener._on_hook_event(WM_SYSKEYDOWN, self.RALT, 0, 0x38) is False
+        assert listener._on_hook_event(WM_KEYDOWN, self.V, 0, 0x2F) is False  # reaches the app
+        listener._on_hook_event(WM_KEYUP, self.V, 0, 0x2F)
+        listener._on_hook_event(WM_KEYUP, self.RALT, 0, 0x38)
+        listener._on_hook_event(WM_KEYUP, self.LCTRL, 0, self.FAKE_CTRL_SCAN)
+        cb["on_toggle"].assert_not_called()
+        # A real Ctrl+Alt+V still works.
+        listener._on_hook_event(WM_KEYDOWN, self.LCTRL, 0, 0x1D)
+        listener._on_hook_event(WM_KEYDOWN, self.LALT, 0, 0x38)
+        assert listener._on_hook_event(WM_KEYDOWN, self.V, 0, 0x2F) is True
+        cb["on_toggle"].assert_called_once()
+
+    def test_missed_releases_dont_leave_modifiers_stuck(self) -> None:
+        listener, cb = _win_listener()
+        listener._on_hook_event(WM_KEYDOWN, self.LCTRL, 0, 0x1D)
+        listener._on_hook_event(WM_KEYDOWN, self.LALT, 0, 0x38)
+        # Ctrl+Alt+Del: the releases happen on the Winlogon desktop, unseen.
+        listener._key_is_down = lambda vk: False
+        assert listener._on_hook_event(WM_KEYDOWN, self.V, 0, 0x2F) is False
+        listener._on_hook_event(WM_KEYUP, self.V, 0, 0x2F)
+        cb["on_toggle"].assert_not_called()
+        assert not listener._pressed
+
+    def test_hold_to_talk_survives_our_own_modifier_release(self) -> None:
+        # Molten typing releases the held Ctrl+Alt logically (injected
+        # key-ups) and the swallowed V never updates Windows' key state: the
+        # resync must not mistake either for the user letting go.
+        listener, cb = _win_listener(mode="hold")
+        held = set()
+        listener._key_is_down = lambda vk: vk in held
+        for vk in (self.LCTRL, self.LALT):
+            held.add(vk)
+            listener._on_hook_event(WM_KEYDOWN, vk, 0)
+        assert listener._on_hook_event(WM_KEYDOWN, self.V, 0) is True
+        cb["on_hold_start"].assert_called_once()
+        for vk in (self.LCTRL, self.LALT):  # the injector's releases
+            held.discard(vk)
+            listener._on_hook_event(WM_KEYUP, vk, LLKHF_INJECTED)
+        for _ in range(3):  # auto-repeat of the held trigger
+            assert listener._on_hook_event(WM_KEYDOWN, self.V, 0) is True
+        cb["on_hold_stop"].assert_not_called()
+        assert listener._on_hook_event(WM_KEYUP, self.V, 0) is True
+        cb["on_hold_stop"].assert_called_once()
+
+    def test_unswallowed_trigger_with_a_missed_release_is_a_fresh_press(self) -> None:
+        listener, cb = _win_listener()
+        listener._on_hook_event(WM_KEYDOWN, self.V, 0)  # plain v, not swallowed
+        listener._key_is_down = lambda vk: False  # its release went unseen
+        listener._on_hook_event(WM_KEYDOWN, self.LCTRL, 0)
+        listener._on_hook_event(WM_KEYDOWN, self.LALT, 0)
+        listener._key_is_down = lambda vk: vk in (self.LCTRL, self.LALT)
+        assert listener._on_hook_event(WM_KEYDOWN, self.V, 0) is True
+        cb["on_toggle"].assert_called_once()

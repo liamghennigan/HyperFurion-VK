@@ -12,6 +12,15 @@ the focused app (where it is Paste Special in Office). Bare-modifier
 bindings (the assistant's Right Ctrl) are never swallowed — a modifier
 alone does nothing in an app, which is what makes them terminal-safe.
 
+Two Windows quirks shape the key tracking. AltGr arrives as a synthetic
+Left Ctrl plus Right Alt; that fake Ctrl is ignored, or AltGr+V ('@' on
+many layouts) would be eaten as Ctrl+Alt+V. And key releases that happen
+on another desktop (Ctrl+Alt+Del, the lock screen, UAC) or while an
+elevated window has focus never reach the hook; on each fresh trigger
+press the held modifiers are re-checked against the real key state, so a
+missed release can't leave Ctrl+Alt "stuck" and turn plain V into the
+hotkey.
+
 RegisterHotKey was deliberately not used: it reports presses only, and
 hold-to-talk needs releases.
 """
@@ -19,6 +28,7 @@ hold-to-talk needs releases.
 import ctypes
 import logging
 import threading
+from typing import Optional
 
 from voice_keyboard.hotkey import HotkeyListener
 
@@ -84,6 +94,10 @@ WM_TIMER = 0x0113
 WM_QUIT = 0x0012
 LLKHF_INJECTED = 0x00000010
 WH_KEYBOARD_LL = 13
+VK_LCONTROL = 0xA2
+# AltGr's synthetic Left Ctrl carries this marker bit in its scan code
+# (0x21D); a physical Left Ctrl is plain 0x1D.
+ALTGR_FAKE_CTRL_SCAN_BIT = 0x200
 
 # Windows silently unhooks a low-level hook that ever overruns
 # LowLevelHooksTimeout (a GIL stall can do it). Re-arming periodically
@@ -139,21 +153,11 @@ def _send_menu_mask() -> None:  # pragma: no cover - requires Windows
     """Tap the inert mask key so the user's coming Alt/Win release (after a
     swallowed chord) can't open the menu bar or the Start menu."""
     try:
-        from voice_keyboard.windows.injector import (
-            _INPUT,
-            _KEYBDINPUT,
-            INPUT_KEYBOARD,
-            KEYEVENTF_KEYUP,
-            VK_MASK,
-        )
+        from voice_keyboard.windows.injector import KEYEVENTF_KEYUP, VK_MASK, WinTextInjector
 
-        events = (_INPUT * 2)()
-        for slot, flags in zip(events, (0, KEYEVENTF_KEYUP)):
-            slot.type = INPUT_KEYBOARD
-            slot.ki = _KEYBDINPUT(VK_MASK, 0, flags, 0, 0)
-        user32 = ctypes.WinDLL("user32")  # type: ignore[attr-defined]
-        user32.SendInput.argtypes = [ctypes.c_uint, ctypes.POINTER(_INPUT), ctypes.c_int]
-        user32.SendInput(2, events, ctypes.sizeof(_INPUT))
+        injector = WinTextInjector()
+        injector.start()
+        injector._send([(VK_MASK, 0, 0), (VK_MASK, 0, KEYEVENTF_KEYUP)])
     except Exception:
         logger.debug("menu mask send failed", exc_info=True)
 
@@ -182,6 +186,14 @@ class WinHotkeyListener(HotkeyListener):
         # auto-repeats and the release are swallowed with it.
         self._swallowing = False
         self._send_mask = _send_menu_mask
+        # vk -> is it down right now (GetAsyncKeyState); set by the hook
+        # thread. None (tests, or before the hook runs) skips the resync.
+        self._key_is_down = None
+        # Modifiers our own injector released while still physically held
+        # (hold-to-talk): logically up, but NOT released by the user.
+        self._injected_up: set[int] = set()
+        # Why SetWindowsHookExW failed (Win32 error code), if it did.
+        self.hook_error: Optional[int] = None
 
     def _make_spec(self, key: str):
         return WinHotkeySpec(key, allow_bare=self._allow_bare)
@@ -232,21 +244,59 @@ class WinHotkeyListener(HotkeyListener):
             threading.Thread(target=self._send_mask, daemon=True).start()
         return self._swallowing
 
-    def _on_hook_event(self, w_param: int, vk_code: int, flags: int) -> bool:
+    def _resync_before_press(self, vk_code: int) -> None:
+        """A key is going down: forget held keys whose release this hook
+        never saw, so they can't complete the chord. The trigger is checked
+        on every press (a stale V plus a fresh Ctrl+Alt would fire); the
+        modifiers when the trigger itself goes down. Our own injected
+        releases are exempt — hold-to-talk keeps the hotkey physically held
+        while molten typing logically releases it."""
+        is_down = self._key_is_down
+        if is_down is None:
+            return
+        trigger = self._spec.trigger_code
+        try:
+            if (
+                trigger in self._pressed
+                and not self._swallowing
+                and trigger not in self._injected_up
+                and not is_down(trigger)
+            ):
+                # Recorded as held, but Windows says it's up: its release was
+                # missed. (A swallowed trigger never updates Windows' key
+                # state, so this is skipped while swallowing.)
+                self._handle_key_event(trigger, 0)
+            if vk_code != trigger:
+                return
+            for vk in [v for v in self._pressed if v in MODIFIER_VKS and v != trigger]:
+                if vk not in self._injected_up and not is_down(vk):
+                    self._handle_key_event(vk, 0)
+        except Exception:
+            logger.debug("hotkey key-state resync failed", exc_info=True)
+
+    def _on_hook_event(self, w_param: int, vk_code: int, flags: int, scan_code: int = 0) -> bool:
         """Feed one hook event to the state machine. True = swallow it."""
+        down = w_param in (WM_KEYDOWN, WM_SYSKEYDOWN)
+        up = w_param in (WM_KEYUP, WM_SYSKEYUP)
         if flags & LLKHF_INJECTED:
-            return False  # our own SendInput typing must never trigger the hotkey
-        if w_param in (WM_KEYDOWN, WM_SYSKEYDOWN):
-            swallow = self._should_swallow(vk_code, True)
-            # LL hooks repeat key-down while held; the state machine treats
-            # re-adding a pressed code as a no-op, so this is naturally safe.
-            self._handle_key_event(vk_code, 1)
-            return swallow
-        if w_param in (WM_KEYUP, WM_SYSKEYUP):
-            swallow = self._should_swallow(vk_code, False)
-            self._handle_key_event(vk_code, 0)
-            return swallow
-        return False
+            # Our own SendInput typing must never trigger the hotkey. Note
+            # modifier releases the injector makes while the user still
+            # holds the key, so the resync doesn't take them as real.
+            if up and vk_code in self._pressed:
+                self._injected_up.add(vk_code)
+            return False
+        if vk_code == VK_LCONTROL and scan_code & ALTGR_FAKE_CTRL_SCAN_BIT:
+            return False  # AltGr's synthetic Ctrl: AltGr is not Ctrl+Alt
+        if not (down or up):
+            return False
+        self._injected_up.discard(vk_code)
+        if down:
+            self._resync_before_press(vk_code)
+        swallow = self._should_swallow(vk_code, down)
+        # LL hooks repeat key-down while held; the state machine treats
+        # re-adding a pressed code as a no-op, so this is naturally safe.
+        self._handle_key_event(vk_code, 1 if down else 0)
+        return swallow
 
     def _run_hook(self) -> None:  # pragma: no cover - requires Windows
         from ctypes import wintypes
@@ -293,12 +343,20 @@ class WinHotkeyListener(HotkeyListener):
         ]
         user32.SetTimer.restype = ctypes.c_size_t
         user32.KillTimer.argtypes = [wintypes.HWND, ctypes.c_size_t]
+        user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+        user32.GetAsyncKeyState.restype = ctypes.c_short
+        user32.PostThreadMessageW.argtypes = [
+            wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+        ]
+        self._key_is_down = lambda vk: bool(user32.GetAsyncKeyState(vk) & 0x8000)
 
         def hook(n_code, w_param, l_param):
             if n_code >= 0:
                 try:
                     data = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-                    if self._on_hook_event(int(w_param), int(data.vkCode), int(data.flags)):
+                    if self._on_hook_event(
+                        int(w_param), int(data.vkCode), int(data.flags), int(data.scanCode)
+                    ):
                         return 1
                 except Exception:
                     logger.exception("hotkey hook handling failed")
@@ -307,8 +365,8 @@ class WinHotkeyListener(HotkeyListener):
         hook_proc = HOOKPROC(hook)
         handle = user32.SetWindowsHookExW(WH_KEYBOARD_LL, hook_proc, None, 0)
         if not handle:
-            logger.warning("Could not install the keyboard hook (error %d)",
-                           ctypes.get_last_error())
+            self.hook_error = ctypes.get_last_error()
+            logger.warning("Could not install the keyboard hook (error %d)", self.hook_error)
             return
         timer = user32.SetTimer(None, 0, REHOOK_INTERVAL_MS, None)
         try:
