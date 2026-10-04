@@ -2,6 +2,7 @@ import asyncio
 from unittest import mock
 
 import pytest
+from waiting import wait_until
 
 from voice_keyboard.daemon import Daemon, _dedupe_repeated_transcript_text, _merge_transcript_text
 from voice_keyboard.config import _default_config_with_paths
@@ -93,10 +94,7 @@ class TestDaemonStateTransitions:
                 stt_client.connect.assert_awaited_once_with(16000)
 
                 # Wait for the receive task to populate _final_text.
-                for _ in range(100):
-                    if daemon._final_text:
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._final_text)
                 assert daemon._final_text == "hello world"
 
                 result = await daemon._stop_recording()
@@ -128,10 +126,7 @@ class TestDaemonStateTransitions:
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
                  mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
-                for _ in range(100):
-                    if daemon._final_text == "hello world":
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._final_text == "hello world")
                 await daemon._stop_recording()
                 daemon._injector.type_text.assert_called_once_with("hello world")
 
@@ -153,10 +148,7 @@ class TestDaemonStateTransitions:
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
                  mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
-                for _ in range(100):
-                    if daemon._final_text == "I started with this part and kept talking after that":
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._final_text == "I started with this part and kept talking after that")
                 result = await daemon._stop_recording()
 
                 assert result == "I started with this part and kept talking after that"
@@ -180,10 +172,7 @@ class TestDaemonStateTransitions:
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
                  mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
-                for _ in range(100):
-                    if daemon._final_text == "This was already finalized and this arrived at the end":
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._final_text == "This was already finalized and this arrived at the end")
                 result = await daemon._stop_recording()
 
                 assert result == "This was already finalized and this arrived at the end"
@@ -225,10 +214,7 @@ class TestDaemonStateTransitions:
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
                  mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
-                for _ in range(100):
-                    if daemon._final_text.endswith("it does."):
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._final_text.endswith("it does."))
                 result = await daemon._stop_recording()
 
                 assert result == (
@@ -266,10 +252,7 @@ class TestDaemonStateTransitions:
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
                  mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
-                for _ in range(100):
-                    if daemon._final_text == final_text:
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._final_text == final_text)
                 result = await daemon._stop_recording()
 
                 assert result == expected
@@ -292,10 +275,7 @@ class TestDaemonStateTransitions:
             with mock.patch("voice_keyboard.daemon.AudioCapture", return_value=audio_capture), \
                  mock.patch("voice_keyboard.daemon.create_stt_client", return_value=stt_client):
                 await daemon._start_recording()
-                for _ in range(100):
-                    if daemon._stt_error:
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._stt_error)
 
                 with pytest.raises(RuntimeError, match="bad key"):
                     await daemon._stop_recording()

@@ -6,6 +6,7 @@ import asyncio
 from unittest import mock
 
 import pytest
+from waiting import wait_until
 
 from voice_keyboard.config import _default_config_with_paths
 from voice_keyboard.daemon import Daemon
@@ -131,11 +132,9 @@ class TestLiveFlow:
                 await daemon._start_recording()
                 assert daemon._flow_worker is not None, "live worker expected"
                 # Let interims flow: something must be typed BEFORE stop.
-                for _ in range(200):
-                    if injector.screen:
-                        break
-                    await asyncio.sleep(0.01)
-                assert injector.screen, "molten text should stream in while recording"
+                assert await wait_until(lambda: injector.screen), (
+                    "molten text should stream in while recording"
+                )
 
                 final = await daemon._stop_recording()
                 assert final == "Hello world how are you"
@@ -159,16 +158,16 @@ class TestLiveFlow:
             daemon._config["flow"]["stability_updates"] = 50
             with daemon._audio_patch, daemon._stt_patch, daemon._probe_patch:
                 await daemon._start_recording()
-                saw_wrong = saw_repaired = False
-                for _ in range(400):
+                seen = {"wrong": False}
+
+                def repaired() -> bool:
                     if injector.screen.startswith("Eye scream"):
-                        saw_wrong = True
-                    if saw_wrong and injector.screen == "Ice cream cone":
-                        saw_repaired = True
-                        break
-                    await asyncio.sleep(0.005)
-                assert saw_wrong, "misheard text should have been typed molten"
-                assert saw_repaired, "revision should repair the typed text in place"
+                        seen["wrong"] = True
+                    return seen["wrong"] and injector.screen == "Ice cream cone"
+
+                done = await wait_until(repaired)
+                assert seen["wrong"], "misheard text should have been typed molten"
+                assert done, "revision should repair the typed text in place"
 
                 final = await daemon._stop_recording()
                 assert final == "Ice cream cone"

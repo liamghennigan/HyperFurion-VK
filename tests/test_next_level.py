@@ -6,6 +6,7 @@ import sys
 from unittest import mock
 
 import pytest
+from waiting import wait_until
 
 from voice_keyboard import dictionary, recall
 from voice_keyboard.config import _default_config_with_paths, validate_config
@@ -418,10 +419,7 @@ class TestRemoteSession:
                 assert daemon._audio_capture is source
                 assert source.running is True
                 pyaudio_cls.assert_not_called()
-                for _ in range(200):
-                    if daemon._final_text:
-                        break
-                    await asyncio.sleep(0.005)
+                await wait_until(lambda: daemon._final_text)
                 result = await daemon._stop_recording()
                 assert result == "from the phone"
 
