@@ -295,6 +295,13 @@ class TestDaemonWindowsCommands:
         daemon._chunks_seen = 3
         assert daemon._no_signal_hint() == ""
 
+    def test_phone_mic_silence_is_not_blamed_on_this_pc(self, monkeypatch) -> None:
+        daemon = _daemon()
+        daemon._chunks_seen = 30
+        daemon._session_remote_audio = True
+        monkeypatch.setattr(sys, "platform", "win32")
+        assert daemon._no_signal_hint() == ""
+
 
 class TestReadAloud:
     @pytest.fixture(autouse=True)

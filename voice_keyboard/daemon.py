@@ -127,6 +127,9 @@ class Daemon:
         # (Windows privacy settings) delivers pure digital silence.
         self._chunks_seen = 0
         self._heard_signal = False
+        # The session's audio came from the phone (remote mic), not this
+        # PC's microphone: its silence says nothing about mic privacy.
+        self._session_remote_audio = False
         self._last_caption = ""
         self._last_typed = ""
         self._last_error = ""
@@ -511,7 +514,7 @@ class Daemon:
     def _no_signal_hint(self) -> str:
         """NO SIGNAL detail: name the likely cause when the mic delivered
         nothing but exact zeros for a whole session (over a second)."""
-        if self._heard_signal or self._chunks_seen < 10:
+        if self._heard_signal or self._chunks_seen < 10 or self._session_remote_audio:
             return ""
         if sys.platform == "win32":
             return "Mic sent pure silence — Settings › Privacy & security › Microphone"
@@ -1080,6 +1083,7 @@ class Daemon:
             probe_task = asyncio.create_task(asyncio.to_thread(probe_focus))
 
         override = self._audio_source_override
+        self._session_remote_audio = override is not None
         if override is not None:
             # A remote mic session: the phone's frames replace PyAudio.
             self._audio_capture = override
