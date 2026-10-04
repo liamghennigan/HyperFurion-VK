@@ -160,33 +160,18 @@ class Daemon:
             self._stop_event.set()
         self._hotkey_lock = asyncio.Lock()
         self._injector.start()
-        self._ipc_server.start()
-        self._start_hotkey_listener()
-        self._start_assistant_hotkey_listener()
-        self._start_read_hotkey_listener()
-        self._push_button_visibility()
-        # Re-push shortly after start in case the shell extension was not yet
-        # listening on the bus (daemon-before-extension ordering).
-        self._loop.call_later(1.6, self._push_button_visibility)
-        if prefetch_enabled(self._config):
-            # A separate TTS client: the watcher thread never shares a
-            # requests session with the playback path.
-            self._prefetch_watcher = SelectionWatcher(
-                tts_client=create_tts_client(self._config),
-                store=self._store_tts_prefetch,
-                is_busy=lambda: self._recording,
-            )
-            self._prefetch_watcher.start()
-        mic_cfg = self._config.get("remote_mic", {})
-        if bool(mic_cfg.get("enabled", False)):
-            self._remote_mic = RemoteMicServer(
-                port=int(mic_cfg.get("port", 9177)),
-                token=str(mic_cfg.get("token", "")).strip(),
-                on_start=self._schedule_remote_start,
-                on_stop=self._schedule_remote_stop,
-            )
-            self._remote_mic.start()
-        self._start_wake_listener()
+        try:
+            self._ipc_server.start()
+        except BaseException:
+            self._injector.stop()
+            raise
+        try:
+            self._start_services()
+        except BaseException:
+            # A half-started daemon must release its port and listeners, or
+            # an in-process restart can't bind again.
+            await self._shutdown()
+            raise
         logger.info(
             "Daemon started, socket: %s", getattr(self._ipc_server, "endpoint", self._socket_path)
         )
@@ -210,6 +195,54 @@ class Daemon:
 
         await stop_event.wait()
         await self._shutdown()
+
+    def _start_services(self) -> None:
+        """Everything after the injector and the IPC server: hotkeys, the
+        overlay's orb, prefetch, the remote mic, the wake word."""
+        self._start_hotkey_listener()
+        self._start_assistant_hotkey_listener()
+        self._start_read_hotkey_listener()
+        # The Windows hook installs on its own thread; say so if Windows
+        # refused it, or the hotkeys would just silently do nothing.
+        self._loop.call_later(1.5, self._check_hotkey_hooks)
+        self._push_button_visibility()
+        # Re-push shortly after start in case the shell extension was not yet
+        # listening on the bus (daemon-before-extension ordering).
+        self._loop.call_later(1.6, self._push_button_visibility)
+        if prefetch_enabled(self._config):
+            # A separate TTS client: the watcher thread never shares a
+            # requests session with the playback path.
+            self._prefetch_watcher = SelectionWatcher(
+                tts_client=create_tts_client(self._config),
+                store=self._store_tts_prefetch,
+                is_busy=lambda: self._recording,
+            )
+            self._prefetch_watcher.start()
+        mic_cfg = self._config.get("remote_mic", {})
+        if bool(mic_cfg.get("enabled", False)):
+            self._remote_mic = RemoteMicServer(
+                port=int(mic_cfg.get("port", 9177)),
+                token=str(mic_cfg.get("token", "")).strip(),
+                on_start=self._schedule_remote_start,
+                on_stop=self._schedule_remote_stop,
+            )
+            self._remote_mic.start()
+        self._start_wake_listener()
+
+    def _check_hotkey_hooks(self) -> None:
+        for listener in (
+            self._hotkey_listener, self._assistant_hotkey_listener, self._read_hotkey_listener
+        ):
+            error = getattr(listener, "hook_error", None)
+            if not isinstance(error, int) or isinstance(error, bool):
+                continue
+            message = f"Windows refused the keyboard hook (error {error}): hotkeys won't work"
+            logger.error("%s", message)
+            self._last_error = message
+            asyncio.ensure_future(
+                self._show_hotkey_overlay("error", detail=message, timeout_ms=6000)
+            )
+            return
 
     @property
     def recording(self) -> bool:

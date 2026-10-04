@@ -612,6 +612,54 @@ class TestPerSessionPort:
         with pytest.raises(ConnectionRefusedError):
             IPCClient("tcp:127.0.0.1:0", timeout=1.0).send_command("status")
 
+    def test_token_and_port_come_from_one_read(self, monkeypatch, tmp_path) -> None:
+        # A daemon restarting between two reads must not get its old token
+        # paired with its new port.
+        from voice_keyboard import ipc
+
+        reads = []
+        monkeypatch.setattr(ipc, "read_ipc_endpoint", lambda: reads.append(1) or ("tok", 1))
+        with pytest.raises(OSError):
+            IPCClient("tcp:127.0.0.1:0", timeout=0.5).send_command("status")
+        assert len(reads) == 1
+
+    def test_a_failed_publish_never_leaves_the_port_bound(self, monkeypatch, tmp_path) -> None:
+        from voice_keyboard import ipc
+
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+
+        def refuse(path, text):
+            raise PermissionError(13, "in use")
+
+        monkeypatch.setattr(ipc, "_write_private", refuse)
+        server = IPCServer("tcp:127.0.0.1:0")
+        with pytest.raises(RuntimeError, match="Could not publish"):
+            server.start()
+        assert server._sock is None and server.required_token is None
+
+    def test_a_pre_2_2_daemon_is_still_reachable(self, monkeypatch, tmp_path) -> None:
+        # Mid-upgrade the old daemon still runs: bare token next to the
+        # config, fixed port 48765.
+        from voice_keyboard import ipc
+
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+        legacy = tmp_path / "config" / "voice-keyboard"
+        legacy.mkdir(parents=True)
+        (legacy / "ipc-token").write_text("oldtoken")
+        assert ipc.read_ipc_endpoint() == ("oldtoken", ipc.LEGACY_PORT)
+
+    def test_each_windows_session_has_its_own_token_file(self, monkeypatch, tmp_path) -> None:
+        # The same person signed in twice (Remote Desktop) runs a daemon in
+        # each session; each session's CLI must reach its own.
+        from voice_keyboard import ipc
+
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+        monkeypatch.setattr(ipc, "_session_id", lambda: 2)
+        assert ipc._token_path().name == "ipc-token-2"
+        monkeypatch.setattr(ipc, "_session_id", lambda: None)
+        assert ipc._token_path().name == "ipc-token"
+
     def test_stopping_leaves_a_newer_daemons_token_alone(self, monkeypatch, tmp_path) -> None:
         from voice_keyboard import ipc
 

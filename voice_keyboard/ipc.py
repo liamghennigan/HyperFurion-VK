@@ -5,6 +5,7 @@ import os
 import secrets
 import socket
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -35,10 +36,42 @@ def _default_socket_path() -> str:
 DEFAULT_SOCKET_PATH = _default_socket_path()
 
 
+# Before 2.2 the Windows daemon used one fixed port and kept a bare token
+# next to the config; a CLI upgraded while such a daemon still runs finds it
+# there.
+LEGACY_PORT = 48765
+
+
+def _session_id() -> Optional[int]:
+    """This process's Windows session (each Remote Desktop sign-in has its
+    own); None elsewhere."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        session = wintypes.DWORD()
+        if ctypes.WinDLL("kernel32").ProcessIdToSessionId(  # type: ignore[attr-defined]
+            os.getpid(), ctypes.byref(session)
+        ):
+            return int(session.value)
+    except Exception:
+        pass
+    return None
+
+
 def _token_path() -> Path:
     # Machine-local (never roams with a Windows profile): it names this
-    # machine's daemon and its port.
-    return paths.state_dir() / "ipc-token"
+    # machine's daemon and its port — one per Windows session, since the
+    # same person signed in twice runs a daemon in each, and each session's
+    # CLI must reach its own.
+    session = _session_id()
+    return paths.state_dir() / ("ipc-token" if session is None else f"ipc-token-{session}")
+
+
+def _legacy_token_path() -> Path:
+    return _config_dir() / "ipc-token"
 
 
 def read_ipc_endpoint() -> tuple[str, int]:
@@ -46,7 +79,11 @@ def read_ipc_endpoint() -> tuple[str, int]:
     try:
         raw = _token_path().read_text(encoding="utf-8").strip()
     except OSError:
-        return "", 0
+        try:
+            raw = _legacy_token_path().read_text(encoding="utf-8").strip()
+        except OSError:
+            return "", 0
+        return (raw, LEGACY_PORT) if raw else ("", 0)
     try:
         data = json.loads(raw)
         return str(data.get("token", "")), int(data.get("port", 0))
@@ -72,12 +109,14 @@ def parse_endpoint(socket_path: str) -> tuple[str, object]:
     return "unix", socket_path
 
 
-def resolve_endpoint(socket_path: str) -> tuple[str, object]:
-    """parse_endpoint, with port 0 replaced by the running daemon's port.
-    No published port means no daemon: ConnectionRefusedError."""
+def resolve_endpoint(socket_path: str, published=None) -> tuple[str, object]:
+    """parse_endpoint, with port 0 replaced by the running daemon's port
+    (`published`: a read_ipc_endpoint() result the caller already has, so
+    token and port come from the same read). No published port means no
+    daemon: ConnectionRefusedError."""
     kind, target = parse_endpoint(socket_path)
     if kind == "inet" and target[1] == 0:
-        port = read_ipc_endpoint()[1]
+        port = (published or read_ipc_endpoint())[1]
         if not port:
             raise ConnectionRefusedError(
                 errno.ECONNREFUSED, "the daemon is not running (no published port)"
@@ -86,8 +125,10 @@ def resolve_endpoint(socket_path: str) -> tuple[str, object]:
     return kind, target
 
 
-def _connect_socket(socket_path: str, timeout: float | None = None) -> socket.socket:
-    kind, target = resolve_endpoint(socket_path)
+def _connect_socket(
+    socket_path: str, timeout: float | None = None, published=None
+) -> socket.socket:
+    kind, target = resolve_endpoint(socket_path, published)
     if kind == "inet":
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     else:
@@ -120,15 +161,31 @@ def _address_in_use(exc: OSError) -> bool:
 
 
 def _write_private(path: Path, text: str) -> None:
-    """Write a 0600 file atomically: a client never reads half a token."""
+    """Write a 0600 file atomically: a client never reads half a token.
+    Retries the swap briefly: on Windows a reader holding the old file open
+    blocks the rename for a moment."""
     path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}")
-    tmp.write_text(text, encoding="utf-8")
     try:
-        os.chmod(tmp, 0o600)
-    except OSError:
-        pass
-    os.replace(tmp, path)
+        tmp.write_text(text, encoding="utf-8")
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        for attempt in range(20):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.05)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 class IPCServer:
@@ -178,7 +235,14 @@ class IPCServer:
             host, port = self._sock.getsockname()[:2]
             self._endpoint = f"tcp:{host}:{port}"
             self._token = secrets.token_hex(16)
-            _write_private(_token_path(), json.dumps({"token": self._token, "port": port}))
+            try:
+                _write_private(_token_path(), json.dumps({"token": self._token, "port": port}))
+            except OSError as exc:
+                # Unpublished, the port is useless: never leave it bound.
+                self._sock.close()
+                self._sock = None
+                self._token = None
+                raise RuntimeError(f"Could not publish the command channel: {exc}") from exc
             logger.info("IPC server listening on %s", self._endpoint)
             return
 
@@ -253,12 +317,15 @@ class IPCClient:
         msg = {"command": command}
         if payload is not None:
             msg["payload"] = payload
+        published = None
         if parse_endpoint(self._socket_path)[0] == "inet":
-            token = read_ipc_token()
-            if token:
-                msg["token"] = token
+            # One read for both: a daemon restarting in between must not
+            # pair its old token with its new port.
+            published = read_ipc_endpoint()
+            if published[0]:
+                msg["token"] = published[0]
         sock = _connect_socket(
-            self._socket_path, timeout if timeout is not None else self._timeout
+            self._socket_path, timeout if timeout is not None else self._timeout, published
         )
         try:
             sock.sendall(json.dumps(msg).encode("utf-8"))

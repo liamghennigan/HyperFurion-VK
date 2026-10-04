@@ -1,3 +1,4 @@
+import errno
 import logging
 import os
 import select
@@ -209,6 +210,11 @@ class HotkeySpec:
         return codes
 
 
+# Open failures that won't fix themselves until the node changes (its
+# permissions, or a new device behind it); anything else is retried.
+_LASTING_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.ENODEV, errno.ENXIO})
+
+
 def _device_key(device):
     return getattr(device, "path", None) or id(device)
 
@@ -341,15 +347,22 @@ class HotkeyListener:
                 continue
             try:
                 device = InputDevice(path)
-            except (OSError, PermissionError) as exc:
+            except OSError as exc:
                 logger.debug("Skipping input device %s: %s", path, exc)
-                self._reject(path, signature)
+                if exc.errno in _LASTING_ERRNOS:
+                    self._reject(path, signature)  # else (EMFILE, EIO, ...) retry
                 continue
             try:
                 usable = self._usable(device)
-            except (OSError, PermissionError) as exc:
+            except OSError as exc:
                 logger.debug("Skipping input device %s: %s", path, exc)
-                usable = False
+                try:
+                    device.close()
+                except OSError:
+                    pass
+                if exc.errno in _LASTING_ERRNOS:
+                    self._reject(path, signature)
+                continue
             if usable:
                 devices.append(device)
                 self._rejected.pop(path, None)
@@ -418,8 +431,10 @@ class HotkeyListener:
             self._devices.append(device)
 
     def _drop(self, device) -> None:
-        """Forget a device that went away (unplugged, suspended), releasing
-        any key it was holding: its key-ups will never come."""
+        """Forget a device that went away (unplugged, suspended). Keys it was
+        holding are let go — their key-ups will never come — and a gesture
+        they were part of is cancelled, not completed: a vanishing keyboard
+        is no tap and no deliberate release."""
         try:
             self._devices.remove(device)
         except ValueError:
@@ -431,8 +446,25 @@ class HotkeyListener:
         logger.info("Hotkey: keyboard %s went away", getattr(device, "name", "") or device)
         held = self._device_keys.pop(_device_key(device), set())
         still_held = set().union(*self._device_keys.values()) if self._device_keys else set()
-        for code in held - still_held:
-            self._handle_key_event(code, 0)
+        lost = held - still_held
+        if lost and not self._stop_event.is_set():
+            self._abandon_keys(lost)
+
+    def _abandon_keys(self, codes: set) -> None:
+        callback = None
+        with self._lock:
+            self._pressed -= codes
+            if self._spec.is_pressed(self._pressed):
+                return  # the chord is still held on another keyboard
+            self._cancel_auto_hold_timer()
+            if self._hold_active:
+                callback = self._on_hold_cancel
+            self._hold_active = False
+            self._combo_latched = False
+            self._auto_combo_pending = False
+            self._gesture_aborted = False
+        if callback:
+            callback()
 
     def _note_key(self, device, code: int, value: int) -> None:
         keys = self._device_keys.setdefault(_device_key(device), set())

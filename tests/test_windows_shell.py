@@ -10,6 +10,7 @@ first-run setup mode.
 
 import asyncio
 import json
+import pathlib
 import struct
 import sys
 import threading
@@ -476,6 +477,24 @@ class TestReadAloud:
 
 
 class TestDaemonLifecycle:
+    def test_a_refused_keyboard_hook_is_reported(self) -> None:
+        daemon = _daemon()
+        shown = []
+
+        async def show(state, **kw):
+            shown.append((state, kw.get("detail", "")))
+
+        daemon._show_hotkey_overlay = show
+        daemon._hotkey_listener = mock.Mock(hook_error=5)
+
+        async def run():
+            daemon._check_hotkey_hooks()
+            await asyncio.sleep(0)
+
+        asyncio.run(run())
+        assert shown and shown[0][0] == "error" and "error 5" in shown[0][1]
+        assert "hotkeys won't work" in daemon._last_error
+
     def test_shutdown_releases_the_ipc_server_even_when_stopping_fails(self) -> None:
         daemon = _daemon()
         daemon._recording = True
@@ -766,14 +785,68 @@ class TestWindowsConfigDefaults:
 
     @pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16", "cp1252"])
     def test_notepad_encodings_load(self, monkeypatch, tmp_path, encoding) -> None:
+        import locale
+
         from voice_keyboard import config
 
         monkeypatch.setattr(config, "_config_dir", lambda: tmp_path)
+        # The ANSI code page even in UTF-8 mode (getpreferredencoding would
+        # say UTF-8 there and turn every accent into U+FFFD).
+        monkeypatch.setattr(locale, "getencoding", lambda: "cp1252")
         (tmp_path / "config.toml").write_bytes(
-            '# Clé de José\n[xai]\napi_key = "k"\n[stt]\nlanguage = "fr"\n'.encode(encoding)
+            '[xai]\r\napi_key = "k"\r\n[assistant]\r\nname = "José"\r\n'.encode(encoding)
         )
         cfg = config.load_config()
-        assert cfg["stt"]["language"] == "fr"
+        assert cfg["assistant"]["name"] == "José"
+
+    def test_signing_in_keeps_a_notepad_file_valid(self, monkeypatch, tmp_path) -> None:
+        # CRLF in, written back in text mode: "\r\n" must not become
+        # "\r\r\n" (which no TOML parser accepts).
+        import tomllib
+
+        from voice_keyboard import client, config
+
+        monkeypatch.setattr(config, "_config_dir", lambda: tmp_path)
+        (tmp_path / "config.toml").write_bytes(b'[audio]\r\ndevice_name = ""\r\n')
+        written = {}
+        real_write = pathlib.Path.write_text
+
+        def windows_write(self, text, encoding=None, errors=None, newline=None):
+            written["text"] = text.replace("\n", "\r\n")  # what text mode does there
+            return real_write(self, written["text"], encoding=encoding)
+
+        monkeypatch.setattr(pathlib.Path, "write_text", windows_write)
+        client._write_hosted_login("hfk-real")
+        assert tomllib.loads(written["text"].replace("\r\n", "\n"))  # still TOML
+        assert "\r\r" not in written["text"]
+
+    def test_defaults_step_aside_for_the_users_own_bindings(self, monkeypatch, tmp_path) -> None:
+        from voice_keyboard import config
+
+        monkeypatch.setattr(config, "_config_dir", lambda: tmp_path)
+        # Their read-aloud key is Right Ctrl, Kai's default: Kai's goes unbound.
+        (tmp_path / "config.toml").write_text(
+            '[xai]\napi_key = "k"\n[tts]\nhotkey = "rightctrl"\n', encoding="utf-8"
+        )
+        cfg = config.load_config()
+        assert cfg["tts"]["hotkey"] == "rightctrl" and cfg["assistant"]["hotkey"] == ""
+        validate_config(cfg)
+        # Both written by the user: that is theirs to fix.
+        (tmp_path / "config.toml").write_text(
+            '[xai]\napi_key = "k"\n[tts]\nhotkey = "rightctrl"\n'
+            '[assistant]\nhotkey = "rightctrl"\n', encoding="utf-8"
+        )
+        with pytest.raises(RuntimeError, match="must differ"):
+            validate_config(config.load_config())
+
+    @pytest.mark.parametrize("section", ["daemon", "xai", "providers"])
+    def test_any_section_written_as_a_value_is_reported(self, monkeypatch, tmp_path, section) -> None:
+        from voice_keyboard import config
+
+        monkeypatch.setattr(config, "_config_dir", lambda: tmp_path)
+        (tmp_path / "config.toml").write_text(f'{section} = "oops"\n', encoding="utf-8")
+        with pytest.raises(RuntimeError, match=f"{section} must be a \\[{section}\\] section"):
+            validate_config(config.load_config())
 
     def test_a_section_written_as_a_value_is_named(self, monkeypatch) -> None:
         from voice_keyboard.windows.app import hotkey_labels

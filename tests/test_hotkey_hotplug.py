@@ -225,6 +225,114 @@ class TestHotplug:
         finally:
             listener.stop()
 
+    def test_a_keyboard_vanishing_mid_tap_is_no_tap(self, devices) -> None:
+        # Auto mode: chord down, then the keyboard goes before the hold
+        # threshold. Its "release" must not read as a quick tap (toggle).
+        plug, opened = devices
+        plug("/dev/input/event9")
+        toggled = threading.Event()
+        listener = HotkeyListener(
+            {"enabled": True, "key": "control+space", "mode": "auto", "hold_threshold_ms": 5000},
+            on_toggle=toggled.set, on_hold_start=lambda: None, on_hold_stop=lambda: None,
+        )
+        listener.start()
+        try:
+            keyboard = opened("/dev/input/event9")
+            keyboard.press((e.KEY_LEFTCTRL, 1), (e.KEY_SPACE, 1))
+            for _ in range(100):
+                if listener._combo_latched:
+                    break
+                time.sleep(0.02)
+            keyboard.unplug()
+            for _ in range(100):
+                if keyboard not in listener._devices:
+                    break
+                time.sleep(0.02)
+            time.sleep(0.1)
+            assert not toggled.is_set()
+            assert not listener._pressed and not listener._combo_latched
+        finally:
+            listener.stop()
+
+    def test_nothing_fires_once_stopping(self) -> None:
+        fired = []
+        listener = HotkeyListener(
+            {"enabled": True, "key": "control+space", "mode": "hold"},
+            on_toggle=lambda: fired.append("toggle"), on_hold_start=lambda: None,
+            on_hold_stop=lambda: fired.append("stop"),
+        )
+
+        class Gone:
+            path = "/dev/input/event5"
+
+            def close(self):
+                pass
+
+        gone = Gone()
+        listener._devices = [gone]
+        listener._handle_key_event(e.KEY_LEFTCTRL, 1)
+        listener._handle_key_event(e.KEY_SPACE, 1)
+        listener._device_keys = {gone.path: {e.KEY_LEFTCTRL, e.KEY_SPACE}}
+        listener._stop_event.set()  # stop() is closing every device
+        listener._drop(gone)
+        assert fired == []
+
+    def test_a_transient_select_error_waits_instead_of_spinning(self, devices, monkeypatch) -> None:
+        import select as real_select
+
+        plug, opened = devices
+        plug("/dev/input/event10")
+        calls = []
+
+        class FlakySelect:
+            @staticmethod
+            def select(r, w, x, timeout=None):
+                calls.append(len(r))
+                if len(r) > 0 and timeout:
+                    raise OSError(4, "Interrupted system call")  # every full wait
+                return real_select.select(r, w, x, timeout)
+
+        listener = _listener(threading.Event())
+        listener.start()
+        try:
+            opened("/dev/input/event10")
+            for _ in range(100):
+                if listener._devices:
+                    break
+                time.sleep(0.02)
+            monkeypatch.setattr(hotkey_mod, "select", FlakySelect)
+            time.sleep(0.6)
+            monkeypatch.undo()
+            assert len(calls) < 20, f"{len(calls)} select() calls in 0.6 s: spinning"
+            assert listener._devices, "a healthy keyboard was dropped"
+        finally:
+            listener.stop()
+
+    def test_only_lasting_open_errors_are_remembered(self, devices, monkeypatch) -> None:
+        import errno
+
+        plug, _ = devices
+        signatures = {"/dev/input/event11": (13, 1, 1), "/dev/input/event12": (13, 2, 1)}
+        monkeypatch.setattr(hotkey_mod, "_device_signature", lambda path: signatures.get(path))
+        attempts = {"/dev/input/event11": 0, "/dev/input/event12": 0}
+        errors = {"/dev/input/event11": errno.EMFILE, "/dev/input/event12": errno.EACCES}
+
+        def failing(path):
+            attempts[path] += 1
+            raise OSError(errors[path], "nope")
+
+        monkeypatch.setattr(hotkey_mod, "InputDevice", failing)
+        plug("/dev/input/event11")
+        plug("/dev/input/event12")
+        listener = _listener(threading.Event())
+        listener.start()
+        try:
+            time.sleep(1.3)  # with no keyboard yet the loop rescans every 0.5 s
+        finally:
+            listener.stop()
+        assert attempts["/dev/input/event11"] >= 2  # out of descriptors: retried
+        assert attempts["/dev/input/event12"] == 1  # no permission: remembered
+
     def test_stop_closes_everything(self, devices) -> None:
         plug, opened = devices
         plug("/dev/input/event5")

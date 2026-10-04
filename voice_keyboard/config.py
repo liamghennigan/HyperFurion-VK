@@ -3,6 +3,7 @@ import copy
 import logging
 import sys
 from pathlib import Path
+from typing import Optional
 
 import tomllib
 
@@ -339,18 +340,23 @@ def _default_config_with_paths() -> dict:
 
 def read_config_text(path: Path) -> str:
     """config.toml as text, however Notepad saved it: UTF-8 with or without
-    a byte-order mark, "Unicode" (UTF-16), or the ANSI code page."""
+    a byte-order mark, "Unicode" (UTF-16), or the ANSI code page. Line
+    endings come back as \n, so a rewrite (sign-in) can't double them."""
     data = path.read_bytes()
     if data.startswith(codecs.BOM_UTF8):
-        return data[len(codecs.BOM_UTF8):].decode("utf-8")
-    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-        return data.decode("utf-16")
-    try:
-        return data.decode("utf-8")
-    except UnicodeDecodeError:
-        import locale
+        text = data[len(codecs.BOM_UTF8):].decode("utf-8")
+    elif data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        text = data.decode("utf-16")
+    else:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            import locale
 
-        return data.decode(locale.getpreferredencoding(False) or "cp1252", errors="replace")
+            # The ANSI code page even in UTF-8 mode (where
+            # getpreferredencoding would say UTF-8 and mangle every accent).
+            text = data.decode(locale.getencoding() or "cp1252", errors="replace")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _table(config: dict, name: str) -> dict:
@@ -358,54 +364,79 @@ def _table(config: dict, name: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _drop_clashing_default_tts_hotkey(config: dict, user_config: dict) -> None:
-    """Windows fills in a read-aloud hotkey the user never wrote; if one of
-    their own bindings already uses that chord, theirs wins and read-aloud
-    goes without a hotkey (rather than refusing to start)."""
-    user_tts = user_config.get("tts")
-    if isinstance(user_tts, dict) and "hotkey" in user_tts:
-        return  # their own choice: validated as written
-    tts = _table(config, "tts")
-    default = str(tts.get("hotkey", "")).strip()
-    if not default:
-        return
+# Bindings besides dictation's whose defaults may step aside (dictation
+# itself always keeps a key).
+_YIELDING_BINDINGS = (("tts", "hotkey"), ("assistant", "hotkey"))
+
+
+def _yield_default_hotkeys(config: dict, user_config: dict) -> None:
+    """A default binding the user never wrote (Windows' read-aloud
+    Ctrl+Alt+R, Kai's Right Ctrl) steps aside when one of the user's own
+    bindings uses the same chord: theirs wins, and the default goes unbound
+    with a warning — rather than refusing to start over a setting they never
+    wrote. Two clashing bindings the user did write stay an error."""
     from voice_keyboard.hotkey import bindings_clash
 
-    for other in (_table(config, "hotkey").get("key", ""), _table(config, "assistant").get("hotkey", "")):
-        if isinstance(other, str) and other.strip() and bindings_clash(default, other):
-            logger.warning(
-                "%s is already one of your hotkeys, so read-aloud has none;"
-                " set [tts] hotkey to pick one", default,
-            )
-            tts["hotkey"] = ""
-            return
+    def written(section: str, key: str) -> bool:
+        table = user_config.get(section)
+        return isinstance(table, dict) and key in table
+
+    def value(section: str, key: str) -> str:
+        found = _table(config, section).get(key, "")
+        return found.strip() if isinstance(found, str) else ""
+
+    everything = (("hotkey", "key"),) + _YIELDING_BINDINGS
+    for section, key in _YIELDING_BINDINGS:
+        default = value(section, key)
+        if not default or written(section, key):
+            continue
+        for other_section, other_key in everything:
+            if (other_section, other_key) == (section, key):
+                continue
+            other = value(other_section, other_key)
+            if other and written(other_section, other_key) and bindings_clash(default, other):
+                logger.warning(
+                    "%s is your %s.%s, so the default %s.%s is unbound; set it to"
+                    " another key to use it", default, other_section, other_key, section, key,
+                )
+                _table(config, section)[key] = ""
+                break
 
 
-def load_config() -> dict:
+def load_config(path: Optional[Path] = None) -> dict:
+    """The effective config: defaults merged with config.toml (or `path`)."""
     config = _default_config_with_paths()
-    config_path = _config_dir() / "config.toml"
+    config_path = path if path is not None else _config_dir() / "config.toml"
     if config_path.exists():
         user_config = tomllib.loads(read_config_text(config_path))
         config = _deep_merge(config, user_config)
-        _drop_clashing_default_tts_hotkey(config, user_config)
+        _yield_default_hotkeys(config, user_config)
 
-    legacy_xai_key = str(config.get("xai", {}).get("api_key", "")).strip()
-    providers = config.setdefault("providers", {})
-    xai_provider = providers.setdefault("xai", {})
-    if legacy_xai_key and not str(xai_provider.get("api_key", "")).strip():
-        xai_provider["api_key"] = legacy_xai_key
+    # Sections written as plain values are reported by validate_config;
+    # nothing here may trip over them first.
+    legacy_xai_key = str(_table(config, "xai").get("api_key", "")).strip()
+    providers = config.get("providers")
+    if isinstance(providers, dict):
+        xai_provider = providers.setdefault("xai", {})
+        if (
+            isinstance(xai_provider, dict)
+            and legacy_xai_key
+            and not str(xai_provider.get("api_key", "")).strip()
+        ):
+            xai_provider["api_key"] = legacy_xai_key
 
     # If the user left socket_path empty (or set an empty string), fall back.
-    if not config.get("daemon", {}).get("socket_path"):
-        config.setdefault("daemon", {})["socket_path"] = _default_socket_path()
+    daemon = config.get("daemon")
+    if isinstance(daemon, dict) and not daemon.get("socket_path"):
+        daemon["socket_path"] = _default_socket_path()
     return config
 
 
 def _active_provider_api_key(config: dict, provider: str) -> str:
-    providers = config.get("providers", {})
-    api_key = str(providers.get(provider, {}).get("api_key", "")).strip()
+    entry = _table(config, "providers").get(provider, {})
+    api_key = str(entry.get("api_key", "") if isinstance(entry, dict) else "").strip()
     if provider == "xai" and not api_key:
-        api_key = str(config.get("xai", {}).get("api_key", "")).strip()
+        api_key = str(_table(config, "xai").get("api_key", "")).strip()
     return api_key
 
 

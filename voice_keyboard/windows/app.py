@@ -459,8 +459,9 @@ class WindowsApp:
             try:
                 daemon = Daemon(config=config)
                 self._daemon = daemon
-                if self._quit.is_set():
-                    daemon.request_stop()  # Quit clicked while we were starting
+                if self._quit.is_set() or self._restart:
+                    # Quit/Restart clicked while it was being built.
+                    daemon.request_stop()
                 asyncio.run(daemon.run())
                 return None
             except RuntimeError as exc:
