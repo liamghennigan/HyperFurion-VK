@@ -746,7 +746,7 @@ class TestCopySelection:
         last_action = [0.0]
         _copy(clip, timeout=0.05, late_copy_s=1.0, user_activity=lambda: last_action[0])
         time.sleep(0.1)
-        last_action[0] = time.monotonic()  # their click, then Ctrl+C
+        last_action[0] = time.perf_counter()  # their click, then Ctrl+C
         clip._copies = True
         clip.copy()  # by the same app
         time.sleep(0.3)

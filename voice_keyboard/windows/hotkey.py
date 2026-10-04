@@ -151,9 +151,9 @@ class WinHotkeySpec:
 
 
 # When the user last pressed a key (a real, fresh press: not our injected
-# input, not auto-repeat) — monotonic seconds, from whichever hotkey hook
-# saw it. The selection copy uses it to tell a copy the user made from an
-# app's late one.
+# input, not auto-repeat) — perf_counter seconds (Windows' monotonic clock
+# only ticks every 15.6 ms), from whichever hotkey hook saw it. The
+# selection copy uses it to tell a copy the user made from an app's late one.
 _last_user_keydown = 0.0
 
 
@@ -323,7 +323,7 @@ class WinHotkeyListener(HotkeyListener):
             return False
         if down:
             if vk_code not in self._pressed:
-                _last_user_keydown = time.monotonic()
+                _last_user_keydown = time.perf_counter()
             self._resync_before_press(vk_code)
             if vk_code not in MODIFIER_VKS and vk_code != self._spec.trigger_code:
                 # Typing other keys: a chord's modifiers our injector

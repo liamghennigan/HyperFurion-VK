@@ -185,14 +185,14 @@ def _foreground_pids() -> frozenset:  # pragma: no cover - requires Windows
 
 def _last_user_action() -> float:  # pragma: no cover - requires Windows
     """When the user last pressed a key (seen by our keyboard hook) or a
-    mouse button (one held right now counts as now) — monotonic seconds.
+    mouse button (one held right now counts as now) — perf_counter seconds.
     Moving the mouse doesn't count: that never copies anything."""
     from voice_keyboard.windows import hotkey
 
     latest = hotkey.last_user_keydown()
     user32 = _api()[0]
     if any(user32.GetAsyncKeyState(button) & 0x8000 for button in (0x01, 0x02, 0x04)):
-        latest = max(latest, time.monotonic())
+        latest = max(latest, time.perf_counter())
     return latest
 
 
@@ -226,9 +226,11 @@ def _restore_after_late_copy(
     The watch ends as soon as the user presses a key or clicks (whatever
     is copied next may be theirs), and a change another app made (a sync,
     a password manager) is left alone."""
-    started = time.monotonic()
+    # perf_counter: Windows' monotonic clock only ticks every 15.6 ms, and a
+    # key press just after the watch began must still count as after it.
+    started = time.perf_counter()
     deadline = started + seconds
-    while time.monotonic() < deadline and not cancel.is_set():
+    while time.perf_counter() < deadline and not cancel.is_set():
         if user_activity() > started:
             return
         if clip.sequence_number() != before:
