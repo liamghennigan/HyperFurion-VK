@@ -311,6 +311,30 @@ def _get_clipboard_text() -> str:
     return ""
 
 
+def _daemon_start_hint() -> str:
+    """How to start the daemon on this platform."""
+    if sys.platform == "win32":
+        return 'start "HyperFurion VK" from the Start menu (it lives in the notification area)'
+    if sys.platform == "darwin":
+        return "launchctl kickstart -k gui/$(id -u)/com.hyperfurion.voice-keyboard"
+    return "systemctl --user start voice-keyboard-daemon"
+
+
+def _print_connect_failure(exc: Exception) -> None:
+    print(f"Failed to connect to daemon: {exc}", file=sys.stderr)
+    if isinstance(exc, (ConnectionRefusedError, FileNotFoundError)):
+        print(f"The daemon is not running — {_daemon_start_hint()}", file=sys.stderr)
+
+
+def _package_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("voice-keyboard")
+    except Exception:
+        return "unknown"
+
+
 def _stop_timeout_for_config(config: dict) -> float:
     provider = str(config.get("stt", {}).get("provider", "xai")).lower()
     if provider == "assemblyai":
@@ -399,7 +423,7 @@ def _run_recall(client: "IPCClient", extra_args: list[str]) -> None:
             "type", {"text": text}, timeout=max(20.0, len(text) * 0.02)
         )
     except Exception as e:
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         print(f"Re-typed {len(text)} characters")
@@ -420,7 +444,7 @@ def _run_transform(client: "IPCClient", extra_args: list[str]) -> None:
         )
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         text = response.get("text", "")
@@ -561,7 +585,7 @@ def _run_ask_cli(client: "IPCClient", extra_args: list[str]) -> None:
         response = client.send_command("ask", {"instruction": question}, timeout=95.0)
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         print(response.get("text", ""))
@@ -610,7 +634,7 @@ def _run_intent_cli(client: "IPCClient", extra_args: list[str]) -> None:
         response = client.send_command("intent", {"instruction": request}, timeout=50.0)
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         text = response.get("text", "")
@@ -767,6 +791,11 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_package_version()}",
+    )
+    parser.add_argument(
         "--socket",
         default=None,
         help=(
@@ -839,7 +868,7 @@ def main() -> None:
         try:
             client.send_command("converse", timeout=5.0)
         except Exception as e:
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
         return
 
@@ -848,7 +877,7 @@ def main() -> None:
             response = client.send_command(args.command, timeout=35.0)
         except Exception as e:
             _show_overlay("error", detail=str(e), timeout_ms=3000)
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
         if response.get("status") == "ok":
             if args.command == "keep":
@@ -895,7 +924,7 @@ def main() -> None:
         except Exception as e:
             _show_overlay("error", detail=str(e), timeout_ms=3000)
             _notify("Voice Keyboard", str(e), urgency="critical", timeout_ms=4000)
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
         return
 
@@ -908,7 +937,7 @@ def main() -> None:
                 print("idle")
             _print_status_details(response)
         except Exception as e:
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
         return
 
@@ -978,7 +1007,7 @@ def main() -> None:
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
         _notify("Voice Keyboard", str(e), urgency="critical", timeout_ms=4000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
 
 

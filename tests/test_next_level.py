@@ -337,6 +337,50 @@ class TestRemoteMicPieces:
         run.assert_not_called()
         assert cert.exists() and key.exists()
 
+    def _fresh_state(self):
+        from voice_keyboard.remotemic import _state_dir as state
+
+        state().mkdir(parents=True, exist_ok=True)
+        for name in ("remote-mic-cert.pem", "remote-mic-key.pem"):
+            (state() / name).unlink(missing_ok=True)
+
+    def test_windows_finds_the_openssl_git_ships(self, monkeypatch, tmp_path) -> None:
+        from voice_keyboard import remotemic
+
+        git_openssl = tmp_path / "Git" / "usr" / "bin" / "openssl.exe"
+        git_openssl.parent.mkdir(parents=True)
+        git_openssl.write_text("")
+        monkeypatch.setattr(remotemic.shutil, "which", lambda name: None)
+        monkeypatch.setattr(remotemic.sys, "platform", "win32")
+        monkeypatch.setenv("ProgramFiles", str(tmp_path))
+        assert remotemic._openssl() == str(git_openssl)
+
+    def test_no_openssl_and_no_cryptography_is_a_clear_error(self, monkeypatch) -> None:
+        from voice_keyboard import remotemic
+
+        self._fresh_state()
+        monkeypatch.setattr(remotemic, "_openssl", lambda: None)
+        monkeypatch.setattr(remotemic, "_write_certificate_with_cryptography", lambda c, k: False)
+        with pytest.raises(RuntimeError, match="Git for Windows"):
+            ensure_certificate()
+
+    def test_cryptography_fallback_is_used_without_openssl(self, monkeypatch) -> None:
+        from voice_keyboard import remotemic
+
+        self._fresh_state()
+
+        def fake_write(cert, key):
+            cert.write_text("cert")
+            key.write_text("key")
+            return True
+
+        monkeypatch.setattr(remotemic, "_openssl", lambda: None)
+        monkeypatch.setattr(remotemic, "_write_certificate_with_cryptography", fake_write)
+        with mock.patch("voice_keyboard.remotemic.subprocess.run") as run:
+            cert, key = ensure_certificate()
+        run.assert_not_called()
+        assert cert.read_text() == "cert" and key.read_text() == "key"
+
 
 class FiniteRemoteSource(RemoteAudioSource):
     """A remote source whose stream ends after one frame — the inline

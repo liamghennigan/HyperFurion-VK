@@ -115,6 +115,20 @@ def write_config_from_env() -> int:
     return 0
 
 
+def hotkey_labels(config: dict) -> dict:
+    """The tray's hotkey names for a config (WinShell keyword arguments)."""
+    from voice_keyboard.hotkey import pretty_binding
+
+    read_key = str(config.get("tts", {}).get("hotkey", "")).strip()
+    return {
+        "dictation_hotkey": pretty_binding(config.get("hotkey", {}).get("key", "control+alt+v")),
+        "assistant_hotkey": pretty_binding(
+            config.get("assistant", {}).get("hotkey", "rightctrl") or "rightctrl"
+        ),
+        "read_hotkey": pretty_binding(read_key) if read_key else "",
+    }
+
+
 def _version() -> str:
     try:
         from importlib.metadata import version
@@ -321,6 +335,11 @@ class WindowsApp:
 
         open_folder(str(paths.log_dir()))
 
+    def _open_help(self) -> None:
+        import webbrowser
+
+        webbrowser.open(DOCS_URL)
+
     def _sign_in(self) -> None:
         """`voice-keyboard login` in its own console window, kept open at
         the end so the result can be read."""
@@ -355,7 +374,6 @@ class WindowsApp:
     # Lifecycle ----------------------------------------------------------
 
     def _make_shell(self, config: dict):
-        from voice_keyboard.hotkey import pretty_binding
         from voice_keyboard.windows.shell import ShellCallbacks, WinShell
 
         callbacks = ShellCallbacks(
@@ -369,19 +387,15 @@ class WindowsApp:
             quit=self._request_quit,
             get_autostart=get_autostart,
             set_autostart=self._set_autostart,
+            open_help=self._open_help,
             status=self._status,
         )
-        read_key = str(config.get("tts", {}).get("hotkey", "")).strip()
         return WinShell(
             callbacks,
             app_name=APP_NAME,
             version=_version(),
-            dictation_hotkey=pretty_binding(config.get("hotkey", {}).get("key", "control+alt+v")),
-            assistant_hotkey=pretty_binding(
-                config.get("assistant", {}).get("hotkey", "rightctrl") or "rightctrl"
-            ),
-            read_hotkey=pretty_binding(read_key) if read_key else "",
             orb_state_path=str(paths.state_dir() / "windows-shell.json"),
+            **hotkey_labels(config),
         )
 
     def _load(self) -> tuple[Optional[dict], str]:
@@ -493,6 +507,12 @@ class WindowsApp:
                     continue
                 if self._shell is not None:
                     self._shell.set_setup_mode("")
+                    labels = hotkey_labels(config)
+                    self._shell.set_labels(
+                        dictation=labels["dictation_hotkey"],
+                        assistant=labels["assistant_hotkey"],
+                        read=labels["read_hotkey"],
+                    )
                 self._welcome(config)
                 self._restart = False
                 error = self._run_daemon(config)

@@ -597,3 +597,31 @@ class TestInstallerConfig:
         mp.setenv("HFVK_STT", "xai")
         assert app_mod.write_config_from_env() == 0
         assert path.read_text() == "# mine\n"
+
+
+class TestHotkeyLabels:
+    def test_labels_follow_the_config(self) -> None:
+        from voice_keyboard.windows.app import hotkey_labels
+
+        cfg = _default_config_with_paths()
+        cfg["hotkey"]["key"] = "control+shift+d"
+        cfg["assistant"]["hotkey"] = "rightalt"
+        cfg["tts"]["hotkey"] = "control+alt+r"
+        assert hotkey_labels(cfg) == {
+            "dictation_hotkey": "Ctrl+Shift+D",
+            "assistant_hotkey": "Right Alt",
+            "read_hotkey": "Ctrl+Alt+R",
+        }
+        cfg["tts"]["hotkey"] = ""
+        assert hotkey_labels(cfg)["read_hotkey"] == ""
+
+    def test_set_labels_is_queued_for_the_ui_thread(self) -> None:
+        from voice_keyboard.windows.shell import ShellCallbacks, WinShell
+
+        shell = WinShell(ShellCallbacks())
+        shell.set_labels(dictation="Ctrl+Shift+D", assistant="Right Alt", read="")
+        assert shell._queue[-1] == ("labels", "Ctrl+Shift+D", "Right Alt", "")
+        shell._refresh_tray = lambda: None  # no tray off Windows
+        shell._handle(shell._queue.pop())
+        assert shell._dictation_hotkey == "Ctrl+Shift+D"
+        assert shell._tip_text().endswith("Ctrl+Shift+D to dictate")

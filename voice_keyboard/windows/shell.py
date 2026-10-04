@@ -357,6 +357,7 @@ class ShellCallbacks:
     quit: Callable[[], None] = lambda: None
     get_autostart: Callable[[], bool] = lambda: False
     set_autostart: Callable[[bool], None] = lambda enabled: None
+    open_help: Callable[[], None] = lambda: None
     status: Callable[[], dict] = lambda: {}
 
 
@@ -462,6 +463,11 @@ class WinShell:
     def notify(self, title: str, body: str = "", *, error: bool = False) -> None:
         self._post(("notify", title, body, error))
 
+    def set_labels(self, *, dictation: str, assistant: str, read: str) -> None:
+        """Hotkey names shown in the menu and tooltip (refreshed whenever the
+        daemon (re)starts, so edited bindings show up after Restart)."""
+        self._post(("labels", dictation, assistant, read))
+
     def set_setup_mode(self, message: str) -> None:
         """Non-empty: the daemon can't start yet (e.g. no API key) — amber
         icon, a setup-first menu. Empty: back to normal."""
@@ -516,6 +522,9 @@ class WinShell:
             self._setup_message = command[1]
             self._refresh_tray()
             self._sync_orb()
+        elif kind == "labels":
+            _, self._dictation_hotkey, self._assistant_hotkey, self._read_hotkey = command
+            self._refresh_tray()
         elif kind == "quit":
             self._teardown()
 
@@ -1198,6 +1207,7 @@ class WinShell:
             add("Open settings file…", self._cb.open_settings)
         add("Open logs folder", self._cb.open_logs)
         add("Start with Windows", self._toggle_autostart, checked=self._safe_autostart())
+        add("Help", self._cb.open_help)
         separator()
         if not self._setup_message:
             add("Restart", self._cb.restart)

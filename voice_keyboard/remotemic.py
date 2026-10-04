@@ -14,10 +14,13 @@ provider the config already uses. No relay involvement, no accounts.
 import asyncio
 import json
 import logging
+import os
 import queue
 import secrets
+import shutil
 import ssl
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Callable, Optional
@@ -74,25 +77,87 @@ def check_token(path: str, token: str) -> bool:
     return secrets.compare_digest(str(query.get("t", [""])[0]), token)
 
 
+def _openssl() -> Optional[str]:
+    """The openssl binary: PATH first; on Windows, where it isn't standard,
+    also the copy Git for Windows ships."""
+    found = shutil.which("openssl")
+    if found or sys.platform != "win32":
+        return found
+    for base in (
+        os.environ.get("ProgramFiles", ""),
+        os.environ.get("ProgramFiles(x86)", ""),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs"),
+    ):
+        candidate = Path(base) / "Git" / "usr" / "bin" / "openssl.exe"
+        if base and candidate.exists():
+            return str(candidate)
+    return None
+
+
+def _write_certificate_with_cryptography(cert: Path, key: Path) -> bool:
+    """The same self-signed cert via the `cryptography` package, when it is
+    installed (no openssl binary needed). False when it isn't."""
+    try:
+        import datetime
+
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.x509.oid import NameOID
+    except ImportError:
+        return False
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "voice-keyboard")])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=5))
+        .not_valid_after(now + datetime.timedelta(days=825))
+        .sign(private_key, hashes.SHA256())
+    )
+    key.write_bytes(
+        private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        )
+    )
+    cert.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    return True
+
+
 def ensure_certificate() -> tuple[Path, Path]:
     """A self-signed cert in the state dir — getUserMedia demands a secure
-    context, and the LAN has no CA. Generated once, mode 600."""
+    context, and the LAN has no CA. Generated once, mode 600, with openssl
+    or (failing that) the `cryptography` package."""
     state = _state_dir()
     state.mkdir(parents=True, mode=0o700, exist_ok=True)
     cert = state / "remote-mic-cert.pem"
     key = state / "remote-mic-key.pem"
     if cert.exists() and key.exists():
         return cert, key
-    subprocess.run(
-        [
-            "openssl", "req", "-x509", "-newkey", "rsa:2048",
-            "-keyout", str(key), "-out", str(cert),
-            "-days", "825", "-nodes", "-subj", "/CN=voice-keyboard",
-        ],
-        check=True,
-        capture_output=True,
-        timeout=30,
-    )
+    openssl = _openssl()
+    if openssl:
+        subprocess.run(
+            [
+                openssl, "req", "-x509", "-newkey", "rsa:2048",
+                "-keyout", str(key), "-out", str(cert),
+                "-days", "825", "-nodes", "-subj", "/CN=voice-keyboard",
+            ],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+    elif not _write_certificate_with_cryptography(cert, key):
+        raise RuntimeError(
+            "the remote mic needs an HTTPS certificate: install OpenSSL"
+            " (on Windows, Git for Windows includes it) or run"
+            " `pip install cryptography` in HyperFurion VK's environment"
+        )
     key.chmod(0o600)
     cert.chmod(0o600)
     return cert, key
