@@ -20,6 +20,8 @@ import ctypes
 import logging
 import time
 
+from voice_keyboard.injector import strip_line_breaks
+
 logger = logging.getLogger(__name__)
 
 INPUT_KEYBOARD = 1
@@ -90,13 +92,6 @@ KEY_NAMES: dict[str, tuple[int, bool]] = {
     **{f"f{n}": (0x6F + n, False) for n in range(1, 25)},
 }
 
-# US-layout fallback for single punctuation keys when VkKeyScanW is not
-# available (tests off Windows). On Windows the active layout decides.
-_US_PUNCTUATION = {
-    "-": 0xBD, "=": 0xBB, ",": 0xBC, ".": 0xBE, "/": 0xBF, "\\": 0xDC,
-    ";": 0xBA, "'": 0xDE, "`": 0xC0, "[": 0xDB, "]": 0xDD, " ": 0x20,
-}
-
 # Keystrokes per SendInput batch; a breather between batches keeps slow
 # apps (and Electron's input queue) fed.
 BATCH_KEYSTROKES = 16
@@ -151,10 +146,6 @@ def utf16_units(text: str) -> list[int]:
     raw = text.encode("utf-16-le")
     return [int.from_bytes(raw[i : i + 2], "little") for i in range(0, len(raw), 2)]
 
-
-def strip_line_breaks(text: str) -> str:
-    """Collapse newlines/carriage returns to spaces (the no-Enter guard)."""
-    return text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
 
 
 # A keystroke is (vk, scan_or_unit, flags) for the key-down; the key-up is
@@ -240,8 +231,6 @@ class WinTextInjector:
                     if shift_state & 1:
                         keys.insert(0, (VK_LSHIFT, False))
                     return keys
-            elif key in _US_PUNCTUATION:
-                return [(_US_PUNCTUATION[key], False)]
         raise ValueError(f"unknown key {name!r}")
 
     def press_combo(self, names: list[str]) -> None:

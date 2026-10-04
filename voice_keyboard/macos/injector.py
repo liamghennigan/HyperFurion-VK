@@ -12,6 +12,8 @@ Requires the hosting Python process to have Accessibility permission
 import logging
 import time
 
+from voice_keyboard.injector import strip_line_breaks
+
 logger = logging.getLogger(__name__)
 
 # Practical per-event budget for CGEventKeyboardSetUnicodeString, counted
@@ -44,10 +46,6 @@ def chunk_text(text: str, budget: int = CHUNK_UTF16_UNITS) -> list[str]:
         chunks.append(current)
     return chunks
 
-
-def strip_line_breaks(text: str) -> str:
-    """Collapse newlines/carriage returns to spaces (the no-Enter guard)."""
-    return text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
 
 
 class MacTextInjector:
