@@ -45,6 +45,12 @@ jobs:
 
       - name: Install from this checkout
         run: |
+          # What an early beta left behind: a Startup-folder launcher and
+          # history under ~\.local\state. The install must clean up / move it.
+          Set-Content -Path (Join-Path ([Environment]::GetFolderPath("Startup")) "hyperfurion-vk-daemon.cmd") -Value "@echo off"
+          $legacy = Join-Path $HOME ".local\state\voice-keyboard"
+          New-Item -ItemType Directory -Force -Path $legacy | Out-Null
+          Set-Content -Path (Join-Path $legacy "history.jsonl") -Value "{}"
           # A dummy key passes config validation; nothing here talks to a
           # speech provider.
           .\packaging\windows\install-hyperfurion-vk.ps1 -Source . -NonInteractive -NoAutostart -NoLaunch -Provider xai -ApiKey ci-dummy-key
@@ -64,6 +70,8 @@ jobs:
           if ((Get-ItemProperty "HKCU:\Environment").Path -notlike "*HyperFurion-VK\bin*") { throw "bin is not on the user PATH" }
           $config = Join-Path $env:APPDATA "voice-keyboard\config.toml"
           if (-not (Select-String -Path $config -Pattern "ci-dummy-key" -Quiet)) { throw "the config was not written" }
+          if (Test-Path (Join-Path ([Environment]::GetFolderPath("Startup")) "hyperfurion-vk-daemon.cmd")) { throw "the beta's startup launcher was left behind" }
+          if (-not (Test-Path (Join-Path $env:LOCALAPPDATA "voice-keyboard\history.jsonl"))) { throw "the beta's history was not moved" }
 
       - name: Start the app and talk to it
         run: |

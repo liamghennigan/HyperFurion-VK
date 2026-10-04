@@ -284,9 +284,12 @@ installer:
   starts the app. Re-running it upgrades in place and never touches your
   settings.
 
-Unattended: `-NonInteractive -Provider xai -ApiKey ...`; also `-Version vX.Y.Z`,
-`-Source <checkout>`, `-NoLaunch`, `-NoAutostart`. With `irm | iex`, set
-`HYPERFURION_VK_VERSION` / `HYPERFURION_VK_NONINTERACTIVE=1` instead.
+Unattended: `-NonInteractive -Provider xai -ApiKey ...` (groq, deepgram, and
+assemblyai have no voice: add `-TtsProvider xai -TtsApiKey ...`); also
+`-Version vX.Y.Z`, `-Source <checkout>`, `-NoLaunch`, `-NoAutostart`. With
+`irm | iex`, set `HYPERFURION_VK_VERSION` / `HYPERFURION_VK_NONINTERACTIVE=1`
+instead. Coming from the early beta? The installer stops it, removes its
+startup launcher, and brings your settings and history along.
 
 ### Using it
 

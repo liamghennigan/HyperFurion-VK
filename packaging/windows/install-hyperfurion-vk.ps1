@@ -8,7 +8,9 @@
 #
 # Options (file form):  -Version v2.2.0   -Source C:\path\to\checkout
 #                       -NonInteractive   -NoLaunch   -NoAutostart
-#                       -Provider xai -ApiKey xai-...   (unattended config)
+#                       -Provider xai -ApiKey xai-...   (unattended config;
+#                       add -TtsProvider/-TtsApiKey when the speech-to-text
+#                       provider has no voice: groq, deepgram, assemblyai)
 # With irm | iex, use environment variables instead: HYPERFURION_VK_VERSION
 # (a release tag, a branch, or a commit), HYPERFURION_VK_REPO,
 # HYPERFURION_VK_NONINTERACTIVE=1.
@@ -29,7 +31,9 @@ param(
     [switch]$NoLaunch,
     [switch]$NoAutostart,
     [string]$Provider = "",
-    [string]$ApiKey = ""
+    [string]$ApiKey = "",
+    [string]$TtsProvider = "",
+    [string]$TtsApiKey = ""
 )
 
 function Install-HyperFurionVK {
@@ -40,7 +44,9 @@ function Install-HyperFurionVK {
         [bool]$NoLaunch,
         [bool]$NoAutostart,
         [string]$Provider,
-        [string]$ApiKey
+        [string]$ApiKey,
+        [string]$TtsProvider,
+        [string]$TtsApiKey
     )
     $ErrorActionPreference = "Stop"
     $ProgressPreference = "SilentlyContinue"   # Invoke-WebRequest is 10x faster without it
@@ -61,7 +67,6 @@ function Install-HyperFurionVK {
     $VenvPythonW = Join-Path $Venv "Scripts\pythonw.exe"
     $BinDir = Join-Path $InstallRoot "bin"
     $Icon = Join-Path $InstallRoot "hyperfurion-vk.ico"
-    $ConfigFile = Join-Path (Join-Path $env:APPDATA "voice-keyboard") "config.toml"
     $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
     $UninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HyperFurionVK"
     $Shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "$AppName.lnk"
@@ -77,10 +82,11 @@ function Install-HyperFurionVK {
     } catch { }
 
     $upgrade = Test-Path $VenvPython
-    if ($upgrade) {
-        Write-Step "Stopping the running copy (upgrade)"
+    if ($upgrade -or (Get-AppProcesses)) {
+        Write-Step "Stopping the running copy"
         Stop-HyperFurionVK -VenvPython $VenvPython
     }
+    Remove-BetaLeftovers
 
     # --- Python ---------------------------------------------------------
     Write-Step "Looking for Python 3.11-3.13 (64-bit)"
@@ -121,16 +127,15 @@ function Install-HyperFurionVK {
     }
     Invoke-Checked $VenvPython @("-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--upgrade", "pip") "upgrading pip"
     Invoke-Checked $VenvPython @("-m", "pip", "install", "--disable-pip-version-check", "--upgrade", $spec) "installing HyperFurion VK"
-    if ($Source) {
-        # A local checkout keeps its version number between edits; make
-        # sure the code that was just installed is the code in the folder.
-        Invoke-Checked $VenvPython @("-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--no-deps", "--force-reinstall", $spec) "refreshing HyperFurion VK"
-    }
+    # pip keeps an installed copy whose version number matches, but a
+    # branch, a commit, or an edited checkout carries new code under the
+    # same number: always lay the requested code down.
+    Invoke-Checked $VenvPython @("-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--no-deps", "--force-reinstall", $spec) "refreshing HyperFurion VK"
     $check = Invoke-Native $VenvPython @("-c", "import voice_keyboard.windows.app, pyaudio, numpy")
     if ($check.Code -ne 0) {
         throw "The installed package is missing the Windows app or a dependency (is $Version older than v2.2.0?):`n$($check.Output)"
     }
-    $installed = (Invoke-Native $VenvPython @("-c", "from importlib.metadata import version; print(version('voice-keyboard'))")).Output.Trim()
+    $installed = Get-MarkedLine (Invoke-Native $VenvPython @("-c", "from importlib.metadata import version; print('HFVK', version('voice-keyboard'))")).Output
 
     # --- icon, command shim, PATH -------------------------------------------
     Write-Step "Adding the voice-keyboard command, Start menu entry and icon"
@@ -189,11 +194,18 @@ function Install-HyperFurionVK {
     New-ItemProperty -Path $UninstallKey -Name "EstimatedSize" -Value $sizeKb -PropertyType DWord -Force | Out-Null
 
     # --- settings ----------------------------------------------------------------
-    if (Test-Path $ConfigFile) {
+    # Ask the app where its settings live (it honors XDG_CONFIG_HOME, and an
+    # early beta's settings are moved into place first).
+    $migration = Invoke-Native $VenvPython @("-c", "from voice_keyboard.paths import migrate_windows_beta as m; print(chr(10).join(m()))")
+    if ($migration.Code -eq 0 -and $migration.Output.Trim()) {
+        $migration.Output.Trim() -split "`n" | ForEach-Object { Write-Host "    $_" }
+    }
+    $ConfigFile = Get-PythonPath $VenvPython "paths.config_dir() / 'config.toml'"
+    if (Test-Path -LiteralPath $ConfigFile) {
         Write-Step "Keeping your settings in $ConfigFile"
     } elseif ($Provider) {
         Write-Step "Writing settings for $Provider"
-        Write-InitialConfig -VenvPython $VenvPython -Stt $Provider -SttKey $ApiKey
+        Write-InitialConfig -VenvPython $VenvPython -Stt $Provider -SttKey $ApiKey -Tts $TtsProvider -TtsKey $TtsApiKey
     } elseif (-not $NonInteractive) {
         Invoke-SetupPrompt -VenvPython $VenvPython
     } else {
@@ -249,26 +261,60 @@ function Invoke-Checked {
     if ($code -ne 0) { throw "Failed while $What (exit code $code)." }
 }
 
+function Get-MarkedLine([string]$Output) {
+    # Native stderr is merged into the output, in no fixed order; the value
+    # asked for is the line Python tagged HFVK.
+    foreach ($line in ($Output -split "`n")) {
+        $line = $line.Trim()
+        if ($line.StartsWith("HFVK ")) { return $line.Substring(5) }
+    }
+    return $null
+}
+
+function ConvertFrom-HexUtf8([string]$Hex) {
+    # Paths come back from Python hex-encoded: console output is decoded
+    # with the OEM code page, which mangles a profile folder like "Jose"
+    # with an accent.
+    if (-not $Hex) { return $null }
+    $Hex = $Hex.Trim()
+    if ($Hex -notmatch '^([0-9a-fA-F]{2})+$') { return $null }
+    $bytes = New-Object byte[] ($Hex.Length / 2)
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        $bytes[$i] = [Convert]::ToByte($Hex.Substring($i * 2, 2), 16)
+    }
+    return [Text.Encoding]::UTF8.GetString($bytes)
+}
+
+function Get-PythonPath([string]$Python, [string]$Expression) {
+    # A path computed by the installed app (voice_keyboard.paths in scope).
+    $r = Invoke-Native $Python @("-c", "from voice_keyboard import paths; print('HFVK', str($Expression).encode('utf-8').hex())")
+    $path = ConvertFrom-HexUtf8 (Get-MarkedLine $r.Output)
+    if ($r.Code -ne 0 -or -not $path) { throw "Could not ask the app where its files live:`n$($r.Output)" }
+    return $path
+}
+
 function Test-PythonCandidate([string]$Exe) {
-    # 64-bit CPython 3.11-3.13 on x64 (also what x64 emulation reports on
+    # A 64-bit x64 CPython 3.11-3.13 (also fine under x64 emulation on
     # ARM64): the audio stack (PyAudio) ships wheels for exactly that.
-    if (-not $Exe -or -not (Test-Path $Exe)) { return $null }
+    # sysconfig names the build; platform.machine() names the CPU, which
+    # reads ARM64 for an x64 Python on an ARM64 PC.
+    if (-not $Exe -or -not (Test-Path -LiteralPath $Exe)) { return $null }
     if ($Exe -like "*\WindowsApps\*") { return $null }   # the Microsoft Store alias stub
-    $probe = Invoke-Native $Exe @("-c", "import sys, platform, struct; print(sys.executable); print('%d.%d' % sys.version_info[:2]); print(platform.machine()); print(struct.calcsize('P') * 8)")
+    $probe = Invoke-Native $Exe @("-c", "import sys, sysconfig; print('HFVK', sys.executable.encode('utf-8').hex(), '%d.%d' % sys.version_info[:2], sysconfig.get_platform())")
     if ($probe.Code -ne 0) { return $null }
-    $lines = $probe.Output -split "`n"
-    if ($lines.Count -lt 4) { return $null }
-    $ok = (@("3.11", "3.12", "3.13") -contains $lines[1].Trim()) -and ($lines[2].Trim() -eq "AMD64") -and ($lines[3].Trim() -eq "64")
-    if ($ok) { return $lines[0].Trim() }
+    $fields = @((Get-MarkedLine $probe.Output) -split " ")
+    if ($fields.Count -ne 3) { return $null }
+    $ok = (@("3.11", "3.12", "3.13") -contains $fields[1]) -and ($fields[2] -eq "win-amd64")
+    if ($ok) { return ConvertFrom-HexUtf8 $fields[0] }
     return $null
 }
 
 function Find-Python {
     if (Get-Command py -ErrorAction SilentlyContinue) {
         foreach ($v in @("3.12", "3.13", "3.11")) {
-            $r = Invoke-Native "py" @("-$v", "-c", "import sys; print(sys.executable)")
+            $r = Invoke-Native "py" @("-$v-64", "-c", "import sys; print('HFVK', sys.executable.encode('utf-8').hex())")
             if ($r.Code -eq 0) {
-                $found = Test-PythonCandidate ($r.Output.Trim() -split "`n")[-1].Trim()
+                $found = Test-PythonCandidate (ConvertFrom-HexUtf8 (Get-MarkedLine $r.Output))
                 if ($found) { return $found }
             }
         }
@@ -289,7 +335,8 @@ function Find-Python {
 function Install-Python {
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if ($winget) {
-        $r = Invoke-Native $winget.Source @("install", "--id", "Python.Python.3.12", "--exact", "--scope", "user", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity")
+        # x64 even on an ARM64 PC: the audio stack has no ARM64 wheels.
+        $r = Invoke-Native $winget.Source @("install", "--id", "Python.Python.3.12", "--exact", "--scope", "user", "--architecture", "x64", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity")
         if ($r.Code -eq 0 -and (Find-Python)) { return }
         Write-Host "    winget could not install Python ($($r.Code)); using the python.org installer"
     }
@@ -320,18 +367,31 @@ function Get-LatestTag([string]$Repo, [string]$Fallback) {
 }
 
 function Get-AppProcesses {
-    Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*" }
+    # The app, a console daemon, and an early beta's voice-keyboard-daemon.exe.
+    Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe' OR Name = 'voice-keyboard-daemon.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq "voice-keyboard-daemon.exe" -or $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*" }
 }
 
 function Stop-HyperFurionVK([string]$VenvPython) {
-    Invoke-Native $VenvPython @("-m", "voice_keyboard.client", "quit") | Out-Null
+    if (Test-Path -LiteralPath $VenvPython) {
+        Invoke-Native $VenvPython @("-m", "voice_keyboard.client", "quit") | Out-Null
+    }
     for ($i = 0; $i -lt 30; $i++) {
         if (-not (Get-AppProcesses)) { return }
         Start-Sleep -Milliseconds 500
     }
     Get-AppProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 500
+}
+
+function Remove-BetaLeftovers {
+    # Early betas started voice-keyboard-daemon.exe from the Startup folder;
+    # left there it would run alongside the app at the next sign-in.
+    $launcher = Join-Path ([Environment]::GetFolderPath("Startup")) "hyperfurion-vk-daemon.cmd"
+    if (Test-Path -LiteralPath $launcher) {
+        Write-Step "Removing the beta's startup launcher"
+        Remove-Item -LiteralPath $launcher -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Send-EnvironmentChange {
@@ -455,7 +515,7 @@ $python = Join-Path $InstallRoot "venv\Scripts\python.exe"
 if (Test-Path $python) { & $python -m voice_keyboard.client quit 2>$null | Out-Null }
 for ($i = 0; $i -lt 20; $i++) {
     $procs = Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" }
+        Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*" }
     if (-not $procs) { break }
     if ($i -eq 19) { $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
     Start-Sleep -Milliseconds 500
@@ -499,7 +559,8 @@ try {
     # [bool] casts: a switch that was never bound ($null) must read as off,
     # not fail parameter binding.
     Install-HyperFurionVK -Version $Version -Source $Source -NonInteractive:([bool]$NonInteractive) `
-        -NoLaunch:([bool]$NoLaunch) -NoAutostart:([bool]$NoAutostart) -Provider $Provider -ApiKey $ApiKey
+        -NoLaunch:([bool]$NoLaunch) -NoAutostart:([bool]$NoAutostart) -Provider $Provider -ApiKey $ApiKey `
+        -TtsProvider $TtsProvider -TtsApiKey $TtsApiKey
     $global:LASTEXITCODE = 0   # probes along the way (py -3.x) may have left it non-zero
 } catch {
     Write-Host ""

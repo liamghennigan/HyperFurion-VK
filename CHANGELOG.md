@@ -26,7 +26,9 @@ Windows becomes a first-class platform, and the whole repo gets a polish pass.
   sets up a per-user venv, the `voice-keyboard` command, a Start menu entry,
   start-with-Windows, and a Settings › Apps entry with an uninstaller; walks
   you through sign-in or provider keys. Upgrades in place, never touches your
-  settings.
+  settings; replaces the early beta cleanly (stops it, removes its startup
+  launcher, brings its settings and history along). Works for non-ASCII
+  profile folders and on ARM64 PCs (x64 Python under emulation).
 - **Setup mode**: with no usable config the app waits (amber icon, sign-in in
   the menu) and starts dictation by itself once the config is valid.
 - **Read the selection aloud** with `[tts] hotkey` (Windows default

@@ -493,6 +493,42 @@ class TestWindowsPaths:
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "x"))
         assert paths.config_dir() == tmp_path / "x" / "voice-keyboard"
 
+    def test_beta_leftovers_are_copied_once_and_never_overwrite(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        for name in ("XDG_CONFIG_HOME", "XDG_STATE_HOME"):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+        monkeypatch.setattr(paths.Path, "home", lambda: tmp_path / "home")
+        legacy_cfg = tmp_path / "home" / ".config" / "voice-keyboard"
+        legacy_cfg.mkdir(parents=True)
+        (legacy_cfg / "config.toml").write_text("[stt]\nprovider = 'xai'\n")
+        legacy_state = tmp_path / "home" / ".local" / "state" / "voice-keyboard"
+        (legacy_state / "memory").mkdir(parents=True)
+        (legacy_state / "history.jsonl").write_text("old\n")
+        (legacy_state / "dictionary.json").write_text("{}")
+        (legacy_state / "memory" / "kai.json").write_text("{}")
+        new_state = tmp_path / "Local" / "voice-keyboard"
+        new_state.mkdir(parents=True)
+        (new_state / "history.jsonl").write_text("new\n")  # already started over
+
+        done = paths.migrate_windows_beta()
+        assert len(done) == 2
+        assert (tmp_path / "Roaming" / "voice-keyboard" / "config.toml").read_text().startswith("[stt]")
+        assert (new_state / "history.jsonl").read_text() == "new\n"
+        assert (new_state / "dictionary.json").exists()
+        assert (new_state / "memory" / "kai.json").exists()
+        assert (legacy_cfg / "config.toml").exists()  # never deleted
+        assert paths.config_dir() == tmp_path / "Roaming" / "voice-keyboard"
+
+        (new_state / "dictionary.json").unlink()  # the user cleared it
+        assert paths.migrate_windows_beta() == []
+        assert not (new_state / "dictionary.json").exists()
+
+    def test_beta_migration_is_windows_only(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr(sys, "platform", "linux")
+        assert paths.migrate_windows_beta() == []
+
     def test_config_module_follows(self, monkeypatch, tmp_path) -> None:
         from voice_keyboard import config, history, ipc
 

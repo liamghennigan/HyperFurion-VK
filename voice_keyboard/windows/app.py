@@ -552,8 +552,14 @@ def main(argv: Optional[list] = None) -> int:
 
     _set_dpi_awareness()
     _set_app_id()
+    try:
+        moved = paths.migrate_windows_beta()  # before logging creates the state dir
+    except Exception:
+        moved = []
     log_path = _setup_logging(console=args.console)
     logger.info("%s %s starting (log: %s)", APP_NAME, _version(), log_path)
+    for line in moved:
+        logger.info("%s", line)
 
     instance = SingleInstance()
     if not instance.acquire(wait_s=args.wait):
