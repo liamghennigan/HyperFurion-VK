@@ -2,6 +2,13 @@
   "name": "Voice Keyboard Overlay",
   "description": "Compositor-native recording status overlay for voice-keyboard.",
   "uuid": "voice-keyboard-overlay@liam-hennigan",
-  "shell-version": ["50"],
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
   "version": 1
 }

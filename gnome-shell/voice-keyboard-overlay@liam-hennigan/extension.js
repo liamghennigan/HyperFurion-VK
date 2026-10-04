@@ -6,6 +6,24 @@ import St from 'gi://St';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+
+const SHELL_MAJOR = parseInt(Config.PACKAGE_VERSION.split('.')[0], 10);
+
+// St.BoxLayout gained `orientation` in GNOME 48 (the boolean `vertical`
+// before it). Use the property this shell knows; 48+ takes exactly the
+// path that has always run on 50.
+function boxLayout(vertical, params = {}) {
+    if (SHELL_MAJOR >= 48) {
+        return new St.BoxLayout({
+            ...params,
+            orientation: vertical
+                ? Clutter.Orientation.VERTICAL
+                : Clutter.Orientation.HORIZONTAL,
+        });
+    }
+    return new St.BoxLayout({...params, vertical});
+}
 
 const BUS_NAME = 'org.voicekeyboard.Overlay';
 const OBJECT_PATH = '/org/voicekeyboard/Overlay';
@@ -302,8 +320,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
     }
 
     _buildActor(style, detail) {
-        const box = new St.BoxLayout({
-            orientation: Clutter.Orientation.HORIZONTAL,
+        const box = boxLayout(false, {
             style: [
                 `background-color: ${INSTRUMENT_BG}`,
                 'border-radius: 12px',
@@ -316,8 +333,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         // four thin phosphor bars, the state's signal colour, bottom-anchored
         // in a fixed field so they read as a live level meter.
         this._accent = style.accent;
-        this._bars = new St.BoxLayout({
-            orientation: Clutter.Orientation.HORIZONTAL,
+        this._bars = boxLayout(false, {
             style: 'margin-right: 16px;',
         });
         this._barWidgets = [];
@@ -328,9 +344,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         }
         box.add_child(this._bars);
 
-        const textBox = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
-        });
+        const textBox = boxLayout(true);
         box.add_child(textBox);
 
         // the engraved-label voice: mono, tracked, uppercase (the .sigcap

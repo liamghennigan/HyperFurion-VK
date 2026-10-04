@@ -45,3 +45,20 @@ def test_kai_orb_is_wired() -> None:
         "'converse'",
     ):
         assert token in text, f"{token!r} missing from extension.js (Kai orb)"
+
+
+def test_supports_current_and_lts_gnome() -> None:
+    # Ubuntu 24.04 LTS ships GNOME 46: a metadata list of ["50"] alone made
+    # the shell refuse to load the overlay anywhere but the newest release.
+    import json
+
+    meta = json.loads((_EXT.parent / "metadata.json").read_text(encoding="utf-8"))
+    assert {"46", "47", "48", "49", "50"} <= set(meta["shell-version"])
+
+
+def test_box_layouts_go_through_the_version_shim() -> None:
+    # St.BoxLayout's `orientation` only exists on GNOME 48+; 45-47 throw on
+    # it. Every box must be built by boxLayout(), which picks the property.
+    text = _EXT.read_text(encoding="utf-8")
+    assert text.count("new St.BoxLayout(") == 2  # the two branches inside boxLayout()
+    assert "SHELL_MAJOR >= 48" in text
