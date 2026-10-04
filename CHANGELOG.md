@@ -30,8 +30,10 @@ Windows becomes a first-class platform, and the whole repo gets a polish pass.
 - **Setup mode**: with no usable config the app waits (amber icon, sign-in in
   the menu) and starts dictation by itself once the config is valid.
 - **Read the selection aloud** with `[tts] hotkey` (Windows default
-  Ctrl+Alt+R): copies the highlighted text, then restores your clipboard
-  exactly, kept out of clipboard history.
+  Ctrl+Alt+R): copies the highlighted text with Ctrl+Insert and puts your
+  clipboard back exactly (pictures included). Terminals and password fields
+  are never sent a key, a clipboard that can't be saved whole is left
+  untouched, and text a password manager marks private is never read.
 - Native clipboard (no PowerShell), caret-anchored overlay, password-field
   detection, per-monitor DPI.
 

@@ -12,6 +12,8 @@ import asyncio
 import json
 import struct
 import sys
+import threading
+import time
 import tomllib
 from unittest import mock
 
@@ -312,7 +314,9 @@ class TestReadAloud:
     def test_reads_the_selection(self, monkeypatch) -> None:
         daemon = self._daemon()
         daemon._tts_client.synthesize.return_value = b"mp3"
-        monkeypatch.setattr("voice_keyboard.daemon.clipboard.selection_text", lambda: " hello ")
+        monkeypatch.setattr(
+            "voice_keyboard.daemon.clipboard.selection_text", lambda **kw: " hello "
+        )
 
         async def run():
             await daemon._toggle_read_aloud(from_selection=True)
@@ -325,14 +329,40 @@ class TestReadAloud:
 
     def test_nothing_selected(self, monkeypatch) -> None:
         daemon = self._daemon()
-        monkeypatch.setattr("voice_keyboard.daemon.clipboard.selection_text", lambda: "")
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.selection_text", lambda **kw: "")
         asyncio.run(daemon._toggle_read_aloud(from_selection=True))
         assert self.overlays == [("empty", "Select some text first")]
+        daemon._tts_client.synthesize.assert_not_called()
+
+    @pytest.mark.parametrize("platform, fallback", [("win32", False), ("linux", False),
+                                                    ("darwin", True)])
+    def test_only_macos_reads_the_clipboard_when_nothing_is_selected(
+        self, monkeypatch, platform, fallback
+    ) -> None:
+        daemon = self._daemon()
+        daemon._config["registers"] = {"map": {"tabby": "terminal"}}
+        calls = []
+        monkeypatch.setattr(sys, "platform", platform)
+        monkeypatch.setattr(
+            "voice_keyboard.daemon.clipboard.selection_text",
+            lambda **kw: calls.append(kw) or "",
+        )
+        asyncio.run(daemon._toggle_read_aloud(from_selection=True))
+        assert calls == [{"clipboard_fallback": fallback,
+                          "registers": {"map": {"tabby": "terminal"}}}]
+
+    def test_a_copied_password_is_not_read(self, monkeypatch) -> None:
+        daemon = self._daemon()
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.is_sensitive", lambda: True)
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.get_text", lambda: "hunter2")
+        asyncio.run(daemon._toggle_read_aloud(from_selection=False))
+        assert self.overlays == [("empty", "Not reading a copied password")]
         daemon._tts_client.synthesize.assert_not_called()
 
     def test_second_press_stops(self, monkeypatch) -> None:
         daemon = self._daemon()
         monkeypatch.setattr("voice_keyboard.daemon.clipboard.get_text", lambda: "clip")
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.is_sensitive", lambda: False)
 
         async def run():
             started = asyncio.Event()
@@ -370,71 +400,203 @@ class TestReadAloud:
 
 
 class FakeClip:
-    def __init__(self, text_after_copy="selected words", copies=True):
+    def __init__(self, text_after_copy="selected words", copies=True, complete=True,
+                 sensitive_after_copy=False, renders_on_snapshot=False):
+        from voice_keyboard.windows.clipboard import Snapshot
+
         self.seq = 1
         self.text = "previous"
+        self.sensitive = False
         self._after = text_after_copy
         self._copies = copies
+        self._sensitive_after = sensitive_after_copy
+        self._renders = renders_on_snapshot
+        self._snapshot = Snapshot([(13, "previous".encode("utf-16-le") + b"\x00\x00")],
+                                  complete=complete)
         self.restored = None
+        self.restores = 0
 
     def sequence_number(self):
         return self.seq
 
     def snapshot(self):
-        return [(13, "previous".encode("utf-16-le") + b"\x00\x00")]
+        if self._renders:
+            self.seq += 1  # delayed rendering counts as a clipboard change
+        return self._snapshot
+
+    def is_sensitive(self):
+        return self.sensitive
 
     def get_text(self):
         return self.text
 
     def restore(self, saved):
         self.restored = saved
+        self.restores += 1
         self.text = "previous"
+        self.sensitive = False
+        self.seq += 1
+        return True
 
     def copy(self):
         if self._copies:
             self.seq += 1
             self.text = self._after
+            self.sensitive = self._sensitive_after
+
+
+def _copy(clip, **kw):
+    from voice_keyboard.windows.selection import copy_selection
+
+    injector = kw.pop("injector", None) or mock.Mock()
+    if not injector.press_combo.side_effect:
+        injector.press_combo.side_effect = lambda keys: clip.copy()
+    kw.setdefault("should_skip", lambda: False)
+    kw.setdefault("late_copy_s", 0)
+    return copy_selection(injector=injector, clip=clip, **kw), injector
 
 
 class TestCopySelection:
-    def test_copies_and_restores(self) -> None:
-        from voice_keyboard.windows.selection import copy_selection
-
+    def test_copies_with_ctrl_insert_and_restores(self) -> None:
         clip = FakeClip()
-        injector = mock.Mock()
-        injector.press_combo.side_effect = lambda keys: clip.copy()
-        text = copy_selection(injector=injector, clip=clip, is_terminal=lambda: False)
+        text, injector = _copy(clip)
         assert text == "selected words"
-        injector.press_combo.assert_called_once_with(["ctrl", "c"])
+        # Ctrl+Insert: copy everywhere, and never "interrupt" like Ctrl+C.
+        injector.press_combo.assert_called_once_with(["ctrl", "insert"])
         assert clip.restored is not None and clip.text == "previous"
 
     def test_nothing_selected(self) -> None:
-        from voice_keyboard.windows.selection import copy_selection
-
         clip = FakeClip(copies=False)
-        injector = mock.Mock()
-        assert copy_selection(injector=injector, clip=clip, is_terminal=lambda: False,
-                              timeout=0.05) is None
+        text, _ = _copy(clip, timeout=0.05)
+        assert text is None
         assert clip.restored is None
 
-    def test_terminals_are_never_sent_ctrl_c(self) -> None:
-        from voice_keyboard.windows.selection import copy_selection
-
-        injector = mock.Mock()
-        assert copy_selection(injector=injector, clip=FakeClip(), is_terminal=lambda: True) is None
+    def test_skipped_windows_get_no_key_press(self) -> None:
+        clip = FakeClip()
+        text, injector = _copy(clip, should_skip=lambda: True)
+        assert text is None
         injector.press_combo.assert_not_called()
+
+    def test_a_failing_focus_probe_means_no_key_press(self) -> None:
+        def broken():
+            raise OSError("probe failed")
+
+        clip = FakeClip()
+        text, injector = _copy(clip, should_skip=broken)
+        assert text is None
+        injector.press_combo.assert_not_called()
+
+    def test_a_clipboard_that_cant_be_saved_is_left_alone(self) -> None:
+        # e.g. a screenshot bigger than the snapshot limit: copying would
+        # destroy it, so nothing is pressed at all.
+        clip = FakeClip(complete=False)
+        text, injector = _copy(clip)
+        assert text is None
+        injector.press_combo.assert_not_called()
+        assert clip.text == "previous"
+
+    def test_a_busy_clipboard_is_left_alone(self) -> None:
+        clip = FakeClip()
+        clip.snapshot = lambda: None
+        text, injector = _copy(clip)
+        assert text is None
+        injector.press_combo.assert_not_called()
+
+    def test_delayed_rendering_during_the_snapshot_is_not_the_copy(self) -> None:
+        clip = FakeClip(copies=False, renders_on_snapshot=True)
+        text, _ = _copy(clip, timeout=0.05)
+        assert text is None  # not "previous" read back as the selection
+
+    def test_a_password_managers_secret_is_never_returned(self) -> None:
+        clip = FakeClip(sensitive_after_copy=True)
+        text, _ = _copy(clip)
+        assert text is None
+        assert clip.text == "previous"
+
+    def test_a_late_copy_still_gets_the_clipboard_restored(self) -> None:
+        clip = FakeClip()
+        injector = mock.Mock()
+        injector.press_combo.side_effect = lambda keys: threading.Timer(0.15, clip.copy).start()
+        text, _ = _copy(clip, injector=injector, timeout=0.05, late_copy_s=2.0)
+        assert text is None
+        deadline = time.monotonic() + 3
+        while clip.restores == 0 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert clip.restores == 1 and clip.text == "previous"
+
+    def test_the_next_copy_cancels_a_pending_late_restore(self) -> None:
+        clip = FakeClip(copies=False)
+        _copy(clip, timeout=0.05, late_copy_s=5.0)
+        clip._copies = True
+        text, _ = _copy(clip)
+        assert text == "selected words"
+        time.sleep(0.2)
+        assert clip.restores == 1  # only the second copy's own restore
 
     def test_selection_text_falls_back_to_the_clipboard(self, monkeypatch) -> None:
         from voice_keyboard import clipboard
         from voice_keyboard.windows import selection
 
         monkeypatch.setattr(sys, "platform", "win32")
-        monkeypatch.setattr(selection, "copy_selection", lambda: None)
+        monkeypatch.setattr(selection, "copy_selection", lambda **kw: None)
         monkeypatch.setattr(clipboard, "get_text", lambda: "on the clipboard")
+        monkeypatch.setattr(clipboard, "is_sensitive", lambda: False)
         assert clipboard.selection_text() == "on the clipboard"
         assert clipboard.selection_text(clipboard_fallback=False) == ""
-        monkeypatch.setattr(selection, "copy_selection", lambda: "highlighted")
-        assert clipboard.selection_text() == "highlighted"
+        monkeypatch.setattr(clipboard, "is_sensitive", lambda: True)
+        assert clipboard.selection_text() == ""  # a copied password never stands in
+        seen = {}
+
+        def copied(**kw):
+            seen.update(kw)
+            return "highlighted"
+
+        monkeypatch.setattr(selection, "copy_selection", copied)
+        assert clipboard.selection_text(registers={"map": {"x": "terminal"}}) == "highlighted"
+        assert seen == {"registers": {"map": {"x": "terminal"}}}
+
+
+class TestFocusSafety:
+    @pytest.fixture
+    def focus(self, monkeypatch):
+        from voice_keyboard import focusprobe
+
+        box = {"focus": None}
+        monkeypatch.setattr(focusprobe, "probe_focus", lambda: box["focus"])
+
+        def set_focus(app, role="text"):
+            box["focus"] = focusprobe.FocusInfo(app=app, role=role) if app is not None else None
+
+        return set_focus
+
+    def _unsafe(self, registers=None):
+        from voice_keyboard.windows.selection import _focus_is_unsafe
+
+        return _focus_is_unsafe(registers)
+
+    def test_unknown_focus_is_unsafe(self, focus) -> None:
+        focus(None)
+        assert self._unsafe()
+        focus("")
+        assert self._unsafe()
+
+    def test_terminals_and_password_fields(self, focus) -> None:
+        focus("WindowsTerminal.exe")
+        assert self._unsafe()
+        focus("notepad.exe", role="password text")
+        assert self._unsafe()
+        focus("notepad.exe")
+        assert not self._unsafe()
+
+    def test_the_registers_map_is_honored(self, focus) -> None:
+        focus("tabby.exe")
+        assert not self._unsafe()
+        assert self._unsafe({"map": {"tabby": "terminal"}})
+        assert self._unsafe({"map": {"tabby.exe": "shell"}})
+        focus("cmd.exe")
+        assert not self._unsafe({"map": {"cmd": "prose"}})
+        focus("notepad.exe")
+        assert self._unsafe({"default": "terminal"})
 
 
 class TestWindowsConfigDefaults:

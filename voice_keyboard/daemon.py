@@ -1814,7 +1814,9 @@ class Daemon:
             try:
                 context = (
                     await asyncio.to_thread(
-                        clipboard.selection_text, clipboard_fallback=False
+                        clipboard.selection_text,
+                        clipboard_fallback=False,
+                        registers=self._config.get("registers", {}),
                     )
                 ).strip()[:4000]
             except Exception:
@@ -2031,8 +2033,20 @@ class Daemon:
             )
             return
         if from_selection:
-            text = await asyncio.to_thread(clipboard.selection_text)
+            # Only macOS, which has no way to read a selection, falls back to
+            # the clipboard: elsewhere "nothing selected" must not quietly
+            # read out whatever was copied last.
+            text = await asyncio.to_thread(
+                clipboard.selection_text,
+                clipboard_fallback=sys.platform == "darwin",
+                registers=self._config.get("registers", {}),
+            )
         else:
+            if await asyncio.to_thread(clipboard.is_sensitive):
+                await self._show_hotkey_overlay(
+                    "empty", detail="Not reading a copied password", timeout_ms=2200
+                )
+                return
             text = await asyncio.to_thread(clipboard.get_text) or ""
         text = text.strip()
         if not text:

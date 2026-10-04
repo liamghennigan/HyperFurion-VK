@@ -300,7 +300,13 @@ Unattended: `-NonInteractive -Provider xai -ApiKey ...`; also `-Version vX.Y.Z`,
 | Right-click the tray icon | the menu |
 
 The V of Ctrl+Alt+V is consumed, so apps never see it (in Office it would open
-Paste Special). The overlay pill appears next to the text cursor — STARTING,
+Paste Special). **Ctrl+Alt+R** copies the selection with Ctrl+Insert (a copy key
+apps honor that, unlike Ctrl+C, never means "interrupt") and then puts your
+clipboard back exactly. It never presses anything in a terminal (yours too:
+it follows `[registers] map`), a password field, or a window it can't
+identify, and if the clipboard holds something it can't save whole (a huge
+image) it leaves it alone. The copied text does appear in clipboard history
+(Win+V), like any copy. The overlay pill appears next to the text cursor — STARTING,
 LISTENING with the live caption and level meter, PROCESSING, INSERTED,
 NO SIGNAL, ERROR — and never takes focus. The **Kai orb** sits bottom-right:
 click to summon, drag to move (the spot is remembered); it never steals focus,

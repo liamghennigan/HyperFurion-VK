@@ -2,12 +2,15 @@
 
 Spawning PowerShell costs ~0.5 s per call and flashes nothing but still
 burns a process; these calls take microseconds. Beyond text get/set this
-offers a full snapshot/restore of the clipboard (every memory-backed
-format — text, HTML, RTF, images as DIB, file lists) so copying the
-user's selection to read it aloud can put their clipboard back exactly.
+offers a snapshot/restore of the clipboard (every memory-backed format —
+text, HTML, RTF, images as DIB, file lists — plus enhanced metafiles) so
+copying the user's selection to read it aloud can put their clipboard
+back exactly; a snapshot says when it could NOT capture everything, so
+callers can leave the clipboard alone instead.
 
-Anything written here only transiently (the selection copy, the restore)
-is tagged so Windows clipboard history (Win+V) and cloud sync skip it.
+A restore is tagged so Windows clipboard history (Win+V) and cloud sync
+don't record it as a new entry. Content that password managers mark
+private is recognized (is_sensitive()) and never read aloud.
 """
 
 import ctypes
@@ -15,22 +18,47 @@ import logging
 import time
 from contextlib import contextmanager
 from ctypes import wintypes
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
+CF_BITMAP = 2
+CF_METAFILEPICT = 3
+CF_DIB = 8
+CF_PALETTE = 9
 CF_UNICODETEXT = 13
+CF_ENHMETAFILE = 14
+CF_DIBV5 = 17
 GMEM_MOVEABLE = 0x0002
-# Formats whose handle is a GDI object (or owner-drawn), not HGLOBAL memory
-# — they cannot be copied byte-wise. Windows synthesizes HGLOBAL twins
-# (CF_DIB for CF_BITMAP, ...) which ARE captured, so images survive.
-_NON_HGLOBAL_FORMATS = frozenset({2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E})
+# Handles Windows re-creates from a twin we DO capture: CF_BITMAP (and its
+# palette) from CF_DIB/CF_DIBV5, CF_METAFILEPICT from CF_ENHMETAFILE.
+_SYNTHESIZED_FROM = {
+    CF_BITMAP: (CF_DIB, CF_DIBV5),
+    CF_PALETTE: (CF_DIB, CF_DIBV5),
+    CF_METAFILEPICT: (CF_ENHMETAFILE,),
+}
+# Owner-drawn and app-private handles: never restorable.
+_UNRESTORABLE_FORMATS = frozenset({0x80, 0x82, 0x83, 0x8E})
 _PRIVATE_RANGE = range(0x200, 0x400)  # CF_PRIVATEFIRST..CF_GDIOBJLAST
 SNAPSHOT_LIMIT_BYTES = 64 * 1024 * 1024
-_HISTORY_EXCLUSION_FORMATS = (
-    "ExcludeClipboardContentFromMonitorProcessing",
-    "CanIncludeInClipboardHistory",
-    "CanUploadToCloudClipboard",
-)
+# Tags on a restore: keep it out of Win+V history and cloud sync (it is
+# not new content). Deliberately NOT the stronger
+# ExcludeClipboardContentFromMonitorProcessing, which password managers
+# set and is_sensitive() honors.
+_HISTORY_EXCLUSION_FORMATS = ("CanIncludeInClipboardHistory", "CanUploadToCloudClipboard")
+# Markers password managers put next to a secret they copy.
+_SENSITIVE_MARKERS = ("ExcludeClipboardContentFromMonitorProcessing", "Clipboard Viewer Ignore")
+
+
+@dataclass
+class Snapshot:
+    """The clipboard's formats as bytes. `complete` is False when some
+    format couldn't be captured (too large, or a handle that can't be
+    copied), i.e. a restore would lose something."""
+
+    formats: list = field(default_factory=list)
+    complete: bool = True
+
 
 _api = None
 
@@ -72,7 +100,15 @@ def _load():  # pragma: no cover - requires Windows
     kernel32.GlobalSize.restype = ctypes.c_size_t
     kernel32.GlobalFree.argtypes = [HGLOBAL]
     kernel32.GlobalFree.restype = HGLOBAL
-    _api = (user32, kernel32)
+    user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+    user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+    gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)  # type: ignore[attr-defined]
+    gdi32.GetEnhMetaFileBits.argtypes = [ctypes.c_void_p, wintypes.UINT, ctypes.c_void_p]
+    gdi32.GetEnhMetaFileBits.restype = wintypes.UINT
+    gdi32.SetEnhMetaFileBits.argtypes = [wintypes.UINT, ctypes.c_char_p]
+    gdi32.SetEnhMetaFileBits.restype = ctypes.c_void_p
+    gdi32.DeleteEnhMetaFile.argtypes = [ctypes.c_void_p]
+    _api = (user32, kernel32, gdi32)
     return _api
 
 
@@ -81,7 +117,7 @@ def _opened():  # pragma: no cover - requires Windows
     """Open the clipboard with a throwaway owner window (SetClipboardData
     fails when the clipboard is opened with a NULL owner and emptied).
     Retries briefly: another app may be holding it. Yields success."""
-    user32, _ = _load()
+    user32 = _load()[0]
     hwnd = user32.CreateWindowExW(0, "STATIC", None, 0, 0, 0, 0, 0, None, None, None, None)
     opened = False
     try:
@@ -101,7 +137,7 @@ def _opened():  # pragma: no cover - requires Windows
 
 
 def _alloc(data: bytes):  # pragma: no cover - requires Windows
-    _, kernel32 = _load()
+    kernel32 = _load()[1]
     handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, max(1, len(data)))
     if not handle:
         return None
@@ -117,7 +153,7 @@ def _alloc(data: bytes):  # pragma: no cover - requires Windows
 def _put(fmt: int, data: bytes) -> bool:  # pragma: no cover - requires Windows
     """SetClipboardData with a fresh HGLOBAL copy (clipboard must be open
     and emptied). The system owns the memory on success."""
-    user32, kernel32 = _load()
+    user32, kernel32 = _load()[:2]
     handle = _alloc(data)
     if handle is None:
         return False
@@ -128,21 +164,32 @@ def _put(fmt: int, data: bytes) -> bool:  # pragma: no cover - requires Windows
 
 
 def _mark_transient() -> None:  # pragma: no cover - requires Windows
-    user32, _ = _load()
+    user32 = _load()[0]
     for name in _HISTORY_EXCLUSION_FORMATS:
         fmt = user32.RegisterClipboardFormatW(name)
         if fmt:
             _put(fmt, b"\x00\x00\x00\x00")
 
 
+def is_sensitive() -> bool:  # pragma: no cover - requires Windows
+    """True when the clipboard holds something a password manager marked
+    private — never send it to a speech provider or read it aloud."""
+    user32 = _load()[0]
+    for name in _SENSITIVE_MARKERS:
+        fmt = user32.RegisterClipboardFormatW(name)
+        if fmt and user32.IsClipboardFormatAvailable(fmt):
+            return True
+    return False
+
+
 def sequence_number() -> int:  # pragma: no cover - requires Windows
-    user32, _ = _load()
+    user32 = _load()[0]
     return int(user32.GetClipboardSequenceNumber())
 
 
 def get_text():  # pragma: no cover - requires Windows
     """Clipboard text; "" when the clipboard holds no text, None on failure."""
-    user32, kernel32 = _load()
+    user32, kernel32 = _load()[:2]
     with _opened() as ok:
         if not ok:
             return None
@@ -159,7 +206,7 @@ def get_text():  # pragma: no cover - requires Windows
 
 
 def set_text(text: str, *, transient: bool = False) -> bool:  # pragma: no cover
-    user32, _ = _load()
+    user32 = _load()[0]
     data = text.encode("utf-16-le") + b"\x00\x00"
     with _opened() as ok:
         if not ok:
@@ -173,10 +220,11 @@ def set_text(text: str, *, transient: bool = False) -> bool:  # pragma: no cover
 
 
 def snapshot():  # pragma: no cover - requires Windows
-    """Every memory-backed format on the clipboard as [(format, bytes)];
-    [] for an empty clipboard, None when it could not be opened."""
-    user32, kernel32 = _load()
-    saved: list[tuple[int, bytes]] = []
+    """The clipboard's contents as a Snapshot (empty for an empty clipboard),
+    or None when it could not be opened."""
+    user32, kernel32, gdi32 = _load()
+    snap = Snapshot()
+    present: set[int] = set()
     total = 0
     with _opened() as ok:
         if not ok:
@@ -186,34 +234,61 @@ def snapshot():  # pragma: no cover - requires Windows
             fmt = user32.EnumClipboardFormats(fmt)
             if not fmt:
                 break
-            if fmt in _NON_HGLOBAL_FORMATS or fmt in _PRIVATE_RANGE:
+            fmt = int(fmt)
+            present.add(fmt)
+            if fmt in _SYNTHESIZED_FROM:
+                continue  # checked below, once every format is known
+            if fmt in _UNRESTORABLE_FORMATS or fmt in _PRIVATE_RANGE:
+                snap.complete = False
                 continue
             handle = user32.GetClipboardData(fmt)
             if not handle:
                 continue
+            if fmt == CF_ENHMETAFILE:
+                size = gdi32.GetEnhMetaFileBits(handle, 0, None)
+                if not size or total + size > SNAPSHOT_LIMIT_BYTES:
+                    snap.complete = False
+                    continue
+                buffer = ctypes.create_string_buffer(size)
+                gdi32.GetEnhMetaFileBits(handle, size, buffer)
+                snap.formats.append((fmt, buffer.raw))
+                total += size
+                continue
             size = kernel32.GlobalSize(handle)
             if not size or total + size > SNAPSHOT_LIMIT_BYTES:
+                snap.complete = False
                 continue
             pointer = kernel32.GlobalLock(handle)
             if not pointer:
+                snap.complete = False
                 continue
             try:
-                saved.append((int(fmt), ctypes.string_at(pointer, size)))
+                snap.formats.append((fmt, ctypes.string_at(pointer, size)))
                 total += size
             finally:
                 kernel32.GlobalUnlock(handle)
-    return saved
+    captured = {fmt for fmt, _ in snap.formats}
+    for fmt, twins in _SYNTHESIZED_FROM.items():
+        if fmt in present and not captured.intersection(twins):
+            snap.complete = False
+    return snap
 
 
 def restore(saved) -> bool:  # pragma: no cover - requires Windows
     """Put a snapshot() back (an empty snapshot empties the clipboard)."""
-    user32, _ = _load()
+    user32, _, gdi32 = _load()
+    formats = saved.formats if isinstance(saved, Snapshot) else saved
     with _opened() as ok:
         if not ok:
             return False
         user32.EmptyClipboard()
-        for fmt, data in saved:
+        for fmt, data in formats:
+            if fmt == CF_ENHMETAFILE:
+                metafile = gdi32.SetEnhMetaFileBits(len(data), data)
+                if metafile and not user32.SetClipboardData(fmt, metafile):
+                    gdi32.DeleteEnhMetaFile(metafile)
+                continue
             _put(fmt, data)
-        if saved:
+        if formats:
             _mark_transient()
         return True

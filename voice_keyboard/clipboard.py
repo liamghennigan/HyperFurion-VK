@@ -132,24 +132,42 @@ def set_text(text: str) -> bool:
     return False
 
 
-def selection_text(*, clipboard_fallback: bool = True) -> str:
+def is_sensitive() -> bool:
+    """True when the clipboard holds something a password manager marked
+    private (Windows) — never read it aloud or send it anywhere."""
+    if sys.platform != "win32":
+        return False
+    from voice_keyboard.windows import clipboard as win_clipboard
+
+    try:
+        return win_clipboard.is_sensitive()
+    except Exception:
+        logger.debug("Windows clipboard sensitivity check failed", exc_info=True)
+        return False
+
+
+def selection_text(*, clipboard_fallback: bool = True, registers: dict | None = None) -> str:
     """The text the user has highlighted right now, best effort; "" when
     none. Linux reads the PRIMARY selection; Windows copies the selection
-    (and restores the clipboard after). macOS has neither, so the
-    clipboard stands in — as it does on Windows when the copy yields
-    nothing (a terminal, or an app that ignores Ctrl+C) — unless the
-    caller opts out with clipboard_fallback=False."""
+    (and restores the clipboard after; `registers` is the [registers]
+    config, so terminals you mapped are never sent a copy key). macOS has
+    neither, so the clipboard stands in — as it does on Windows when the
+    copy yields nothing — unless the caller opts out with
+    clipboard_fallback=False. Clipboard content a password manager marked
+    private never stands in."""
     if sys.platform == "win32":
         try:
             from voice_keyboard.windows.selection import copy_selection
 
-            text = copy_selection()
+            text = copy_selection(registers=registers)
         except Exception:
             logger.debug("Windows selection copy failed", exc_info=True)
             text = None
         if text:
             return text
-        return (get_text() or "") if clipboard_fallback else ""
+        if not clipboard_fallback or is_sensitive():
+            return ""
+        return get_text() or ""
     if sys.platform == "darwin":
         return (get_text() or "") if clipboard_fallback else ""
     return get_primary_text() or ""

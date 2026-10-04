@@ -184,11 +184,67 @@ class TestClipboard:
         assert clip.set_text("clipboard ünïcode ✓")
         assert clip.get_text() == "clipboard ünïcode ✓"
         snap = clip.snapshot()
-        assert snap and any(fmt == 13 for fmt, _ in snap)  # CF_UNICODETEXT
+        assert snap is not None and snap.complete
+        assert any(fmt == 13 for fmt, _ in snap.formats)  # CF_UNICODETEXT
         clip.set_text("temporary", transient=True)
         assert clip.get_text() == "temporary"
         assert clip.restore(snap)
         assert clip.get_text() == "clipboard ünïcode ✓"
+
+    def test_metafile_pictures_survive_a_restore(self, saved_clipboard) -> None:
+        # Office copies pictures as enhanced metafiles: GDI handles, not
+        # memory — they must be saved by value or a restore drops them.
+        clip = saved_clipboard
+        gdi32 = ctypes.WinDLL("gdi32")
+        gdi32.CreateEnhMetaFileW.restype = ctypes.c_void_p
+        gdi32.CreateEnhMetaFileW.argtypes = [ctypes.c_void_p] * 4
+        gdi32.CloseEnhMetaFile.restype = ctypes.c_void_p
+        gdi32.CloseEnhMetaFile.argtypes = [ctypes.c_void_p]
+        gdi32.Rectangle.argtypes = [ctypes.c_void_p] + [ctypes.c_int] * 4
+        dc = gdi32.CreateEnhMetaFileW(None, None, None, None)
+        gdi32.Rectangle(dc, 10, 10, 200, 120)
+        metafile = gdi32.CloseEnhMetaFile(dc)
+        user32_ = clip._load()[0]
+        with clip._opened() as ok:
+            assert ok
+            user32_.EmptyClipboard()
+            assert user32_.SetClipboardData(14, metafile)  # CF_ENHMETAFILE
+            assert clip._put(13, "caption".encode("utf-16-le") + b"\x00\x00")
+        snap = clip.snapshot()
+        assert snap is not None and snap.complete
+        bits = dict(snap.formats)[14]
+        assert len(bits) > 0
+        clip.set_text("something else")
+        assert clip.restore(snap)
+        again = clip.snapshot()
+        assert dict(again.formats)[14] == bits
+        assert clip.get_text() == "caption"
+
+    def test_snapshot_too_large_is_incomplete(self, saved_clipboard, monkeypatch) -> None:
+        clip = saved_clipboard
+        clip.set_text("x" * 5000)
+        monkeypatch.setattr(clip, "SNAPSHOT_LIMIT_BYTES", 1000)
+        snap = clip.snapshot()
+        assert snap is not None and not snap.complete
+
+    def test_password_manager_markers(self, saved_clipboard) -> None:
+        clip = saved_clipboard
+        clip.set_text("ordinary")
+        assert not clip.is_sensitive()
+        user32_ = clip._load()[0]
+        marker = user32_.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing")
+        with clip._opened() as ok:
+            assert ok
+            user32_.EmptyClipboard()
+            clip._put(13, "hunter2".encode("utf-16-le") + b"\x00\x00")
+            clip._put(marker, b"\x00")
+        assert clip.is_sensitive()
+        # A restore keeps the marker (password managers' auto-clear relies on
+        # it) and only adds the history/cloud opt-outs.
+        snap = clip.snapshot()
+        clip.set_text("other")
+        clip.restore(snap)
+        assert clip.is_sensitive()
 
     def test_copy_selection_restores_the_clipboard(self, edit_box, saved_clipboard) -> None:
         from voice_keyboard.windows.selection import copy_selection
@@ -198,7 +254,7 @@ class TestClipboard:
         edit_box.text = "the selected words"
         edit_box.select_all()
         result = edit_box.run_while_pumping(
-            lambda: copy_selection(is_terminal=lambda: False), seconds=3.0
+            lambda: copy_selection(should_skip=lambda: False), seconds=3.0
         )
         assert result == "the selected words"
         assert clip.get_text() == "what was there before"
