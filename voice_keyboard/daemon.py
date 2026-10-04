@@ -87,7 +87,13 @@ class Daemon:
         # [tts] hotkey: read the highlighted text aloud (press again to stop).
         self._read_hotkey_listener: Optional[HotkeyListener] = None
         self._read_task: Optional[asyncio.Task] = None
+        # Set to stop the current read wherever it is: fetching, decoding,
+        # or playing (a thread can't be cancelled, so playback checks it).
+        self._read_cancel: Optional[threading.Event] = None
         self._stop_event: Optional[asyncio.Event] = None
+        # A stop requested before run() has its loop (a Quit clicked while
+        # the daemon is still starting) must not be lost.
+        self._stop_requested = False
         self._hotkey_lock: Optional[asyncio.Lock] = None
         # The conversational mind (None until [assistant] enabled).
         self._brain: Optional[Brain] = create_brain(self._config)
@@ -143,9 +149,13 @@ class Daemon:
         from voice_keyboard import client as _client
 
         _client.mark_daemon_process()
-        self._loop = asyncio.get_running_loop()
-        self._hotkey_lock = asyncio.Lock()
+        if self._stop_requested:
+            return
         self._stop_event = asyncio.Event()
+        self._loop = asyncio.get_running_loop()
+        if self._stop_requested:  # raced with request_stop() above
+            self._stop_event.set()
+        self._hotkey_lock = asyncio.Lock()
         self._injector.start()
         self._ipc_server.start()
         self._start_hotkey_listener()
@@ -174,7 +184,9 @@ class Daemon:
             )
             self._remote_mic.start()
         self._start_wake_listener()
-        logger.info("Daemon started, socket: %s", self._socket_path)
+        logger.info(
+            "Daemon started, socket: %s", getattr(self._ipc_server, "endpoint", self._socket_path)
+        )
 
         ipc_thread = threading.Thread(target=self._ipc_loop, daemon=True)
         ipc_thread.start()
@@ -212,11 +224,13 @@ class Daemon:
         )
 
     def request_stop(self) -> None:
-        """Ask a running daemon to shut down cleanly. Thread-safe (the
-        Windows tray's Quit and the IPC `quit` command use it)."""
+        """Ask the daemon to shut down cleanly — also before or while it
+        starts. Thread-safe (the Windows tray's Quit and the IPC `quit`
+        command use it)."""
+        self._stop_requested = True
         loop, event = self._loop, self._stop_event
         if loop is None or event is None or loop.is_closed():
-            return
+            return  # run() sees _stop_requested
         loop.call_soon_threadsafe(event.set)
 
     def schedule_action(self, action: str) -> None:
@@ -225,31 +239,40 @@ class Daemon:
         self._schedule_hotkey_action(action)
 
     async def _shutdown(self) -> None:
+        """Stop everything. The injector and the IPC server are released
+        whatever else fails — an in-process restart must be able to bind
+        again, and a dead daemon must not keep answering commands."""
         logger.info("Shutting down daemon")
-        if self._wake_listener is not None:
-            self._wake_listener.stop()
-            self._wake_listener = None
-        if self._remote_mic is not None:
-            self._remote_mic.stop()
-            self._remote_mic = None
-        if self._prefetch_watcher is not None:
-            self._prefetch_watcher.stop()
-            self._prefetch_watcher = None
-        if self._hotkey_listener:
-            self._hotkey_listener.stop()
-            self._hotkey_listener = None
-        if self._assistant_hotkey_listener:
-            self._assistant_hotkey_listener.stop()
-            self._assistant_hotkey_listener = None
-        if self._read_hotkey_listener:
-            self._read_hotkey_listener.stop()
-            self._read_hotkey_listener = None
-        if self._read_task and not self._read_task.done():
-            self._read_task.cancel()
-        if self._recording:
-            await self._stop_recording()
-        self._injector.stop()
-        self._ipc_server.stop()
+        try:
+            for name in (
+                "_wake_listener", "_remote_mic", "_prefetch_watcher", "_hotkey_listener",
+                "_assistant_hotkey_listener", "_read_hotkey_listener",
+            ):
+                part = getattr(self, name)
+                if part is not None:
+                    setattr(self, name, None)
+                    try:
+                        part.stop()
+                    except Exception:
+                        logger.exception("Stopping %s failed", name.strip("_"))
+            if self._stop_reading():
+                # Its pill was shown without a timeout: take it down too.
+                try:
+                    from voice_keyboard.client import _stop_overlay
+
+                    await asyncio.to_thread(_stop_overlay)
+                except Exception:
+                    logger.debug("Could not hide the overlay", exc_info=True)
+            if self._recording:
+                await self._stop_recording()
+        except Exception:
+            logger.exception("Error while shutting down; releasing resources anyway")
+        finally:
+            try:
+                self._injector.stop()
+            except Exception:
+                logger.exception("Stopping the injector failed")
+            self._ipc_server.stop()
 
     def _start_hotkey_listener(self) -> None:
         try:
@@ -2013,18 +2036,26 @@ class Daemon:
         # Called from the watcher thread; a single tuple swap is atomic.
         self._tts_cache = (text, audio)
 
+    def _stop_reading(self) -> bool:
+        """Stop the read in progress, if any (True when there was one)."""
+        task = self._read_task
+        if task is None or task.done():
+            return False
+        if self._read_cancel is not None:
+            self._read_cancel.set()  # before stop_playback: no gap to start in
+        try:
+            self._tts_client.stop_playback()
+        except Exception:
+            pass
+        task.cancel()
+        self._read_task = None
+        return True
+
     async def _toggle_read_aloud(self, *, from_selection: bool) -> None:
         """The read-aloud hotkey / tray item: speak the highlighted text (or
         the clipboard), or stop speaking if it already is. Playback runs as
         a task, off the hotkey lock, so dictation stays available."""
-        task = self._read_task
-        if task is not None and not task.done():
-            try:
-                self._tts_client.stop_playback()
-            except Exception:
-                pass
-            task.cancel()
-            self._read_task = None
+        if self._stop_reading():
             await self._show_hotkey_overlay("empty", detail="Stopped reading", timeout_ms=1200)
             return
         if self._recording:
@@ -2056,27 +2087,19 @@ class Daemon:
                 timeout_ms=2200,
             )
             return
-        self._read_task = asyncio.create_task(self._read_aloud(text))
+        self._read_cancel = threading.Event()
+        self._read_task = asyncio.create_task(self._read_aloud(text, self._read_cancel))
 
-    async def _read_aloud(self, text: str) -> None:
+    async def _read_aloud(self, text: str, cancel: threading.Event) -> None:
         try:
             await self._show_hotkey_overlay(
                 "processing", detail=f"Reading {len(text)} characters — press again to stop"
             )
-            client = self._tts_client
-            if hasattr(client, "synthesize") and hasattr(client, "play_audio"):
-                # Synthesize and play as separate awaits: a stop pressed while
-                # the audio is still being fetched cancels here, before any
-                # sound — a thread can't be cancelled mid-call.
-                cache = self._tts_cache
-                if cache is not None and cache[0] == text:
-                    audio = cache[1]
-                else:
-                    audio = await asyncio.to_thread(client.synthesize, text)
-                await asyncio.to_thread(client.play_audio, audio)
-            else:
-                await self._run_tts(text)
-            await self._show_hotkey_overlay("inserted", detail="Finished reading", timeout_ms=1500)
+            await self._run_tts(text, cancel=cancel)
+            if not cancel.is_set():
+                await self._show_hotkey_overlay(
+                    "inserted", detail="Finished reading", timeout_ms=1500
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -2087,15 +2110,22 @@ class Daemon:
             if self._read_task is asyncio.current_task():
                 self._read_task = None
 
-    async def _run_tts(self, text: str) -> None:
+    async def _run_tts(self, text: str, cancel: Optional[threading.Event] = None) -> None:
+        """Speak `text` (a prefetched clip plays at once). With `cancel`,
+        fetching and playing are separate awaits and playback checks the
+        event, so a stop at any point is never lost."""
+        client = self._tts_client
+        play_kwargs = {"cancel": cancel} if cancel is not None else {}
         cache = self._tts_cache
-        if cache is not None and cache[0] == text and hasattr(
-            self._tts_client, "play_audio"
-        ):
+        if cache is not None and cache[0] == text and hasattr(client, "play_audio"):
             logger.info("TTS prefetch hit (%d chars) — instant playback", len(text))
-            await asyncio.to_thread(self._tts_client.play_audio, cache[1])
+            await asyncio.to_thread(client.play_audio, cache[1], **play_kwargs)
             return
-        await asyncio.to_thread(self._tts_client.synthesize_and_play, text)
+        if cancel is not None and hasattr(client, "synthesize") and hasattr(client, "play_audio"):
+            audio = await asyncio.to_thread(client.synthesize, text)
+            await asyncio.to_thread(client.play_audio, audio, **play_kwargs)
+            return
+        await asyncio.to_thread(client.synthesize_and_play, text)
 
 
 def main() -> None:

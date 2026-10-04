@@ -1,5 +1,6 @@
 import logging
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -107,6 +108,9 @@ class TTSClient:
             f"{openai_base_url.rstrip('/')}/audio/speech" if openai_base_url else OPENAI_TTS_URL
         )
         self._session: Optional[requests.Session] = None
+        # Serializes "start playing" against stop_playback(): a stop that
+        # lands while audio is still being decoded must win.
+        self._play_lock = threading.Lock()
 
     @property
     def session(self) -> requests.Session:
@@ -231,43 +235,47 @@ class TTSClient:
     def stop_playback(self) -> None:
         """Cut off any in-flight speech immediately — the barge-in path.
         Safe to call when nothing is playing."""
-        try:
-            import sounddevice as sd
+        with self._play_lock:
+            try:
+                import sounddevice as sd
 
-            sd.stop()
-        except Exception:
-            pass
-        try:
-            import pygame
+                sd.stop()
+            except Exception:
+                pass
+            try:
+                import pygame
 
-            if pygame.mixer.get_init():
-                pygame.mixer.music.stop()
-        except Exception:
-            pass
+                if pygame.mixer.get_init():
+                    pygame.mixer.music.stop()
+            except Exception:
+                pass
 
     def synthesize_and_play(self, text: str) -> None:
         self.play_audio(self.synthesize(text))
 
-    def play_audio(self, audio_data: bytes) -> None:
+    def play_audio(self, audio_data: bytes, *, cancel: Optional[threading.Event] = None) -> None:
         """Play already-synthesized audio — the instant half of the TTS
-        path, used directly on a prefetch-cache hit."""
+        path, used directly on a prefetch-cache hit. Once `cancel` is set
+        (before or during decoding) nothing more plays."""
+        if cancel is not None and cancel.is_set():
+            return
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             f.write(audio_data)
             tmp_path = f.name
 
         try:
-            self._play_sounddevice(tmp_path)
+            self._play_sounddevice(tmp_path, cancel)
         except Exception:
             logger.exception("sounddevice playback failed, falling back to pygame")
             try:
-                self._play_pygame(tmp_path)
+                self._play_pygame(tmp_path, cancel)
             except Exception:
                 logger.exception("pygame playback also failed")
                 raise RuntimeError("Failed to play TTS audio with any backend")
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
-    def _play_sounddevice(self, tmp_path: str) -> None:
+    def _play_sounddevice(self, tmp_path: str, cancel: Optional[threading.Event] = None) -> None:
         import numpy as np
         import sounddevice as sd
         import soundfile as sf
@@ -275,19 +283,28 @@ class TTSClient:
         data, samplerate = sf.read(tmp_path)
         if data.ndim == 1:
             data = data[:, np.newaxis]
-        sd.play(data, samplerate)
+        with self._play_lock:
+            if cancel is not None and cancel.is_set():
+                return
+            sd.play(data, samplerate)
         sd.wait()
 
-    def _play_pygame(self, tmp_path: str) -> None:
+    def _play_pygame(self, tmp_path: str, cancel: Optional[threading.Event] = None) -> None:
         import pygame
 
         mixer_ready = False
         try:
-            pygame.mixer.init()
-            mixer_ready = True
-            pygame.mixer.music.load(tmp_path)
-            pygame.mixer.music.play()
+            with self._play_lock:
+                if cancel is not None and cancel.is_set():
+                    return
+                pygame.mixer.init()
+                mixer_ready = True
+                pygame.mixer.music.load(tmp_path)
+                pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
+                if cancel is not None and cancel.is_set():
+                    pygame.mixer.music.stop()
+                    break
                 pygame.time.Clock().tick(10)
         finally:
             if mixer_ready:

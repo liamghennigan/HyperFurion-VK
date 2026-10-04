@@ -452,8 +452,11 @@ class WindowsApp:
 
         for attempt in range(6):
             try:
-                self._daemon = Daemon(config=config)
-                asyncio.run(self._daemon.run())
+                daemon = Daemon(config=config)
+                self._daemon = daemon
+                if self._quit.is_set():
+                    daemon.request_stop()  # Quit clicked while we were starting
+                asyncio.run(daemon.run())
                 return None
             except RuntimeError as exc:
                 if "already listening" in str(exc) and attempt < 5 and not self._quit.is_set():

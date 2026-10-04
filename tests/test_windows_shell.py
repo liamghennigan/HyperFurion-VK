@@ -324,7 +324,7 @@ class TestReadAloud:
 
         asyncio.run(run())
         daemon._tts_client.synthesize.assert_called_once_with("hello")
-        daemon._tts_client.play_audio.assert_called_once_with(b"mp3")
+        daemon._tts_client.play_audio.assert_called_once_with(b"mp3", cancel=mock.ANY)
         assert self.overlays[-1][0] == "inserted"
 
     def test_nothing_selected(self, monkeypatch) -> None:
@@ -373,10 +373,10 @@ class TestReadAloud:
 
             daemon._tts_client.synthesize.side_effect = slow_synth
 
-            async def never_finishes(func, *args):
+            async def never_finishes(func, *args, **kwargs):
                 if func is daemon._tts_client.play_audio:
                     await asyncio.sleep(30)
-                return func(*args)
+                return func(*args, **kwargs)
 
             monkeypatch.setattr(asyncio, "to_thread", never_finishes)
             await daemon._toggle_read_aloud(from_selection=False)
@@ -394,6 +394,65 @@ class TestReadAloud:
         daemon._recording = True
         asyncio.run(daemon._toggle_read_aloud(from_selection=True))
         assert "busy" in self.overlays[0][1]
+
+    def test_a_stop_while_the_audio_is_still_decoding_wins(self, monkeypatch) -> None:
+        # The second press lands after synthesis but before playback has
+        # started: nothing may play afterwards.
+        from voice_keyboard.tts import TTSClient
+
+        played = []
+        cancel = threading.Event()
+
+        def read(path):
+            cancel.set()  # the stop arrives while decoding
+            return np.zeros(10), 24000
+
+        monkeypatch.setitem(sys.modules, "soundfile", mock.Mock(read=read))
+        monkeypatch.setitem(sys.modules, "sounddevice", mock.Mock(
+            play=lambda *a: played.append(a), wait=lambda: None, stop=lambda: None
+        ))
+        client = TTSClient(api_key="k")
+        client.play_audio(b"mp3", cancel=cancel)
+        assert played == []
+        cancel.clear()
+        client.play_audio(b"mp3", cancel=threading.Event())
+        assert len(played) == 1
+
+    def test_shutdown_stops_reading_and_takes_the_pill_down(self, monkeypatch) -> None:
+        daemon = self._daemon()
+        hidden = []
+        monkeypatch.setattr("voice_keyboard.client._stop_overlay", lambda: hidden.append(1))
+
+        async def run():
+            daemon._read_cancel = threading.Event()
+            daemon._read_task = asyncio.create_task(asyncio.sleep(30))
+            await daemon._shutdown()
+            return daemon._read_cancel
+
+        cancel = asyncio.run(run())
+        assert cancel.is_set()
+        daemon._tts_client.stop_playback.assert_called()
+        assert hidden == [1]
+
+
+class TestDaemonLifecycle:
+    def test_shutdown_releases_the_ipc_server_even_when_stopping_fails(self) -> None:
+        daemon = _daemon()
+        daemon._recording = True
+
+        async def failing_stop():
+            raise RuntimeError("stt stream died")
+
+        daemon._stop_recording = failing_stop
+        asyncio.run(daemon._shutdown())
+        daemon._injector.stop.assert_called_once()
+        daemon._ipc_server.stop.assert_called_once()
+
+    def test_a_stop_requested_before_run_is_not_lost(self) -> None:
+        daemon = _daemon()
+        daemon.request_stop()
+        asyncio.run(asyncio.wait_for(daemon.run(), 5))
+        daemon._ipc_server.start.assert_not_called()
 
 
 # ------------------------------------------------------- selection + config
