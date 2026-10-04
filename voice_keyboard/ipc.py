@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from voice_keyboard import paths
+
 logger = logging.getLogger(__name__)
 
 # Default recv timeout for a single IPC command response. Generous enough to
@@ -16,10 +18,7 @@ CLIENT_RECV_TIMEOUT = 35.0
 
 
 def _config_dir() -> Path:
-    xdg = os.environ.get("XDG_CONFIG_HOME", "")
-    if xdg:
-        return Path(xdg) / "voice-keyboard"
-    return Path.home() / ".config" / "voice-keyboard"
+    return paths.config_dir()
 
 
 def _default_socket_path() -> str:
@@ -102,8 +101,20 @@ class IPCServer:
         kind, target = parse_endpoint(self._socket_path)
         if kind == "inet":
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self._sock.bind(target)
+            if sys.platform == "win32":
+                # Windows SO_REUSEADDR lets a second socket bind a port that
+                # is IN USE — a hijack. Exclusive use is the safe equivalent.
+                self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                self._sock.bind(target)
+            except OSError as exc:
+                self._sock.close()
+                self._sock = None
+                raise RuntimeError(
+                    f"Another daemon is already listening on {self._socket_path}"
+                ) from exc
             self._sock.listen(5)
             self._sock.setblocking(True)
             self._token = secrets.token_hex(16)

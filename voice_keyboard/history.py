@@ -2,9 +2,9 @@
 
 Off by default ([flow] history = true enables it). Entries are appended
 as JSON lines to ~/.local/state/voice-keyboard/history.jsonl (or under
-$XDG_STATE_HOME), file mode 600, directory 700 — same posture as the
-config file. `voice-keyboard history` lists entries; `voice-keyboard
-recall N` re-types one.
+$XDG_STATE_HOME; under %LOCALAPPDATA% on Windows), file mode 600,
+directory 700 — same posture as the config file. `voice-keyboard history`
+lists entries; `voice-keyboard recall N` re-types one.
 """
 
 import json
@@ -13,16 +13,15 @@ import os
 import time
 from pathlib import Path
 
+from voice_keyboard import paths
+
 logger = logging.getLogger(__name__)
 
 MAX_READ_BYTES = 4 * 1024 * 1024  # read at most the trailing 4 MiB
 
 
 def _state_dir() -> Path:
-    xdg = os.environ.get("XDG_STATE_HOME", "")
-    if xdg:
-        return Path(xdg) / "voice-keyboard"
-    return Path.home() / ".local" / "state" / "voice-keyboard"
+    return paths.state_dir()
 
 
 def history_path() -> Path:

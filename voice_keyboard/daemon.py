@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import signal
+import sys
 import threading
 import time
 from typing import Optional
@@ -22,7 +23,7 @@ from voice_keyboard.flow.registers import (
 from voice_keyboard.flow.vad import SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import common_prefix_len
 from voice_keyboard.focusprobe import FocusInfo, probe_focus
-from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener
+from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty_binding
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
 from voice_keyboard.llm import create_llm_client
@@ -84,6 +85,10 @@ class Daemon:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._hotkey_listener: Optional[HotkeyListener] = None
         self._assistant_hotkey_listener: Optional[HotkeyListener] = None
+        # [tts] hotkey: read the highlighted text aloud (press again to stop).
+        self._read_hotkey_listener: Optional[HotkeyListener] = None
+        self._read_task: Optional[asyncio.Task] = None
+        self._stop_event: Optional[asyncio.Event] = None
         self._hotkey_lock: Optional[asyncio.Lock] = None
         # The conversational mind (None until [assistant] enabled).
         self._brain: Optional[Brain] = create_brain(self._config)
@@ -113,6 +118,10 @@ class Daemon:
         self._silence_gate: Optional[SilenceGate] = None
         self._auto_stop_started = False
         self._levels: list[float] = []
+        # Was any non-zero sample captured this session? A blocked mic
+        # (Windows privacy settings) delivers pure digital silence.
+        self._chunks_seen = 0
+        self._heard_signal = False
         self._last_caption = ""
         self._last_typed = ""
         self._last_error = ""
@@ -132,12 +141,17 @@ class Daemon:
         self._config_mtime = self._current_config_mtime()
 
     async def run(self) -> None:
+        from voice_keyboard import client as _client
+
+        _client.mark_daemon_process()
         self._loop = asyncio.get_running_loop()
         self._hotkey_lock = asyncio.Lock()
+        self._stop_event = asyncio.Event()
         self._injector.start()
         self._ipc_server.start()
         self._start_hotkey_listener()
         self._start_assistant_hotkey_listener()
+        self._start_read_hotkey_listener()
         self._push_button_visibility()
         # Re-push shortly after start in case the shell extension was not yet
         # listening on the bus (daemon-before-extension ordering).
@@ -166,7 +180,7 @@ class Daemon:
         ipc_thread = threading.Thread(target=self._ipc_loop, daemon=True)
         ipc_thread.start()
 
-        stop_event = asyncio.Event()
+        stop_event = self._stop_event
 
         def _signal_handler():
             logger.info("Received shutdown signal")
@@ -182,6 +196,34 @@ class Daemon:
 
         await stop_event.wait()
         await self._shutdown()
+
+    @property
+    def recording(self) -> bool:
+        return self._recording
+
+    @property
+    def assistant_enabled(self) -> bool:
+        return self._brain is not None
+
+    @property
+    def conversing(self) -> bool:
+        """Kai is capturing a question or running a turn."""
+        return self._converse_capture or bool(
+            self._converse_task and not self._converse_task.done()
+        )
+
+    def request_stop(self) -> None:
+        """Ask a running daemon to shut down cleanly. Thread-safe (the
+        Windows tray's Quit and the IPC `quit` command use it)."""
+        loop, event = self._loop, self._stop_event
+        if loop is None or event is None or loop.is_closed():
+            return
+        loop.call_soon_threadsafe(event.set)
+
+    def schedule_action(self, action: str) -> None:
+        """Run a hotkey action (toggle, converse_toggle, read_selection,
+        read_clipboard, ...) from any thread — the tray menu's entry point."""
+        self._schedule_hotkey_action(action)
 
     async def _shutdown(self) -> None:
         logger.info("Shutting down daemon")
@@ -200,6 +242,11 @@ class Daemon:
         if self._assistant_hotkey_listener:
             self._assistant_hotkey_listener.stop()
             self._assistant_hotkey_listener = None
+        if self._read_hotkey_listener:
+            self._read_hotkey_listener.stop()
+            self._read_hotkey_listener = None
+        if self._read_task and not self._read_task.done():
+            self._read_task.cancel()
         if self._recording:
             await self._stop_recording()
         self._injector.stop()
@@ -257,6 +304,25 @@ class Daemon:
         except Exception:
             logger.exception("Failed to start assistant hotkey listener")
             self._assistant_hotkey_listener = None
+
+    def _start_read_hotkey_listener(self) -> None:
+        """[tts] hotkey: one press reads the highlighted text aloud, the
+        next press stops it. Fires on press (toggle), so it feels instant."""
+        binding = str(self._config.get("tts", {}).get("hotkey", "")).strip()
+        if not binding:
+            return
+        try:
+            self._read_hotkey_listener = create_hotkey_listener(
+                {"enabled": True, "key": binding, "mode": "toggle", "allow_bare": True},
+                on_toggle=lambda: self._schedule_hotkey_action("read_selection"),
+                on_hold_start=lambda: None,
+                on_hold_stop=lambda: None,
+            )
+            self._read_hotkey_listener.start()
+            logger.info("Read-aloud hotkey listening: %s", binding)
+        except Exception:
+            logger.exception("Failed to start read-aloud hotkey listener")
+            self._read_hotkey_listener = None
 
     def _start_wake_listener(self) -> None:
         """Arm the opt-in local wake word. A detection fires the same summon
@@ -320,6 +386,10 @@ class Daemon:
                         )
                     else:
                         await self._converse_start(hands_free=True)
+                elif action in {"read_selection", "read_clipboard"}:
+                    await self._toggle_read_aloud(
+                        from_selection=action == "read_selection"
+                    )
                 elif action == "converse_tap":
                     # A bare-modifier tap: barge in or end a capture, but
                     # NEVER open the mic — a stray Right-Ctrl tap is too easy
@@ -381,16 +451,21 @@ class Daemon:
         except Exception:
             logger.debug("Could not push Kai button visibility")
 
+    def _hotkey_label(self) -> str:
+        """The dictation binding as people write it (Ctrl+Alt+V)."""
+        return pretty_binding(str(self._config.get("hotkey", {}).get("key", "control+alt+v")))
+
     async def _hotkey_start_recording(self, *, hold_to_talk: bool = False) -> None:
         if self._recording:
             return
         mode = self._config.get("hotkey", {}).get("mode", "auto")
+        label = self._hotkey_label()
         if hold_to_talk or mode == "hold":
-            listening_detail = "Release Ctrl+Alt+V to stop"
+            listening_detail = f"Release {label} to stop"
         elif mode == "auto":
-            listening_detail = "Tap Ctrl+Alt+V again to stop; hold to talk"
+            listening_detail = f"Tap {label} again to stop; hold to talk"
         else:
-            listening_detail = "Press Ctrl+Alt+V again to stop"
+            listening_detail = f"Press {label} again to stop"
         await self._show_hotkey_overlay("starting")
         await self._start_recording()
         await self._show_hotkey_overlay("listening", detail=listening_detail)
@@ -407,7 +482,18 @@ class Daemon:
                 timeout_ms=1800,
             )
         else:
-            await self._show_hotkey_overlay("empty", timeout_ms=2200)
+            await self._show_hotkey_overlay(
+                "empty", detail=self._no_signal_hint(), timeout_ms=3200
+            )
+
+    def _no_signal_hint(self) -> str:
+        """NO SIGNAL detail: name the likely cause when the mic delivered
+        nothing but exact zeros for a whole session (over a second)."""
+        if self._heard_signal or self._chunks_seen < 10:
+            return ""
+        if sys.platform == "win32":
+            return "Mic sent pure silence — Settings › Privacy & security › Microphone"
+        return "Mic sent pure silence — is it muted?"
 
     def _ipc_loop(self) -> None:
         while True:
@@ -607,6 +693,26 @@ class Daemon:
                             response = {"status": "error", "message": str(exc)}
                         else:
                             response = {"status": "ok", "message": f"pressed {keys}"}
+
+                elif command == "overlay":
+                    # A CLI process asking the daemon to draw its overlay
+                    # (Windows: the overlay lives in the daemon process).
+                    from voice_keyboard.client import _show_overlay
+
+                    anchor = None
+                    if "x" in payload and "y" in payload:
+                        anchor = (int(payload["x"]), int(payload["y"]))
+                    _show_overlay(
+                        str(payload.get("state", "processing")),
+                        detail=str(payload.get("detail", "")),
+                        timeout_ms=int(payload.get("timeout_ms", 0)),
+                        anchor=anchor,
+                    )
+                    response = {"status": "ok", "message": "overlay shown"}
+
+                elif command == "quit":
+                    self.request_stop()
+                    response = {"status": "ok", "message": "daemon stopping"}
 
                 elif command == "converse":
                     # Summon Kai (or end/cancel a turn) — the same toggle the
@@ -985,6 +1091,8 @@ class Daemon:
         self._final_text = ""
         self._interim_text = ""
         self._stt_error = None
+        self._chunks_seen = 0
+        self._heard_signal = False
         self._recording = True
 
         self._receive_task = asyncio.create_task(self._receive_events())
@@ -1705,7 +1813,11 @@ class Daemon:
         context = ""
         if not self._session_secret:
             try:
-                context = (clipboard.get_primary_text() or "").strip()[:4000]
+                context = (
+                    await asyncio.to_thread(
+                        clipboard.selection_text, clipboard_fallback=False
+                    )
+                ).strip()[:4000]
             except Exception:
                 context = ""
         await self._show_hotkey_overlay("processing", detail=f"⌁ {question[:40]}")
@@ -1796,6 +1908,9 @@ class Daemon:
                 break
 
     def _observe_audio(self, chunk: bytes, chunk_ms: float) -> None:
+        self._chunks_seen += 1
+        if not self._heard_signal and chunk.strip(b"\x00"):
+            self._heard_signal = True
         level = chunk_rms(chunk)
         self._levels.append(level)
         del self._levels[:-8]
@@ -1897,6 +2012,68 @@ class Daemon:
         # Called from the watcher thread; a single tuple swap is atomic.
         self._tts_cache = (text, audio)
 
+    async def _toggle_read_aloud(self, *, from_selection: bool) -> None:
+        """The read-aloud hotkey / tray item: speak the highlighted text (or
+        the clipboard), or stop speaking if it already is. Playback runs as
+        a task, off the hotkey lock, so dictation stays available."""
+        task = self._read_task
+        if task is not None and not task.done():
+            try:
+                self._tts_client.stop_playback()
+            except Exception:
+                pass
+            task.cancel()
+            self._read_task = None
+            await self._show_hotkey_overlay("empty", detail="Stopped reading", timeout_ms=1200)
+            return
+        if self._recording:
+            await self._show_hotkey_overlay(
+                "processing", detail="⌁ busy — dictation is live", timeout_ms=1400
+            )
+            return
+        if from_selection:
+            text = await asyncio.to_thread(clipboard.selection_text)
+        else:
+            text = await asyncio.to_thread(clipboard.get_text) or ""
+        text = text.strip()
+        if not text:
+            await self._show_hotkey_overlay(
+                "empty",
+                detail="Select some text first" if from_selection else "Clipboard is empty",
+                timeout_ms=2200,
+            )
+            return
+        self._read_task = asyncio.create_task(self._read_aloud(text))
+
+    async def _read_aloud(self, text: str) -> None:
+        try:
+            await self._show_hotkey_overlay(
+                "processing", detail=f"Reading {len(text)} characters — press again to stop"
+            )
+            client = self._tts_client
+            if hasattr(client, "synthesize") and hasattr(client, "play_audio"):
+                # Synthesize and play as separate awaits: a stop pressed while
+                # the audio is still being fetched cancels here, before any
+                # sound — a thread can't be cancelled mid-call.
+                cache = self._tts_cache
+                if cache is not None and cache[0] == text:
+                    audio = cache[1]
+                else:
+                    audio = await asyncio.to_thread(client.synthesize, text)
+                await asyncio.to_thread(client.play_audio, audio)
+            else:
+                await self._run_tts(text)
+            await self._show_hotkey_overlay("inserted", detail="Finished reading", timeout_ms=1500)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception("Read-aloud failed")
+            self._last_error = str(exc)
+            await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+        finally:
+            if self._read_task is asyncio.current_task():
+                self._read_task = None
+
     async def _run_tts(self, text: str) -> None:
         cache = self._tts_cache
         if cache is not None and cache[0] == text and hasattr(
@@ -1909,6 +2086,13 @@ class Daemon:
 
 
 def main() -> None:
+    if sys.platform == "win32":
+        # On Windows the daemon always runs inside the app that owns its
+        # overlay, orb, and tray icon; this entry point is the console
+        # flavour (logs to the terminal as well as the log file).
+        from voice_keyboard.windows.app import main as windows_main
+
+        raise SystemExit(windows_main(["--console"]))
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

@@ -230,17 +230,36 @@ def _probe_macos() -> Optional[FocusInfo]:
         return None
 
 
+ES_PASSWORD = 0x0020
+GWL_STYLE = -16
+
+
 def _probe_windows() -> Optional[FocusInfo]:
+    """Foreground window -> exe basename, plus (when the app exposes a
+    system caret, as Win32/WinForms/most Chromium apps do) the caret's
+    screen position for the overlay, and a classic Edit control's
+    ES_PASSWORD style as the secret flag."""
     try:
         import ctypes
+        from ctypes import wintypes
 
         user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetWindowThreadProcessId.argtypes = [
+            wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
+        ]
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
+        ]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
             return None
-        pid = ctypes.c_uint32()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        pid = wintypes.DWORD()
+        thread_id = user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if not pid.value:
             return None
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -250,7 +269,7 @@ def _probe_windows() -> Optional[FocusInfo]:
         if not handle:
             return None
         try:
-            size = ctypes.c_uint32(1024)
+            size = wintypes.DWORD(1024)
             buffer = ctypes.create_unicode_buffer(size.value)
             if not kernel32.QueryFullProcessImageNameW(
                 handle, 0, buffer, ctypes.byref(size)
@@ -260,10 +279,62 @@ def _probe_windows() -> Optional[FocusInfo]:
         finally:
             kernel32.CloseHandle(handle)
         basename = image.replace("/", "\\").rsplit("\\", 1)[-1]
-        return FocusInfo(app=basename)
+        x, y, secret = _windows_caret_and_secret(user32, thread_id)
+        return FocusInfo(
+            app=basename,
+            role="password text" if secret else "",
+            x=x,
+            y=y,
+            secret=secret,
+        )
     except Exception:
         logger.debug("Windows focus probe failed", exc_info=True)
         return None
+
+
+def _windows_caret_and_secret(user32, thread_id: int) -> tuple[int, int, bool]:
+    """(caret_x, caret_y, is_password_field) for the foreground thread;
+    (-1, -1, False) when the app draws its own caret (UWP, some editors)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class GUITHREADINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("flags", wintypes.DWORD),
+            ("hwndActive", wintypes.HWND),
+            ("hwndFocus", wintypes.HWND),
+            ("hwndCapture", wintypes.HWND),
+            ("hwndMenuOwner", wintypes.HWND),
+            ("hwndMoveSize", wintypes.HWND),
+            ("hwndCaret", wintypes.HWND),
+            ("rcCaret", wintypes.RECT),
+        ]
+
+    info = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
+    user32.GetGUIThreadInfo.argtypes = [wintypes.DWORD, ctypes.POINTER(GUITHREADINFO)]
+    user32.GetGUIThreadInfo.restype = wintypes.BOOL
+    if not user32.GetGUIThreadInfo(thread_id, ctypes.byref(info)):
+        return -1, -1, False
+
+    secret = False
+    if info.hwndFocus:
+        name = ctypes.create_unicode_buffer(64)
+        user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+        user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.GetWindowLongW.restype = ctypes.c_long
+        if user32.GetClassNameW(info.hwndFocus, name, 64) and "edit" in name.value.lower():
+            style = user32.GetWindowLongW(info.hwndFocus, GWL_STYLE)
+            secret = bool(style & ES_PASSWORD)
+
+    if not info.hwndCaret:
+        return -1, -1, secret
+    point = wintypes.POINT(info.rcCaret.left, info.rcCaret.bottom)
+    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+    user32.ClientToScreen.restype = wintypes.BOOL
+    if not user32.ClientToScreen(info.hwndCaret, ctypes.byref(point)):
+        return -1, -1, secret
+    return int(point.x), int(point.y), secret
 
 
 def probe_focus(timeout: float = PROBE_TIMEOUT_S) -> Optional[FocusInfo]:

@@ -6,10 +6,17 @@ WH_KEYBOARD_LL hook pumped on its own thread feeds virtual-key codes
 into _handle_key_event(). Injected events (our own SendInput typing)
 are ignored so dictation can never re-trigger the hotkey.
 
+Unlike evdev, a hook can CONSUME a key: the trigger key of a chord is
+swallowed while its modifiers are held, so Ctrl+Alt+V never also reaches
+the focused app (where it is Paste Special in Office). Bare-modifier
+bindings (the assistant's Right Ctrl) are never swallowed — a modifier
+alone does nothing in an app, which is what makes them terminal-safe.
+
 RegisterHotKey was deliberately not used: it reports presses only, and
 hold-to-talk needs releases.
 """
 
+import ctypes
 import logging
 import threading
 
@@ -17,7 +24,8 @@ from voice_keyboard.hotkey import HotkeyListener
 
 logger = logging.getLogger(__name__)
 
-# Virtual-key codes (winuser.h).
+# Virtual-key codes (winuser.h). LL hooks report the sided codes
+# (VK_LCONTROL...), the generic ones are kept for completeness.
 VK_MODIFIER_ALIASES = {
     "control": frozenset({0x11, 0xA2, 0xA3}),
     "ctrl": frozenset({0x11, 0xA2, 0xA3}),
@@ -27,28 +35,67 @@ VK_MODIFIER_ALIASES = {
     "meta": frozenset({0x5B, 0x5C}),
     "win": frozenset({0x5B, 0x5C}),
 }
+MODIFIER_VKS = frozenset().union(*VK_MODIFIER_ALIASES.values())
+MENU_VKS = frozenset({0x12, 0xA4, 0xA5, 0x5B, 0x5C})
 
+# Trigger keys by name — the evdev KEY_* vocabulary the Linux backend
+# accepts (rightctrl, f9, period, ...) mapped to virtual keys, so a config
+# written on Linux binds the same physical key here.
 VK_KEY_ALIASES = {
-    "space": 0x20,
-    "spacebar": 0x20,
-    "enter": 0x0D,
-    "return": 0x0D,
+    "space": 0x20, "spacebar": 0x20,
+    "enter": 0x0D, "return": 0x0D,
     "tab": 0x09,
+    "esc": 0x1B, "escape": 0x1B,
+    "backspace": 0x08,
+    "insert": 0x2D, "delete": 0x2E,
+    "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
+    "left": 0x25, "up": 0x26, "right": 0x27, "down": 0x28,
+    "capslock": 0x14, "scrolllock": 0x91, "pause": 0x13,
+    "sysrq": 0x2C, "printscreen": 0x2C, "print": 0x2C,
+    "menu": 0x5D, "compose": 0x5D, "apps": 0x5D,
+    # Bare-key bindings (the assistant's terminal-safe summon).
+    "rightctrl": 0xA3, "leftctrl": 0xA2,
+    "rightalt": 0xA5, "leftalt": 0xA4, "altgr": 0xA5,
+    "rightshift": 0xA1, "leftshift": 0xA0,
+    "rightmeta": 0x5C, "leftmeta": 0x5B,
+    "rightsuper": 0x5C, "leftsuper": 0x5B,
+    "rightwin": 0x5C, "leftwin": 0x5B,
+    # Punctuation (US positions — OEM keys are named by position).
+    ".": 0xBE, "period": 0xBE, "dot": 0xBE,
+    ",": 0xBC, "comma": 0xBC,
+    "/": 0xBF, "slash": 0xBF,
+    ";": 0xBA, "semicolon": 0xBA,
+    "'": 0xDE, "apostrophe": 0xDE,
+    "-": 0xBD, "minus": 0xBD,
+    "=": 0xBB, "equal": 0xBB,
+    "[": 0xDB, "leftbrace": 0xDB,
+    "]": 0xDD, "rightbrace": 0xDD,
+    "\\": 0xDC, "backslash": 0xDC,
+    "`": 0xC0, "grave": 0xC0,
+    **{f"f{n}": 0x6F + n for n in range(1, 25)},
+    **{f"kp{n}": 0x60 + n for n in range(10)},
 }
 
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
 WM_SYSKEYDOWN = 0x0104
 WM_SYSKEYUP = 0x0105
+WM_TIMER = 0x0113
+WM_QUIT = 0x0012
 LLKHF_INJECTED = 0x00000010
 WH_KEYBOARD_LL = 13
-WM_QUIT = 0x0012
+
+# Windows silently unhooks a low-level hook that ever overruns
+# LowLevelHooksTimeout (a GIL stall can do it). Re-arming periodically
+# bounds how long a dropped hook can leave the hotkey dead.
+REHOOK_INTERVAL_MS = 120_000
 
 
 def vk_for_key(name: str) -> int:
+    name = name.strip().lower()
     if name in VK_KEY_ALIASES:
         return VK_KEY_ALIASES[name]
-    if len(name) == 1 and (name.isalpha() or name.isdigit()):
+    if len(name) == 1 and name.isascii() and name.isalnum():
         return ord(name.upper())
     raise ValueError(f"unsupported hotkey key: {name}")
 
@@ -56,9 +103,11 @@ def vk_for_key(name: str) -> int:
 class WinHotkeySpec:
     """Same contract as HotkeySpec, expressed in Windows virtual keys."""
 
-    def __init__(self, key: str):
+    def __init__(self, key: str, *, allow_bare: bool = False):
         parts = [part.strip().lower() for part in key.split("+") if part.strip()]
-        if len(parts) < 2:
+        if not parts:
+            raise ValueError("hotkey.key is empty")
+        if len(parts) < 2 and not allow_bare:
             raise ValueError("hotkey.key must include at least one modifier and one key")
         self.modifier_groups = []
         for part in parts[:-1]:
@@ -68,6 +117,17 @@ class WinHotkeySpec:
         self.trigger_code = vk_for_key(parts[-1])
         self.key = key
 
+    @property
+    def is_bare(self) -> bool:
+        return not self.modifier_groups
+
+    @property
+    def codes(self) -> set[int]:
+        codes = {self.trigger_code}
+        for group in self.modifier_groups:
+            codes.update(group)
+        return codes
+
     def is_pressed(self, pressed: set[int]) -> bool:
         return (
             self.trigger_code in pressed
@@ -75,20 +135,56 @@ class WinHotkeySpec:
         )
 
 
+def _send_menu_mask() -> None:  # pragma: no cover - requires Windows
+    """Tap the inert mask key so the user's coming Alt/Win release (after a
+    swallowed chord) can't open the menu bar or the Start menu."""
+    try:
+        from voice_keyboard.windows.injector import (
+            _INPUT,
+            _KEYBDINPUT,
+            INPUT_KEYBOARD,
+            KEYEVENTF_KEYUP,
+            VK_MASK,
+        )
+
+        events = (_INPUT * 2)()
+        for slot, flags in zip(events, (0, KEYEVENTF_KEYUP)):
+            slot.type = INPUT_KEYBOARD
+            slot.ki = _KEYBDINPUT(VK_MASK, 0, flags, 0, 0)
+        user32 = ctypes.WinDLL("user32")  # type: ignore[attr-defined]
+        user32.SendInput.argtypes = [ctypes.c_uint, ctypes.POINTER(_INPUT), ctypes.c_int]
+        user32.SendInput(2, events, ctypes.sizeof(_INPUT))
+    except Exception:
+        logger.debug("menu mask send failed", exc_info=True)
+
+
 class WinHotkeyListener(HotkeyListener):
-    def __init__(self, config: dict, *, on_toggle, on_hold_start, on_hold_stop):
+    def __init__(
+        self,
+        config: dict,
+        *,
+        on_toggle,
+        on_hold_start,
+        on_hold_stop,
+        on_hold_cancel=None,
+    ):
         # Base initializes the shared state machine; _make_spec swaps in the
-        # Windows virtual-key spec. Only the hook-thread id is added here.
+        # Windows virtual-key spec.
         super().__init__(
             config,
             on_toggle=on_toggle,
             on_hold_start=on_hold_start,
             on_hold_stop=on_hold_stop,
+            on_hold_cancel=on_hold_cancel,
         )
         self._thread_id = None
+        # True between a swallowed trigger key-down and its key-up, so the
+        # auto-repeats and the release are swallowed with it.
+        self._swallowing = False
+        self._send_mask = _send_menu_mask
 
     def _make_spec(self, key: str):
-        return WinHotkeySpec(key)
+        return WinHotkeySpec(key, allow_bare=self._allow_bare)
 
     def start(self) -> None:
         if not self._enabled or self._mode == "disabled":
@@ -108,8 +204,6 @@ class WinHotkeyListener(HotkeyListener):
         self._cancel_auto_hold_timer()
         if self._thread_id is not None:
             try:
-                import ctypes
-
                 ctypes.WinDLL("user32").PostThreadMessageW(  # type: ignore[attr-defined]
                     self._thread_id, WM_QUIT, 0, 0
                 )
@@ -121,18 +215,40 @@ class WinHotkeyListener(HotkeyListener):
         self._thread_id = None
         logger.info("Hotkey listener stopped")
 
-    def _on_hook_event(self, w_param: int, vk_code: int, flags: int) -> None:
+    def _should_swallow(self, vk_code: int, down: bool) -> bool:
+        """Consume the chord's trigger key so the focused app never sees it.
+        Called on the hook thread BEFORE the state machine updates."""
+        if vk_code != self._spec.trigger_code or vk_code in MODIFIER_VKS:
+            return False
+        if not down:
+            swallowed, self._swallowing = self._swallowing, False
+            return swallowed
+        if self._swallowing:
+            return True  # auto-repeat of a swallowed press
+        self._swallowing = all(
+            group & self._pressed for group in self._spec.modifier_groups
+        )
+        if self._swallowing and MENU_VKS & self._pressed:
+            threading.Thread(target=self._send_mask, daemon=True).start()
+        return self._swallowing
+
+    def _on_hook_event(self, w_param: int, vk_code: int, flags: int) -> bool:
+        """Feed one hook event to the state machine. True = swallow it."""
         if flags & LLKHF_INJECTED:
-            return  # our own SendInput typing must never trigger the hotkey
+            return False  # our own SendInput typing must never trigger the hotkey
         if w_param in (WM_KEYDOWN, WM_SYSKEYDOWN):
+            swallow = self._should_swallow(vk_code, True)
             # LL hooks repeat key-down while held; the state machine treats
             # re-adding a pressed code as a no-op, so this is naturally safe.
             self._handle_key_event(vk_code, 1)
-        elif w_param in (WM_KEYUP, WM_SYSKEYUP):
+            return swallow
+        if w_param in (WM_KEYUP, WM_SYSKEYUP):
+            swallow = self._should_swallow(vk_code, False)
             self._handle_key_event(vk_code, 0)
+            return swallow
+        return False
 
     def _run_hook(self) -> None:  # pragma: no cover - requires Windows
-        import ctypes
         from ctypes import wintypes
 
         user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
@@ -172,12 +288,18 @@ class WinHotkeyListener(HotkeyListener):
             ctypes.POINTER(wintypes.MSG), wintypes.HWND, ctypes.c_uint, ctypes.c_uint
         ]
         user32.GetMessageW.restype = ctypes.c_int
+        user32.SetTimer.argtypes = [
+            wintypes.HWND, ctypes.c_size_t, ctypes.c_uint, ctypes.c_void_p
+        ]
+        user32.SetTimer.restype = ctypes.c_size_t
+        user32.KillTimer.argtypes = [wintypes.HWND, ctypes.c_size_t]
 
         def hook(n_code, w_param, l_param):
             if n_code >= 0:
                 try:
                     data = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-                    self._on_hook_event(int(w_param), int(data.vkCode), int(data.flags))
+                    if self._on_hook_event(int(w_param), int(data.vkCode), int(data.flags)):
+                        return 1
                 except Exception:
                     logger.exception("hotkey hook handling failed")
             return user32.CallNextHookEx(None, n_code, w_param, l_param)
@@ -188,12 +310,21 @@ class WinHotkeyListener(HotkeyListener):
             logger.warning("Could not install the keyboard hook (error %d)",
                            ctypes.get_last_error())
             return
+        timer = user32.SetTimer(None, 0, REHOOK_INTERVAL_MS, None)
         try:
             msg = wintypes.MSG()
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 if self._stop_event.is_set():
                     break
+                if msg.message == WM_TIMER and msg.hWnd is None:
+                    fresh = user32.SetWindowsHookExW(WH_KEYBOARD_LL, hook_proc, None, 0)
+                    if fresh:
+                        user32.UnhookWindowsHookEx(handle)
+                        handle = fresh
+                    continue
                 user32.TranslateMessage(ctypes.byref(msg))
                 user32.DispatchMessageW(ctypes.byref(msg))
         finally:
+            if timer:
+                user32.KillTimer(None, timer)
             user32.UnhookWindowsHookEx(handle)

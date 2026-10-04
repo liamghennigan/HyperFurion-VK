@@ -1,10 +1,10 @@
 import copy
-import os
 import sys
 from pathlib import Path
 
 import tomllib
 
+from voice_keyboard import paths
 from voice_keyboard.stt import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS
 from voice_keyboard.tts import DEFAULT_TTS_MODELS, DEFAULT_TTS_VOICES, SUPPORTED_TTS_PROVIDERS
 
@@ -61,6 +61,10 @@ DEFAULT_CONFIG: dict = {
         # "always" opts in cloud TTS (spends tokens on selections never
         # played, and sends selection text before you ask); "off" = never.
         "prefetch": "off",
+        # A global hotkey that reads the highlighted text aloud (press again
+        # to stop). Off by default on Linux, where a desktop shortcut runs
+        # `voice-keyboard tts`; Windows defaults to control+alt+r.
+        "hotkey": "",
     },
     "audio": {
         "sample_rate": 16000,
@@ -290,10 +294,7 @@ PLACEHOLDER_API_KEYS = {
 
 
 def _config_dir() -> Path:
-    xdg = os.environ.get("XDG_CONFIG_HOME", "")
-    if xdg:
-        return Path(xdg) / "voice-keyboard"
-    return Path.home() / ".config" / "voice-keyboard"
+    return paths.config_dir()
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -319,9 +320,16 @@ def _default_socket_path() -> str:
     return str(_config_dir() / "socket")
 
 
+DEFAULT_WINDOWS_TTS_HOTKEY = "control+alt+r"
+
+
 def _default_config_with_paths() -> dict:
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["daemon"]["socket_path"] = _default_socket_path()
+    if sys.platform == "win32":
+        # No desktop-shortcut system to bind `voice-keyboard tts` to, so the
+        # daemon owns a read-aloud hotkey there.
+        config["tts"]["hotkey"] = DEFAULT_WINDOWS_TTS_HOTKEY
     return config
 
 
@@ -411,6 +419,19 @@ def validate_config(config: dict) -> None:
 
     if str(tts_cfg.get("prefetch", "off")).lower() not in {"off", "auto", "always"}:
         raise RuntimeError("tts.prefetch must be one of: off, auto, always")
+    tts_hotkey = tts_cfg.get("hotkey", "")
+    if not isinstance(tts_hotkey, str):
+        raise RuntimeError("tts.hotkey must be a string")
+    if tts_hotkey.strip():
+        from voice_keyboard.hotkey import parse_binding
+
+        try:
+            parse_binding(tts_hotkey, allow_bare=True)
+        except ValueError as exc:
+            raise RuntimeError(f"tts.hotkey is invalid: {exc}") from exc
+        main_key = str(config.get("hotkey", {}).get("key", ""))
+        if tts_hotkey.lower().replace(" ", "") == main_key.lower().replace(" ", ""):
+            raise RuntimeError("tts.hotkey must differ from the dictation hotkey.key")
 
     audio_cfg = config.get("audio", {})
     sample_rate = audio_cfg.get("sample_rate", 0)
@@ -487,15 +508,14 @@ def _validate_assistant_config(config: dict) -> None:
     if hotkey:
         # The summon key is always bound (a press gives a helpful hint even
         # when the mind is off), so a typo must fail loud at load, not
-        # silently at listener start. Skip when evdev is absent (no Linux
-        # keycode table to resolve against).
-        from voice_keyboard.hotkey import MODIFIER_ALIASES, HotkeySpec
+        # silently at listener start. Checked against this platform's
+        # keycode table (skipped where none is available).
+        from voice_keyboard.hotkey import parse_binding
 
-        if MODIFIER_ALIASES:
-            try:
-                HotkeySpec(hotkey, allow_bare=True)
-            except ValueError as exc:
-                raise RuntimeError(f"assistant.hotkey is invalid: {exc}") from exc
+        try:
+            parse_binding(hotkey, allow_bare=True)
+        except ValueError as exc:
+            raise RuntimeError(f"assistant.hotkey is invalid: {exc}") from exc
     if cfg.get("enabled", False):
         main_hotkey = str(config.get("hotkey", {}).get("key", "")).strip().lower()
         if hotkey and hotkey.lower().replace(" ", "") == main_hotkey.replace(" ", ""):

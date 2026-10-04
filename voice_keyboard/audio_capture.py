@@ -49,6 +49,11 @@ class AudioCapture:
             if device_index is None:
                 self._pa.terminate()
                 self._pa = None
+                if self._device_name == "default":
+                    raise RuntimeError(
+                        "No microphone found — connect one or set a default"
+                        " input device in your sound settings"
+                    )
                 raise RuntimeError(
                     f"Input device not found: {self._device_name}"
                 )
