@@ -20,6 +20,7 @@ import asyncio
 import ctypes
 import logging
 import logging.handlers
+import os
 import subprocess
 import sys
 import threading
@@ -66,6 +67,52 @@ api_key = "xai-your-api-key-here"
 [hotkey]
 key = "control+alt+v"   # tap to toggle dictation, hold to talk
 """
+
+
+def initial_config(
+    stt_provider: str,
+    tts_provider: str,
+    keys: dict,
+    *,
+    base_url: str = "",
+) -> str:
+    """The first config.toml for a fresh install: the starter template with
+    the chosen providers, their keys, and (for a local OpenAI-compatible
+    server) its base_url filled in. Used by the Windows installer."""
+    from voice_keyboard.client import _set_toml_value
+
+    text = STARTER_CONFIG
+    text = _set_toml_value(text, "stt", "provider", stt_provider)
+    text = _set_toml_value(text, "tts", "provider", tts_provider)
+    for provider, key in keys.items():
+        if key:
+            text = _set_toml_value(text, f"providers.{provider}", "api_key", key)
+    if base_url:
+        text = _set_toml_value(text, "providers.openai", "base_url", base_url)
+    return text
+
+
+def write_config_from_env() -> int:
+    """Installer entry point: write config.toml from HFVK_* environment
+    variables (keys never appear on a command line). Refuses to overwrite
+    an existing config. Prints the path written."""
+    path = _config_path()
+    if path.exists():
+        print(f"kept existing {path}")
+        return 0
+    stt = os.environ.get("HFVK_STT", "").strip().lower()
+    tts = os.environ.get("HFVK_TTS", "").strip().lower() or stt
+    if not stt:
+        print("HFVK_STT is required", file=sys.stderr)
+        return 2
+    keys = {stt: os.environ.get("HFVK_STT_KEY", "").strip()}
+    if tts != stt:
+        keys[tts] = os.environ.get("HFVK_TTS_KEY", "").strip()
+    text = initial_config(stt, tts, keys, base_url=os.environ.get("HFVK_BASE_URL", "").strip())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print(f"wrote {path}")
+    return 0
 
 
 def _version() -> str:

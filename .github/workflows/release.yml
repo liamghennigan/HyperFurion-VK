@@ -5,9 +5,10 @@ name: Create release on version bump
 #      has no release yet, one is created automatically (the usual path).
 #   2. Push a tag like v1.1.0.
 #   3. Run the workflow manually with a tag input.
-# The job stamps the bootstrap installer so its pinned default matches the
-# released tag and attaches it as the `install-hyperfurion-vk.sh` asset
-# that /releases/latest/download/... serves.
+# The job stamps the bootstrap installers so their pinned defaults match the
+# released tag and attaches them as the `install-hyperfurion-vk.sh` (Linux)
+# and `install-hyperfurion-vk.ps1` (Windows) assets that
+# /releases/latest/download/... serves.
 
 on:
   push:
@@ -47,13 +48,16 @@ jobs:
             echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
             echo "releasing $TAG at $GITHUB_SHA"
           fi
-      - name: Pin the bootstrap installer to this tag
+      - name: Pin the bootstrap installers to this tag
         if: env.RELEASE_TAG != ''
         run: |
           sed -i "s|^VERSION=.*|VERSION=\"\${HYPERFURION_VK_VERSION:-${RELEASE_TAG}}\"|" \
             packaging/install-hyperfurion-vk.sh
           grep '^VERSION=' packaging/install-hyperfurion-vk.sh
-      - name: Create the release with the installer asset
+          sed -i "s|^    \$DefaultVersion = \".*\"|    \$DefaultVersion = \"${RELEASE_TAG}\"|" \
+            packaging/windows/install-hyperfurion-vk.ps1
+          grep -n 'DefaultVersion = "'"${RELEASE_TAG}"'"' packaging/windows/install-hyperfurion-vk.ps1
+      - name: Create the release with the installer assets
         if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -61,6 +65,7 @@ jobs:
           # --target creates the tag server-side when it does not exist yet.
           gh release create "$RELEASE_TAG" \
             packaging/install-hyperfurion-vk.sh \
+            packaging/windows/install-hyperfurion-vk.ps1 \
             --target "$GITHUB_SHA" \
             --title "HyperFurion VK $RELEASE_TAG" \
             --generate-notes

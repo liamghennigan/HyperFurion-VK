@@ -1,0 +1,105 @@
+name: Windows installer
+
+# Installs HyperFurion VK on a clean Windows runner with the real installer
+# (Windows PowerShell 5.1, what users have), checks every artifact it
+# promises, starts the tray app and talks to it over the CLI, upgrades in
+# place while it runs, then uninstalls and checks nothing is left behind.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packaging/windows/**"
+      - "voice_keyboard/**"
+      - "pyproject.toml"
+      - ".github/workflows/windows-installer.yml"
+  pull_request:
+    paths:
+      - "packaging/windows/**"
+      - "voice_keyboard/**"
+      - "pyproject.toml"
+      - ".github/workflows/windows-installer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    env:
+      ROOT: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install from this checkout
+        run: |
+          # A dummy key passes config validation; nothing here talks to a
+          # speech provider.
+          .\packaging\windows\install-hyperfurion-vk.ps1 -Source . -NonInteractive -NoAutostart -NoLaunch -Provider xai -ApiKey ci-dummy-key
+          if ($LASTEXITCODE) { throw "installer exited $LASTEXITCODE" }
+
+      - name: Check what was installed
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA "HyperFurion-VK"
+          foreach ($p in @("venv\Scripts\pythonw.exe", "bin\voice-keyboard.cmd", "hyperfurion-vk.ico", "uninstall.ps1")) {
+            if (-not (Test-Path (Join-Path $root $p))) { throw "missing $p" }
+          }
+          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath("Programs")) "HyperFurion VK.lnk"))) { throw "no Start menu shortcut" }
+          if (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "HyperFurion VK" -ErrorAction SilentlyContinue) { throw "autostart set despite -NoAutostart" }
+          $app = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HyperFurionVK"
+          if ($app.DisplayName -ne "HyperFurion VK" -or -not $app.UninstallString) { throw "no Apps & features entry" }
+          Write-Host "Apps & features: $($app.DisplayName) $($app.DisplayVersion)"
+          if ((Get-ItemProperty "HKCU:\Environment").Path -notlike "*HyperFurion-VK\bin*") { throw "bin is not on the user PATH" }
+          $config = Join-Path $env:APPDATA "voice-keyboard\config.toml"
+          if (-not (Select-String -Path $config -Pattern "ci-dummy-key" -Quiet)) { throw "the config was not written" }
+
+      - name: Start the app and talk to it
+        run: |
+          $ErrorActionPreference = "Continue"
+          $root = Join-Path $env:LOCALAPPDATA "HyperFurion-VK"
+          $cli = Join-Path $root "bin\voice-keyboard.cmd"
+          Start-Process (Join-Path $root "venv\Scripts\pythonw.exe") -ArgumentList "-m", "voice_keyboard.windows"
+          $answered = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            $out = & $cli status 2>&1
+            if ($LASTEXITCODE -eq 0) { $answered = $true; break }
+            Start-Sleep -Seconds 1
+          }
+          $out
+          if (-not $answered) { throw "the app never answered voice-keyboard status" }
+
+      - name: Upgrade in place while it runs
+        run: |
+          $config = Join-Path $env:APPDATA "voice-keyboard\config.toml"
+          $before = (Get-FileHash $config).Hash
+          .\packaging\windows\install-hyperfurion-vk.ps1 -Source . -NonInteractive -NoAutostart -NoLaunch
+          if ($LASTEXITCODE) { throw "upgrade exited $LASTEXITCODE" }
+          if ((Get-FileHash $config).Hash -ne $before) { throw "the upgrade changed the user's config" }
+          $left = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" }
+          if ($left) { throw "the upgrade did not stop the running app" }
+
+      - name: Uninstall
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\HyperFurion-VK\uninstall.ps1" -Purge
+          Start-Sleep -Seconds 2
+          if (Test-Path "$env:LOCALAPPDATA\HyperFurion-VK") { throw "install folder left behind" }
+          if (Test-Path "$env:APPDATA\voice-keyboard") { throw "config left behind despite -Purge" }
+          if (Test-Path (Join-Path ([Environment]::GetFolderPath("Programs")) "HyperFurion VK.lnk")) { throw "shortcut left behind" }
+          if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HyperFurionVK") { throw "Apps & features entry left behind" }
+          if ((Get-ItemProperty "HKCU:\Environment").Path -like "*HyperFurion-VK\bin*") { throw "PATH entry left behind" }
+
+      - name: App log
+        if: always()
+        run: Get-Content "$env:LOCALAPPDATA\voice-keyboard\logs\daemon.log" -ErrorAction SilentlyContinue

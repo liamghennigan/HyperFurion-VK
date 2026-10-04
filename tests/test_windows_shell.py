@@ -541,3 +541,59 @@ class TestAppSetupMode:
     def test_main_refuses_off_windows(self, app) -> None:
         app_mod, _, _ = app
         assert app_mod.main([]) == 2
+
+
+class TestInstallerConfig:
+    """The installer writes the first config through write_config_from_env
+    (keys travel in environment variables, never on a command line)."""
+
+    @pytest.fixture
+    def env(self, monkeypatch, tmp_path):
+        from voice_keyboard.windows import app as app_mod
+
+        monkeypatch.setattr(app_mod, "_config_path", lambda: tmp_path / "config.toml")
+        for name in ("HFVK_STT", "HFVK_TTS", "HFVK_STT_KEY", "HFVK_TTS_KEY", "HFVK_BASE_URL"):
+            monkeypatch.delenv(name, raising=False)
+        return app_mod, monkeypatch, tmp_path / "config.toml"
+
+    def _validated(self, path):
+        cfg = _default_config_with_paths()
+        from voice_keyboard.config import _deep_merge
+
+        cfg = _deep_merge(cfg, tomllib.loads(path.read_text()))
+        validate_config(cfg)
+        return cfg
+
+    def test_one_provider_for_both(self, env) -> None:
+        app_mod, mp, path = env
+        mp.setenv("HFVK_STT", "xai")
+        mp.setenv("HFVK_STT_KEY", "xai-real")
+        assert app_mod.write_config_from_env() == 0
+        cfg = self._validated(path)
+        assert cfg["stt"]["provider"] == cfg["tts"]["provider"] == "xai"
+        assert cfg["providers"]["xai"]["api_key"] == "xai-real"
+
+    def test_separate_speech_and_voice_providers(self, env) -> None:
+        app_mod, mp, path = env
+        for name, value in {"HFVK_STT": "groq", "HFVK_STT_KEY": "gsk-1",
+                            "HFVK_TTS": "elevenlabs", "HFVK_TTS_KEY": "el-2"}.items():
+            mp.setenv(name, value)
+        app_mod.write_config_from_env()
+        cfg = self._validated(path)
+        assert cfg["providers"]["groq"]["api_key"] == "gsk-1"
+        assert cfg["providers"]["elevenlabs"]["api_key"] == "el-2"
+
+    def test_local_server_needs_no_key(self, env) -> None:
+        app_mod, mp, path = env
+        mp.setenv("HFVK_STT", "openai")
+        mp.setenv("HFVK_BASE_URL", "http://127.0.0.1:8000/v1")
+        app_mod.write_config_from_env()
+        cfg = self._validated(path)
+        assert cfg["providers"]["openai"]["base_url"] == "http://127.0.0.1:8000/v1"
+
+    def test_never_overwrites(self, env) -> None:
+        app_mod, mp, path = env
+        path.write_text("# mine\n")
+        mp.setenv("HFVK_STT", "xai")
+        assert app_mod.write_config_from_env() == 0
+        assert path.read_text() == "# mine\n"
