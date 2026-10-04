@@ -75,12 +75,15 @@ class TestRender:
         # into the cached base.
         kw = dict(margin=10, width=260, height=70, scale=1.0, accent=(81, 207, 102),
                   glow_alpha=0.28, bars_x=18)
+        render._pill_base.cache_clear()
         first, alpha1 = render.pill_layers(280, 90, bars=[22] * 4, **kw)
         second, alpha2 = render.pill_layers(280, 90, bars=[3] * 4, **kw)
-        assert alpha1 is alpha2 and not alpha1.flags.writeable
-        assert not np.array_equal(first, second)
+        info = render._pill_base.cache_info()
+        assert (info.hits, info.misses) == (1, 1)
+        assert np.array_equal(alpha1, alpha2)
+        assert not np.array_equal(first, second)  # the bars moved
         third, _ = render.pill_layers(280, 90, bars=[22] * 4, **kw)
-        assert np.array_equal(first, third)
+        assert np.array_equal(first, third)  # the cached glass was not painted on
 
     def test_only_the_orb_disc_takes_clicks(self) -> None:
         # Review finding: the glow's faint halo was 93% of the window and ate

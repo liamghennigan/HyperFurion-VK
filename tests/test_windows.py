@@ -780,6 +780,65 @@ class TestHookKeyStateQuirks:
         listener._key_is_down = lambda vk: False  # its release went unseen
         listener._on_hook_event(WM_KEYDOWN, self.LCTRL, 0)
         listener._on_hook_event(WM_KEYDOWN, self.LALT, 0)
+        # The stale V must not complete the chord on the Alt press...
+        cb["on_toggle"].assert_not_called()
         listener._key_is_down = lambda vk: vk in (self.LCTRL, self.LALT)
+        # ...only a real V press does.
         assert listener._on_hook_event(WM_KEYDOWN, self.V, 0) is True
         cb["on_toggle"].assert_called_once()
+
+    def test_altgr_cannot_hide_a_stale_left_ctrl(self) -> None:
+        # Ctrl+Alt+Del: Ctrl and Alt are released on the secure desktop.
+        # Back in the app, AltGr+V ('@'): Windows reports Left Ctrl down
+        # once AltGr's fake Ctrl passes, so the stale one must go at it.
+        listener, cb = _win_listener()
+        held = {self.LCTRL, self.LALT}
+        listener._key_is_down = lambda vk: vk in held
+        listener._on_hook_event(WM_KEYDOWN, self.LCTRL, 0, 0x1D)
+        listener._on_hook_event(WM_KEYDOWN, self.LALT, 0, 0x38)
+        held.clear()  # the unseen releases
+        listener._on_hook_event(WM_KEYDOWN, self.LCTRL, 0, self.FAKE_CTRL_SCAN)
+        held.update({self.LCTRL, self.RALT})  # AltGr is held: Windows says so
+        listener._on_hook_event(WM_SYSKEYDOWN, self.RALT, 0, 0x38)
+        assert listener._on_hook_event(WM_KEYDOWN, self.V, 0, 0x2F) is False
+        cb["on_toggle"].assert_not_called()
+
+    def test_a_missed_release_cant_hide_behind_our_own_injection(self) -> None:
+        # Hold-to-talk typed text (our injector released Ctrl+Alt), then the
+        # user's real releases were missed (the hook was dropped). Once they
+        # type anything else, plain V must be plain V again.
+        listener, cb = _win_listener(mode="hold")
+        held = set()
+        listener._key_is_down = lambda vk: vk in held
+        for vk in (self.LCTRL, self.LALT):
+            held.add(vk)
+            listener._on_hook_event(WM_KEYDOWN, vk, 0)
+        listener._on_hook_event(WM_KEYDOWN, self.V, 0)
+        for vk in (self.LCTRL, self.LALT):
+            held.discard(vk)
+            listener._on_hook_event(WM_KEYUP, vk, LLKHF_INJECTED)
+        listener._on_hook_event(WM_KEYUP, self.V, 0)
+        cb["on_hold_stop"].assert_called_once()
+        # (Ctrl and Alt let go unseen.) The user types "a", then "v".
+        listener._on_hook_event(WM_KEYDOWN, ord("A"), 0)
+        listener._on_hook_event(WM_KEYUP, ord("A"), 0)
+        assert listener._on_hook_event(WM_KEYDOWN, self.V, 0) is False
+        cb["on_hold_start"].assert_called_once()  # only the first, real hold
+
+    def test_a_held_bare_modifier_trigger_survives_its_auto_repeat(self) -> None:
+        # Kai's Right Ctrl held to talk; our injector releases it while
+        # typing; the physical key keeps auto-repeating. Inside the hook
+        # Windows calls it up (our release) until each repeat passes.
+        listener, cb = _win_listener(key="rightctrl", mode="hold", allow_bare=True)
+        RCTRL = 0xA3
+        held = {RCTRL}
+        listener._key_is_down = lambda vk: vk in held
+        listener._on_hook_event(WM_KEYDOWN, RCTRL, 0)
+        cb["on_hold_start"].assert_called_once()
+        held.discard(RCTRL)
+        listener._on_hook_event(WM_KEYUP, RCTRL, LLKHF_INJECTED)
+        for _ in range(3):
+            listener._on_hook_event(WM_KEYDOWN, RCTRL, 0)
+            held.add(RCTRL)  # the repeat passed: Windows says down again
+        cb["on_hold_stop"].assert_not_called()
+        cb["on_hold_start"].assert_called_once()

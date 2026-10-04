@@ -43,6 +43,8 @@ if sys.platform == "win32":
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.IsWindow.argtypes = [wintypes.HWND]
     user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.c_void_p]
+    user32.WindowFromPoint.argtypes = [wintypes.POINT]
+    user32.WindowFromPoint.restype = wintypes.HWND
 
 REQUIRE_DESKTOP = os.environ.get("HFVK_REQUIRE_DESKTOP") == "1"
 
@@ -342,7 +344,16 @@ class TestHookAndShell:
             user32.GetWindowRect(shell._orb_hwnd, ctypes.byref(hit))
             user32.GetWindowRect(shell._orb_glow_hwnd, ctypes.byref(glow))
             assert hit.right - hit.left < glow.right - glow.left
-            # taskkill (without /F) and Alt+F4 ask the app to quit properly.
+            # Clicks: the disc takes them, the halo around it doesn't.
+            cx, cy = (hit.left + hit.right) // 2, (hit.top + hit.bottom) // 2
+            assert user32.WindowFromPoint(wintypes.POINT(cx, cy)) == shell._orb_hwnd
+            halo = wintypes.POINT(glow.left + 3, cy)  # inside the glow, outside the disc
+            assert user32.WindowFromPoint(halo) not in (shell._orb_hwnd, shell._orb_glow_hwnd)
+            # Alt+F4 never quits the app...
+            user32.PostMessageW(shell._hwnd, 0x0112, 0xF060, 0)  # WM_SYSCOMMAND, SC_CLOSE
+            time.sleep(0.3)
+            assert not closed.is_set()
+            # ...a taskkill (without /F) asks it to quit properly.
             user32.PostMessageW(shell._hwnd, 0x0010, 0, 0)  # WM_CLOSE
             assert closed.wait(2.0)
             assert user32.IsWindow(shell._hwnd)
@@ -352,6 +363,25 @@ class TestHookAndShell:
             shell.show("inserted", detail="auto-hide", timeout_ms=200)
             time.sleep(0.6)
             assert not shell._ov.visible
+            # A timed pill turned persistent: the old timer must not hide it.
+            shell.show("processing", detail="timed", timeout_ms=250)
+            shell.show("processing", detail="now persistent")
+            time.sleep(0.6)
+            assert shell._ov.visible
+            shell.hide()
+            time.sleep(0.2)
+            # Emoji are two UTF-16 units: measured (and drawn) in full.
+            gdi32 = ctypes.WinDLL("gdi32")
+            gdi32.CreateCompatibleDC.restype = wintypes.HDC
+            gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+            gdi32.DeleteDC.argtypes = [wintypes.HDC]
+            dc = gdi32.CreateCompatibleDC(None)
+            try:
+                font = shell._font(96, 8.5, False)
+                plain = shell._text_size(dc, font, "ab")[0]
+                assert shell._text_size(dc, font, "ab\U0001F399\U0001F399")[0] > plain
+            finally:
+                gdi32.DeleteDC(dc)
             shell.notify("HyperFurion VK", "live test")
             shell.set_setup_mode("Add your speech provider API key to get started")
             time.sleep(0.3)

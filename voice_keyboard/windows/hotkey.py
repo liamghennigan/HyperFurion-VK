@@ -274,6 +274,23 @@ class WinHotkeyListener(HotkeyListener):
         except Exception:
             logger.debug("hotkey key-state resync failed", exc_info=True)
 
+    def _resync_left_ctrl(self) -> None:
+        """At AltGr's fake Left Ctrl: once it passes, Windows reports Left
+        Ctrl down for as long as AltGr is held, hiding a recorded Left Ctrl
+        whose release was missed. Inside the hook Windows still reports the
+        state from before this event — the last chance to tell."""
+        is_down = self._key_is_down
+        if (
+            is_down is not None
+            and VK_LCONTROL in self._pressed
+            and VK_LCONTROL not in self._injected_up
+        ):
+            try:
+                if not is_down(VK_LCONTROL):
+                    self._handle_key_event(VK_LCONTROL, 0)
+            except Exception:
+                logger.debug("AltGr key-state resync failed", exc_info=True)
+
     def _on_hook_event(self, w_param: int, vk_code: int, flags: int, scan_code: int = 0) -> bool:
         """Feed one hook event to the state machine. True = swallow it."""
         down = w_param in (WM_KEYDOWN, WM_SYSKEYDOWN)
@@ -286,12 +303,22 @@ class WinHotkeyListener(HotkeyListener):
                 self._injected_up.add(vk_code)
             return False
         if vk_code == VK_LCONTROL and scan_code & ALTGR_FAKE_CTRL_SCAN_BIT:
+            if down:
+                self._resync_left_ctrl()
             return False  # AltGr's synthetic Ctrl: AltGr is not Ctrl+Alt
         if not (down or up):
             return False
-        self._injected_up.discard(vk_code)
         if down:
+            if vk_code not in MODIFIER_VKS and vk_code != self._spec.trigger_code:
+                # Typing other keys: whatever chord was held is over, so a
+                # modifier our injector released is no longer presumed held
+                # (its real release may have been missed meanwhile).
+                self._injected_up.clear()
             self._resync_before_press(vk_code)
+        # Only now: the resync above must still see this key's exemption
+        # (a held bare-modifier trigger auto-repeats after our injected
+        # release, and Windows calls it up until this event passes).
+        self._injected_up.discard(vk_code)
         swallow = self._should_swallow(vk_code, down)
         # LL hooks repeat key-down while held; the state machine treats
         # re-adding a pressed code as a no-op, so this is naturally safe.

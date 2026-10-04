@@ -104,10 +104,11 @@ def anchor_known(anchor) -> bool:
     return anchor is not None and tuple(anchor[:2]) != (-1, -1)
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=6)
 def _pill_base(canvas_w, canvas_h, margin, width, height, scale, accent, glow_alpha):
     """The pill's glass, hairline, and glow — everything but the bars, which
-    change every animation frame. Cached: this is the expensive part."""
+    change every animation frame. Cached (this is the expensive part) as
+    8-bit RGB + alpha: 4 bytes a pixel, ~1.6 MB per entry even at 200%."""
     radius = 12.0 * scale
     sdf = _rounded_rect_sdf(canvas_w, canvas_h, margin, margin, width, height, radius)
     # box-shadow: 0 10px 34px — the glow sits a little below the pill.
@@ -123,9 +124,11 @@ def _pill_base(canvas_w, canvas_h, margin, width, height, scale, accent, glow_al
         glow_alpha=glow_alpha,
         glow_sigma=6.5 * scale,
     )
-    rgb.setflags(write=False)
-    alpha.setflags(write=False)
-    return rgb, alpha
+    rgb8 = np.clip(np.round(rgb), 0, 255).astype(np.uint8)
+    alpha8 = np.clip(np.round(alpha * 255.0), 0, 255).astype(np.uint8)
+    rgb8.setflags(write=False)
+    alpha8.setflags(write=False)
+    return rgb8, alpha8
 
 
 def pill_layers(
@@ -142,12 +145,12 @@ def pill_layers(
     bars_x: int,
 ):
     """The overlay pill at (margin, margin) inside a glow margin, with the
-    level-meter bars painted in. Returns (rgb, alpha) float arrays; alpha
-    is shared with the cache and read-only."""
-    base_rgb, alpha = _pill_base(
+    level-meter bars painted in. Returns (rgb, alpha) float arrays."""
+    base_rgb, base_alpha = _pill_base(
         canvas_w, canvas_h, margin, width, height, float(scale), tuple(accent), float(glow_alpha)
     )
-    rgb = base_rgb.copy()
+    rgb = base_rgb.astype(np.float32)
+    alpha = base_alpha.astype(np.float32) / 255.0
     bar_w = max(2, round(3 * scale))
     gap = max(2, round(3 * scale))
     slot = BAR_SLOT * scale

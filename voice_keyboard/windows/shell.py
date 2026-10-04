@@ -49,6 +49,9 @@ WM_LBUTTONUP = 0x0202
 WM_RBUTTONUP = 0x0205
 WM_MOUSELEAVE = 0x02A3
 WM_CONTEXTMENU = 0x007B
+WM_SYSCOMMAND = 0x0112
+SC_CLOSE = 0xF060
+DWMWA_CLOAKED = 14
 WM_NULL = 0x0000
 WM_DPICHANGED = 0x02E0
 WM_DISPLAYCHANGE = 0x007E
@@ -313,6 +316,14 @@ def _load_api():  # pragma: no cover - requires Windows
     except AttributeError:
         pass
     proto(gdi32.GdiFlush, wintypes.BOOL)
+    proto(user32.IsIconic, wintypes.BOOL, H)
+    try:
+        dwmapi = ctypes.WinDLL("dwmapi")  # type: ignore[attr-defined]
+        proto(dwmapi.DwmGetWindowAttribute, ctypes.c_long, H, wintypes.DWORD,
+              ctypes.c_void_p, wintypes.DWORD)
+        user32._dwm_cloaked = dwmapi.DwmGetWindowAttribute  # type: ignore[attr-defined]
+    except (OSError, AttributeError):
+        pass
     proto(gdi32.CreateCompatibleDC, HDC, HDC)
     proto(gdi32.DeleteDC, wintypes.BOOL, HDC)
     proto(gdi32.CreateDIBSection, wintypes.HBITMAP, HDC, ctypes.POINTER(BITMAPINFOHEADER),
@@ -668,9 +679,11 @@ class WinShell:
                 self._tray.added = False
                 self._add_tray()
                 return 0
+            if msg == WM_SYSCOMMAND and (wparam & 0xFFF0) == SC_CLOSE:
+                return 0  # Alt+F4 meant for something else: never quits us
             if msg == WM_CLOSE:
-                # taskkill (without /F), or Alt+F4 while the menu had focus:
-                # quit properly rather than lose the window and keep running.
+                # taskkill (without /F): quit properly rather than lose the
+                # window and keep running.
                 self._cb.quit()
                 return 0
             if msg in (WM_DISPLAYCHANGE, WM_DPICHANGED):
@@ -786,6 +799,20 @@ class WinShell:
             elif now - self._ov.idle_since > STALE_LISTENING_S:
                 self._hide_overlay()
 
+    def _focusable(self, hwnd) -> bool:  # pragma: no cover - requires Windows
+        """Can take the focus back sensibly: still exists, not minimized
+        (typing would go nowhere visible), not on another virtual desktop."""
+        user32 = _load_api()[0]
+        if not hwnd or not user32.IsWindow(hwnd) or user32.IsIconic(hwnd):
+            return False
+        cloaked_query = getattr(user32, "_dwm_cloaked", None)
+        if cloaked_query is not None:
+            cloaked = wintypes.DWORD()
+            if cloaked_query(hwnd, DWMWA_CLOAKED, ctypes.byref(cloaked),
+                             ctypes.sizeof(cloaked)) == 0 and cloaked.value:
+                return False
+        return True
+
     def _app_window(self, hwnd):  # pragma: no cover - requires Windows
         """hwnd when it is an app the user works in; None for our own
         windows and the taskbar/desktop."""
@@ -800,7 +827,7 @@ class WinShell:
         app the user was in before acting, so dictation types THERE."""
         user32 = _load_api()[0]
         target = self._last_target
-        if target and user32.IsWindow(target):
+        if target and self._focusable(target):
             user32.SetForegroundWindow(target)
             self._deferred = action
             user32.SetTimer(self._hwnd, TIMER_DEFERRED, 150, None)
@@ -1275,7 +1302,11 @@ class WinShell:
             add("Restart", self._cb.restart, refocus=True)
         add("Quit", self._cb.quit, refocus=True)
 
-        previous = self._app_window(user32.GetForegroundWindow()) or self._last_target
+        # Whatever really had the focus (the taskbar, for a tray click; the
+        # app or the desktop, for the orb, which never takes it).
+        previous = user32.GetForegroundWindow()
+        if self._ours(previous):
+            previous = None
         point = wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(point))
         # Required for the menu to close when clicking elsewhere.
@@ -1286,9 +1317,13 @@ class WinShell:
         ))
         user32.PostMessageW(self._hwnd, WM_NULL, 0, 0)
         user32.DestroyMenu(menu)
-        if (not chosen or chosen in refocus_ids) and previous and user32.IsWindow(previous):
+        if (
+            (not chosen or chosen in refocus_ids)
+            and user32.GetForegroundWindow() == self._hwnd  # not clicked away
+            and self._focusable(previous)
+        ):
             # Our hidden window must not keep the focus: typing would go
-            # nowhere, and Alt+F4 would close us instead of their app.
+            # nowhere.
             user32.SetForegroundWindow(previous)
         action = items.get(chosen)
         if action is not None:
