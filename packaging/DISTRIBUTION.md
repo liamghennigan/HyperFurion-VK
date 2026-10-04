@@ -1,6 +1,6 @@
 # Distribution & packaging
 
-Channels for HyperFurion VK, in order of leverage for a Linux input tool:
+Channels for HyperFurion VK, in order of leverage. Linux:
 
 1. **curl installer (default)** — `releases/latest/download/install-hyperfurion-vk.sh`.
    Downloads the release tarball and runs `install.sh` (venv + uinput + systemd
@@ -14,6 +14,25 @@ Channels for HyperFurion VK, in order of leverage for a Linux input tool:
 4. **AppImage** — *TODO.* A self-contained "download and run" is ideal for the
    launch/demo. It still has to request `/dev/uinput` access (add the user to
    `input`) on first run — bundle a small first-run helper for that.
+
+## Windows
+
+1. **PowerShell installer (default)** —
+   `packaging/windows/install-hyperfurion-vk.ps1`, run as
+   `irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex`
+   (it installs the latest release) or attached to each release with its
+   version pinned. Per-user, no admin rights: installs Python 3.12 if needed,
+   a venv under `%LOCALAPPDATA%\HyperFurion-VK`, a Start menu entry,
+   start-with-Windows, and a Settings › Apps entry with an uninstaller. CI
+   (`windows-installer.yml`) installs, runs, upgrades, and uninstalls it on a
+   real Windows runner. `irm | iex` scripts are not subject to SmartScreen.
+2. **winget** — *TODO.* A manifest needs an installer binary (an EXE/MSI or
+   a zip); the natural route is a frozen build (below) published per release.
+3. **Scoop** — *TODO.* A bucket manifest can wrap the same frozen zip, with
+   the tray app as a shortcut and `voice-keyboard` as a shim.
+4. **Frozen build (PyInstaller / Nuitka)** — *TODO.* Removes the Python step
+   and enables 2 and 3. Unsigned binaries trip SmartScreen until they earn
+   reputation, so code signing should come with it.
 
 ## Why we deliberately do NOT ship a Flatpak
 
