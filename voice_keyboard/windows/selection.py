@@ -40,7 +40,7 @@ SETTLE_S = 0.04
 # Why nothing was read (shown on the overlay instead of "Select some text").
 NOTE_SKIPPED = "Not in a terminal or password field — copy it instead"
 NOTE_UNKNOWN = "Can't tell what's focused — copy the text instead"
-NOTE_UNSAVABLE = "Clipboard too big to set aside — copy the text instead"
+NOTE_UNSAVABLE = "Clipboard can't be set aside safely — copy the text instead"
 NOTE_BUSY = "Clipboard is busy — try again"
 NOTE_FOREIGN = "The clipboard changed elsewhere — try again"
 
@@ -70,22 +70,95 @@ def _focus_is_unsafe(registers: Optional[dict] = None) -> str:
 _win = None
 
 
-def _foreground_pids() -> frozenset:  # pragma: no cover - requires Windows
-    """The foreground app's process and its child windows' (a UWP app's
-    content runs in its own process under ApplicationFrameHost)."""
+def _api():  # pragma: no cover - requires Windows
     global _win
-    import ctypes
-    from ctypes import wintypes
-
     if _win is None:
+        import ctypes
+        from ctypes import wintypes
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260),
+            ]
+
         user32 = ctypes.WinDLL("user32")  # type: ignore[attr-defined]
+        kernel32 = ctypes.WinDLL("kernel32")  # type: ignore[attr-defined]
         enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
         user32.GetForegroundWindow.restype = wintypes.HWND
         user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
         user32.GetWindowThreadProcessId.restype = wintypes.DWORD
         user32.EnumChildWindows.argtypes = [wintypes.HWND, enum_proc, wintypes.LPARAM]
-        _win = (user32, enum_proc)
-    user32, enum_proc = _win
+        user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+        user32.GetAsyncKeyState.restype = ctypes.c_short
+        kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+        kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        _win = (user32, kernel32, enum_proc, PROCESSENTRY32W)
+    return _win
+
+
+def _process_table() -> dict:  # pragma: no cover - requires Windows
+    """pid -> (parent pid, exe name), from a Toolhelp snapshot."""
+    import ctypes
+
+    _, kernel32, _, entry_type = _api()
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if not snapshot or snapshot == ctypes.c_void_p(-1).value:
+        return {}
+    table = {}
+    try:
+        entry = entry_type()
+        entry.dwSize = ctypes.sizeof(entry_type)
+        ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while ok:
+            table[int(entry.th32ProcessID)] = (
+                int(entry.th32ParentProcessID), entry.szExeFile.lower()
+            )
+            ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return table
+
+
+def _process_family(pid: int, table: dict) -> set:
+    """`pid`, every process it started (a WebView2 or renderer helper may
+    be the one that copies), and its parents running the same program (a
+    sandbox broker)."""
+    family = {pid}
+    children: dict = {}
+    for child, (parent, _exe) in table.items():
+        children.setdefault(parent, []).append(child)
+    pending = [pid]
+    while pending:
+        for child in children.get(pending.pop(), []):
+            if child not in family:
+                family.add(child)
+                pending.append(child)
+    exe = table.get(pid, (0, ""))[1]
+    current = pid
+    while current in table:
+        parent, _ = table[current]
+        if parent in family or table.get(parent, (0, ""))[1] != exe:
+            break
+        family.add(parent)
+        current = parent
+    return family
+
+
+def _foreground_pids() -> frozenset:  # pragma: no cover - requires Windows
+    """The processes that may answer a copy key sent to the foreground app:
+    its own, its child windows' (a UWP app's content runs under
+    ApplicationFrameHost), and their process families."""
+    import ctypes
+    from ctypes import wintypes
+
+    user32, _, enum_proc, _ = _api()
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
         return frozenset()
@@ -103,7 +176,24 @@ def _foreground_pids() -> frozenset:  # pragma: no cover - requires Windows
 
     add(hwnd)
     user32.EnumChildWindows(hwnd, enum_proc(each_child), 0)
-    return frozenset(pids)
+    table = _process_table()
+    family: set[int] = set()
+    for pid in pids:
+        family |= _process_family(pid, table)
+    return frozenset(family)
+
+
+def _last_user_action() -> float:  # pragma: no cover - requires Windows
+    """When the user last pressed a key (seen by our keyboard hook) or a
+    mouse button (one held right now counts as now) — monotonic seconds.
+    Moving the mouse doesn't count: that never copies anything."""
+    from voice_keyboard.windows import hotkey
+
+    latest = hotkey.last_user_keydown()
+    user32 = _api()[0]
+    if any(user32.GetAsyncKeyState(button) & 0x8000 for button in (0x01, 0x02, 0x04)):
+        latest = max(latest, time.monotonic())
+    return latest
 
 
 def _wait_for_change(clip, before: int, seconds: float) -> bool:
@@ -129,20 +219,24 @@ def _cancel_late_copy_watch() -> None:
             _watch_cancel = None
 
 
-def _restore_after_late_copy(clip, before: int, saved, seconds: float, cancel, targets) -> None:
+def _restore_after_late_copy(
+    clip, before: int, saved, seconds: float, cancel, targets, user_activity
+) -> None:
     """Put the clipboard back if the app copies after all — and only then.
-    A change the app didn't make (a sync, a password manager), or one that
-    follows any key press or mouse move (the user copying something
-    themselves), is left alone."""
-    idle_since = clip.last_input_tick()
-    deadline = time.monotonic() + seconds
+    The watch ends as soon as the user presses a key or clicks (whatever
+    is copied next may be theirs), and a change another app made (a sync,
+    a password manager) is left alone."""
+    started = time.monotonic()
+    deadline = started + seconds
     while time.monotonic() < deadline and not cancel.is_set():
+        if user_activity() > started:
+            return
         if clip.sequence_number() != before:
             time.sleep(SETTLE_S)
             owner = clip.owner_pid()
-            if owner is None or owner not in targets:
+            if owner is not None and owner not in targets:
                 return
-            if idle_since is None or clip.last_input_tick() != idle_since:
+            if user_activity() > started:
                 return
             with _watch_lock:
                 if cancel.is_set():
@@ -153,14 +247,14 @@ def _restore_after_late_copy(clip, before: int, saved, seconds: float, cancel, t
         time.sleep(POLL_S)
 
 
-def _watch_for_late_copy(clip, before: int, saved, seconds: float, targets) -> None:
+def _watch_for_late_copy(clip, before: int, saved, seconds: float, targets, user_activity) -> None:
     global _watch_cancel
     cancel = threading.Event()
     with _watch_lock:
         _watch_cancel = cancel
     threading.Thread(
         target=_restore_after_late_copy,
-        args=(clip, before, saved, seconds, cancel, targets),
+        args=(clip, before, saved, seconds, cancel, targets, user_activity),
         name="vk-clipboard-late-copy",
         daemon=True,
     ).start()
@@ -173,6 +267,7 @@ def copy_selection(
     registers: Optional[dict] = None,
     should_skip: Optional[Callable[[], object]] = None,
     foreground_pids: Callable[[], frozenset] = _foreground_pids,
+    user_activity: Callable[[], float] = _last_user_action,
     timeout: float = COPY_TIMEOUT_S,
     late_copy_s: float = LATE_COPY_S,
     notes: Optional[list] = None,
@@ -228,7 +323,7 @@ def copy_selection(
 
     if not _wait_for_change(clip, before, timeout):
         if late_copy_s > 0 and targets:
-            _watch_for_late_copy(clip, before, saved, late_copy_s, targets)
+            _watch_for_late_copy(clip, before, saved, late_copy_s, targets, user_activity)
         return None
     owner = clip.owner_pid()
     if owner is not None and targets and owner not in targets:

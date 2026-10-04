@@ -28,6 +28,7 @@ hold-to-talk needs releases.
 import ctypes
 import logging
 import threading
+import time
 from typing import Optional
 
 from voice_keyboard.hotkey import HotkeyListener
@@ -147,6 +148,17 @@ class WinHotkeySpec:
             self.trigger_code in pressed
             and all(group & pressed for group in self.modifier_groups)
         )
+
+
+# When the user last pressed a key (a real, fresh press: not our injected
+# input, not auto-repeat) — monotonic seconds, from whichever hotkey hook
+# saw it. The selection copy uses it to tell a copy the user made from an
+# app's late one.
+_last_user_keydown = 0.0
+
+
+def last_user_keydown() -> float:
+    return _last_user_keydown
 
 
 def _send_menu_mask() -> None:  # pragma: no cover - requires Windows
@@ -293,6 +305,7 @@ class WinHotkeyListener(HotkeyListener):
 
     def _on_hook_event(self, w_param: int, vk_code: int, flags: int, scan_code: int = 0) -> bool:
         """Feed one hook event to the state machine. True = swallow it."""
+        global _last_user_keydown
         down = w_param in (WM_KEYDOWN, WM_SYSKEYDOWN)
         up = w_param in (WM_KEYUP, WM_SYSKEYUP)
         if flags & LLKHF_INJECTED:
@@ -309,12 +322,16 @@ class WinHotkeyListener(HotkeyListener):
         if not (down or up):
             return False
         if down:
-            if vk_code not in MODIFIER_VKS and vk_code != self._spec.trigger_code:
-                # Typing other keys: whatever chord was held is over, so a
-                # modifier our injector released is no longer presumed held
-                # (its real release may have been missed meanwhile).
-                self._injected_up.clear()
+            if vk_code not in self._pressed:
+                _last_user_keydown = time.monotonic()
             self._resync_before_press(vk_code)
+            if vk_code not in MODIFIER_VKS and vk_code != self._spec.trigger_code:
+                # Typing other keys: a chord's modifiers our injector
+                # released are no longer presumed held (their real release
+                # may have been missed meanwhile). Only after this press's
+                # own resync, and never a held bare trigger: that one ends
+                # with its own release (or a cancel, not a send).
+                self._injected_up &= {self._spec.trigger_code}
         # Only now: the resync above must still see this key's exemption
         # (a held bare-modifier trigger auto-repeats after our injected
         # release, and Windows calls it up until this event passes).

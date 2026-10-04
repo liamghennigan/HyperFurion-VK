@@ -37,8 +37,8 @@ _SYNTHESIZED_FROM = {
     CF_PALETTE: (CF_DIB, CF_DIBV5),
     CF_METAFILEPICT: (CF_ENHMETAFILE,),
 }
-# Device-independent bitmaps Windows converts between: saving the one the
-# app put (listed first) is enough, the other is re-created on restore.
+# Device-independent bitmaps Windows converts between: both are saved when
+# they fit; for a huge screenshot one is enough (the other is re-created).
 _DIB_TWINS = frozenset({CF_DIB, CF_DIBV5})
 # Owner-drawn and app-private handles: never restorable.
 _UNRESTORABLE_FORMATS = frozenset({0x80, 0x82, 0x83, 0x8E})
@@ -62,10 +62,6 @@ class Snapshot:
 
     formats: list = field(default_factory=list)
     complete: bool = True
-
-
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_ = [("cbSize", ctypes.c_uint32), ("dwTime", ctypes.c_uint32)]
 
 
 _api = None
@@ -113,8 +109,6 @@ def _load():  # pragma: no cover - requires Windows
     user32.GetClipboardOwner.restype = wintypes.HWND
     user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
     user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-    user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
-    user32.GetLastInputInfo.restype = wintypes.BOOL
     gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)  # type: ignore[attr-defined]
     gdi32.GetEnhMetaFileBits.argtypes = [ctypes.c_void_p, wintypes.UINT, ctypes.c_void_p]
     gdi32.GetEnhMetaFileBits.restype = wintypes.UINT
@@ -207,15 +201,6 @@ def owner_pid():  # pragma: no cover - requires Windows
     return int(pid.value) or None
 
 
-def last_input_tick():  # pragma: no cover - requires Windows
-    """When the user last pressed a key or moved the mouse (ms ticks)."""
-    user32 = _load()[0]
-    info = LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO), 0)
-    if not user32.GetLastInputInfo(ctypes.byref(info)):
-        return None
-    return int(info.dwTime)
-
-
 def sequence_number() -> int:  # pragma: no cover - requires Windows
     user32 = _load()[0]
     return int(user32.GetClipboardSequenceNumber())
@@ -277,8 +262,6 @@ def snapshot():  # pragma: no cover - requires Windows
             present.add(fmt)
             if fmt in _SYNTHESIZED_FROM:
                 continue  # checked below, once every format is known
-            if fmt in _DIB_TWINS and any(f in _DIB_TWINS for f, _ in snap.formats):
-                continue  # re-created from the twin we saved
             if fmt in _UNRESTORABLE_FORMATS or fmt in _PRIVATE_RANGE:
                 snap.complete = False
                 continue
@@ -301,6 +284,10 @@ def snapshot():  # pragma: no cover - requires Windows
                 total += size
                 continue
             size = kernel32.GlobalSize(handle)
+            if size and total + size > SNAPSHOT_LIMIT_BYTES and fmt in _DIB_TWINS and any(
+                f in _DIB_TWINS for f, _ in snap.formats
+            ):
+                continue  # too big to keep both: Windows re-creates it from its twin
             if not size or total + size > SNAPSHOT_LIMIT_BYTES:
                 snap.complete = False
                 continue

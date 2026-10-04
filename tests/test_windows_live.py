@@ -290,6 +290,17 @@ class TestSession:
         assert ipc._token_path().name == f"ipc-token-{session}"
 
 
+class TestSelectionTargets:
+    def test_the_foreground_apps_process_family_is_found(self, edit_box) -> None:
+        import os
+
+        from voice_keyboard.windows import selection
+
+        table = selection._process_table()
+        assert os.getpid() in table and table[os.getpid()][1].endswith(".exe")
+        assert os.getpid() in selection._foreground_pids()  # our edit box is in front
+
+
 class TestFocusProbe:
     def test_our_own_window_is_not_the_app_being_dictated_to(self, edit_box) -> None:
         # The tray/orb menu brings our window to the front; the focus

@@ -11,6 +11,7 @@ of Unix sockets.
 
 import sys
 import threading
+import time
 from unittest import mock
 
 import pytest
@@ -842,6 +843,35 @@ class TestHookKeyStateQuirks:
         listener._on_hook_event(WM_KEYUP, ord("A"), 0)
         assert listener._on_hook_event(WM_KEYDOWN, self.V, 0) is False
         cb["on_hold_start"].assert_called_once()  # only the first, real hold
+
+    def test_only_fresh_real_presses_count_as_the_user_typing(self) -> None:
+        from voice_keyboard.windows import hotkey as win_hotkey
+
+        listener, _ = _win_listener()
+        listener._on_hook_event(WM_KEYDOWN, ord("A"), 0)
+        first = win_hotkey.last_user_keydown()
+        assert first > 0
+        time.sleep(0.01)
+        listener._on_hook_event(WM_KEYDOWN, ord("A"), 0)  # auto-repeat
+        listener._on_hook_event(WM_KEYDOWN, ord("B"), LLKHF_INJECTED)  # ours
+        assert win_hotkey.last_user_keydown() == first
+        listener._on_hook_event(WM_KEYUP, ord("A"), 0)
+        listener._on_hook_event(WM_KEYDOWN, ord("C"), 0)
+        assert win_hotkey.last_user_keydown() > first
+
+    def test_another_key_during_a_bare_hold_cancels_it(self) -> None:
+        # Kai's Right Ctrl held, released by our injector, then the user hits
+        # C (Right Ctrl+C was real modifier use): cancel, never send.
+        listener, cb = _win_listener(key="rightctrl", mode="hold", allow_bare=True)
+        RCTRL = 0xA3
+        held = {RCTRL}
+        listener._key_is_down = lambda vk: vk in held
+        listener._on_hook_event(WM_KEYDOWN, RCTRL, 0)
+        held.discard(RCTRL)
+        listener._on_hook_event(WM_KEYUP, RCTRL, LLKHF_INJECTED)
+        listener._on_hook_event(WM_KEYDOWN, ord("C"), 0)
+        cb["on_hold_cancel"].assert_called_once()
+        cb["on_hold_stop"].assert_not_called()
 
     def test_a_held_bare_modifier_trigger_survives_its_auto_repeat(self) -> None:
         # Kai's Right Ctrl held to talk; our injector releases it while

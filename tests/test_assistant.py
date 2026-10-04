@@ -267,10 +267,14 @@ class TestConverseIntegration:
 
     def _kai(self, cfg: dict, register: str) -> Daemon:
         from voice_keyboard.flow.registers import resolve_register
+        from voice_keyboard.focusprobe import FocusInfo
 
         daemon = _daemon(cfg)
         daemon._run_tts = mock.AsyncMock()
         daemon._session_register = resolve_register(register)
+        # A known app: unknown focus would try the terminal route (and the
+        # real LLM) first.
+        daemon._session_focus = FocusInfo(app="terminal" if register == "terminal" else "gedit")
         return daemon
 
     def test_non_terminal_query_is_answered_by_voice(self) -> None:
@@ -285,7 +289,7 @@ class TestConverseIntegration:
         daemon._brain = brain
         result = asyncio.run(daemon._run_converse_audio(b"pcm", "capital of France"))
         assert result == "Paris."
-        daemon._tts_client.play_pcm.assert_called_once_with(b"SPOKEN", mock.ANY)
+        daemon._tts_client.play_pcm.assert_called_once_with(b"SPOKEN", mock.ANY, cancel=mock.ANY)
         assert daemon._injector.typed == []  # answers never type into the app
 
     def test_terminal_command_query_is_typed_no_enter(self) -> None:
@@ -379,7 +383,7 @@ class TestConverseIntegration:
             )
         assert result == "Paris."
         assert daemon._injector.typed == []  # nothing typed into the terminal
-        daemon._tts_client.play_pcm.assert_called_once_with(b"SPOKEN", mock.ANY)
+        daemon._tts_client.play_pcm.assert_called_once_with(b"SPOKEN", mock.ANY, cancel=mock.ANY)
 
     def test_type_no_enter_helper_arms_and_restores(self) -> None:
         daemon = _daemon(_config())
@@ -413,9 +417,11 @@ class TestSummonUX:
 
     def _kai(self, cfg: dict, register: str = "prose") -> Daemon:
         from voice_keyboard.flow.registers import resolve_register
+        from voice_keyboard.focusprobe import FocusInfo
 
         daemon = _daemon(cfg)
         daemon._session_register = resolve_register(register)
+        daemon._session_focus = FocusInfo(app="terminal" if register == "terminal" else "gedit")
         return daemon
 
     def test_summon_when_disabled_shows_hint_never_opens_mic(self) -> None:
@@ -651,7 +657,7 @@ class TestSummonUX:
         daemon._brain = brain
         daemon._show_hotkey_overlay = mock.AsyncMock()
         asyncio.run(daemon._run_converse_audio(b"pcm", "capital of France"))
-        daemon._tts_client.play_pcm.assert_called_once_with(b"PCMPCM", 24000)
+        daemon._tts_client.play_pcm.assert_called_once_with(b"PCMPCM", 24000, cancel=mock.ANY)
         states = [c.args[0] for c in daemon._show_hotkey_overlay.await_args_list]
         assert states[-1] == "inserted"  # the answer replaces PROCESSING
 

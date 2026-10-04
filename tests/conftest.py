@@ -117,3 +117,33 @@ if "pyaudio" not in sys.modules:
     pyaudio_stub.PyAudio = _PyAudio
     pyaudio_stub.Stream = _Stream
     sys.modules["pyaudio"] = pyaudio_stub
+
+
+# ------------------------------------------------------------- no network
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_internet(monkeypatch):
+    """Unit tests never reach a real service: a request to anything but a
+    local server fails the test that made it (a dummy key sent to a live
+    API is slow, flaky, and not what any test means to check)."""
+    import urllib.parse
+
+    import requests.adapters
+
+    real_send = requests.adapters.HTTPAdapter.send
+    reached: list[str] = []
+
+    def send(self, request, *args, **kwargs):
+        host = urllib.parse.urlsplit(request.url).hostname or ""
+        if host not in {"localhost", "127.0.0.1", "::1"}:
+            reached.append(host)
+            # Code under test may swallow this; the teardown below won't.
+            raise requests.exceptions.ConnectionError(f"tests may not reach {host}")
+        return real_send(self, request, *args, **kwargs)
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+    yield
+    assert not reached, f"test tried to reach {sorted(set(reached))}: mock the client instead"

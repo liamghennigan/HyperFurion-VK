@@ -1252,9 +1252,9 @@ class WinShell:
             pass
         menu = user32.CreatePopupMenu()
         items: dict[int, Callable[[], None]] = {}
-        # Items that open nothing hand focus straight back to the app the
-        # user was in (so does dismissing the menu); the rest open a window
-        # of their own, or restore focus themselves.
+        # Items that open nothing hand focus straight back (so does
+        # dismissing the menu); the rest open a window of their own, or
+        # restore focus themselves.
         refocus_ids: set[int] = set()
 
         def add(text: str, action: Optional[Callable[[], None]] = None, *,
@@ -1302,11 +1302,14 @@ class WinShell:
             add("Restart", self._cb.restart, refocus=True)
         add("Quit", self._cb.quit, refocus=True)
 
-        # Whatever really had the focus (the taskbar, for a tray click; the
-        # app or the desktop, for the orb, which never takes it).
+        # Whatever really had the focus: the app (the orb never takes it),
+        # or for a tray click — which focuses the taskbar — the app the user
+        # was in before, if it can sensibly take it back.
         previous = user32.GetForegroundWindow()
         if self._ours(previous):
             previous = None
+        if not self._app_window(previous) and self._focusable(self._last_target):
+            previous = self._last_target
         point = wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(point))
         # Required for the menu to close when clicking elsewhere.

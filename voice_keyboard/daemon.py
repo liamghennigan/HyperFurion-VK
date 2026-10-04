@@ -90,6 +90,8 @@ class Daemon:
         # Set to stop the current read wherever it is: fetching, decoding,
         # or playing (a thread can't be cancelled, so playback checks it).
         self._read_cancel: Optional[threading.Event] = None
+        # The same for Kai's spoken answer (barge-in).
+        self._converse_cancel_flag: Optional[threading.Event] = None
         self._stop_event: Optional[asyncio.Event] = None
         # A stop requested before run() has its loop (a Quit clicked while
         # the daemon is still starting) must not be lost.
@@ -291,7 +293,7 @@ class Daemon:
                         part.stop()
                     except Exception:
                         logger.exception("Stopping %s failed", name.strip("_"))
-            if self._stop_reading():
+            if await self._stop_reading():
                 # Its pill was shown without a timeout: take it down too.
                 try:
                     from voice_keyboard.client import _stop_overlay
@@ -1622,10 +1624,9 @@ class Daemon:
 
     async def _converse_cancel(self) -> None:
         """Barge-in: cut off Kai's answer, or discard a live question."""
-        try:
-            self._tts_client.stop_playback()
-        except Exception:
-            pass
+        if self._converse_cancel_flag is not None:
+            self._converse_cancel_flag.set()  # an answer not yet playing never will
+        await self._stop_audio()
         task = self._converse_task
         self._converse_task = None
         if task and not task.done():
@@ -1744,17 +1745,21 @@ class Daemon:
             await self._show_hotkey_overlay(
                 "empty", detail="⌁ no answer", timeout_ms=2200
             )
+        # A barge-in stops the answer wherever it is: fetching, decoding, or
+        # playing.
+        cancel = self._converse_cancel_flag = threading.Event()
         # The voice agent speaks its own answer as RAW PCM (s16le), not an
         # MP3 container — play it as PCM or the decoder chews static.
         if result.audio and hasattr(self._tts_client, "play_pcm"):
-            await asyncio.to_thread(
+            await _in_daemon_thread(
                 self._tts_client.play_pcm,
                 result.audio,
                 getattr(result, "audio_sample_rate", 24000),
+                cancel=cancel,
             )
         elif answer:
             try:
-                await self._run_tts(answer)
+                await self._run_tts(answer, cancel=cancel)
             except Exception as exc:
                 logger.debug("Assistant TTS failed: %s", exc)
         logger.info("Kai (%s): heard %r", result.brain or "?", transcript[:60])
@@ -2073,26 +2078,31 @@ class Daemon:
         # Called from the watcher thread; a single tuple swap is atomic.
         self._tts_cache = (text, audio)
 
-    def _stop_reading(self) -> bool:
+    async def _stop_audio(self) -> None:
+        """stop_playback, off the event loop: it may wait for an audio
+        device that is still opening."""
+        try:
+            await asyncio.to_thread(self._tts_client.stop_playback)
+        except Exception:
+            pass
+
+    async def _stop_reading(self) -> bool:
         """Stop the read in progress, if any (True when there was one)."""
         task = self._read_task
         if task is None or task.done():
             return False
+        self._read_task = None
         if self._read_cancel is not None:
             self._read_cancel.set()  # before stop_playback: no gap to start in
-        try:
-            self._tts_client.stop_playback()
-        except Exception:
-            pass
         task.cancel()
-        self._read_task = None
+        await self._stop_audio()
         return True
 
     async def _toggle_read_aloud(self, *, from_selection: bool) -> None:
         """The read-aloud hotkey / tray item: speak the highlighted text (or
         the clipboard), or stop speaking if it already is. Playback runs as
         a task, off the hotkey lock, so dictation stays available."""
-        if self._stop_reading():
+        if await self._stop_reading():
             await self._show_hotkey_overlay("empty", detail="Stopped reading", timeout_ms=1200)
             return
         if self._recording:

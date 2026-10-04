@@ -495,6 +495,38 @@ class TestReadAloud:
         client.play_audio(b"mp3", cancel=threading.Event())
         assert len(played) == 1
 
+    def test_a_stop_while_the_device_opens_stops_that_stream(self, monkeypatch) -> None:
+        # Kai's barge-in lands while sd.play() is still opening the device:
+        # it must stop the stream that is starting, not the previous one.
+        from voice_keyboard.tts import TTSClient
+
+        events = []
+        opening = threading.Event()
+
+        def play(*args):
+            opening.set()
+            time.sleep(0.2)  # a Bluetooth headset waking up
+            events.append("play")
+
+        monkeypatch.setitem(sys.modules, "sounddevice", mock.Mock(
+            play=play, wait=lambda: events.append("wait"), stop=lambda: events.append("stop")
+        ))
+        client = TTSClient(api_key="k")
+        player = threading.Thread(target=client.play_pcm, args=(b"\x00\x00" * 8,))
+        player.start()
+        assert opening.wait(2)
+        client.stop_playback()
+        player.join(2)
+        assert events.index("play") < events.index("stop")
+
+    def test_kai_barge_in_reaches_an_answer_not_yet_playing(self) -> None:
+        daemon = self._daemon()
+        flag = threading.Event()
+        daemon._converse_cancel_flag = flag
+        asyncio.run(daemon._converse_cancel())
+        assert flag.is_set()
+        daemon._tts_client.stop_playback.assert_called_once()
+
     def test_shutdown_stops_reading_and_takes_the_pill_down(self, monkeypatch) -> None:
         daemon = self._daemon()
         hidden = []
@@ -564,7 +596,6 @@ class FakeClip:
         self.text = "previous"
         self.sensitive = False
         self.owner = 7
-        self.input_tick = 1000
         self._after = text_after_copy
         self._copies = copies
         self._sensitive_after = sensitive_after_copy
@@ -584,9 +615,6 @@ class FakeClip:
 
     def owner_pid(self):
         return self.owner
-
-    def last_input_tick(self):
-        return self.input_tick
 
     def get_text(self, *, unless_sensitive=False):
         return None if unless_sensitive and self.sensitive else self.text
@@ -616,6 +644,7 @@ def _copy(clip, **kw):
     kw.setdefault("should_skip", lambda: "")
     kw.setdefault("late_copy_s", 0)
     kw.setdefault("foreground_pids", lambda: frozenset({FakeClip.APP}))
+    kw.setdefault("user_activity", lambda: 0.0)  # nobody types or clicks
     return copy_selection(injector=injector, clip=clip, **kw), injector
 
 
@@ -714,13 +743,35 @@ class TestCopySelection:
         # Nothing was selected; seeing "Select some text first" the user
         # selects and copies something themselves within the watch window.
         clip = FakeClip(copies=False)
-        _copy(clip, timeout=0.05, late_copy_s=1.0)
+        last_action = [0.0]
+        _copy(clip, timeout=0.05, late_copy_s=1.0, user_activity=lambda: last_action[0])
         time.sleep(0.1)
-        clip.input_tick += 400  # their selecting and Ctrl+C
+        last_action[0] = time.monotonic()  # their click, then Ctrl+C
         clip._copies = True
         clip.copy()  # by the same app
         time.sleep(0.3)
         assert clip.restores == 0 and clip.text == "selected words"
+
+    def test_moving_the_mouse_doesnt_stop_a_late_restore(self) -> None:
+        # Only key presses and clicks count as the user acting: the late
+        # copy is still put back while the pointer merely moves.
+        clip = FakeClip()
+        injector = mock.Mock()
+        injector.press_combo.side_effect = lambda keys: threading.Timer(0.15, clip.copy).start()
+        _copy(clip, injector=injector, timeout=0.05, late_copy_s=2.0,
+              user_activity=lambda: 0.0)  # (mouse moves never register)
+        _settle(clip, 1)
+        assert clip.restores == 1
+
+    def test_an_app_without_a_clipboard_window_still_gets_restored(self) -> None:
+        # gVim and friends copy with no owner window: unknown is not foreign.
+        clip = FakeClip()
+        injector = mock.Mock()
+        injector.press_combo.side_effect = lambda keys: threading.Timer(
+            0.15, lambda: clip.copy(owner=None)).start()
+        _copy(clip, injector=injector, timeout=0.05, late_copy_s=2.0)
+        _settle(clip, 1)
+        assert clip.restores == 1
 
     def test_a_late_change_by_another_app_is_not_undone(self) -> None:
         clip = FakeClip(copies=False)
@@ -776,6 +827,27 @@ class TestCopySelection:
         notes = []
         assert clipboard.selection_text(registers={"map": {"x": "terminal"}}, notes=notes) == "highlighted"
         assert seen == {"registers": {"map": {"x": "terminal"}}, "notes": notes}
+
+
+class TestProcessFamily:
+    def test_helpers_and_sandbox_brokers_count_as_the_app(self) -> None:
+        # A WebView2 helper the app started copies on its behalf; Acrobat's
+        # Protected Mode runs the UI under a broker of the same program.
+        from voice_keyboard.windows.selection import _process_family
+
+        table = {
+            1: (0, "explorer.exe"),
+            10: (1, "acrord32.exe"),     # broker
+            11: (10, "acrord32.exe"),    # sandboxed UI (foreground)
+            20: (1, "notes.exe"),        # a WinUI app
+            21: (20, "msedgewebview2.exe"),
+            22: (21, "msedgewebview2.exe"),
+            30: (1, "keepass.exe"),
+        }
+        assert _process_family(11, table) == {10, 11}
+        assert _process_family(20, table) == {20, 21, 22}
+        assert 1 not in _process_family(20, table)  # never the shell that started it
+        assert 30 not in _process_family(20, table) | _process_family(11, table)
 
 
 class TestFocusSafety:
