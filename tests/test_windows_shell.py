@@ -690,6 +690,63 @@ class TestWindowsConfigDefaults:
         with pytest.raises(RuntimeError, match="assistant.hotkey is invalid"):
             validate_config(cfg)
 
+    def test_clashes_are_found_however_they_are_spelled(self, monkeypatch) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        cfg = _default_config_with_paths()
+        cfg["xai"]["api_key"] = "k"
+        cfg["tts"]["hotkey"] = "Alt + Ctrl + V"  # the dictation chord, reordered
+        with pytest.raises(RuntimeError, match="must differ from the dictation"):
+            validate_config(cfg)
+        cfg["tts"]["hotkey"] = "rightctrl"  # Kai's default summon key
+        with pytest.raises(RuntimeError, match="must differ from assistant.hotkey"):
+            validate_config(cfg)
+        cfg["tts"]["hotkey"] = "control+alt+r"
+        cfg["assistant"]["hotkey"] = "ctrl+alt+v"
+        with pytest.raises(RuntimeError, match="assistant.hotkey must differ"):
+            validate_config(cfg)  # bound even while the assistant is off
+
+    def test_a_default_read_hotkey_never_blocks_startup(self, monkeypatch, tmp_path) -> None:
+        from voice_keyboard import config
+
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(config, "_config_dir", lambda: tmp_path)
+        (tmp_path / "config.toml").write_text(
+            '[xai]\napi_key = "k"\n[hotkey]\nkey = "ctrl+alt+r"\n', encoding="utf-8"
+        )
+        cfg = config.load_config()
+        assert cfg["tts"]["hotkey"] == ""  # their Ctrl+Alt+R wins; read-aloud has none
+        validate_config(cfg)
+        # Written by the user, the same clash is an error to fix.
+        (tmp_path / "config.toml").write_text(
+            '[xai]\napi_key = "k"\n[hotkey]\nkey = "ctrl+alt+r"\n'
+            '[tts]\nhotkey = "control+alt+r"\n', encoding="utf-8"
+        )
+        with pytest.raises(RuntimeError, match="must differ"):
+            validate_config(config.load_config())
+
+    @pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16", "cp1252"])
+    def test_notepad_encodings_load(self, monkeypatch, tmp_path, encoding) -> None:
+        from voice_keyboard import config
+
+        monkeypatch.setattr(config, "_config_dir", lambda: tmp_path)
+        (tmp_path / "config.toml").write_bytes(
+            '# Clé de José\n[xai]\napi_key = "k"\n[stt]\nlanguage = "fr"\n'.encode(encoding)
+        )
+        cfg = config.load_config()
+        assert cfg["stt"]["language"] == "fr"
+
+    def test_a_section_written_as_a_value_is_named(self, monkeypatch) -> None:
+        from voice_keyboard.windows.app import hotkey_labels
+
+        cfg = _default_config_with_paths()
+        cfg["xai"]["api_key"] = "k"
+        cfg["hotkey"] = "ctrl+alt+v"
+        with pytest.raises(RuntimeError, match=r"hotkey must be a \[hotkey\] section"):
+            validate_config(cfg)
+        # The tray still gets labels (it is built before validation).
+        assert hotkey_labels(cfg)["dictation_hotkey"] == "Ctrl+Alt+V"
+        assert hotkey_labels({"tts": 3, "assistant": []})["assistant_hotkey"] == "Right Ctrl"
+
 
 class TestPrettyBinding:
     def test_labels(self, monkeypatch) -> None:

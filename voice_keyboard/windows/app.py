@@ -116,15 +116,20 @@ def write_config_from_env() -> int:
 
 
 def hotkey_labels(config: dict) -> dict:
-    """The tray's hotkey names for a config (WinShell keyword arguments)."""
+    """The tray's hotkey names for a config (WinShell keyword arguments).
+    Never raises: it runs before the tray exists, on a config that may not
+    have passed validation yet."""
     from voice_keyboard.hotkey import pretty_binding
 
-    read_key = str(config.get("tts", {}).get("hotkey", "")).strip()
+    def value(section: str, key: str, default: str) -> str:
+        table = config.get(section) if isinstance(config, dict) else None
+        found = table.get(key, default) if isinstance(table, dict) else default
+        return found.strip() if isinstance(found, str) else default
+
+    read_key = value("tts", "hotkey", "")
     return {
-        "dictation_hotkey": pretty_binding(config.get("hotkey", {}).get("key", "control+alt+v")),
-        "assistant_hotkey": pretty_binding(
-            config.get("assistant", {}).get("hotkey", "rightctrl") or "rightctrl"
-        ),
+        "dictation_hotkey": pretty_binding(value("hotkey", "key", "") or "control+alt+v"),
+        "assistant_hotkey": pretty_binding(value("assistant", "hotkey", "") or "rightctrl"),
         "read_hotkey": pretty_binding(read_key) if read_key else "",
     }
 

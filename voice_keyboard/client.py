@@ -764,10 +764,10 @@ def _apply_hosted_login(text: str, key: str) -> str:
 
 
 def _write_hosted_login(key: str) -> Path:
-    from voice_keyboard.config import _config_dir
+    from voice_keyboard.config import _config_dir, read_config_text
 
     path = _config_dir() / "config.toml"
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    existing = read_config_text(path) if path.exists() else ""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_apply_hosted_login(existing, key), encoding="utf-8")
     return path

@@ -1,4 +1,6 @@
+import codecs
 import copy
+import logging
 import sys
 from pathlib import Path
 
@@ -7,6 +9,8 @@ import tomllib
 from voice_keyboard import paths
 from voice_keyboard.stt import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS
 from voice_keyboard.tts import DEFAULT_TTS_MODELS, DEFAULT_TTS_VOICES, SUPPORTED_TTS_PROVIDERS
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG: dict = {
     "xai": {
@@ -333,13 +337,57 @@ def _default_config_with_paths() -> dict:
     return config
 
 
+def read_config_text(path: Path) -> str:
+    """config.toml as text, however Notepad saved it: UTF-8 with or without
+    a byte-order mark, "Unicode" (UTF-16), or the ANSI code page."""
+    data = path.read_bytes()
+    if data.startswith(codecs.BOM_UTF8):
+        return data[len(codecs.BOM_UTF8):].decode("utf-8")
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        import locale
+
+        return data.decode(locale.getpreferredencoding(False) or "cp1252", errors="replace")
+
+
+def _table(config: dict, name: str) -> dict:
+    value = config.get(name, {})
+    return value if isinstance(value, dict) else {}
+
+
+def _drop_clashing_default_tts_hotkey(config: dict, user_config: dict) -> None:
+    """Windows fills in a read-aloud hotkey the user never wrote; if one of
+    their own bindings already uses that chord, theirs wins and read-aloud
+    goes without a hotkey (rather than refusing to start)."""
+    user_tts = user_config.get("tts")
+    if isinstance(user_tts, dict) and "hotkey" in user_tts:
+        return  # their own choice: validated as written
+    tts = _table(config, "tts")
+    default = str(tts.get("hotkey", "")).strip()
+    if not default:
+        return
+    from voice_keyboard.hotkey import bindings_clash
+
+    for other in (_table(config, "hotkey").get("key", ""), _table(config, "assistant").get("hotkey", "")):
+        if isinstance(other, str) and other.strip() and bindings_clash(default, other):
+            logger.warning(
+                "%s is already one of your hotkeys, so read-aloud has none;"
+                " set [tts] hotkey to pick one", default,
+            )
+            tts["hotkey"] = ""
+            return
+
+
 def load_config() -> dict:
     config = _default_config_with_paths()
     config_path = _config_dir() / "config.toml"
     if config_path.exists():
-        with open(config_path, "rb") as f:
-            user_config = tomllib.load(f)
+        user_config = tomllib.loads(read_config_text(config_path))
         config = _deep_merge(config, user_config)
+        _drop_clashing_default_tts_hotkey(config, user_config)
 
     legacy_xai_key = str(config.get("xai", {}).get("api_key", "")).strip()
     providers = config.setdefault("providers", {})
@@ -398,6 +446,11 @@ def _validate_api_key(config: dict, provider: str) -> None:
 
 def validate_config(config: dict) -> None:
     """Validate config and raise a clear RuntimeError on missing/invalid values."""
+    for name, default in DEFAULT_CONFIG.items():
+        if isinstance(default, dict) and name in config and not isinstance(config[name], dict):
+            raise RuntimeError(
+                f"{name} must be a [{name}] section, not a {type(config[name]).__name__}"
+            )
     stt_cfg = config.get("stt", {})
     tts_cfg = config.get("tts", {})
     stt_provider = str(stt_cfg.get("provider", "xai")).lower()
@@ -429,9 +482,14 @@ def validate_config(config: dict) -> None:
             parse_binding(tts_hotkey, allow_bare=True)
         except ValueError as exc:
             raise RuntimeError(f"tts.hotkey is invalid: {exc}") from exc
+        from voice_keyboard.hotkey import bindings_clash
+
         main_key = str(config.get("hotkey", {}).get("key", ""))
-        if tts_hotkey.lower().replace(" ", "") == main_key.lower().replace(" ", ""):
+        if bindings_clash(tts_hotkey, main_key):
             raise RuntimeError("tts.hotkey must differ from the dictation hotkey.key")
+        assistant_key = str(config.get("assistant", {}).get("hotkey", ""))
+        if assistant_key.strip() and bindings_clash(tts_hotkey, assistant_key):
+            raise RuntimeError("tts.hotkey must differ from assistant.hotkey")
 
     audio_cfg = config.get("audio", {})
     sample_rate = audio_cfg.get("sample_rate", 0)
@@ -516,9 +574,11 @@ def _validate_assistant_config(config: dict) -> None:
             parse_binding(hotkey, allow_bare=True)
         except ValueError as exc:
             raise RuntimeError(f"assistant.hotkey is invalid: {exc}") from exc
-    if cfg.get("enabled", False):
-        main_hotkey = str(config.get("hotkey", {}).get("key", "")).strip().lower()
-        if hotkey and hotkey.lower().replace(" ", "") == main_hotkey.replace(" ", ""):
+    # Bound even while the mind is off (a press explains how to turn it on).
+    if hotkey:
+        from voice_keyboard.hotkey import bindings_clash
+
+        if bindings_clash(hotkey, str(config.get("hotkey", {}).get("key", ""))):
             raise RuntimeError(
                 "assistant.hotkey must differ from the dictation hotkey.key"
             )

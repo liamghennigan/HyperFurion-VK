@@ -124,6 +124,36 @@ def pretty_binding(key: str) -> str:
     return "+".join(pretty)
 
 
+_MODIFIER_WORDS = {
+    "ctrl": "control", "control": "control", "alt": "alt", "option": "alt",
+    "shift": "shift", "super": "super", "meta": "super", "win": "super", "cmd": "super",
+}
+
+
+def binding_signature(key: str):
+    """What a binding means, whatever its spelling or order: ctrl+alt+r,
+    Alt+Control+R, and control + alt + r are one chord. Uses this
+    platform's keycodes when it can, else normalized names."""
+    try:
+        spec = parse_binding(key, allow_bare=True)
+    except ValueError:
+        spec = None
+    if spec is not None:
+        groups = frozenset(frozenset(group) for group in spec.modifier_groups)
+        return ("codes", groups, spec.trigger_code)
+    parts = [part.strip().lower() for part in str(key).split("+") if part.strip()]
+    if not parts:
+        return None
+    return ("names", frozenset(_MODIFIER_WORDS.get(p, p) for p in parts[:-1]), parts[-1])
+
+
+def bindings_clash(first: str, second: str) -> bool:
+    """True when two bindings are the same chord (both listeners would
+    fire, and one would swallow the key from the other)."""
+    a, b = binding_signature(first), binding_signature(second)
+    return a is not None and a == b
+
+
 def parse_binding(key: str, *, allow_bare: bool = False):
     """Parse a hotkey binding with this platform's keycode table; raises
     ValueError on a typo. None when no table can be checked (non-Linux
