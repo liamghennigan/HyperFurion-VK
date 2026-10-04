@@ -9,6 +9,7 @@ UpdateLayeredWindow. Kept free of any Win32 so it is testable anywhere.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 
@@ -97,21 +98,16 @@ def _compose(sdf, glow_sdf, *, fill, accent, border_px, glow_alpha, glow_sigma):
     return rgb, alpha.astype(np.float32)
 
 
-def pill_layers(
-    canvas_w: int,
-    canvas_h: int,
-    *,
-    margin: int,
-    width: int,
-    height: int,
-    scale: float,
-    accent: tuple[int, int, int],
-    glow_alpha: float,
-    bars: list[int],
-    bars_x: int,
-):
-    """The overlay pill at (margin, margin) inside a glow margin, with the
-    level-meter bars painted in. Returns (rgb, alpha) float arrays."""
+def anchor_known(anchor) -> bool:
+    """A caret position, or the (-1, -1) "unknown" sentinel. Negative
+    coordinates are real: monitors left of or above the primary have them."""
+    return anchor is not None and tuple(anchor[:2]) != (-1, -1)
+
+
+@lru_cache(maxsize=8)
+def _pill_base(canvas_w, canvas_h, margin, width, height, scale, accent, glow_alpha):
+    """The pill's glass, hairline, and glow — everything but the bars, which
+    change every animation frame. Cached: this is the expensive part."""
     radius = 12.0 * scale
     sdf = _rounded_rect_sdf(canvas_w, canvas_h, margin, margin, width, height, radius)
     # box-shadow: 0 10px 34px — the glow sits a little below the pill.
@@ -127,6 +123,31 @@ def pill_layers(
         glow_alpha=glow_alpha,
         glow_sigma=6.5 * scale,
     )
+    rgb.setflags(write=False)
+    alpha.setflags(write=False)
+    return rgb, alpha
+
+
+def pill_layers(
+    canvas_w: int,
+    canvas_h: int,
+    *,
+    margin: int,
+    width: int,
+    height: int,
+    scale: float,
+    accent: tuple[int, int, int],
+    glow_alpha: float,
+    bars: list[int],
+    bars_x: int,
+):
+    """The overlay pill at (margin, margin) inside a glow margin, with the
+    level-meter bars painted in. Returns (rgb, alpha) float arrays; alpha
+    is shared with the cache and read-only."""
+    base_rgb, alpha = _pill_base(
+        canvas_w, canvas_h, margin, width, height, float(scale), tuple(accent), float(glow_alpha)
+    )
+    rgb = base_rgb.copy()
     bar_w = max(2, round(3 * scale))
     gap = max(2, round(3 * scale))
     slot = BAR_SLOT * scale
@@ -172,6 +193,19 @@ def orb_layers(
         cover = np.clip(0.5 - (np.hypot(xs - cx, ys - cy) - r), 0.0, 1.0)
         rgb = rgb * (1.0 - cover[..., None]) + mark * cover[..., None]
     return rgb, alpha
+
+
+def orb_hit_bgra(size: int) -> np.ndarray:
+    """The orb's click target: the disc itself at alpha 1/255 (invisible,
+    yet hit-testable — Windows hit-tests every non-zero pixel of a layered
+    window), nothing outside it. The glow lives in a separate
+    click-through window, so its halo never eats clicks meant for the app
+    underneath."""
+    ys, xs = np.mgrid[0:size, 0:size].astype(np.float32) + 0.5
+    radius = size / 2.0
+    out = np.zeros((size, size, 4), np.uint8)
+    out[np.hypot(xs - radius, ys - radius) <= radius, 3] = 1
+    return out
 
 
 def to_bgra_premultiplied(rgb, alpha) -> np.ndarray:
@@ -288,7 +322,7 @@ def place_pill(
     margin = int(18 * scale)
     left, top, right, bottom = work_area
     x = y = None
-    if anchor is not None and anchor[0] >= 0 and anchor[1] >= 0:
+    if anchor_known(anchor):
         ax, ay = anchor
         near_window = window_rect is None or (
             window_rect[0] - 96 <= ax <= window_rect[2] + 96

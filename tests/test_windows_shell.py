@@ -69,6 +69,32 @@ class TestRender:
         mid_y = margin + h // 2
         assert tuple(np.round(rgb[mid_y, margin + 19])) == (81, 207, 102)
 
+    def test_animation_frames_reuse_the_glass(self) -> None:
+        # The glow is cached; each frame only repaints the bars, and never
+        # into the cached base.
+        kw = dict(margin=10, width=260, height=70, scale=1.0, accent=(81, 207, 102),
+                  glow_alpha=0.28, bars_x=18)
+        first, alpha1 = render.pill_layers(280, 90, bars=[22] * 4, **kw)
+        second, alpha2 = render.pill_layers(280, 90, bars=[3] * 4, **kw)
+        assert alpha1 is alpha2 and not alpha1.flags.writeable
+        assert not np.array_equal(first, second)
+        third, _ = render.pill_layers(280, 90, bars=[22] * 4, **kw)
+        assert np.array_equal(first, third)
+
+    def test_only_the_orb_disc_takes_clicks(self) -> None:
+        # Review finding: the glow's faint halo was 93% of the window and ate
+        # clicks meant for the app below. Now the glow is click-through and
+        # the hit window holds the disc alone.
+        scale, size, margin = 1.0, 46, 16
+        _, glow_alpha = render.orb_layers(size, margin=margin, scale=scale,
+                                          ring_rgb=render.ORB_CYAN, glow_alpha=0.26)
+        hit = render.orb_hit_bgra(size)
+        clickable = int((hit[..., 3] > 0).sum())
+        assert clickable == pytest.approx(np.pi * (size / 2) ** 2, rel=0.05)
+        assert clickable < int((glow_alpha > 0).sum()) / 3
+        assert hit[..., :3].max() == 0 and hit[..., 3].max() == 1  # invisible
+        assert hit[0, 0, 3] == 0 and hit[size // 2, size // 2, 3] == 1
+
     def test_premultiply(self) -> None:
         rgb = np.array([[[200.0, 100.0, 50.0]]])
         alpha = np.array([[0.5]])
@@ -117,6 +143,13 @@ class TestPlacePill:
     def test_caret_far_from_the_window_is_ignored(self) -> None:
         x, _ = render.place_pill(300, 80, (1900, 1000), (0, 0, 400, 300), self.WORK)
         assert x == 200 - 150 or x == 18  # window-centred (clamped)
+
+    def test_monitors_left_of_the_primary_have_negative_carets(self) -> None:
+        work = (-1920, 0, 0, 1040)
+        x, y = render.place_pill(300, 80, (-1000, 500), (-1800, 100, -200, 900), work)
+        assert x == -1000 - 150 and y + 80 < 500
+        assert render.anchor_known((-1000, 500)) and not render.anchor_known((-1, -1))
+        assert not render.anchor_known(None)
 
     def test_clamped_to_the_work_area(self) -> None:
         x, y = render.place_pill(300, 80, (1915, 1035), None, self.WORK)

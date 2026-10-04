@@ -280,8 +280,16 @@ def _windows_api():
     ]
     kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    try:  # Windows 10 1607+
+        user32.SetThreadDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+        user32.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+    except AttributeError:
+        pass
     _win_api = (user32, kernel32, GUITHREADINFO)
     return _win_api
+
+
+DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
 
 
 def _probe_windows() -> Optional[FocusInfo]:
@@ -290,6 +298,27 @@ def _probe_windows() -> Optional[FocusInfo]:
     screen position for the overlay, and a classic Edit control's
     ES_PASSWORD style as the secret flag. None while our own window is in
     front (the tray or orb menu): that is not the app being dictated to."""
+    try:
+        import ctypes
+
+        user32 = _windows_api()[0]
+    except Exception:
+        logger.debug("Windows focus probe unavailable", exc_info=True)
+        return None
+    # Physical pixels whoever asks: the app is per-monitor DPI aware, but
+    # the CLI is not, and its caret position is forwarded to the app.
+    set_dpi = getattr(user32, "SetThreadDpiAwarenessContext", None)
+    previous = None
+    if set_dpi is not None:
+        previous = set_dpi(ctypes.c_void_p(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+    try:
+        return _probe_windows_foreground()
+    finally:
+        if previous:
+            set_dpi(ctypes.c_void_p(previous))
+
+
+def _probe_windows_foreground() -> Optional[FocusInfo]:
     try:
         import ctypes
         from ctypes import wintypes

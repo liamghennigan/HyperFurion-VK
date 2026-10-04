@@ -9,7 +9,8 @@ instrument natively, in-process, with nothing but ctypes:
   is click-through, so it can't disturb the app you are typing into;
 - the Kai orb — a small always-on-top disc; click to summon Kai, drag to
   move. Clicking it does not steal focus (WS_EX_NOACTIVATE), so Kai still
-  knows which app you were in;
+  knows which app you were in. Its glow is a separate click-through
+  window: only the disc itself takes clicks;
 - a notification-area icon whose colour tracks the daemon (cyan idle, red
   recording, amber setup needed), with a menu for everything else.
 
@@ -70,6 +71,7 @@ SWP_NOACTIVATE = 0x0010
 SWP_SHOWWINDOW = 0x0040
 HWND_TOPMOST = -1
 MA_NOACTIVATE = 3
+MSGFLT_ALLOW = 1
 ULW_ALPHA = 0x00000002
 AC_SRC_OVER = 0x00
 AC_SRC_ALPHA = 0x01
@@ -305,6 +307,12 @@ def _load_api():  # pragma: no cover - requires Windows
     proto(user32.MessageBoxW, ctypes.c_int, H, wintypes.LPCWSTR, wintypes.LPCWSTR, U)
     proto(user32.DrawTextW, ctypes.c_int, HDC, wintypes.LPCWSTR, ctypes.c_int,
           ctypes.POINTER(wintypes.RECT), U)
+    try:
+        proto(user32.ChangeWindowMessageFilterEx, wintypes.BOOL, H, U, wintypes.DWORD,
+              ctypes.c_void_p)
+    except AttributeError:
+        pass
+    proto(gdi32.GdiFlush, wintypes.BOOL)
     proto(gdi32.CreateCompatibleDC, HDC, HDC)
     proto(gdi32.DeleteDC, wintypes.BOOL, HDC)
     proto(gdi32.CreateDIBSection, wintypes.HBITMAP, HDC, ctypes.POINTER(BITMAPINFOHEADER),
@@ -425,7 +433,8 @@ class WinShell:
         self._thread: Optional[threading.Thread] = None
         self._hwnd = None
         self._overlay_hwnd = None
-        self._orb_hwnd = None
+        self._orb_hwnd = None  # the disc: takes clicks, draws nothing visible
+        self._orb_glow_hwnd = None  # the visible orb and halo: click-through
         self._procs: list = []
         self._ov = _Overlay()
         self._orb = _Orb()
@@ -472,15 +481,6 @@ class WinShell:
         """Non-empty: the daemon can't start yet (e.g. no API key) — amber
         icon, a setup-first menu. Empty: back to normal."""
         self._post(("setup", message))
-
-    def message_box(self, text: str, *, title: str = "", flags: int = 0) -> int:
-        """A modal message box (blocks the CALLER, not the UI thread)."""
-        try:
-            user32 = _load_api()[0]
-            return int(user32.MessageBoxW(None, text, title or self._app_name, flags | 0x10000))
-        except Exception:
-            logger.exception("MessageBox failed")
-            return 0
 
     # ------------------------------------------------------ queue plumbing
 
@@ -544,11 +544,18 @@ class WinShell:
                 | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
                 style=WS_POPUP,
             )
+            self._orb_glow_hwnd = self._create_window(
+                "HyperFurionVK.OrbGlow", self._overlay_proc,
+                ex_style=WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW
+                | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
+                style=WS_POPUP,
+            )
             self._orb_hwnd = self._create_window(
                 "HyperFurionVK.Orb", self._orb_proc,
                 ex_style=WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 style=WS_POPUP,
             )
+            self._allow_explorer_messages()
             self._load_orb_position()
             self._add_tray()
             user32.SetTimer(self._hwnd, TIMER_POLL, POLL_MS, None)
@@ -585,6 +592,23 @@ class WinShell:
             raise OSError(f"CreateWindowExW({class_name}) failed: {ctypes.get_last_error()}")
         return hwnd
 
+    def _allow_explorer_messages(self) -> None:  # pragma: no cover - requires Windows
+        """Run as administrator, our window would never hear from Explorer
+        (UIPI drops messages from lower integrity): no tray clicks, and no
+        TaskbarCreated to bring the icon back after Explorer restarts."""
+        user32 = _load_api()[0]
+        allow = getattr(user32, "ChangeWindowMessageFilterEx", None)
+        if allow is None:
+            return
+        for message in (self._taskbar_created, WM_APP_TRAY):
+            if message and not allow(self._hwnd, message, MSGFLT_ALLOW, None):
+                logger.debug("ChangeWindowMessageFilterEx(%#x) failed", message)
+
+    def _ours(self, hwnd) -> bool:
+        return bool(hwnd) and hwnd in (
+            self._hwnd, self._overlay_hwnd, self._orb_hwnd, self._orb_glow_hwnd
+        )
+
     def _teardown(self) -> None:  # pragma: no cover - requires Windows
         user32, _, shell32, _, _ = _load_api()
         if self._tray.added:
@@ -594,10 +618,10 @@ class WinShell:
         for hicon in self._tray.icons.values():
             user32.DestroyIcon(hicon)
         self._tray.icons.clear()
-        for hwnd in (self._overlay_hwnd, self._orb_hwnd, self._hwnd):
+        for hwnd in (self._overlay_hwnd, self._orb_hwnd, self._orb_glow_hwnd, self._hwnd):
             if hwnd:
                 user32.DestroyWindow(hwnd)
-        self._overlay_hwnd = self._orb_hwnd = None
+        self._overlay_hwnd = self._orb_hwnd = self._orb_glow_hwnd = None
         self._hwnd = None
         for font in self._fonts.values():
             _load_api()[1].DeleteObject(font)
@@ -644,6 +668,11 @@ class WinShell:
                 self._tray.added = False
                 self._add_tray()
                 return 0
+            if msg == WM_CLOSE:
+                # taskkill (without /F), or Alt+F4 while the menu had focus:
+                # quit properly rather than lose the window and keep running.
+                self._cb.quit()
+                return 0
             if msg in (WM_DISPLAYCHANGE, WM_DPICHANGED):
                 self._sync_orb(reposition=True)
         except Exception:
@@ -653,6 +682,8 @@ class WinShell:
     def _overlay_proc(self, hwnd, msg, wparam, lparam):  # pragma: no cover
         if msg == WM_MOUSEACTIVATE:
             return MA_NOACTIVATE
+        if msg == WM_CLOSE:
+            return 0  # only the main window answers a close (by quitting)
         return _load_api()[0].DefWindowProcW(hwnd, msg, wparam, lparam)
 
     def _orb_proc(self, hwnd, msg, wparam, lparam):  # pragma: no cover
@@ -660,6 +691,8 @@ class WinShell:
         try:
             if msg == WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE  # never steal focus from the user's app
+            if msg == WM_CLOSE:
+                return 0
             if msg == WM_SETCURSOR:
                 user32.SetCursor(user32.LoadCursorW(None, ctypes.c_void_p(IDC_HAND)))
                 return 1
@@ -720,12 +753,9 @@ class WinShell:
         focus back to it), and follow daemon status: tray colour, orb
         colour, and clearing a LISTENING pill that outlived its session."""
         user32 = _load_api()[0]
-        fg = user32.GetForegroundWindow()
-        if fg and fg not in (self._hwnd, self._overlay_hwnd, self._orb_hwnd):
-            name = ctypes.create_unicode_buffer(64)
-            user32.GetClassNameW(fg, name, 64)
-            if name.value.lower() not in _SHELL_CLASSES:
-                self._last_target = fg
+        fg = self._app_window(user32.GetForegroundWindow())
+        if fg:
+            self._last_target = fg
         try:
             status = self._cb.status() or {}
         except Exception:
@@ -755,6 +785,15 @@ class WinShell:
                 self._ov.idle_since = now
             elif now - self._ov.idle_since > STALE_LISTENING_S:
                 self._hide_overlay()
+
+    def _app_window(self, hwnd):  # pragma: no cover - requires Windows
+        """hwnd when it is an app the user works in; None for our own
+        windows and the taskbar/desktop."""
+        if not hwnd or self._ours(hwnd):
+            return None
+        name = ctypes.create_unicode_buffer(64)
+        _load_api()[0].GetClassNameW(hwnd, name, 64)
+        return None if name.value.lower() in _SHELL_CLASSES else hwnd
 
     def _with_focus_restored(self, action: Callable[[], None]) -> None:  # pragma: no cover
         """Clicking the tray hands focus to the taskbar; give it back to the
@@ -793,6 +832,9 @@ class WinShell:
                 user32.KillTimer(self._hwnd, TIMER_ANIM)
         if timeout_ms > 0:
             user32.SetTimer(self._hwnd, TIMER_HIDE, timeout_ms, None)
+        else:
+            # Persistent now: an earlier update's timer must not hide it.
+            user32.KillTimer(self._hwnd, TIMER_HIDE)
         self._ov.visible = True
         self._draw_overlay()
 
@@ -815,7 +857,7 @@ class WinShell:
     def _foreground_rect(self):  # pragma: no cover - requires Windows
         user32 = _load_api()[0]
         fg = user32.GetForegroundWindow()
-        if not fg or fg in (self._overlay_hwnd, self._orb_hwnd):
+        if not fg or self._ours(fg):
             fg = self._last_target
         if not fg:
             return None
@@ -877,7 +919,9 @@ class WinShell:
         gdi32.SelectObject(dc, font)
         gdi32.SetTextCharacterExtra(dc, extra)
         size = wintypes.SIZE()
-        gdi32.GetTextExtentPoint32W(dc, text, len(text), ctypes.byref(size))
+        # The count is in UTF-16 units: an emoji is two.
+        gdi32.GetTextExtentPoint32W(dc, text, len(text.encode("utf-16-le")) // 2,
+                                    ctypes.byref(size))
         return int(size.cx), int(size.cy)
 
     def _draw_overlay(self) -> None:  # pragma: no cover - requires Windows
@@ -886,7 +930,7 @@ class WinShell:
             return
         style = render.style_for(self._ov.state)
         anchor = self._ov.anchor
-        probe_x, probe_y = anchor if anchor and anchor[0] >= 0 else self._rect_center()
+        probe_x, probe_y = anchor if render.anchor_known(anchor) else self._rect_center()
         work, dpi = self._monitor_for(probe_x, probe_y)
         scale = dpi / 96.0
         s = lambda v: int(round(v * scale))  # noqa: E731
@@ -941,6 +985,7 @@ class WinShell:
             if detail:
                 top += lh + s(3)
                 self._draw_text(dc, detail_font, detail, render.DETAIL_INK, left, top, right, dh)
+            gdi32.GdiFlush()  # GDI may batch the text; read the bits after it lands
             drawn = view[..., :3][..., ::-1].astype(np.float32)
             view[...] = render.to_bgra_premultiplied(drawn, alpha)
             self._update_layered(self._overlay_hwnd, dc, x - margin, y - margin,
@@ -965,7 +1010,9 @@ class WinShell:
         gdi32.SetTextCharacterExtra(dc, extra)
         gdi32.SetTextColor(dc, _rgb(color))
         rect = wintypes.RECT(int(left), int(top), int(right), int(top + height + 2))
-        user32.DrawTextW(dc, text, len(text), ctypes.byref(rect),
+        # -1: NUL-terminated, so text with emoji (two UTF-16 units each) is
+        # never cut short by a code-point count.
+        user32.DrawTextW(dc, text, -1, ctypes.byref(rect),
                          DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS)
 
     def _dib(self, dc, width: int, height: int):  # pragma: no cover - requires Windows
@@ -1007,11 +1054,14 @@ class WinShell:
         if want:
             self._orb.visible = True
             self._draw_orb()
-            user32.SetWindowPos(self._orb_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+            # The click target goes above the glow it sits in.
+            for hwnd in (self._orb_glow_hwnd, self._orb_hwnd):
+                user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
         elif self._orb.visible:
             self._orb.visible = False
-            user32.ShowWindow(self._orb_hwnd, SW_HIDE)
+            for hwnd in (self._orb_hwnd, self._orb_glow_hwnd):
+                user32.ShowWindow(hwnd, SW_HIDE)
 
     def _default_orb_pos(self, size: int) -> tuple[int, int]:  # pragma: no cover
         user32 = _load_api()[0]
@@ -1054,16 +1104,21 @@ class WinShell:
         try:
             import numpy as np
 
-            bits, bitmap = self._dib(dc, canvas, canvas)
-            old_bitmap = gdi32.SelectObject(dc, bitmap)
-            view = np.ctypeslib.as_array(
-                ctypes.cast(bits, ctypes.POINTER(ctypes.c_uint8)), shape=(canvas, canvas, 4)
-            )
-            view[...] = render.to_bgra_premultiplied(rgb, alpha)
-            self._update_layered(self._orb_hwnd, dc, pos[0] - margin, pos[1] - margin,
-                                 canvas, canvas)
-            gdi32.SelectObject(dc, old_bitmap)
-            gdi32.DeleteObject(bitmap)
+            for hwnd, pixels, x, y in (
+                (self._orb_glow_hwnd, render.to_bgra_premultiplied(rgb, alpha),
+                 pos[0] - margin, pos[1] - margin),
+                (self._orb_hwnd, render.orb_hit_bgra(size), pos[0], pos[1]),
+            ):
+                side = pixels.shape[0]
+                bits, bitmap = self._dib(dc, side, side)
+                old_bitmap = gdi32.SelectObject(dc, bitmap)
+                view = np.ctypeslib.as_array(
+                    ctypes.cast(bits, ctypes.POINTER(ctypes.c_uint8)), shape=(side, side, 4)
+                )
+                view[...] = pixels
+                self._update_layered(hwnd, dc, x, y, side, side)
+                gdi32.SelectObject(dc, old_bitmap)
+                gdi32.DeleteObject(bitmap)
         finally:
             gdi32.DeleteDC(dc)
             user32.ReleaseDC(None, screen)
@@ -1170,13 +1225,19 @@ class WinShell:
             pass
         menu = user32.CreatePopupMenu()
         items: dict[int, Callable[[], None]] = {}
+        # Items that open nothing hand focus straight back to the app the
+        # user was in (so does dismissing the menu); the rest open a window
+        # of their own, or restore focus themselves.
+        refocus_ids: set[int] = set()
 
         def add(text: str, action: Optional[Callable[[], None]] = None, *,
-                checked: bool = False, enabled: bool = True) -> None:
+                checked: bool = False, enabled: bool = True, refocus: bool = False) -> None:
             item_id = len(items) + 1
             flags = MF_STRING | (MF_CHECKED if checked else 0) | (0 if enabled else MF_GRAYED)
             user32.AppendMenuW(menu, flags, item_id, text)
             items[item_id] = action or (lambda: None)
+            if refocus:
+                refocus_ids.add(item_id)
 
         def separator() -> None:
             user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
@@ -1201,29 +1262,35 @@ class WinShell:
             read_label = "Read clipboard aloud"
             if self._read_hotkey:
                 read_label += f"\t(selection: {self._read_hotkey})"
-            add(read_label, self._cb.read_clipboard)
+            add(read_label, self._cb.read_clipboard, refocus=True)
             separator()
-            add("Show Kai orb", self._toggle_orb, checked=self._orb.want)
+            add("Show Kai orb", self._toggle_orb, checked=self._orb.want, refocus=True)
             add("Open settings file…", self._cb.open_settings)
         add("Open logs folder", self._cb.open_logs)
-        add("Start with Windows", self._toggle_autostart, checked=self._safe_autostart())
+        add("Start with Windows", self._toggle_autostart, checked=self._safe_autostart(),
+            refocus=True)
         add("Help", self._cb.open_help)
         separator()
         if not self._setup_message:
-            add("Restart", self._cb.restart)
-        add("Quit", self._cb.quit)
+            add("Restart", self._cb.restart, refocus=True)
+        add("Quit", self._cb.quit, refocus=True)
 
+        previous = self._app_window(user32.GetForegroundWindow()) or self._last_target
         point = wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(point))
         # Required for the menu to close when clicking elsewhere.
         user32.SetForegroundWindow(self._hwnd)
-        chosen = user32.TrackPopupMenu(
+        chosen = int(user32.TrackPopupMenu(
             menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
             point.x, point.y, 0, self._hwnd, None,
-        )
+        ))
         user32.PostMessageW(self._hwnd, WM_NULL, 0, 0)
         user32.DestroyMenu(menu)
-        action = items.get(int(chosen))
+        if (not chosen or chosen in refocus_ids) and previous and user32.IsWindow(previous):
+            # Our hidden window must not keep the focus: typing would go
+            # nowhere, and Alt+F4 would close us instead of their app.
+            user32.SetForegroundWindow(previous)
+        action = items.get(chosen)
         if action is not None:
             try:
                 action()

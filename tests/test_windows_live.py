@@ -2,11 +2,14 @@
 
 These run only on Windows (the Windows CI job, or Windows Python under
 Wine) and skip themselves when there is no interactive desktop to type
-into. Physical key presses can't be synthesized here (our own hook
-ignores injected input by design), so the hook is checked for a clean
-install/uninstall; the swallow logic is covered in tests/test_windows.py.
+into — unless HFVK_REQUIRE_DESKTOP=1 (CI sets it), where a missing
+desktop is a failure: a crash must never pass as a skip. Physical key
+presses can't be synthesized here (our own hook ignores injected input by
+design), so the hook is checked for a clean install/uninstall; the
+swallow logic is covered in tests/test_windows.py.
 """
 
+import os
 import sys
 import threading
 import time
@@ -35,6 +38,20 @@ if sys.platform == "win32":
     user32.PeekMessageW.argtypes = [
         ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT
     ]
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.c_void_p]
+
+REQUIRE_DESKTOP = os.environ.get("HFVK_REQUIRE_DESKTOP") == "1"
+
+
+def no_desktop(reason: str) -> None:
+    if REQUIRE_DESKTOP:
+        pytest.fail(f"{reason} (HFVK_REQUIRE_DESKTOP=1)")
+    pytest.skip(reason)
+
 
 WS_VISIBLE = 0x10000000
 WS_CHILD = 0x40000000
@@ -126,7 +143,7 @@ def edit_box():
     box = EditBox()
     if not box.focus():
         box.close()
-        pytest.skip("no interactive desktop (cannot take the foreground)")
+        no_desktop("no interactive desktop (cannot take the foreground)")
     yield box
     box.close()
 
@@ -260,6 +277,28 @@ class TestClipboard:
         assert clip.get_text() == "what was there before"
 
 
+class TestFocusProbe:
+    def test_our_own_window_is_not_the_app_being_dictated_to(self, edit_box) -> None:
+        # The tray/orb menu brings our window to the front; the focus
+        # watchdog must not read that as "the user switched apps".
+        from voice_keyboard.focusprobe import probe_focus
+
+        assert probe_focus() is None
+
+    def test_probing_does_not_grow_ctypes_caches(self, edit_box) -> None:
+        from voice_keyboard import focusprobe
+
+        cache = getattr(ctypes, "_pointer_type_cache", None)
+        if cache is None:
+            pytest.skip("no ctypes pointer cache on this Python")
+        thread_id = user32.GetWindowThreadProcessId(edit_box.frame, None)
+        focusprobe._windows_caret_and_secret(focusprobe._windows_api()[0], thread_id)
+        before = len(cache)
+        for _ in range(50):
+            focusprobe._windows_caret_and_secret(focusprobe._windows_api()[0], thread_id)
+        assert len(cache) == before
+
+
 class TestHookAndShell:
     def test_hotkey_hook_installs_and_stops(self) -> None:
         from voice_keyboard.windows.hotkey import WinHotkeyListener
@@ -278,18 +317,35 @@ class TestHookAndShell:
         time.sleep(0.2)
         if not thread.is_alive():
             # SetWindowsHookEx refused (a non-interactive service session).
-            pytest.skip("low-level keyboard hooks unavailable in this session")
+            no_desktop("low-level keyboard hooks unavailable in this session")
         listener.stop()
         assert not thread.is_alive()
 
     def test_shell_lifecycle(self) -> None:
         from voice_keyboard.windows.shell import ShellCallbacks, WinShell
 
-        shell = WinShell(ShellCallbacks(status=lambda: {"recording": True}), version="test")
+        closed = threading.Event()
+        shell = WinShell(
+            ShellCallbacks(status=lambda: {"recording": True}, quit=closed.set), version="test"
+        )
         if not shell.start():
-            pytest.skip("no desktop for windows")
+            no_desktop("no desktop for windows")
         try:
             shell.set_button(True)
+            time.sleep(0.3)
+            # The glow is click-through; only the disc-sized window takes clicks.
+            user32.GetWindowLongW.restype = ctypes.c_long
+            glow_style = user32.GetWindowLongW(shell._orb_glow_hwnd, -20)  # GWL_EXSTYLE
+            assert glow_style & 0x20  # WS_EX_TRANSPARENT
+            assert not user32.GetWindowLongW(shell._orb_hwnd, -20) & 0x20
+            hit, glow = wintypes.RECT(), wintypes.RECT()
+            user32.GetWindowRect(shell._orb_hwnd, ctypes.byref(hit))
+            user32.GetWindowRect(shell._orb_glow_hwnd, ctypes.byref(glow))
+            assert hit.right - hit.left < glow.right - glow.left
+            # taskkill (without /F) and Alt+F4 ask the app to quit properly.
+            user32.PostMessageW(shell._hwnd, 0x0010, 0, 0)  # WM_CLOSE
+            assert closed.wait(2.0)
+            assert user32.IsWindow(shell._hwnd)
             for state in ("starting", "listening", "processing", "inserted", "empty", "error"):
                 shell.show(state, detail=f"{state} ▁▃▅▇ detail", anchor=(400, 300))
                 time.sleep(0.15)
