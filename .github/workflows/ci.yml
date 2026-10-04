@@ -6,7 +6,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -57,6 +56,8 @@ jobs:
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       - name: Tests (including live Win32 typing, clipboard, hook, tray)
+        env:
+          HFVK_REQUIRE_DESKTOP: "1"  # the runner has a desktop: never skip the live tests
         run: python -m pytest -q -rs
 
   relay:
