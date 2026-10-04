@@ -25,6 +25,17 @@ function boxLayout(vertical, params = {}) {
     return new St.BoxLayout({...params, vertical});
 }
 
+// The click-through pill must stay out of the shell's input region. GNOME
+// 45-49 put chrome IN it by default (on X11 the pill then swallows clicks
+// on whatever is under it); GNOME 50 removed the parameter, and its
+// Params.parse throws on an unknown key — so it is passed only where it
+// exists. The orb is reactive and keeps the default.
+function pillChromeParams(params) {
+    if (SHELL_MAJOR < 50)
+        return {...params, affectsInputRegion: false};
+    return params;
+}
+
 const BUS_NAME = 'org.voicekeyboard.Overlay';
 const OBJECT_PATH = '/org/voicekeyboard/Overlay';
 
@@ -287,15 +298,13 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         this._state = state;
         const style = STATE_STYLES[state] || STATE_STYLES.listening;
         const actor = this._buildActor(style, detail || style.detail);
-        // NOTE: do NOT re-add the input-region param that GNOME 50 removed
-        // from addChrome's params — Params.parse throws on the unknown key
-        // and the pill stops drawing entirely (see tests for the regression
-        // guard). Click-through is preserved because the actors are
-        // non-reactive (reactive defaults to false) on GNOME 50.
-        Main.layoutManager.addChrome(actor, {
+        // Version-gated params: see pillChromeParams (and the regression
+        // guard in tests/test_gnome_overlay.py). The actors are
+        // non-reactive, so the pill is click-through on every version.
+        Main.layoutManager.addChrome(actor, pillChromeParams({
             affectsStruts: false,
             trackFullscreen: true,
-        });
+        }));
         actor.opacity = 245;
         actor.set_position(0, 0);
         actor.show();
