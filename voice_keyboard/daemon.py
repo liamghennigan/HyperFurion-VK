@@ -10,7 +10,6 @@ from typing import Optional
 from voice_keyboard import clipboard, dictionary, history, recall
 from voice_keyboard.ambient import AmbientGate
 from voice_keyboard.assistant import Brain, create_brain
-from voice_keyboard.assistant.citations import format_visual_citations
 from voice_keyboard.audio_capture import AudioCapture
 from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker

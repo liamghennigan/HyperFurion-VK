@@ -6,13 +6,36 @@ from types import ModuleType
 if "evdev" not in sys.modules:
     evdev_stub = ModuleType("evdev")
 
+    import re
+
+    # Real evdev key names (linux/input-event-codes.h) beyond the explicit
+    # list below. Only these get synthesized: a stub that invents a code for
+    # ANY KEY_* name would make a typo'd hotkey binding impossible to reject.
+    _EVDEV_WORDS = (
+        "ESC MINUS EQUAL BACKSPACE TAB LEFTBRACE RIGHTBRACE ENTER LEFTCTRL "
+        "SEMICOLON APOSTROPHE GRAVE LEFTSHIFT BACKSLASH COMMA DOT SLASH "
+        "RIGHTSHIFT LEFTALT SPACE CAPSLOCK NUMLOCK SCROLLLOCK SYSRQ RIGHTCTRL "
+        "RIGHTALT LINEFEED HOME UP PAGEUP LEFT RIGHT END DOWN PAGEDOWN INSERT "
+        "DELETE MUTE VOLUMEDOWN VOLUMEUP POWER PAUSE LEFTMETA RIGHTMETA "
+        "COMPOSE MENU PRINT STOP AGAIN UNDO COPY PASTE FIND CUT HELP CALC "
+        "SLEEP WAKEUP MAIL BOOKMARKS COMPUTER BACK FORWARD HOMEPAGE REFRESH "
+        "PLAYPAUSE NEXTSONG PREVIOUSSONG STOPCD RECORD MICMUTE ZENKAKUHANKAKU "
+        "102ND RO KATAKANA HIRAGANA HENKAN MUHENKAN YEN HANGEUL HANJA"
+    ).split()
+    _EVDEV_NAME = re.compile(
+        r"^(?:KEY_(?:[A-Z]|[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|KP[A-Z0-9]+|"
+        + "|".join(_EVDEV_WORDS)
+        + r")|BTN_[A-Z0-9_]+|EV_[A-Z_]+)$"
+    )
+
     class _Ecodes(ModuleType):
-        # Unknown KEY_/EV_/BTN_ names get a stable synthetic code on first
-        # access, so new keycodes in the injector never break collection.
+        # Real-but-unlisted KEY_/EV_/BTN_ names get a stable synthetic code
+        # on first access, so new keycodes in the injector never break
+        # collection; names evdev doesn't have raise like the real module.
         _next = 1000
 
         def __getattr__(self, name):
-            if name.startswith(("KEY_", "EV_", "BTN_")):
+            if _EVDEV_NAME.match(name):
                 _Ecodes._next += 1
                 setattr(self, name, _Ecodes._next)
                 return getattr(self, name)

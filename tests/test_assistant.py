@@ -7,12 +7,13 @@ no-Enter chokepoint as the intent channel, and Enter is never pressed.
 """
 
 import asyncio
+import sys
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from voice_keyboard import dictionary, history
+from voice_keyboard import history
 from voice_keyboard.assistant.brain import Brain, create_brain
 from voice_keyboard.assistant.context import ContextProvider
 from voice_keyboard.assistant.memory import AssistantMemory, extract_memory_candidate
@@ -91,6 +92,7 @@ class TestUnifiedMemory:
         hits = mem.search("concise answers")
         assert hits and "concise" in hits[0].text
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
     def test_db_is_mode_600(self) -> None:
         import os
 

@@ -1,7 +1,5 @@
-import io
-import os
+import sys
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -12,6 +10,8 @@ from voice_keyboard import config
 def tmp_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     cfg_dir = tmp_path / "voice-keyboard"
     monkeypatch.setattr(config, "_config_dir", lambda: cfg_dir)
+    # Unix-socket defaults; Windows (loopback TCP) is covered in test_windows*.
+    monkeypatch.setattr(sys, "platform", "linux")
     return cfg_dir
 
 
@@ -45,7 +45,8 @@ class TestConfigLoading:
         cfg_path = tmp_config_dir / "config.toml"
         custom_socket = str(tmp_config_dir / "custom.sock")
         tmp_config_dir.mkdir(parents=True, exist_ok=True)
-        cfg_path.write_text(f"[daemon]\nsocket_path = \"{custom_socket}\"\n")
+        # A TOML literal string: Windows paths carry backslashes.
+        cfg_path.write_text(f"[daemon]\nsocket_path = '{custom_socket}'\n")
         cfg = config.load_config()
         assert cfg["daemon"]["socket_path"] == custom_socket
 
@@ -119,6 +120,7 @@ class TestConfigValidation:
     ],
 )
 def test_config_dir(monkeypatch: pytest.MonkeyPatch, xdg: str, expected: Path) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")  # Windows: %APPDATA% (test_windows)
     monkeypatch.setenv("XDG_CONFIG_HOME", xdg)
     assert config._config_dir() == expected
 

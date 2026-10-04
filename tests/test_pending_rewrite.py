@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 
 from voice_keyboard.config import _default_config_with_paths
-from voice_keyboard.daemon import PENDING_REWRITE_TTL_S, Daemon
+from voice_keyboard.daemon import Daemon
 
 
 def _valid_config(pending: bool = True) -> dict:

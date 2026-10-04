@@ -12,6 +12,8 @@ from voice_keyboard.ipc import IPCClient, IPCServer, recv_all
 
 
 def _unix_stream_sockets_available() -> bool:
+    if not hasattr(socket, "AF_UNIX"):
+        return False  # Windows Python: IPC is loopback TCP (tests/test_windows.py)
     with tempfile.TemporaryDirectory() as tmp:
         path = str(Path(tmp) / "probe.sock")
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -26,7 +28,7 @@ def _unix_stream_sockets_available() -> bool:
 
 pytestmark = pytest.mark.skipif(
     not _unix_stream_sockets_available(),
-    reason="AF_UNIX stream sockets are blocked in this sandbox",
+    reason="AF_UNIX stream sockets are unavailable (sandbox or Windows)",
 )
 
 

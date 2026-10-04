@@ -1,6 +1,5 @@
 import asyncio
 
-import pytest
 
 from voice_keyboard.flow.vad import SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import InjectionWorker, common_prefix_len

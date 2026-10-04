@@ -1,0 +1,7 @@
+# Lint for real defects only — pyflakes (unused/undefined names, shadowing)
+# and syntax errors. Formatting and style are left to the surrounding code.
+target-version = "py311"
+extend-exclude = ["docs"]
+
+[lint]
+select = ["F", "E9"]

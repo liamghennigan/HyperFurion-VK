@@ -2,8 +2,7 @@
 procedural memory — routing, gating, and physics."""
 
 import asyncio
-import json
-import queue
+import sys
 from unittest import mock
 
 import pytest
@@ -168,6 +167,12 @@ class TestLLMAnswer:
 
 
 class TestRunAsk:
+    @pytest.fixture(autouse=True)
+    def linux_platform(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Context comes from the PRIMARY selection here; on Windows it is a
+        # real Ctrl+C copy (covered in tests/test_windows_shell.py).
+        monkeypatch.setattr(sys, "platform", "linux")
+
     def test_say_mode_speaks_the_answer(self) -> None:
         daemon = _daemon()
         daemon._run_tts = mock.AsyncMock()
