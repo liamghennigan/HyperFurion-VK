@@ -475,6 +475,26 @@ def _validate_api_key(config: dict, provider: str) -> None:
         raise RuntimeError(f"providers.{provider}.api_key is not configured")
 
 
+def lacks_credentials(path: Path) -> bool:
+    """True for a config file whose only problem is that no API key was ever
+    filled in — e.g. the early beta installer's copy of the example."""
+    try:
+        validate_config(load_config(path))
+    except RuntimeError as exc:
+        return "api_key is not configured" in str(exc)
+    except Exception:
+        return False
+    return False
+
+
+def is_usable(path: Path) -> bool:
+    try:
+        validate_config(load_config(path))
+    except Exception:
+        return False
+    return True
+
+
 def validate_config(config: dict) -> None:
     """Validate config and raise a clear RuntimeError on missing/invalid values."""
     for name, default in DEFAULT_CONFIG.items():

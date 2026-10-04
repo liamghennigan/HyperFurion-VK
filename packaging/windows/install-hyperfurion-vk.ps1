@@ -86,7 +86,6 @@ function Install-HyperFurionVK {
         Write-Step "Stopping the running copy"
         Stop-HyperFurionVK -VenvPython $VenvPython
     }
-    Remove-BetaLeftovers
 
     # --- Python ---------------------------------------------------------
     Write-Step "Looking for Python 3.11-3.13 (64-bit)"
@@ -136,6 +135,9 @@ function Install-HyperFurionVK {
         throw "The installed package is missing the Windows app or a dependency (is $Version older than v2.2.0?):`n$($check.Output)"
     }
     $installed = Get-MarkedLine (Invoke-Native $VenvPython @("-c", "from importlib.metadata import version; print('HFVK', version('voice-keyboard'))")).Output
+    # Only now that the new app is in place: a failed install leaves an
+    # early beta able to start at the next sign-in.
+    Remove-BetaLeftovers
 
     # --- icon, command shim, PATH -------------------------------------------
     Write-Step "Adding the voice-keyboard command, Start menu entry and icon"
@@ -147,7 +149,7 @@ function Install-HyperFurionVK {
     # expand %LOCALAPPDATA% itself.
     Set-Content -Path (Join-Path $BinDir "voice-keyboard.cmd") -Encoding ASCII -Value "@echo off`r`n`"%LOCALAPPDATA%\HyperFurion-VK\venv\Scripts\voice-keyboard.exe`" %*"
     Add-UserPath $BinDir
-    if (($env:Path -split ";") -notcontains $BinDir) { $env:Path = "$env:Path;$BinDir" }
+    if (($env:Path -split ";") -notcontains $BinDir) { $env:Path = "$BinDir;$env:Path" }
 
     $shell = New-Object -ComObject WScript.Shell
     $link = $shell.CreateShortcut($Shortcut)
@@ -196,7 +198,7 @@ function Install-HyperFurionVK {
     # --- settings ----------------------------------------------------------------
     # Ask the app where its settings live (it honors XDG_CONFIG_HOME, and an
     # early beta's settings are moved into place first).
-    $migration = Invoke-Native $VenvPython @("-c", "from voice_keyboard.paths import migrate_windows_beta as m; print(chr(10).join(m()))")
+    $migration = Invoke-Native $VenvPython @("-c", "from voice_keyboard.paths import migrate_windows_beta as m; moved, failed = m(); print(chr(10).join(moved + failed))")
     if ($migration.Code -eq 0 -and $migration.Output.Trim()) {
         $migration.Output.Trim() -split "`n" | ForEach-Object { Write-Host "    $_" }
     }
@@ -367,9 +369,11 @@ function Get-LatestTag([string]$Repo, [string]$Fallback) {
 }
 
 function Get-AppProcesses {
-    # The app, a console daemon, and an early beta's voice-keyboard-daemon.exe.
+    # The app, a console daemon, and an early beta's voice-keyboard-daemon.exe
+    # - in this Windows session only: others signed in on this PC run their own.
+    $session = (Get-Process -Id $PID).SessionId
     Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe' OR Name = 'voice-keyboard-daemon.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq "voice-keyboard-daemon.exe" -or $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*" }
+        Where-Object { $_.SessionId -eq $session -and ($_.Name -eq "voice-keyboard-daemon.exe" -or $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*") }
 }
 
 function Stop-HyperFurionVK([string]$VenvPython) {
@@ -388,9 +392,20 @@ function Remove-BetaLeftovers {
     # Early betas started voice-keyboard-daemon.exe from the Startup folder;
     # left there it would run alongside the app at the next sign-in.
     $launcher = Join-Path ([Environment]::GetFolderPath("Startup")) "hyperfurion-vk-daemon.cmd"
-    if (Test-Path -LiteralPath $launcher) {
-        Write-Step "Removing the beta's startup launcher"
-        Remove-Item -LiteralPath $launcher -Force -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $launcher)) { return }
+    $betaExe = $null
+    $match = [regex]::Match((Get-Content -LiteralPath $launcher -Raw -ErrorAction SilentlyContinue), '"([^"]*voice-keyboard-daemon\.exe)"')
+    if ($match.Success) { $betaExe = $match.Groups[1].Value }
+    Write-Step "Removing the beta's startup launcher"
+    Remove-Item -LiteralPath $launcher -Force -ErrorAction SilentlyContinue
+    if ($betaExe) {
+        # Its commands stay installed (pip's user Scripts folder); ours now
+        # come first on PATH, but say how to remove them for good.
+        $scripts = Split-Path -Parent $betaExe
+        $version = ""
+        if ($scripts -match 'Python(\d)(\d+)\\Scripts$') { $version = " -$($Matches[1]).$($Matches[2])" }
+        Write-Host "    The beta's own commands are still in $scripts."
+        Write-Host "    To remove them: py$version -m pip uninstall voice-keyboard"
     }
 }
 
@@ -415,13 +430,14 @@ function Get-RawUserPath {
 }
 
 function Add-UserPath([string]$Dir) {
+    # First in the user PATH, so another voice-keyboard (an early beta's,
+    # from pip's Scripts folder) can't shadow ours.
     $current = Get-RawUserPath
     $parts = @($current -split ";" | Where-Object { $_ -ne "" })
-    foreach ($p in $parts) {
-        if ($p.TrimEnd("\") -ieq $Dir.TrimEnd("\")) { return }
-    }
-    $parts += $Dir
-    New-ItemProperty -Path "HKCU:\Environment" -Name "Path" -Value ($parts -join ";") -PropertyType ExpandString -Force | Out-Null
+    $others = @($parts | Where-Object { $_.TrimEnd("\") -ine $Dir.TrimEnd("\") })
+    if ($parts.Count -eq $others.Count + 1 -and $parts[0].TrimEnd("\") -ieq $Dir.TrimEnd("\")) { return }
+    $updated = @($Dir) + $others
+    New-ItemProperty -Path "HKCU:\Environment" -Name "Path" -Value ($updated -join ";") -PropertyType ExpandString -Force | Out-Null
     Send-EnvironmentChange
 }
 
@@ -513,9 +529,10 @@ Set-Location $env:TEMP
 Write-Host "Uninstalling $AppName..." -ForegroundColor Cyan
 $python = Join-Path $InstallRoot "venv\Scripts\python.exe"
 if (Test-Path $python) { & $python -m voice_keyboard.client quit 2>$null | Out-Null }
+$session = (Get-Process -Id $PID).SessionId
 for ($i = 0; $i -lt 20; $i++) {
     $procs = Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*" }
+        Where-Object { $_.SessionId -eq $session -and ($_.CommandLine -like "*voice_keyboard.windows*" -or $_.CommandLine -like "*voice-keyboard-daemon*") }
     if (-not $procs) { break }
     if ($i -eq 19) { $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
     Start-Sleep -Milliseconds 500
@@ -537,8 +554,17 @@ if ($kept.Count -ne @($path -split ";" | Where-Object { $_ -ne "" }).Count) {
 }
 
 if ($Purge) {
-    Remove-Item (Join-Path $env:APPDATA "voice-keyboard") -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $env:LOCALAPPDATA "voice-keyboard") -Recurse -Force -ErrorAction SilentlyContinue
+    $data = @(
+        (Join-Path $env:APPDATA "voice-keyboard"),
+        (Join-Path $env:LOCALAPPDATA "voice-keyboard"),
+        # Where an early beta kept them: left behind, a reinstall would
+        # bring them back.
+        (Join-Path $HOME ".config\voice-keyboard"),
+        (Join-Path $HOME ".local\state\voice-keyboard")
+    )
+    if ($env:XDG_CONFIG_HOME) { $data += Join-Path $env:XDG_CONFIG_HOME "voice-keyboard" }
+    if ($env:XDG_STATE_HOME) { $data += Join-Path $env:XDG_STATE_HOME "voice-keyboard" }
+    foreach ($dir in $data) { Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 Remove-Item $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
 if (Test-Path $InstallRoot) {

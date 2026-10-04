@@ -494,7 +494,10 @@ class TestWindowsPaths:
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "x"))
         assert paths.config_dir() == tmp_path / "x" / "voice-keyboard"
 
-    def test_beta_leftovers_are_copied_once_and_never_overwrite(self, monkeypatch, tmp_path) -> None:
+    @pytest.fixture
+    def beta(self, monkeypatch, tmp_path):
+        """An early beta's leftovers: settings under ~/.config, history
+        under ~/.local/state (where its daemon kept them)."""
         monkeypatch.setattr(sys, "platform", "win32")
         for name in ("XDG_CONFIG_HOME", "XDG_STATE_HOME"):
             monkeypatch.delenv(name, raising=False)
@@ -503,32 +506,74 @@ class TestWindowsPaths:
         monkeypatch.setattr(paths.Path, "home", lambda: tmp_path / "home")
         legacy_cfg = tmp_path / "home" / ".config" / "voice-keyboard"
         legacy_cfg.mkdir(parents=True)
-        (legacy_cfg / "config.toml").write_text("[stt]\nprovider = 'xai'\n")
+        (legacy_cfg / "config.toml").write_text('[providers.xai]\napi_key = "xai-real-key"\n')
         legacy_state = tmp_path / "home" / ".local" / "state" / "voice-keyboard"
         (legacy_state / "memory").mkdir(parents=True)
         (legacy_state / "history.jsonl").write_text("old\n")
         (legacy_state / "dictionary.json").write_text("{}")
         (legacy_state / "memory" / "kai.json").write_text("{}")
-        new_state = tmp_path / "Local" / "voice-keyboard"
+        return tmp_path
+
+    def test_beta_leftovers_are_copied_once_and_never_overwrite(self, beta) -> None:
+        new_state = beta / "Local" / "voice-keyboard"
         new_state.mkdir(parents=True)
         (new_state / "history.jsonl").write_text("new\n")  # already started over
 
-        done = paths.migrate_windows_beta()
-        assert len(done) == 2
-        assert (tmp_path / "Roaming" / "voice-keyboard" / "config.toml").read_text().startswith("[stt]")
+        moved, failed = paths.migrate_windows_beta()
+        assert len(moved) == 2 and failed == []
+        assert "xai-real-key" in (beta / "Roaming" / "voice-keyboard" / "config.toml").read_text()
         assert (new_state / "history.jsonl").read_text() == "new\n"
         assert (new_state / "dictionary.json").exists()
         assert (new_state / "memory" / "kai.json").exists()
-        assert (legacy_cfg / "config.toml").exists()  # never deleted
-        assert paths.config_dir() == tmp_path / "Roaming" / "voice-keyboard"
+        assert (beta / "home" / ".config" / "voice-keyboard" / "config.toml").exists()
+        assert not list(new_state.glob("*.migrating"))
+        assert paths.config_dir() == beta / "Roaming" / "voice-keyboard"
 
         (new_state / "dictionary.json").unlink()  # the user cleared it
-        assert paths.migrate_windows_beta() == []
+        assert paths.migrate_windows_beta() == ([], [])
         assert not (new_state / "dictionary.json").exists()
+
+    def test_the_beta_installers_starter_config_gives_way(self, beta) -> None:
+        # The beta's installer copied the example (placeholder keys) into
+        # %APPDATA%, but its daemon only ever read ~/.config.
+        target = beta / "Roaming" / "voice-keyboard" / "config.toml"
+        target.parent.mkdir(parents=True)
+        target.write_text('[xai]\napi_key = "xai-your-api-key-here"\n')
+        moved, failed = paths.migrate_windows_beta()
+        assert failed == [] and "beta-starter" in moved[0]
+        assert "xai-real-key" in target.read_text()
+        assert "your-api-key-here" in target.with_name("config.toml.beta-starter").read_text()
+
+    def test_real_settings_are_never_replaced(self, beta) -> None:
+        target = beta / "Roaming" / "voice-keyboard" / "config.toml"
+        target.parent.mkdir(parents=True)
+        target.write_text('[providers.xai]\napi_key = "xai-newer-key"\n')
+        paths.migrate_windows_beta()
+        assert "xai-newer-key" in target.read_text()
+        assert not target.with_name("config.toml.beta-starter").exists()
+
+    def test_a_failed_copy_is_retried_next_time(self, beta, monkeypatch) -> None:
+        real_copy = paths._copy_file
+
+        def locked(src, dest):
+            if dest.name == "dictionary.json":
+                raise PermissionError(13, "in use by another process")
+            real_copy(src, dest)
+
+        monkeypatch.setattr(paths, "_copy_file", locked)
+        moved, failed = paths.migrate_windows_beta()
+        assert len(failed) == 1 and "dictionary.json" in failed[0]
+        new_state = beta / "Local" / "voice-keyboard"
+        assert not (new_state / "dictionary.json").exists()
+        assert not (new_state / ".beta-migrated").exists()
+        monkeypatch.setattr(paths, "_copy_file", real_copy)
+        moved, failed = paths.migrate_windows_beta()
+        assert failed == [] and (new_state / "dictionary.json").exists()
+        assert (new_state / ".beta-migrated").exists()
 
     def test_beta_migration_is_windows_only(self, monkeypatch, tmp_path) -> None:
         monkeypatch.setattr(sys, "platform", "linux")
-        assert paths.migrate_windows_beta() == []
+        assert paths.migrate_windows_beta() == ([], [])
 
     def test_config_module_follows(self, monkeypatch, tmp_path) -> None:
         from voice_keyboard import config, history, ipc

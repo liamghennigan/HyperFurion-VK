@@ -97,12 +97,30 @@ jobs:
           $left = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" }
           if ($left) { throw "the upgrade did not stop the running app" }
 
+      - name: Upgrade over an early beta's settings
+        run: |
+          # The beta's installer left a starter config (placeholder keys) in
+          # %APPDATA% while its daemon read ~\.config: the real one must win,
+          # and the starter be kept aside.
+          $config = Join-Path $env:APPDATA "voice-keyboard\config.toml"
+          Set-Content -Path $config -Value "[xai]`napi_key = `"xai-your-api-key-here`""
+          $legacy = Join-Path $HOME ".config\voice-keyboard"
+          New-Item -ItemType Directory -Force -Path $legacy | Out-Null
+          Set-Content -Path (Join-Path $legacy "config.toml") -Value "[providers.xai]`napi_key = `"ci-beta-key`""
+          Remove-Item (Join-Path $env:LOCALAPPDATA "voice-keyboard\.beta-migrated") -ErrorAction SilentlyContinue
+          .\packaging\windows\install-hyperfurion-vk.ps1 -Source . -NonInteractive -NoAutostart -NoLaunch
+          if ($LASTEXITCODE) { throw "upgrade exited $LASTEXITCODE" }
+          if (-not (Select-String -Path $config -Pattern "ci-beta-key" -Quiet)) { throw "the beta's settings were not brought over" }
+          if (-not (Test-Path "$config.beta-starter")) { throw "the beta's starter config was not kept aside" }
+
       - name: Uninstall
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\HyperFurion-VK\uninstall.ps1" -Purge
           Start-Sleep -Seconds 6   # covers the uninstaller's deferred folder removal
           if (Test-Path "$env:LOCALAPPDATA\HyperFurion-VK") { throw "install folder left behind" }
           if (Test-Path "$env:APPDATA\voice-keyboard") { throw "config left behind despite -Purge" }
+          if (Test-Path "$HOME\.config\voice-keyboard") { throw "the beta's settings left behind despite -Purge" }
+          if (Test-Path "$HOME\.local\state\voice-keyboard") { throw "the beta's history left behind despite -Purge" }
           if (Test-Path (Join-Path ([Environment]::GetFolderPath("Programs")) "HyperFurion VK.lnk")) { throw "shortcut left behind" }
           if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HyperFurionVK") { throw "Apps & features entry left behind" }
           if ((Get-ItemProperty "HKCU:\Environment").Path -like "*HyperFurion-VK\bin*") { throw "PATH entry left behind" }

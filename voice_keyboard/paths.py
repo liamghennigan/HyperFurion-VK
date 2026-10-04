@@ -50,51 +50,105 @@ def log_dir() -> Path:
     return state_dir() / "logs"
 
 
-def migrate_windows_beta() -> list[str]:
+def _copy_file(src: Path, dest: Path) -> None:
+    """Copy through a temporary name, so a failure never leaves half a file
+    under the real one. Plain reads and writes (shutil.copy2 needs
+    CopyFile2, which some Windows layers such as Wine lack)."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f".{dest.name}.migrating")
+    try:
+        with open(src, "rb") as fin, open(tmp, "wb") as fout:
+            shutil.copyfileobj(fin, fout)
+        os.replace(tmp, dest)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _copy_tree(src: Path, dest: Path) -> None:
+    """A folder, built under a temporary name and renamed into place."""
+    tmp = dest.with_name(f".{dest.name}.migrating")
+    shutil.rmtree(tmp, ignore_errors=True)
+    try:
+        for root, _dirs, files in os.walk(src):
+            folder = tmp / Path(root).relative_to(src)
+            folder.mkdir(parents=True, exist_ok=True)
+            for name in files:
+                with open(Path(root) / name, "rb") as fin, open(folder / name, "wb") as fout:
+                    shutil.copyfileobj(fin, fout)
+        os.replace(tmp, dest)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+
+
+def migrate_windows_beta() -> tuple[list[str], list[str]]:
     """Windows: bring over what an early beta kept under ~/.config and
-    ~/.local/state. Copies (never overwrites, never deletes) and runs once;
-    the installer and the app both call it. Returns what it did."""
+    ~/.local/state. Copies, never deletes, and never overwrites real
+    settings — only the beta installer's unfilled starter config, which is
+    kept as config.toml.beta-starter. Done once: until every copy has
+    succeeded (a failure is retried at the next start). The installer and
+    the app both call it. Returns (what moved, what failed)."""
     if sys.platform != "win32":
-        return []
+        return [], []
     marker = state_dir() / ".beta-migrated"
     if marker.exists():
-        return []
-    done: list[str] = []
+        return [], []
+    moved: list[str] = []
+    failed: list[str] = []
     home = Path.home()
     legacy_config = home / ".config" / APP_DIR_NAME / "config.toml"
     appdata = os.environ.get("APPDATA", "")
     if appdata and not os.environ.get("XDG_CONFIG_HOME") and legacy_config.is_file():
+        from voice_keyboard.config import is_usable, lacks_credentials
+
         target = Path(appdata) / APP_DIR_NAME / "config.toml"
-        if not target.exists():
-            try:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(legacy_config, target)
-                done.append(r"Moved your beta settings into %APPDATA%\voice-keyboard")
-            except OSError:
-                logger.warning("Could not move the beta's settings", exc_info=True)
+        try:
+            if not target.exists():
+                _copy_file(legacy_config, target)
+                moved.append(r"Moved your beta settings into %APPDATA%\voice-keyboard")
+            elif lacks_credentials(target) and is_usable(legacy_config):
+                # The beta installer wrote a starter config here that its
+                # daemon never read; the real settings are the legacy ones.
+                backup = target.with_name("config.toml.beta-starter")
+                if not backup.exists():
+                    _copy_file(target, backup)
+                _copy_file(legacy_config, target)
+                moved.append(
+                    r"Moved your beta settings into %APPDATA%\voice-keyboard"
+                    " (its unused starter file is kept as config.toml.beta-starter)"
+                )
+        except OSError as exc:
+            failed.append(f"Could not move the beta's settings: {exc}")
     legacy_state = home / ".local" / "state" / APP_DIR_NAME
     local = os.environ.get("LOCALAPPDATA", "")
     if local and not os.environ.get("XDG_STATE_HOME") and legacy_state.is_dir():
         target_dir = Path(local) / APP_DIR_NAME
         copied = 0
-        for item in legacy_state.iterdir():
+        for item in sorted(legacy_state.iterdir()):
             dest = target_dir / item.name
-            if dest.exists():
+            if dest.exists() or item.name.endswith(".migrating"):
                 continue
             try:
-                target_dir.mkdir(parents=True, exist_ok=True)
                 if item.is_dir():
-                    shutil.copytree(item, dest)
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    _copy_tree(item, dest)
                 else:
-                    shutil.copy2(item, dest)
+                    _copy_file(item, dest)
                 copied += 1
-            except OSError:
-                logger.warning("Could not move %s from the beta", item.name, exc_info=True)
+            except OSError as exc:
+                failed.append(f"Could not move {item.name} from the beta: {exc}")
         if copied:
-            done.append(r"Moved your beta history and dictionary into %LOCALAPPDATA%\voice-keyboard")
-    try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("", encoding="utf-8")
-    except OSError:
-        pass
-    return done
+            moved.append(
+                r"Moved your beta history and dictionary into %LOCALAPPDATA%\voice-keyboard"
+            )
+    if not failed:
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("", encoding="utf-8")
+        except OSError:
+            pass
+    return moved, failed

@@ -562,13 +562,15 @@ def main(argv: Optional[list] = None) -> int:
     _set_dpi_awareness()
     _set_app_id()
     try:
-        moved = paths.migrate_windows_beta()  # before logging creates the state dir
-    except Exception:
-        moved = []
+        moved, failed = paths.migrate_windows_beta()
+    except Exception as exc:
+        moved, failed = [], [f"Could not bring over the beta's files: {exc}"]
     log_path = _setup_logging(console=args.console)
     logger.info("%s %s starting (log: %s)", APP_NAME, _version(), log_path)
     for line in moved:
         logger.info("%s", line)
+    for line in failed:
+        logger.warning("%s (will retry at the next start)", line)
 
     instance = SingleInstance()
     if not instance.acquire(wait_s=args.wait):
