@@ -478,6 +478,11 @@ if ($Purge) {
     Remove-Item (Join-Path $env:LOCALAPPDATA "voice-keyboard") -Recurse -Force -ErrorAction SilentlyContinue
 }
 Remove-Item $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $InstallRoot) {
+    # Something still held a file (this script, a lingering process): retry
+    # from a detached process once we have exited.
+    Start-Process -FilePath "cmd.exe" -WindowStyle Hidden -ArgumentList "/c", "ping -n 4 127.0.0.1 >nul & rmdir /s /q `"$InstallRoot`""
+}
 
 Write-Host "$AppName is uninstalled." -ForegroundColor Green
 if (-not $Purge) {

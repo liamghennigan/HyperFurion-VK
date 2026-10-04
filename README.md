@@ -329,8 +329,8 @@ recording.
 
 The CLI works as on Linux (`voice-keyboard status`, `intent`, `ask`,
 `history`, `devices`, `quit`, …). It talks to the app over loopback TCP
-(`127.0.0.1:48765`) with a per-session token that only your account can read,
-so other users and processes can't drive your keyboard. `voice-keyboard-daemon`
+(`127.0.0.1:48765`) with a per-session token kept in your profile (other
+standard users can't read it), so other users can't drive your keyboard. `voice-keyboard-daemon`
 runs the app in a terminal with the log streaming alongside.
 
 ### Uninstall

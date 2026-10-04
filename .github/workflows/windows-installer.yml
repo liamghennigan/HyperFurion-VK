@@ -93,7 +93,7 @@ jobs:
       - name: Uninstall
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\HyperFurion-VK\uninstall.ps1" -Purge
-          Start-Sleep -Seconds 2
+          Start-Sleep -Seconds 6   # covers the uninstaller's deferred folder removal
           if (Test-Path "$env:LOCALAPPDATA\HyperFurion-VK") { throw "install folder left behind" }
           if (Test-Path "$env:APPDATA\voice-keyboard") { throw "config left behind despite -Purge" }
           if (Test-Path (Join-Path ([Environment]::GetFolderPath("Programs")) "HyperFurion VK.lnk")) { throw "shortcut left behind" }
