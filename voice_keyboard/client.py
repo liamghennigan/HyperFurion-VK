@@ -291,17 +291,12 @@ def _show_overlay(
 
 
 def _get_clipboard_text() -> str:
-    # No primary selection exists off Linux; the clipboard is the selection.
-    if sys.platform == "darwin":
-        try:
-            result = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=2)
-            return result.stdout.strip() if result.returncode == 0 else ""
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return ""
-    if sys.platform == "win32":
+    # No primary selection exists off Linux; the clipboard is the selection
+    # — never one a password manager marked private.
+    if sys.platform in {"darwin", "win32"}:
         from voice_keyboard import clipboard
 
-        return (clipboard.get_text() or "").strip()
+        return (clipboard.get_text(unless_sensitive=True) or "").strip()
     try:
         result = subprocess.run(
             ["wl-paste", "--primary"],

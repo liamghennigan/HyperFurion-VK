@@ -37,10 +37,14 @@ _SYNTHESIZED_FROM = {
     CF_PALETTE: (CF_DIB, CF_DIBV5),
     CF_METAFILEPICT: (CF_ENHMETAFILE,),
 }
+# Device-independent bitmaps Windows converts between: saving the one the
+# app put (listed first) is enough, the other is re-created on restore.
+_DIB_TWINS = frozenset({CF_DIB, CF_DIBV5})
 # Owner-drawn and app-private handles: never restorable.
 _UNRESTORABLE_FORMATS = frozenset({0x80, 0x82, 0x83, 0x8E})
 _PRIVATE_RANGE = range(0x200, 0x400)  # CF_PRIVATEFIRST..CF_GDIOBJLAST
-SNAPSHOT_LIMIT_BYTES = 64 * 1024 * 1024
+# Room for a screenshot across three 4K monitors (~100 MB as a DIB).
+SNAPSHOT_LIMIT_BYTES = 128 * 1024 * 1024
 # Tags on a restore: keep it out of Win+V history and cloud sync (it is
 # not new content). Deliberately NOT the stronger
 # ExcludeClipboardContentFromMonitorProcessing, which password managers
@@ -58,6 +62,10 @@ class Snapshot:
 
     formats: list = field(default_factory=list)
     complete: bool = True
+
+
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint32), ("dwTime", ctypes.c_uint32)]
 
 
 _api = None
@@ -102,6 +110,11 @@ def _load():  # pragma: no cover - requires Windows
     kernel32.GlobalFree.restype = HGLOBAL
     user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
     user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+    user32.GetClipboardOwner.restype = wintypes.HWND
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+    user32.GetLastInputInfo.restype = wintypes.BOOL
     gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)  # type: ignore[attr-defined]
     gdi32.GetEnhMetaFileBits.argtypes = [ctypes.c_void_p, wintypes.UINT, ctypes.c_void_p]
     gdi32.GetEnhMetaFileBits.restype = wintypes.UINT
@@ -182,16 +195,42 @@ def is_sensitive() -> bool:  # pragma: no cover - requires Windows
     return False
 
 
+def owner_pid():  # pragma: no cover - requires Windows
+    """The process that last set the clipboard, or None when unknown (an
+    app that opened the clipboard without a window)."""
+    user32 = _load()[0]
+    hwnd = user32.GetClipboardOwner()
+    if not hwnd:
+        return None
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(pid.value) or None
+
+
+def last_input_tick():  # pragma: no cover - requires Windows
+    """When the user last pressed a key or moved the mouse (ms ticks)."""
+    user32 = _load()[0]
+    info = LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO), 0)
+    if not user32.GetLastInputInfo(ctypes.byref(info)):
+        return None
+    return int(info.dwTime)
+
+
 def sequence_number() -> int:  # pragma: no cover - requires Windows
     user32 = _load()[0]
     return int(user32.GetClipboardSequenceNumber())
 
 
-def get_text():  # pragma: no cover - requires Windows
-    """Clipboard text; "" when the clipboard holds no text, None on failure."""
+def get_text(*, unless_sensitive: bool = False):  # pragma: no cover - requires Windows
+    """Clipboard text; "" when the clipboard holds no text, None on failure
+    — and None when `unless_sensitive` and a password manager marked it
+    (checked in the same clipboard session as the read, so a writer can't
+    add the marker in between)."""
     user32, kernel32 = _load()[:2]
     with _opened() as ok:
         if not ok:
+            return None
+        if unless_sensitive and is_sensitive():
             return None
         handle = user32.GetClipboardData(CF_UNICODETEXT)
         if not handle:
@@ -238,11 +277,16 @@ def snapshot():  # pragma: no cover - requires Windows
             present.add(fmt)
             if fmt in _SYNTHESIZED_FROM:
                 continue  # checked below, once every format is known
+            if fmt in _DIB_TWINS and any(f in _DIB_TWINS for f, _ in snap.formats):
+                continue  # re-created from the twin we saved
             if fmt in _UNRESTORABLE_FORMATS or fmt in _PRIVATE_RANGE:
                 snap.complete = False
                 continue
             handle = user32.GetClipboardData(fmt)
             if not handle:
+                # Listed but not renderable for us (e.g. an OLE stream such
+                # as FileContents): a restore would lose it.
+                snap.complete = False
                 continue
             if fmt == CF_ENHMETAFILE:
                 size = gdi32.GetEnhMetaFileBits(handle, 0, None)
@@ -250,7 +294,9 @@ def snapshot():  # pragma: no cover - requires Windows
                     snap.complete = False
                     continue
                 buffer = ctypes.create_string_buffer(size)
-                gdi32.GetEnhMetaFileBits(handle, size, buffer)
+                if gdi32.GetEnhMetaFileBits(handle, size, buffer) != size:
+                    snap.complete = False
+                    continue
                 snap.formats.append((fmt, buffer.raw))
                 total += size
                 continue
@@ -271,24 +317,32 @@ def snapshot():  # pragma: no cover - requires Windows
     for fmt, twins in _SYNTHESIZED_FROM.items():
         if fmt in present and not captured.intersection(twins):
             snap.complete = False
+    if present & _DIB_TWINS and not captured & _DIB_TWINS:
+        snap.complete = False
     return snap
 
 
 def restore(saved) -> bool:  # pragma: no cover - requires Windows
-    """Put a snapshot() back (an empty snapshot empties the clipboard)."""
+    """Put a snapshot() back (an empty snapshot empties the clipboard).
+    False when the clipboard couldn't be opened or any format failed."""
     user32, _, gdi32 = _load()
     formats = saved.formats if isinstance(saved, Snapshot) else saved
     with _opened() as ok:
         if not ok:
             return False
         user32.EmptyClipboard()
+        complete = True
         for fmt, data in formats:
             if fmt == CF_ENHMETAFILE:
                 metafile = gdi32.SetEnhMetaFileBits(len(data), data)
-                if metafile and not user32.SetClipboardData(fmt, metafile):
+                if not metafile:
+                    complete = False
+                elif not user32.SetClipboardData(fmt, metafile):
                     gdi32.DeleteEnhMetaFile(metafile)
+                    complete = False
                 continue
-            _put(fmt, data)
+            if not _put(fmt, data):
+                complete = False
         if formats:
             _mark_transient()
-        return True
+        return complete

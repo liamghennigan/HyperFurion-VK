@@ -108,9 +108,6 @@ class TTSClient:
             f"{openai_base_url.rstrip('/')}/audio/speech" if openai_base_url else OPENAI_TTS_URL
         )
         self._session: Optional[requests.Session] = None
-        # Serializes "start playing" against stop_playback(): a stop that
-        # lands while audio is still being decoded must win.
-        self._play_lock = threading.Lock()
 
     @property
     def session(self) -> requests.Session:
@@ -234,21 +231,23 @@ class TTSClient:
 
     def stop_playback(self) -> None:
         """Cut off any in-flight speech immediately — the barge-in path.
-        Safe to call when nothing is playing."""
-        with self._play_lock:
-            try:
-                import sounddevice as sd
+        Safe to call when nothing is playing, and never blocks on a
+        playback that is still opening its audio device (callers that
+        must also stop a playback not yet started pass `cancel` to
+        play_audio)."""
+        try:
+            import sounddevice as sd
 
-                sd.stop()
-            except Exception:
-                pass
-            try:
-                import pygame
+            sd.stop()
+        except Exception:
+            pass
+        try:
+            import pygame
 
-                if pygame.mixer.get_init():
-                    pygame.mixer.music.stop()
-            except Exception:
-                pass
+            if pygame.mixer.get_init():
+                pygame.mixer.music.stop()
+        except Exception:
+            pass
 
     def synthesize_and_play(self, text: str) -> None:
         self.play_audio(self.synthesize(text))
@@ -283,10 +282,14 @@ class TTSClient:
         data, samplerate = sf.read(tmp_path)
         if data.ndim == 1:
             data = data[:, np.newaxis]
-        with self._play_lock:
-            if cancel is not None and cancel.is_set():
-                return
-            sd.play(data, samplerate)
+        if cancel is not None and cancel.is_set():
+            return
+        sd.play(data, samplerate)
+        # A stop that landed while the device was opening found nothing to
+        # stop: it set `cancel` first, so it is seen here.
+        if cancel is not None and cancel.is_set():
+            sd.stop()
+            return
         sd.wait()
 
     def _play_pygame(self, tmp_path: str, cancel: Optional[threading.Event] = None) -> None:
@@ -294,13 +297,12 @@ class TTSClient:
 
         mixer_ready = False
         try:
-            with self._play_lock:
-                if cancel is not None and cancel.is_set():
-                    return
-                pygame.mixer.init()
-                mixer_ready = True
-                pygame.mixer.music.load(tmp_path)
-                pygame.mixer.music.play()
+            if cancel is not None and cancel.is_set():
+                return
+            pygame.mixer.init()
+            mixer_ready = True
+            pygame.mixer.music.load(tmp_path)
+            pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
                 if cancel is not None and cancel.is_set():
                     pygame.mixer.music.stop()

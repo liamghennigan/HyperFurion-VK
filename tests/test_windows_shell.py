@@ -389,8 +389,41 @@ class TestReadAloud:
             lambda **kw: calls.append(kw) or "",
         )
         asyncio.run(daemon._toggle_read_aloud(from_selection=True))
-        assert calls == [{"clipboard_fallback": fallback,
-                          "registers": {"map": {"tabby": "terminal"}}}]
+        assert len(calls) == 1
+        assert calls[0]["clipboard_fallback"] is fallback
+        assert calls[0]["registers"] == {"map": {"tabby": "terminal"}}
+
+    def test_the_overlay_says_why_nothing_was_read(self, monkeypatch) -> None:
+        daemon = self._daemon()
+
+        def blocked(**kw):
+            kw["notes"].append("Clipboard too big to set aside — copy the text instead")
+            return ""
+
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.selection_text", blocked)
+        asyncio.run(daemon._toggle_read_aloud(from_selection=True))
+        assert self.overlays == [("empty", "Clipboard too big to set aside — copy the text instead")]
+
+    def test_quit_never_waits_for_an_unneeded_download(self, monkeypatch) -> None:
+        # The stop reaches playback, but a thread can't be cancelled in the
+        # middle of fetching audio: asyncio.run must not wait for it.
+        daemon = self._daemon()
+        release = threading.Event()
+        daemon._tts_client.synthesize.side_effect = lambda text: release.wait(10) and b"mp3"
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.get_text", lambda **kw: "clip")
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.is_sensitive", lambda: False)
+        monkeypatch.setattr("voice_keyboard.client._stop_overlay", lambda: None)
+
+        async def run():
+            await daemon._toggle_read_aloud(from_selection=False)
+            await asyncio.sleep(0.1)  # the download is under way
+            await daemon._shutdown()
+
+        started = time.monotonic()
+        asyncio.run(run())
+        elapsed = time.monotonic() - started
+        release.set()
+        assert elapsed < 3, f"quit waited {elapsed:.1f}s for the download"
 
     def test_a_copied_password_is_not_read(self, monkeypatch) -> None:
         daemon = self._daemon()
@@ -402,7 +435,7 @@ class TestReadAloud:
 
     def test_second_press_stops(self, monkeypatch) -> None:
         daemon = self._daemon()
-        monkeypatch.setattr("voice_keyboard.daemon.clipboard.get_text", lambda: "clip")
+        monkeypatch.setattr("voice_keyboard.daemon.clipboard.get_text", lambda **kw: "clip")
         monkeypatch.setattr("voice_keyboard.daemon.clipboard.is_sensitive", lambda: False)
 
         async def run():
@@ -419,7 +452,7 @@ class TestReadAloud:
                     await asyncio.sleep(30)
                 return func(*args, **kwargs)
 
-            monkeypatch.setattr(asyncio, "to_thread", never_finishes)
+            monkeypatch.setattr("voice_keyboard.daemon._in_daemon_thread", never_finishes)
             await daemon._toggle_read_aloud(from_selection=False)
             await asyncio.wait_for(started.wait(), 2)
             await asyncio.sleep(0)
@@ -518,6 +551,8 @@ class TestDaemonLifecycle:
 
 
 class FakeClip:
+    APP = 42  # the focused app's process
+
     def __init__(self, text_after_copy="selected words", copies=True, complete=True,
                  sensitive_after_copy=False, renders_on_snapshot=False):
         from voice_keyboard.windows.clipboard import Snapshot
@@ -525,6 +560,8 @@ class FakeClip:
         self.seq = 1
         self.text = "previous"
         self.sensitive = False
+        self.owner = 7
+        self.input_tick = 1000
         self._after = text_after_copy
         self._copies = copies
         self._sensitive_after = sensitive_after_copy
@@ -542,11 +579,14 @@ class FakeClip:
             self.seq += 1  # delayed rendering counts as a clipboard change
         return self._snapshot
 
-    def is_sensitive(self):
-        return self.sensitive
+    def owner_pid(self):
+        return self.owner
 
-    def get_text(self):
-        return self.text
+    def last_input_tick(self):
+        return self.input_tick
+
+    def get_text(self, *, unless_sensitive=False):
+        return None if unless_sensitive and self.sensitive else self.text
 
     def restore(self, saved):
         self.restored = saved
@@ -556,10 +596,11 @@ class FakeClip:
         self.seq += 1
         return True
 
-    def copy(self):
+    def copy(self, owner=APP):
         if self._copies:
             self.seq += 1
             self.text = self._after
+            self.owner = owner
             self.sensitive = self._sensitive_after
 
 
@@ -569,9 +610,16 @@ def _copy(clip, **kw):
     injector = kw.pop("injector", None) or mock.Mock()
     if not injector.press_combo.side_effect:
         injector.press_combo.side_effect = lambda keys: clip.copy()
-    kw.setdefault("should_skip", lambda: False)
+    kw.setdefault("should_skip", lambda: "")
     kw.setdefault("late_copy_s", 0)
+    kw.setdefault("foreground_pids", lambda: frozenset({FakeClip.APP}))
     return copy_selection(injector=injector, clip=clip, **kw), injector
+
+
+def _settle(clip, restores, seconds=3.0):
+    deadline = time.monotonic() + seconds
+    while clip.restores < restores and time.monotonic() < deadline:
+        time.sleep(0.02)
 
 
 class TestCopySelection:
@@ -590,9 +638,12 @@ class TestCopySelection:
         assert clip.restored is None
 
     def test_skipped_windows_get_no_key_press(self) -> None:
+        from voice_keyboard.windows.selection import NOTE_SKIPPED
+
         clip = FakeClip()
-        text, injector = _copy(clip, should_skip=lambda: True)
-        assert text is None
+        notes = []
+        text, injector = _copy(clip, should_skip=lambda: NOTE_SKIPPED, notes=notes)
+        assert text is None and notes == [NOTE_SKIPPED]
         injector.press_combo.assert_not_called()
 
     def test_a_failing_focus_probe_means_no_key_press(self) -> None:
@@ -606,10 +657,13 @@ class TestCopySelection:
 
     def test_a_clipboard_that_cant_be_saved_is_left_alone(self) -> None:
         # e.g. a screenshot bigger than the snapshot limit: copying would
-        # destroy it, so nothing is pressed at all.
+        # destroy it, so nothing is pressed at all — and the user is told.
+        from voice_keyboard.windows.selection import NOTE_UNSAVABLE
+
         clip = FakeClip(complete=False)
-        text, injector = _copy(clip)
-        assert text is None
+        notes = []
+        text, injector = _copy(clip, notes=notes)
+        assert text is None and notes == [NOTE_UNSAVABLE]
         injector.press_combo.assert_not_called()
         assert clip.text == "previous"
 
@@ -625,6 +679,19 @@ class TestCopySelection:
         text, _ = _copy(clip, timeout=0.05)
         assert text is None  # not "previous" read back as the selection
 
+    def test_someone_elses_change_is_neither_read_nor_undone(self) -> None:
+        # A cloud-clipboard sync lands right after the copy key: it is not
+        # the selection, and restoring would throw it away.
+        from voice_keyboard.windows.selection import NOTE_FOREIGN
+
+        clip = FakeClip()
+        injector = mock.Mock()
+        injector.press_combo.side_effect = lambda keys: clip.copy(owner=99)
+        notes = []
+        text, _ = _copy(clip, injector=injector, notes=notes)
+        assert text is None and notes == [NOTE_FOREIGN]
+        assert clip.restores == 0 and clip.text == "selected words"
+
     def test_a_password_managers_secret_is_never_returned(self) -> None:
         clip = FakeClip(sensitive_after_copy=True)
         text, _ = _copy(clip)
@@ -637,10 +704,28 @@ class TestCopySelection:
         injector.press_combo.side_effect = lambda keys: threading.Timer(0.15, clip.copy).start()
         text, _ = _copy(clip, injector=injector, timeout=0.05, late_copy_s=2.0)
         assert text is None
-        deadline = time.monotonic() + 3
-        while clip.restores == 0 and time.monotonic() < deadline:
-            time.sleep(0.02)
+        _settle(clip, 1)
         assert clip.restores == 1 and clip.text == "previous"
+
+    def test_the_users_own_copy_is_never_undone(self) -> None:
+        # Nothing was selected; seeing "Select some text first" the user
+        # selects and copies something themselves within the watch window.
+        clip = FakeClip(copies=False)
+        _copy(clip, timeout=0.05, late_copy_s=1.0)
+        time.sleep(0.1)
+        clip.input_tick += 400  # their selecting and Ctrl+C
+        clip._copies = True
+        clip.copy()  # by the same app
+        time.sleep(0.3)
+        assert clip.restores == 0 and clip.text == "selected words"
+
+    def test_a_late_change_by_another_app_is_not_undone(self) -> None:
+        clip = FakeClip(copies=False)
+        _copy(clip, timeout=0.05, late_copy_s=1.0)
+        clip._copies = True
+        clip.copy(owner=99)  # e.g. a password manager or RDP clipboard sync
+        time.sleep(0.3)
+        assert clip.restores == 0
 
     def test_the_next_copy_cancels_a_pending_late_restore(self) -> None:
         clip = FakeClip(copies=False)
@@ -651,18 +736,33 @@ class TestCopySelection:
         time.sleep(0.2)
         assert clip.restores == 1  # only the second copy's own restore
 
+    def test_a_skipped_press_keeps_a_pending_late_restore(self) -> None:
+        clip = FakeClip()
+        slow = mock.Mock()
+        slow.press_combo.side_effect = lambda keys: threading.Timer(0.3, clip.copy).start()
+        _copy(clip, injector=slow, timeout=0.05, late_copy_s=3.0)
+        # A second press in a terminal touches nothing...
+        _copy(FakeClip(), should_skip=lambda: "terminal")
+        # ...so the slow app's late copy is still put back.
+        _settle(clip, 1)
+        assert clip.restores == 1 and clip.text == "previous"
+
     def test_selection_text_falls_back_to_the_clipboard(self, monkeypatch) -> None:
         from voice_keyboard import clipboard
         from voice_keyboard.windows import selection
 
         monkeypatch.setattr(sys, "platform", "win32")
         monkeypatch.setattr(selection, "copy_selection", lambda **kw: None)
-        monkeypatch.setattr(clipboard, "get_text", lambda: "on the clipboard")
-        monkeypatch.setattr(clipboard, "is_sensitive", lambda: False)
+        reads = []
+
+        def get_text(**kw):
+            reads.append(kw)
+            return "on the clipboard"
+
+        monkeypatch.setattr(clipboard, "get_text", get_text)
         assert clipboard.selection_text() == "on the clipboard"
+        assert reads == [{"unless_sensitive": True}]  # a copied password never stands in
         assert clipboard.selection_text(clipboard_fallback=False) == ""
-        monkeypatch.setattr(clipboard, "is_sensitive", lambda: True)
-        assert clipboard.selection_text() == ""  # a copied password never stands in
         seen = {}
 
         def copied(**kw):
@@ -670,8 +770,9 @@ class TestCopySelection:
             return "highlighted"
 
         monkeypatch.setattr(selection, "copy_selection", copied)
-        assert clipboard.selection_text(registers={"map": {"x": "terminal"}}) == "highlighted"
-        assert seen == {"registers": {"map": {"x": "terminal"}}}
+        notes = []
+        assert clipboard.selection_text(registers={"map": {"x": "terminal"}}, notes=notes) == "highlighted"
+        assert seen == {"registers": {"map": {"x": "terminal"}}, "notes": notes}
 
 
 class TestFocusSafety:
@@ -690,7 +791,7 @@ class TestFocusSafety:
     def _unsafe(self, registers=None):
         from voice_keyboard.windows.selection import _focus_is_unsafe
 
-        return _focus_is_unsafe(registers)
+        return bool(_focus_is_unsafe(registers))
 
     def test_unknown_focus_is_unsafe(self, focus) -> None:
         focus(None)

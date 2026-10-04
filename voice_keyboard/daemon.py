@@ -2100,6 +2100,7 @@ class Daemon:
                 "processing", detail="⌁ busy — dictation is live", timeout_ms=1400
             )
             return
+        notes: list[str] = []
         if from_selection:
             # Only macOS, which has no way to read a selection, falls back to
             # the clipboard: elsewhere "nothing selected" must not quietly
@@ -2108,6 +2109,7 @@ class Daemon:
                 clipboard.selection_text,
                 clipboard_fallback=sys.platform == "darwin",
                 registers=self._config.get("registers", {}),
+                notes=notes,
             )
         else:
             if await asyncio.to_thread(clipboard.is_sensitive):
@@ -2118,11 +2120,11 @@ class Daemon:
             text = await asyncio.to_thread(clipboard.get_text) or ""
         text = text.strip()
         if not text:
-            await self._show_hotkey_overlay(
-                "empty",
-                detail="Select some text first" if from_selection else "Clipboard is empty",
-                timeout_ms=2200,
-            )
+            if notes:
+                detail = notes[0]
+            else:
+                detail = "Select some text first" if from_selection else "Clipboard is empty"
+            await self._show_hotkey_overlay("empty", detail=detail, timeout_ms=2600)
             return
         self._read_cancel = threading.Event()
         self._read_task = asyncio.create_task(self._read_aloud(text, self._read_cancel))
@@ -2148,21 +2150,52 @@ class Daemon:
                 self._read_task = None
 
     async def _run_tts(self, text: str, cancel: Optional[threading.Event] = None) -> None:
-        """Speak `text` (a prefetched clip plays at once). With `cancel`,
-        fetching and playing are separate awaits and playback checks the
-        event, so a stop at any point is never lost."""
+        """Speak `text` (a prefetched clip plays at once). With `cancel`
+        (read-aloud), fetching and playing are separate awaits on daemon
+        threads and playback checks the event: a stop at any point is never
+        lost, and Quit never waits for a download it no longer needs."""
         client = self._tts_client
-        play_kwargs = {"cancel": cancel} if cancel is not None else {}
         cache = self._tts_cache
+        if cancel is not None and hasattr(client, "synthesize") and hasattr(client, "play_audio"):
+            if cache is not None and cache[0] == text:
+                logger.info("TTS prefetch hit (%d chars) — instant playback", len(text))
+                audio = cache[1]
+            else:
+                audio = await _in_daemon_thread(client.synthesize, text)
+            await _in_daemon_thread(client.play_audio, audio, cancel=cancel)
+            return
         if cache is not None and cache[0] == text and hasattr(client, "play_audio"):
             logger.info("TTS prefetch hit (%d chars) — instant playback", len(text))
-            await asyncio.to_thread(client.play_audio, cache[1], **play_kwargs)
-            return
-        if cancel is not None and hasattr(client, "synthesize") and hasattr(client, "play_audio"):
-            audio = await asyncio.to_thread(client.synthesize, text)
-            await asyncio.to_thread(client.play_audio, audio, **play_kwargs)
+            await asyncio.to_thread(client.play_audio, cache[1])
             return
         await asyncio.to_thread(client.synthesize_and_play, text)
+
+
+def _in_daemon_thread(func, *args, **kwargs) -> "asyncio.Future":
+    """Like asyncio.to_thread, but on a daemon thread outside the default
+    executor: asyncio.run() (and interpreter exit) never waits for it, so a
+    cancelled read-aloud's download can't hold up Quit or Restart."""
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+
+    def deliver(setter, value) -> None:
+        if not future.done():
+            setter(value)
+
+    def run() -> None:
+        try:
+            result = func(*args, **kwargs)
+        except BaseException as exc:  # handed to the awaiting coroutine
+            outcome = (future.set_exception, exc)
+        else:
+            outcome = (future.set_result, result)
+        try:
+            loop.call_soon_threadsafe(deliver, *outcome)
+        except RuntimeError:
+            pass  # the loop is gone: nobody is waiting any more
+
+    threading.Thread(target=run, name="vk-tts", daemon=True).start()
+    return future
 
 
 def main() -> None:

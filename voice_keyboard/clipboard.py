@@ -47,16 +47,19 @@ def available() -> bool:
     return shutil.which("xclip") is not None
 
 
-def get_text() -> str | None:
-    """Current clipboard text; "" for an empty clipboard, None on failure."""
+def get_text(*, unless_sensitive: bool = False) -> str | None:
+    """Current clipboard text; "" for an empty clipboard, None on failure —
+    and None when `unless_sensitive` and a password manager marked it."""
     if sys.platform == "win32":
         from voice_keyboard.windows import clipboard as win_clipboard
 
         try:
-            return win_clipboard.get_text()
+            return win_clipboard.get_text(unless_sensitive=unless_sensitive)
         except Exception:
             logger.debug("Windows clipboard read failed", exc_info=True)
             return None
+    if unless_sensitive and is_sensitive():
+        return None
     candidates: list[list[str]] = []
     if sys.platform == "darwin":
         candidates = [["pbpaste"]]
@@ -132,42 +135,79 @@ def set_text(text: str) -> bool:
     return False
 
 
+# What password managers put next to a secret they copy: nspasteboard.org's
+# concealed type (macOS; 1Password adds its own), KDE's hint (KeePassXC
+# on Linux).
+_MAC_SECRET_TYPES = {"org.nspasteboard.ConcealedType", "com.agilebits.onepassword"}
+_LINUX_SECRET_TYPES = {"x-kde-passwordManagerHint"}
+_MAC_TYPES_SCRIPT = (
+    'ObjC.import("AppKit"); var t = $.NSPasteboard.generalPasteboard.types;'
+    ' var out = []; for (var i = 0; i < t.count; i++) out.push(t.objectAtIndex(i).js);'
+    ' out.join("\\n")'
+)
+
+
+def _clipboard_types() -> set[str]:
+    """The clipboard's data types (macOS/Linux); empty when unknown."""
+    if sys.platform == "darwin":
+        candidates = [["osascript", "-l", "JavaScript", "-e", _MAC_TYPES_SCRIPT]]
+    else:
+        candidates = []
+        if _is_wayland() and shutil.which("wl-paste"):
+            candidates.append(["wl-paste", "--list-types"])
+        if shutil.which("xclip"):
+            candidates.append(["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"])
+    for command in candidates:
+        try:
+            result = _run(command)
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+        if result.returncode == 0:
+            return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    return set()
+
+
 def is_sensitive() -> bool:
     """True when the clipboard holds something a password manager marked
-    private (Windows) — never read it aloud or send it anywhere."""
-    if sys.platform != "win32":
-        return False
-    from voice_keyboard.windows import clipboard as win_clipboard
+    private — never read it aloud or send it anywhere."""
+    if sys.platform == "win32":
+        from voice_keyboard.windows import clipboard as win_clipboard
 
-    try:
-        return win_clipboard.is_sensitive()
-    except Exception:
-        logger.debug("Windows clipboard sensitivity check failed", exc_info=True)
-        return False
+        try:
+            return win_clipboard.is_sensitive()
+        except Exception:
+            logger.debug("Windows clipboard sensitivity check failed", exc_info=True)
+            return False
+    secret = _MAC_SECRET_TYPES if sys.platform == "darwin" else _LINUX_SECRET_TYPES
+    return bool(_clipboard_types() & secret)
 
 
-def selection_text(*, clipboard_fallback: bool = True, registers: dict | None = None) -> str:
+def selection_text(
+    *,
+    clipboard_fallback: bool = True,
+    registers: dict | None = None,
+    notes: list | None = None,
+) -> str:
     """The text the user has highlighted right now, best effort; "" when
     none. Linux reads the PRIMARY selection; Windows copies the selection
     (and restores the clipboard after; `registers` is the [registers]
-    config, so terminals you mapped are never sent a copy key). macOS has
-    neither, so the clipboard stands in — as it does on Windows when the
-    copy yields nothing — unless the caller opts out with
-    clipboard_fallback=False. Clipboard content a password manager marked
-    private never stands in."""
+    config, so terminals you mapped are never sent a copy key; why nothing
+    could be copied goes into `notes`). macOS has neither, so the clipboard
+    stands in — as it does on Windows when the copy yields nothing —
+    unless the caller opts out with clipboard_fallback=False. Clipboard
+    content a password manager marked private never stands in."""
     if sys.platform == "win32":
         try:
             from voice_keyboard.windows.selection import copy_selection
 
-            text = copy_selection(registers=registers)
+            text = copy_selection(registers=registers, notes=notes)
         except Exception:
             logger.debug("Windows selection copy failed", exc_info=True)
             text = None
         if text:
             return text
-        if not clipboard_fallback or is_sensitive():
-            return ""
-        return get_text() or ""
-    if sys.platform == "darwin":
-        return (get_text() or "") if clipboard_fallback else ""
-    return get_primary_text() or ""
+    elif sys.platform != "darwin":
+        return get_primary_text() or ""
+    if not clipboard_fallback:
+        return ""
+    return get_text(unless_sensitive=True) or ""
