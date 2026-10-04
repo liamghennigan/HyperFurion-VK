@@ -65,10 +65,16 @@ language = "en"
 # tokens on selections never played, and sends selection text before you
 # ask); "off" = never.
 prefetch = "off"
+# A global hotkey that reads the highlighted text aloud; press it again to
+# stop. Empty = off (the default on Linux, where you bind a desktop shortcut
+# to `voice-keyboard tts` instead). Windows defaults to "control+alt+r".
+# hotkey = "control+alt+r"
 
 [audio]
 sample_rate = 16000
 chunk_ms = 100
+# "default" follows the system's input device. To pin one, run
+# `voice-keyboard devices` and use its name (or any unique part of it).
 device_name = "default"
 
 [hotkey]

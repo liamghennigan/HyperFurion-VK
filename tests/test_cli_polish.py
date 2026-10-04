@@ -47,3 +47,44 @@ class TestDaemonDownHint:
             client.main()
         assert exit_info.value.code == 1
         assert "systemctl --user start" in capsys.readouterr().err
+
+
+class TestDevices:
+    def test_lists_inputs_with_the_default_marked(self, monkeypatch, capsys) -> None:
+        monkeypatch.setattr(sys, "argv", ["voice-keyboard", "devices"])
+        monkeypatch.setattr(client, "load_config", lambda: {"daemon": {"socket_path": "x"}})
+        monkeypatch.setattr(client, "_list_input_devices", lambda: [
+            {"name": "Microphone (Realtek(R) Audio)", "channels": 2, "rate": 44100, "default": True},
+            {"name": "Headset Microphone (Jabra Evolve2 65)", "channels": 1, "rate": 16000, "default": False},
+        ])
+        client.main()
+        out = capsys.readouterr().out
+        assert "* Microphone (Realtek(R) Audio)" in out
+        assert "  Headset Microphone (Jabra Evolve2 65)" in out
+        assert "device_name" in out
+
+    def test_list_skips_outputs(self, monkeypatch) -> None:
+        import types
+
+        infos = [
+            {"index": 0, "name": "Speakers", "maxInputChannels": 0, "defaultSampleRate": 48000},
+            {"index": 1, "name": "Mic", "maxInputChannels": 1, "defaultSampleRate": 16000},
+        ]
+
+        class FakePA:
+            def get_default_input_device_info(self):
+                return infos[1]
+
+            def get_device_count(self):
+                return len(infos)
+
+            def get_device_info_by_index(self, index):
+                return infos[index]
+
+            def terminate(self):
+                pass
+
+        monkeypatch.setitem(sys.modules, "pyaudio", types.SimpleNamespace(PyAudio=FakePA))
+        assert client._list_input_devices() == [
+            {"name": "Mic", "channels": 1, "rate": 16000, "default": True}
+        ]

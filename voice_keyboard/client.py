@@ -335,6 +335,49 @@ def _package_version() -> str:
         return "unknown"
 
 
+def _list_input_devices() -> list[dict]:
+    """Audio inputs as PyAudio sees them: [{name, channels, rate, default}]."""
+    import pyaudio
+
+    pa = pyaudio.PyAudio()
+    try:
+        try:
+            default_index = pa.get_default_input_device_info()["index"]
+        except (OSError, IOError):
+            default_index = None
+        devices = []
+        for index in range(pa.get_device_count()):
+            info = pa.get_device_info_by_index(index)
+            if int(info.get("maxInputChannels", 0)) <= 0:
+                continue
+            devices.append({
+                "name": str(info.get("name", "")),
+                "channels": int(info.get("maxInputChannels", 0)),
+                "rate": int(info.get("defaultSampleRate", 0)),
+                "default": index == default_index,
+            })
+        return devices
+    finally:
+        pa.terminate()
+
+
+def _run_devices() -> None:
+    """`voice-keyboard devices`: the names [audio] device_name accepts (an
+    exact name or any unique part of one; "default" follows the system)."""
+    try:
+        devices = _list_input_devices()
+    except Exception as exc:
+        print(f"Could not list audio devices: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not devices:
+        print("No audio input devices found.")
+        return
+    for device in devices:
+        marker = "*" if device["default"] else " "
+        print(f"{marker} {device['name']}  ({device['channels']} ch, {device['rate']} Hz)")
+    print('\n* = the system default. Set [audio] device_name = "<name or a unique part>" to choose.')
+
+
 def _stop_timeout_for_config(config: dict) -> float:
     provider = str(config.get("stt", {}).get("provider", "xai")).lower()
     if provider == "assemblyai":
@@ -776,7 +819,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login", "quit",
+            "login", "quit", "devices",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -818,6 +861,10 @@ def main() -> None:
     if args.command == "login":
         # Talks to the relay over HTTP + writes config — never the daemon.
         _run_login(config, args.args)
+        return
+
+    if args.command == "devices":
+        _run_devices()
         return
 
     socket_path = args.socket or config["daemon"]["socket_path"]
