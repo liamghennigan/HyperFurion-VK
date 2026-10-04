@@ -15,6 +15,7 @@ treat the probe as advisory.
 
 import json
 import logging
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -232,48 +233,82 @@ def _probe_macos() -> Optional[FocusInfo]:
 
 ES_PASSWORD = 0x0020
 GWL_STYLE = -16
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+_win_api = None
+
+
+def _windows_api():
+    """user32/kernel32 with prototypes, and the GUITHREADINFO type — built
+    once: ctypes caches every POINTER() type forever, so a structure class
+    defined per call leaks on every probe."""
+    global _win_api
+    if _win_api is not None:
+        return _win_api
+    import ctypes
+    from ctypes import wintypes
+
+    class GUITHREADINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("flags", wintypes.DWORD),
+            ("hwndActive", wintypes.HWND),
+            ("hwndFocus", wintypes.HWND),
+            ("hwndCapture", wintypes.HWND),
+            ("hwndMenuOwner", wintypes.HWND),
+            ("hwndMoveSize", wintypes.HWND),
+            ("hwndCaret", wintypes.HWND),
+            ("rcCaret", wintypes.RECT),
+        ]
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.GetGUIThreadInfo.argtypes = [wintypes.DWORD, ctypes.POINTER(GUITHREADINFO)]
+    user32.GetGUIThreadInfo.restype = wintypes.BOOL
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetWindowLongW.restype = ctypes.c_long
+    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+    user32.ClientToScreen.restype = wintypes.BOOL
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.QueryFullProcessImageNameW.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
+    ]
+    kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _win_api = (user32, kernel32, GUITHREADINFO)
+    return _win_api
 
 
 def _probe_windows() -> Optional[FocusInfo]:
     """Foreground window -> exe basename, plus (when the app exposes a
     system caret, as Win32/WinForms/most Chromium apps do) the caret's
     screen position for the overlay, and a classic Edit control's
-    ES_PASSWORD style as the secret flag."""
+    ES_PASSWORD style as the secret flag. None while our own window is in
+    front (the tray or orb menu): that is not the app being dictated to."""
     try:
         import ctypes
         from ctypes import wintypes
 
-        user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-        user32.GetForegroundWindow.restype = wintypes.HWND
-        user32.GetWindowThreadProcessId.argtypes = [
-            wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
-        ]
-        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        kernel32.QueryFullProcessImageNameW.argtypes = [
-            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
-        ]
-        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        user32, kernel32, _ = _windows_api()
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
             return None
         pid = wintypes.DWORD()
         thread_id = user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        if not pid.value:
+        if not pid.value or pid.value == os.getpid():
             return None
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        handle = kernel32.OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value
-        )
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
         if not handle:
             return None
         try:
             size = wintypes.DWORD(1024)
             buffer = ctypes.create_unicode_buffer(size.value)
-            if not kernel32.QueryFullProcessImageNameW(
-                handle, 0, buffer, ctypes.byref(size)
-            ):
+            if not kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
                 return None
             image = buffer.value
         finally:
@@ -298,31 +333,14 @@ def _windows_caret_and_secret(user32, thread_id: int) -> tuple[int, int, bool]:
     import ctypes
     from ctypes import wintypes
 
-    class GUITHREADINFO(ctypes.Structure):
-        _fields_ = [
-            ("cbSize", wintypes.DWORD),
-            ("flags", wintypes.DWORD),
-            ("hwndActive", wintypes.HWND),
-            ("hwndFocus", wintypes.HWND),
-            ("hwndCapture", wintypes.HWND),
-            ("hwndMenuOwner", wintypes.HWND),
-            ("hwndMoveSize", wintypes.HWND),
-            ("hwndCaret", wintypes.HWND),
-            ("rcCaret", wintypes.RECT),
-        ]
-
-    info = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
-    user32.GetGUIThreadInfo.argtypes = [wintypes.DWORD, ctypes.POINTER(GUITHREADINFO)]
-    user32.GetGUIThreadInfo.restype = wintypes.BOOL
+    guithreadinfo = _windows_api()[2]
+    info = guithreadinfo(cbSize=ctypes.sizeof(guithreadinfo))
     if not user32.GetGUIThreadInfo(thread_id, ctypes.byref(info)):
         return -1, -1, False
 
     secret = False
     if info.hwndFocus:
         name = ctypes.create_unicode_buffer(64)
-        user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-        user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
-        user32.GetWindowLongW.restype = ctypes.c_long
         if user32.GetClassNameW(info.hwndFocus, name, 64) and "edit" in name.value.lower():
             style = user32.GetWindowLongW(info.hwndFocus, GWL_STYLE)
             secret = bool(style & ES_PASSWORD)
@@ -330,8 +348,6 @@ def _windows_caret_and_secret(user32, thread_id: int) -> tuple[int, int, bool]:
     if not info.hwndCaret:
         return -1, -1, secret
     point = wintypes.POINT(info.rcCaret.left, info.rcCaret.bottom)
-    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
-    user32.ClientToScreen.restype = wintypes.BOOL
     if not user32.ClientToScreen(info.hwndCaret, ctypes.byref(point)):
         return -1, -1, secret
     return int(point.x), int(point.y), secret
