@@ -9,8 +9,9 @@
 # Options (file form):  -Version v2.2.0   -Source C:\path\to\checkout
 #                       -NonInteractive   -NoLaunch   -NoAutostart
 #                       -Provider xai -ApiKey xai-...   (unattended config)
-# With irm | iex, use environment variables instead: HYPERFURION_VK_VERSION,
-# HYPERFURION_VK_REPO, HYPERFURION_VK_NONINTERACTIVE=1.
+# With irm | iex, use environment variables instead: HYPERFURION_VK_VERSION
+# (a release tag, a branch, or a commit), HYPERFURION_VK_REPO,
+# HYPERFURION_VK_NONINTERACTIVE=1.
 #
 # What it does (per user, no administrator rights needed):
 #   - finds Python 3.11-3.13 (64-bit), or installs Python 3.12 for you
@@ -136,8 +137,10 @@ function Install-HyperFurionVK {
     $env:HFVK_ICON = $Icon
     Invoke-Checked $VenvPython @("-c", "import os; from voice_keyboard.windows.render import ico_bytes; open(os.environ['HFVK_ICON'], 'wb').write(ico_bytes())") "writing the icon"
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-    $exe = Join-Path $Venv "Scripts\voice-keyboard.exe"
-    Set-Content -Path (Join-Path $BinDir "voice-keyboard.cmd") -Encoding ASCII -Value "@echo off`r`n`"$exe`" %*"
+    # cmd reads .cmd files in the OEM code page, so a profile path with
+    # non-ASCII characters can't be written into it literally; let cmd
+    # expand %LOCALAPPDATA% itself.
+    Set-Content -Path (Join-Path $BinDir "voice-keyboard.cmd") -Encoding ASCII -Value "@echo off`r`n`"%LOCALAPPDATA%\HyperFurion-VK\venv\Scripts\voice-keyboard.exe`" %*"
     Add-UserPath $BinDir
     if (($env:Path -split ";") -notcontains $BinDir) { $env:Path = "$env:Path;$BinDir" }
 
@@ -493,8 +496,10 @@ if ($Pause) { Read-Host "Press Enter to close" | Out-Null }
 }
 
 try {
-    Install-HyperFurionVK -Version $Version -Source $Source -NonInteractive:$NonInteractive.IsPresent `
-        -NoLaunch:$NoLaunch.IsPresent -NoAutostart:$NoAutostart.IsPresent -Provider $Provider -ApiKey $ApiKey
+    # [bool] casts: a switch that was never bound ($null) must read as off,
+    # not fail parameter binding.
+    Install-HyperFurionVK -Version $Version -Source $Source -NonInteractive:([bool]$NonInteractive) `
+        -NoLaunch:([bool]$NoLaunch) -NoAutostart:([bool]$NoAutostart) -Provider $Provider -ApiKey $ApiKey
     $global:LASTEXITCODE = 0   # probes along the way (py -3.x) may have left it non-zero
 } catch {
     Write-Host ""
