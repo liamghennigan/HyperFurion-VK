@@ -71,8 +71,9 @@ export const LocalSTT = (() => {
     const src = ctx.createMediaStreamSource(stream);
     const proc = ctx.createScriptProcessor(2048, 1, 1);
     const sink = ctx.createGain(); sink.gain.value = 0;
-    const MAX = 16000 * 28, MIN = 16000 * 0.35, GAP = 1200, EVERY = 500, FLOOR = 0.012;
+    const MAX = 16000 * 28, MIN = 16000 * 0.35, GAP = 1200, EVERY = 500, FLOOR = 0.008;
     let chunks = [], total = 0, voiced = 0, lastVoice = 0, lastRun = 0, busy = false, again = false, closed = false, lastText = "";
+    let noise = 0.004;   // running estimate of the room, so a pause is a pause in *this* room
 
     function take() {
       const out = new Float32Array(total);
@@ -109,8 +110,10 @@ export const LocalSTT = (() => {
       for (let i = 0; i < f.length; i++) sum += f[i] * f[i];
       const rms = Math.sqrt(sum / f.length);
       const now = performance.now();
-      if (rms > FLOOR) { lastVoice = now; voiced += f.length; }
-      if (total > MAX) { while (total > MAX) total -= chunks.shift().length; }
+      const floor = Math.max(FLOOR, noise * 3);
+      if (rms > floor) { lastVoice = now; voiced += f.length; }
+      else noise += (rms - noise) * 0.05;            // only quiet frames teach the floor
+      if (total > MAX) { lastVoice = 0; run(true); return; }   // a very long utterance closes rather than losing its start
       if (voiced > 0 && lastVoice && now - lastVoice > GAP) { lastVoice = 0; run(true); return; }
       // preview cadence adapts to the device: never more often than a pass takes
       if (voiced > 0 && now - lastRun > Math.max(EVERY, S.stats.lastMs * 1.2)) run(false);
