@@ -1,6 +1,25 @@
 # Distribution & packaging
 
-Channels for HyperFurion VK, in order of leverage. Linux:
+Channels for HyperFurion VK, in order of leverage.
+
+## Download and run (both platforms)
+
+Every release carries two files a user downloads and runs as themselves,
+built by [`build-downloads.sh`](build-downloads.sh) in `release.yml`:
+
+- **`HyperFurion-VK-Setup.run`** (Linux) — a self-extracting archive of the
+  release source that runs `install.sh`; double-clicked from a file manager,
+  it reopens itself in a terminal. Refuses to run as root.
+- **`HyperFurion-VK-Setup.cmd`** (Windows) — a batch/PowerShell polyglot that
+  runs the pinned PowerShell installer with no execution-policy step.
+  Downloaded files carry the mark of the web, so Windows asks once
+  ("More info › Run anyway") until a signed EXE replaces it (see below).
+
+Both end in `voice-keyboard setup`, the settings walkthrough, which first
+looks for a running llama.cpp server and offers its model as the default
+`[llm]`.
+
+## Linux
 
 1. **curl installer (default)** — `releases/latest/download/install-hyperfurion-vk.sh`.
    Downloads the release tarball and runs `install.sh` (venv + uinput + systemd

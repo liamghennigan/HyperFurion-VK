@@ -21,6 +21,22 @@ landing page dictates itself, live, in your browser.
 ![HyperFurion VK typing into a terminal by voice](docs/media/demo.gif)
 -->
 
+### Download and run
+
+| | Download | Run it |
+| --- | --- | --- |
+| **Linux** | [HyperFurion-VK-Setup.run](https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run) | `sh ~/Downloads/HyperFurion-VK-Setup.run`, or make it executable and double-click it |
+| **Windows** | [HyperFurion-VK-Setup.cmd](https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.cmd) | double-click it (if Windows warns about a downloaded file: **More info › Run anyway**) |
+
+Run it as yourself: no `sudo`, no administrator. (On Linux it asks for your
+password only for the system steps: audio libraries and keyboard access.)
+It installs for your user, then walks you through the settings: speech
+provider and keys, the hotkey, the language, Kai. If a
+[llama.cpp](https://github.com/ggml-org/llama.cpp) server (`llama-server`) is
+already running on your computer, setup finds it and asks whether to make
+its model your default language model (rewrites, Kai's terminal commands,
+pause punctuation). Change any of it later with `voice-keyboard setup`.
+
 ### Install on Linux — one line
 
 ```bash
@@ -179,7 +195,12 @@ chmod +x install-hyperfurion-vk.sh
 ```
 
 The release installer downloads the tagged source archive and runs the bundled
-project installer.
+project installer. (`HyperFurion-VK-Setup.run`, above, carries the source
+itself instead.) In a terminal, the installer ends in the settings
+walkthrough, `voice-keyboard setup`, which you can re-run any time; it
+offers a running llama.cpp server's model as your default `[llm]`. It looks
+on ports 8080, 8081, 8000 and 8012 (and `$LLAMA_ARG_PORT`); set
+`HFVK_LLAMA_URL=http://host:port` to point it elsewhere.
 
 If you cloned this repository:
 
@@ -279,16 +300,21 @@ installer:
   command on your PATH (open a **new** terminal to use it);
 - adds **HyperFurion VK** to the Start menu, to startup, and to
   **Settings › Apps** (where you can uninstall it);
-- asks how to transcribe — sign in to the hosted service, paste your own API
-  key(s) (typed hidden), point at a local offline server, or skip for now — and
-  starts the app. Re-running it upgrades in place and never touches your
-  settings.
+- walks you through the settings (`voice-keyboard setup`): a running
+  llama.cpp model offered as your default language model, how to transcribe —
+  sign in to the hosted service, paste your own API key(s) (typed hidden),
+  point at a local offline server, or skip for now — the hotkey, the language
+  and Kai, then starts the app. Re-running it upgrades in place and keeps
+  your settings (it offers the walkthrough again; Enter skips it).
+
+The double-click download, `HyperFurion-VK-Setup.cmd`, is this same installer
+pinned to its release; it honors the same environment variables.
 
 Unattended: `-NonInteractive -Provider xai -ApiKey ...` (groq, deepgram, and
 assemblyai have no voice: add `-TtsProvider xai -TtsApiKey ...`); also
 `-Version vX.Y.Z`, `-Source <checkout>`, `-NoLaunch`, `-NoAutostart`. With
-`irm | iex`, set `HYPERFURION_VK_VERSION` / `HYPERFURION_VK_NONINTERACTIVE=1`
-instead. Coming from the early beta? The installer stops it, removes its
+`irm | iex`, set `HYPERFURION_VK_VERSION` / `HYPERFURION_VK_SOURCE` /
+`HYPERFURION_VK_NONINTERACTIVE=1` instead. Coming from the early beta? The installer stops it, removes its
 startup launcher, and brings your settings and history along.
 
 ### Using it

@@ -60,6 +60,16 @@ jobs:
           HFVK_REQUIRE_DESKTOP: "1"  # the runner has a desktop: never skip the live tests
         run: python -m pytest -q -rs
 
+  downloads:
+    # The download-and-run setup files build, and the Linux one unpacks
+    # and reaches install.sh.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: packaging/build-downloads.sh dist
+      - run: sh dist/HyperFurion-VK-Setup.run --help | grep -q "Install (or upgrade)"
+      - run: head -1 dist/HyperFurion-VK-Setup.cmd | grep -q "^<# :"
+
   relay:
     runs-on: ubuntu-latest
     steps:

@@ -9,12 +9,14 @@ on:
   push:
     paths:
       - "packaging/windows/**"
+      - "packaging/build-downloads.sh"
       - "voice_keyboard/**"
       - "pyproject.toml"
       - ".github/workflows/windows-installer.yml"
   pull_request:
     paths:
       - "packaging/windows/**"
+      - "packaging/build-downloads.sh"
       - "voice_keyboard/**"
       - "pyproject.toml"
       - ".github/workflows/windows-installer.yml"
@@ -98,6 +100,24 @@ jobs:
           if ((Get-FileHash $config).Hash -ne $before) { throw "the upgrade changed the user's config" }
           $left = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*voice_keyboard.windows*" }
           if ($left) { throw "the upgrade did not stop the running app" }
+
+      - name: Upgrade with the double-click download
+        run: |
+          # HyperFurion-VK-Setup.cmd, the file users download and run.
+          & "C:\Program Files\Git\bin\bash.exe" packaging/build-downloads.sh dist
+          if ($LASTEXITCODE) { throw "building the downloads exited $LASTEXITCODE" }
+          $config = Join-Path $env:APPDATA "voice-keyboard\config.toml"
+          $before = (Get-FileHash $config).Hash
+          $env:HYPERFURION_VK_NONINTERACTIVE = "1"
+          $env:HYPERFURION_VK_SOURCE = $env:ROOT
+          cmd /c "dist\HyperFurion-VK-Setup.cmd"
+          if ($LASTEXITCODE) { throw "HyperFurion-VK-Setup.cmd exited $LASTEXITCODE" }
+          if ((Get-FileHash $config).Hash -ne $before) { throw "the download changed the user's config" }
+          # A failed install must say so through the exit code.
+          $env:HYPERFURION_VK_SOURCE = Join-Path $env:TEMP "no-such-checkout"
+          cmd /c "dist\HyperFurion-VK-Setup.cmd"
+          if ($LASTEXITCODE -ne 1) { throw "a failed install exited $LASTEXITCODE, not 1" }
+          $global:LASTEXITCODE = 0   # the runner would fail the step on that expected 1
 
       - name: Upgrade over an early beta's settings
         run: |

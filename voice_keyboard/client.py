@@ -722,13 +722,17 @@ def _relay_base(config: dict) -> str:
     return base
 
 
-def _set_toml_value(text: str, table: str, key: str, value: str) -> str:
-    """Set `key = "value"` under `[table]` in a TOML document, preserving the
-    rest of the file (comments, other tables) verbatim. Inserts the key or the
-    whole table if missing. Kept deliberately simple — it only ever sets the
-    three flat string keys the hosted login needs."""
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    line = f'{key} = "{escaped}"'
+def _set_toml_value(text: str, table: str, key: str, value) -> str:
+    """Set `key = "value"` (or `key = true`) under `[table]` in a TOML
+    document, preserving the rest of the file (comments, other tables)
+    verbatim. Inserts the key or the whole table if missing. Kept
+    deliberately simple — flat string and boolean keys only (the hosted
+    login and `voice-keyboard setup`)."""
+    if isinstance(value, bool):
+        line = f"{key} = {'true' if value else 'false'}"
+    else:
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        line = f'{key} = "{escaped}"'
     lines = text.splitlines()
     header = f"[{table}]"
     start = next((i for i, ln in enumerate(lines) if ln.strip() == header), None)
@@ -832,7 +836,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login", "quit", "devices",
+            "login", "quit", "devices", "setup",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -868,6 +872,13 @@ def main() -> None:
         for stream in (sys.stdout, sys.stderr):
             if stream is not None and hasattr(stream, "reconfigure"):
                 stream.reconfigure(errors="replace")
+
+    if args.command == "setup":
+        # The settings walkthrough; it must run before the config is
+        # loaded, since fixing a missing or broken config is its job.
+        from voice_keyboard.setup_wizard import main as setup_main
+
+        sys.exit(setup_main())
 
     config = load_config()
     global _overlay_endpoint

@@ -67,6 +67,12 @@ if [ "$UNINSTALL" -eq 1 ]; then
     exit 0
 fi
 
+if [ "$(id -u)" -eq 0 ]; then
+    echo "Run the installer as yourself, not as root (no sudo): it installs for" >&2
+    echo "your user and asks for your password only for the system steps." >&2
+    exit 1
+fi
+
 echo "=== voice-keyboard installer ==="
 echo ""
 
@@ -99,8 +105,20 @@ raise SystemExit(0 if key and key not in placeholders else 1)
 PY
 }
 
-config_has_required_api_keys() {
-    config_has_provider_api_key "$1" "$2" && config_has_provider_api_key "$1" "$3"
+config_is_usable() {
+    CONFIG_PATH="$1" "$VENV_DIR/bin/python" - <<'PY'
+import os
+from pathlib import Path
+
+from voice_keyboard.config import is_usable
+
+raise SystemExit(0 if is_usable(Path(os.environ["CONFIG_PATH"])) else 1)
+PY
+}
+
+has_tty() {
+    # `[ -r ]` alone passes without a controlling terminal; opening it doesn't.
+    { : < /dev/tty; } 2>/dev/null
 }
 
 write_provider_config() {
@@ -336,28 +354,49 @@ else
     echo "Config already exists at $CONFIG_DIR/config.toml"
 fi
 
-STT_PROVIDER="$(prompt_provider "Speech-to-text" "xai" "xai openai groq deepgram assemblyai" "${VOICE_KEYBOARD_STT_PROVIDER:-}")"
-TTS_PROVIDER="$(prompt_provider "Text-to-speech" "xai" "xai openai elevenlabs" "${VOICE_KEYBOARD_TTS_PROVIDER:-}")"
-STT_API_KEY=""
-TTS_API_KEY=""
-
-if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$STT_PROVIDER"; then
-    STT_API_KEY="$(prompt_api_key "$STT_PROVIDER")"
-fi
-if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$TTS_PROVIDER"; then
-    if [ "$TTS_PROVIDER" = "$STT_PROVIDER" ] && [ -n "$STT_API_KEY" ]; then
-        TTS_API_KEY="$STT_API_KEY"
-    else
-        TTS_API_KEY="$(prompt_api_key "$TTS_PROVIDER")"
+if [ -z "${VOICE_KEYBOARD_STT_PROVIDER:-}${VOICE_KEYBOARD_TTS_PROVIDER:-}" ] \
+        && [ "${VOICE_KEYBOARD_NONINTERACTIVE:-0}" != "1" ] && has_tty; then
+    # The settings walkthrough: a local llama.cpp model if one is running,
+    # speech provider, hotkey, language, Kai. Re-run any time with
+    # `voice-keyboard setup`. An upgrade that already works only asks.
+    RUN_SETUP=1
+    if config_is_usable "$CONFIG_DIR/config.toml"; then
+        printf "Walk through your settings again? (y/N): " > /dev/tty
+        IFS= read -r answer < /dev/tty || answer=""
+        case "$answer" in [yY]*) ;; *) RUN_SETUP=0 ;; esac
     fi
-fi
+    if [ "$RUN_SETUP" -eq 1 ]; then
+        "$VENV_DIR/bin/voice-keyboard" setup < /dev/tty > /dev/tty 2>&1 || \
+            echo "Setup was not finished; run 'voice-keyboard setup' any time."
+    fi
+else
+    # Unattended: providers and keys from the environment.
+    STT_PROVIDER="$(prompt_provider "Speech-to-text" "xai" "xai openai groq deepgram assemblyai" "${VOICE_KEYBOARD_STT_PROVIDER:-}")"
+    TTS_PROVIDER="$(prompt_provider "Text-to-speech" "xai" "xai openai elevenlabs" "${VOICE_KEYBOARD_TTS_PROVIDER:-}")"
+    STT_API_KEY=""
+    TTS_API_KEY=""
 
-write_provider_config "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER" "$STT_API_KEY" "$TTS_API_KEY"
+    if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$STT_PROVIDER"; then
+        STT_API_KEY="$(prompt_api_key "$STT_PROVIDER")"
+    fi
+    if ! config_has_provider_api_key "$CONFIG_DIR/config.toml" "$TTS_PROVIDER"; then
+        if [ "$TTS_PROVIDER" = "$STT_PROVIDER" ] && [ -n "$STT_API_KEY" ]; then
+            TTS_API_KEY="$STT_API_KEY"
+        else
+            TTS_API_KEY="$(prompt_api_key "$TTS_PROVIDER")"
+        fi
+    fi
+
+    write_provider_config "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER" "$STT_API_KEY" "$TTS_API_KEY"
+    echo "Configured STT provider: $STT_PROVIDER"
+    echo "Configured TTS provider: $TTS_PROVIDER"
+fi
 chmod 600 "$CONFIG_DIR/config.toml"
-echo "Configured STT provider: $STT_PROVIDER"
-echo "Configured TTS provider: $TTS_PROVIDER"
-if ! config_has_required_api_keys "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER"; then
-    echo "No complete API key setup saved; daemon will not be started yet."
+CONFIG_READY=0
+if config_is_usable "$CONFIG_DIR/config.toml"; then
+    CONFIG_READY=1
+else
+    echo "No complete speech provider setup saved; daemon will not be started yet."
 fi
 
 # ── systemd user service ──────────────────────────────────────────────
@@ -385,8 +424,9 @@ SERVICE
 systemctl --user daemon-reload
 systemctl --user enable voice-keyboard-daemon.service
 
-if ! config_has_required_api_keys "$CONFIG_DIR/config.toml" "$STT_PROVIDER" "$TTS_PROVIDER"; then
-    echo "Service enabled but not started: edit $CONFIG_DIR/config.toml with the selected provider API key(s) first."
+if [ "$CONFIG_READY" -eq 0 ]; then
+    echo "Service enabled but not started: run 'voice-keyboard setup' (or edit $CONFIG_DIR/config.toml), then"
+    echo "  systemctl --user start voice-keyboard-daemon"
 elif [ "$NEEDS_RELOGIN" -eq 1 ]; then
     echo "Service enabled but not started: log out and back in so 'input' group access applies."
 else
@@ -407,6 +447,7 @@ echo ""
 echo "Optional shortcuts:"
 echo "  Ctrl+Alt+T → $BIN_DIR/voice-keyboard tts"
 echo ""
+echo "  Change settings:     voice-keyboard setup"
 echo "  Check daemon status: systemctl --user status voice-keyboard-daemon"
 echo "  Uninstall:           curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash -s -- --uninstall"
 echo "  Manual test: voice-keyboard start && sleep 3 && voice-keyboard stop"
