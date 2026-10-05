@@ -32,6 +32,7 @@ export const Dictation = (() => {
   let tickT = 0, autoStopT = 0;
   let playTimers = [];        // scripted playback
   let scripted = false;
+  let sessionCommits = 0;      // lines committed since the mic was tapped
   Object.defineProperty(D, "engine", { get: () => engine });
 
   const liveFlow = () => settings.flowLive && settings.interim;
@@ -62,10 +63,24 @@ export const Dictation = (() => {
   }
 
   // ── one render pipe: raw transcript -> engine -> the focused window ─────
-  function newLine() {
-    line = moltenLine({ register: Window.register(), cfg: settings });
+  // live engines re-recognize or revise the whole utterance, so words stay
+  // molten until the utterance closes (a pause) and freeze then — never on
+  // a clock that a slow pass could satisfy by accident. The scripted demo
+  // keeps the daemon's 1.5 s window so its molten→frozen beat shows.
+  function newLine(live = false) {
+    line = moltenLine({ register: Window.register(), cfg: live ? { ...settings, stabilityMs: Infinity } : settings });
     rawFinal = ""; rawInterim = ""; guard = false;
     state.lastError = "";
+  }
+  // a final closes the line: flush, resolve "scratch that" and the wake
+  // word, commit (or retract), and start the next line while still recording
+  function closeUtterance(text) {
+    if (!line) return "";
+    rawFinal = text || ""; rawInterim = "";
+    pump();
+    const settled = settleLine();
+    if (D.recording) newLine(true);
+    return settled;
   }
   function raw() { return (rawFinal + " " + rawInterim).trim(); }
   function paint(r) {
@@ -92,7 +107,8 @@ export const Dictation = (() => {
     if (D.recording) return;
     stopPlayback();
     scripted = false;
-    newLine();
+    sessionCommits = 0;
+    newLine(true);
     Typist.reset();
     setRecording(true);
     Window.setLatency(null);
@@ -142,10 +158,10 @@ export const Dictation = (() => {
           bus.emit("rec:interim", { text });
         },
         onFinal(text) {
-          rawFinal += " " + text; rawInterim = "";
           state.mark = performance.now();
-          pump(); armAutoStop();
           bus.emit("rec:final", { text });
+          closeUtterance(text);
+          armAutoStop();
         },
       });
       engine = "local";
@@ -172,7 +188,7 @@ export const Dictation = (() => {
           let interim = "";
           for (let i = e.resultIndex; i < e.results.length; i++) {
             const r = e.results[i];
-            if (r.isFinal) { rawFinal += " " + r[0].transcript; bus.emit("rec:final", { text: r[0].transcript }); }
+            if (r.isFinal) { bus.emit("rec:final", { text: r[0].transcript }); closeUtterance(r[0].transcript); }
             else interim += r[0].transcript;
           }
           if (engine !== "live") { engine = "live"; caption(); }
@@ -239,10 +255,9 @@ export const Dictation = (() => {
     if (ev.type === "transcript.partial") {
       state.mark = performance.now();
       if (ev.is_final && ev.text) {
-        rawFinal += " " + ev.text;
-        rawInterim = "";
-        pump(); armAutoStop();
         bus.emit("rec:final", { text: ev.text });
+        closeUtterance(ev.text);
+        armAutoStop();
       } else {
         rawInterim = ev.text || "";
         pump(); armAutoStop();
@@ -250,7 +265,8 @@ export const Dictation = (() => {
       }
     } else if (ev.type === "transcript.done") {
       const t = String(ev.text || "");
-      if (t.length >= rawFinal.trim().length) { rawFinal = t; rawInterim = ""; }
+      // the relay's closing transcript only matters if nothing was committed yet
+      if (!sessionCommits && !raw() && t) { rawFinal = t; rawInterim = ""; }
       pump();
       relay.done = true;
       if (D.recording) stop();  // the demo cap finalized for us
@@ -277,8 +293,9 @@ export const Dictation = (() => {
     if (!relay) return;
     clearTimeout(relayT);
     relayCleanup();
-    if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
-    else funnel();
+    settleLine();
+    if (sessionCommits) funnel();
+    else log("nothing recognized", "dim");
   }
   function relayFail(msg) {
     // NB: relay may be null here — a failure before the socket/nodes were
@@ -292,7 +309,7 @@ export const Dictation = (() => {
       startBrowser();
       caption();
     } else {
-      if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
+      settleLine();
     }
   }
   function funnel() {
@@ -365,25 +382,27 @@ export const Dictation = (() => {
     if (rec) { try { rec.stop(); } catch {} rec = null; }
     state.dictations++;
     bus.emit("rec:stop", {});
+    const finish = () => {
+      settleLine();
+      if (!sessionCommits) {
+        if (engine === "sim" || engine === "trying" || engine === "none") {
+          log("nothing recognized · a scripted line stands in", "dim");
+          playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
+        } else log("nothing recognized", "dim");
+      }
+      caption();
+    };
     if (engine === "relay") {
-      if (relay) relayFinish();
-      else if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
+      if (relay) relayFinish(); else finish();
       return;
     }
     if (engine === "local" || engine === "loading") {
       const l = local; local = null;
-      const finish = () => { if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]); caption(); };
       if (l) l.stop().then(finish, finish); else finish();
       return;
     }
     // give a final result a beat to arrive, then settle the line
-    setTimeout(() => {
-      if (!settleLine()) {
-        if (engine !== "live") log("nothing recognized · a scripted line stands in", "dim");
-        playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
-      }
-      caption();
-    }, engine === "live" || engine === "trying" ? 350 : 0);
+    setTimeout(finish, engine === "live" || engine === "trying" ? 350 : 0);
   }
 
   // ── scripted playback: chips, autopilot, and the no-engine fallback ─────
@@ -393,7 +412,7 @@ export const Dictation = (() => {
     stopPlayback();
     const sc = typeof script === "string" ? { text: script } : script;
     const compiled = compileScript(sc.text, { revise: sc.revise || null });
-    newLine();
+    newLine(false);
     scripted = true;
     caption();
     if (opts.raw) line = moltenLine({ register: { name: "verbatim", smartCaps: false, grammar: false }, cfg: settings });
@@ -426,7 +445,7 @@ export const Dictation = (() => {
     state.ledger.push({ text, app: Window.focusedName(), when: Date.now() });
     if (state.ledger.length > 20) state.ledger.shift();
     bus.emit("type:text", { text });
-    engine = "none";
+    sessionCommits++;
   }
 
   D.start = start; D.stop = stop;

@@ -13,9 +13,20 @@ const PUNCT_STRIP = /[.,!?;:]+$/;
 const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "");
 
 const COMMANDS = {
-  "scratch that": "scratch", "delete that": "scratch",
+  "scratch that": "scratch", "scratched that": "scratch", "scratch this": "scratch",
+  "strike that": "scratch", "delete that": "scratch", "undo that": "scratch",
   "new line": "\n", "new paragraph": "\n\n",
 };
+// the wake word as a speech model is likely to write it
+const WAKE_ALIASES = ["vk", "v.k.", "vk.", "vicky", "vikki", "veekay", "veek"];
+// returns how many tokens at i spell the wake word (0 = none)
+export function wakeAt(cores, i, wake) {
+  const w = (wake || "vk").toLowerCase();
+  const c = (cores[i] || "").replace(/\./g, "");
+  if (c === w.replace(/\./g, "") || WAKE_ALIASES.some((a) => a.replace(/\./g, "") === c)) return 1;
+  if (c === "v" && (cores[i + 1] || "").replace(/\./g, "") === "k") return 2;
+  return 0;
+}
 // phrase -> [glyph, mode, sentenceEnd]; modes: left|right|both|none
 const PUNCT = {
   "period": [".", "left", true], "full stop": [".", "left", true],
@@ -188,9 +199,10 @@ export function parse(tokens, { flush = false, frozen = 0, register, cfg }) {
     const fence = i < frozen ? frozen - i : tokens.length;
     // wake word: everything after it is an instruction, never typed —
     // it resolves only at finalize; until then it holds the tail back
-    if (i >= frozen && wake && cores[i] === wake) {
+    const wk = i >= frozen ? wakeAt(cores, i, wake) : 0;
+    if (wk) {
       if (!flush) { pendingFrom = i; break; }
-      items.push({ kind: "instruction", text: tokens.slice(i + 1).join(" "),
+      items.push({ kind: "instruction", text: tokens.slice(i + wk).join(" "),
                    s: i, e: tokens.length });
       break;
     }
@@ -307,7 +319,7 @@ export function render(items, register, state) {
 // tokens are ignored — frozen text keeps its form. Only the user's own
 // "scratch that" may take committed text back.
 export function moltenLine({ register, cfg }) {
-  const stab = () => Math.max(200, (cfg && cfg.stabilityMs) || 1500);
+  const stab = () => (cfg && cfg.stabilityMs === Infinity) ? Infinity : Math.max(200, (cfg && cfg.stabilityMs) || 1500);
   let all = [];          // the full transcript view, tokenized
   let track = [];        // per-global-index stability clocks
   let committed = 0;     // tokens consumed into the fold
@@ -384,7 +396,7 @@ export function moltenLine({ register, cfg }) {
     if (!instr && !flush) {
       const tailNow = all.slice(committed);
       const p2 = parse(tailNow, { flush: false, frozen: 0, register, cfg });
-      if (p2.pendingFrom !== null && core(tailNow[p2.pendingFrom] || "") === wake)
+      if (p2.pendingFrom !== null && wakeAt(tailNow.map(core), p2.pendingFrom, wake))
         instr = tailNow.slice(p2.pendingFrom).join(" ");
     }
     lastRendered = {
