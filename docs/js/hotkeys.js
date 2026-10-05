@@ -1,19 +1,20 @@
-// ═══ HOTKEYS — honors the live config ═════════════════════════════════════
-import { cfgEl, synth, reduced } from "./env.js";
+// ═══ HOTKEYS — ctrl+alt+v, auto mode: tap toggles, hold talks ═════════════
+import { synth, reduced } from "./env.js";
 import { bus } from "./bus.js";
-import { Config } from "./config.js";
+import { settings } from "./settings.js";
 import { Dictation } from "./dictation.js";
 import { TTS } from "./tts.js";
+import { Keyboard } from "./keyboard.js";
 
 (() => {
-  const cfg = Config.cfg;
+  const cfg = settings;
   function comboDown(e) {
     return e.ctrlKey === cfg.mods.ctrl && e.altKey === cfg.mods.alt &&
            e.shiftKey === cfg.mods.shift && e.metaKey === cfg.mods.meta && e.code === cfg.code;
   }
-  // the config editor blocks the combo (AltGr layouts type through ctrl+alt);
-  // the terminal input does not — modifier chords never insert text there
-  const inEditor = (e) => e.target === cfgEl || (e.target.isContentEditable && e.target !== cfgEl);
+  // text fields block the combo (AltGr layouts type through ctrl+alt)
+  const inField = (e) => e.target && (e.target.isContentEditable ||
+    /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
 
   let keyDown = false, holdStarted = false, holdTimer = 0;
   addEventListener("keydown", (e) => {
@@ -28,7 +29,7 @@ import { TTS } from "./tts.js";
       if (synth) { synth.cancel(); TTS.clearHighlight(); bus.emit("tts:end"); }
       return;
     }
-    if (!comboDown(e) || inEditor(e)) return;
+    if (!comboDown(e) || inField(e)) return;
     e.preventDefault();
     if (e.repeat || keyDown) return;
     keyDown = true;
@@ -51,28 +52,18 @@ import { TTS } from "./tts.js";
   });
 })();
 
-// ═══ the kbd glyphs on the page light up under your real fingers ══════════
-// A small, honest delight: hold Ctrl and every <kbd>Ctrl</kbd> on screen
-// presses itself — the page teaching its own hotkey.
+// ═══ your real fingers press the board on screen ══════════════════════════
+// A small, honest delight: whatever you type on your physical keyboard
+// presses the same key on the 3D board (sand-colored, nothing is inserted).
+// Enter still never goes down — its ring flashes: yours.
 (() => {
   if (reduced) return;
-  const NAME = {
-    Control: ["ctrl", "control"], Alt: ["alt"], Shift: ["shift"],
-    Meta: ["meta", "super"], Escape: ["esc", "escape"],
-  };
-  const pressed = new Set();
-  let kbds = null;
-  function labels(e, on) {
-    const l = NAME[e.key] || (/^Key[A-Z]$/.test(e.code) ? [e.code.slice(3).toLowerCase()] : null);
-    if (!l) return false;
-    for (const n of l) on ? pressed.add(n) : pressed.delete(n);
-    return true;
-  }
-  function paint() {
-    kbds = kbds || document.querySelectorAll("kbd");
-    for (const k of kbds) k.classList.toggle("down", pressed.has(k.textContent.trim().toLowerCase()));
-  }
-  addEventListener("keydown", (e) => { if (labels(e, true)) { kbds = null; paint(); } }, true);
-  addEventListener("keyup", (e) => { if (labels(e, false)) paint(); }, true);
-  addEventListener("blur", () => { pressed.clear(); if (kbds) paint(); });
+  const MODS = new Set(["ControlLeft","ControlRight","AltLeft","AltRight","ShiftLeft","ShiftRight","MetaLeft","MetaRight"]);
+  addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    if (MODS.has(e.code)) Keyboard.press(e.code, { heat: "user", hold: true });
+    else Keyboard.press(e.code, { heat: "user" });
+  }, true);
+  addEventListener("keyup", (e) => { if (MODS.has(e.code)) Keyboard.release(e.code); }, true);
+  addEventListener("blur", () => Keyboard.releaseAll());
 })();

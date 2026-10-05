@@ -1,7 +1,7 @@
 // ═══ TTS — the reverse lane, with word-by-word highlight ══════════════════
 import { favicon, synth, coarse, baseTitle, FAV_IDLE, FAV_SPK } from "./env.js";
 import { bus } from "./bus.js";
-import { Config } from "./config.js";
+import { settings } from "./settings.js";
 import { Dictation } from "./dictation.js";
 
 export const TTS = (() => {
@@ -67,9 +67,9 @@ export const TTS = (() => {
     clearHighlight();
     const segs = textSegments(range);
     const u = new SpeechSynthesisUtterance(raw);
-    u.rate = Config.cfg.rate;
-    u.pitch = Config.cfg.pitch;
-    if (Config.cfg.voice) u.voice = Config.cfg.voice;
+    u.rate = settings.tts.rate;
+    u.pitch = settings.tts.pitch;
+    if (settings.tts.voice) u.voice = settings.tts.voice;
     u.onstart = () => { bus.emit("tts:start"); setSpeaking(true); };
     u.onboundary = (ev) => {
       if (ev.name && ev.name !== "word") return;
@@ -99,7 +99,7 @@ export const TTS = (() => {
     chip = document.createElement("button");
     chip.className = "ttschip";
     chip.type = "button";
-    chip.textContent = coarse ? "🔊 read aloud" : "🔊 voice-keyboard tts";
+    chip.textContent = coarse ? "read aloud" : "read aloud · ctrl+alt+t";
     chip.style.left = Math.min(
       Math.max(8, r.left + scrollX), scrollX + innerWidth - 170
     ) + "px";

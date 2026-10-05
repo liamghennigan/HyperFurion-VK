@@ -1,96 +1,61 @@
-// ═══ AUTOPILOT — a scripted ghost user, honestly labeled ══════════════════
+// ═══ AUTOPILOT — a scripted demo, on request, honestly labeled ════════════
 // Most visitors will not hand a landing page their microphone, and Firefox
-// has no SpeechRecognition at all. So the demo can drive itself: a ghost
-// presses the hotkey, dictates molten into the editor — mis-hears a word
-// and lets it repair itself — says "scratch that" out loud, shows the
-// terminal register turning spoken numbers into digits, and ends by having
-// a sentence read aloud. Every second of it is labeled as scripted, and
-// any real interaction (Esc, the mic, a key) takes over.
-import { $, hint, synth, reduced, SR } from "./env.js";
+// has no SpeechRecognition at all. So the demo can run itself, when asked:
+// four dictations through the same molten engine — a mis-heard word that
+// repairs itself, "scratch that", the terminal register, the python
+// register. The window's engine badge says "scripted" the whole time, and
+// any real interaction (the mic, Esc, a tab, a chip) stops it. It never
+// starts on its own.
+import { $, reduced } from "./env.js";
 import { bus } from "./bus.js";
-import { Desktop } from "./desktop.js";
+import { Window } from "./window.js";
 import { Dictation } from "./dictation.js";
-import { TTS } from "./tts.js";
+import { compileScript } from "./flow.js";
 
 export const Autopilot = (() => {
-  const watchBtn = $("watch");
+  const btn = $("autopilot");
   const A = { running: false };
-  let timers = [], overlay = null;
+  let timers = [];
 
   const SCRIPT = [
-    { focus: "editor",
-      say: { text: "fixed the race condition in the audio thread period",
-             revise: { at: 3, wrong: "addition" } } },
-    { focus: "editor",
-      say: { text: "scratch that fixed the race in audio capture instead period" } },
-    { focus: "terminal",
-      say: { text: "twenty three tests green comma zero flaky" } },
+    { register: "prose", say: { text: "fixed the race condition in the audio thread period", revise: { at: 3, wrong: "addition" } } },
+    { register: "prose", say: { text: "scratch that fixed the race in audio capture instead period" } },
+    { register: "terminal", say: { text: "twenty three failed tests comma rerun the flaky ones" } },
+    { register: "python", say: { text: "for i in range ten colon" } },
   ];
 
-  function ghostKbd() {
-    overlay = document.createElement("div");
-    overlay.className = "ghostkbd";
-    overlay.setAttribute("aria-hidden", "true");
-    overlay.innerHTML = "<span class='sigcap'>autopilot" +
-      (SR ? "" : " — your browser has no speech engine") +
-      " · scripted, nothing is listening · esc takes over</span>" +
-      "<span class='keys'><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd></span>";
-    document.body.appendChild(overlay);
-  }
-  function pressCombo() {
-    if (!overlay) return;
-    for (const k of overlay.querySelectorAll("kbd")) k.classList.add("down");
-    timers.push(setTimeout(() => {
-      if (overlay) for (const k of overlay.querySelectorAll("kbd")) k.classList.remove("down");
-    }, 420));
-  }
-  function at(ms, fn) { timers.push(setTimeout(fn, reduced ? Math.min(ms, 120 * (timers.length + 1)) : ms)); }
+  const at = (ms, fn) => { timers.push(setTimeout(fn, reduced ? 0 : ms)); };
 
   function start() {
-    if (A.running || Dictation.recording) return;
+    if (A.running || Dictation.busy()) return;
     A.running = true;
-    watchBtn.textContent = "■ stop watching";
-    ghostKbd();
-    const dur = reduced ? 400 : 4600;   // per step: press, dictate molten, settle
-    SCRIPT.forEach((step, i) => {
-      at(i * dur + 200, () => { Desktop.focus(step.focus); pressCombo(); });
-      at(i * dur + (reduced ? 250 : 800), () => Dictation.simulate(step.say));
+    document.body.classList.add("autopilot");
+    if (btn) { btn.textContent = "stop the demo"; btn.setAttribute("aria-pressed", "true"); }
+    let t = 200;
+    SCRIPT.forEach((step) => {
+      const dur = compileScript(step.say.text, { revise: step.say.revise || null }).dur;
+      at(t, () => { Window.setRegister(step.register, { silent: true }); Dictation.simulate(step.say); });
+      t += dur + 2400;
     });
-    // the finale: the reverse lane reads the freshly typed line aloud
-    at(SCRIPT.length * dur + 400, () => {
-      const line = [...document.querySelectorAll("#ebody .eline span")]
-        .find((s) => /audio capture/.test(s.textContent));
-      if (synth && line && line.firstChild) {
-        const r = document.createRange();
-        r.selectNodeContents(line);
-        const sel = getSelection();
-        sel.removeAllRanges();
-        sel.addRange(r);
-        TTS.speakSelection();
-      }
-      stop("autopilot: done — your turn. the mic is up top.");
-    });
-    const el = document.createElement("span");
-    hint.replaceChildren(el);
-    el.outerHTML = "<span class='engine-live'>autopilot</span> — scripted demo, honestly labeled. " +
-      "watch the amber words: molten, then repaired, then frozen. " +
-      "press <kbd>Esc</kbd> or the mic to take over.";
+    at(t, () => stop(true));
   }
-  function stop(msg) {
+  function stop(natural = false) {
     if (!A.running) return;
     A.running = false;
     for (const t of timers) clearTimeout(t);
     timers = [];
-    if (overlay) { overlay.remove(); overlay = null; }
-    watchBtn.textContent = "▶ watch it work";
-    if (msg) hint.textContent = msg;
+    if (!natural) Dictation.cancelScript();
+    document.body.classList.remove("autopilot");
+    if (btn) { btn.textContent = natural ? "replay the demo" : "play the scripted demo"; btn.setAttribute("aria-pressed", "false"); }
   }
 
-  watchBtn.hidden = false;
-  watchBtn.addEventListener("click", () => (A.running ? stop("") : start()));
-  addEventListener("keydown", (e) => { if (e.code === "Escape") stop(""); });
-  bus.on("rec:start", () => stop(""));  // the real mic always wins
+  if (btn) btn.addEventListener("click", () => (A.running ? stop(false) : start()));
+  addEventListener("keydown", (e) => { if (e.code === "Escape") stop(false); });
+  bus.on("rec:start", () => stop(false));   // the real mic always wins
+  bus.on("register:change", () => stop(false));
+  bus.on("simulate", () => stop(false));
+  document.addEventListener("visibilitychange", () => { if (document.hidden && A.running) stop(false); });
 
-  A.start = start; A.stop = stop;
+  A.start = start; A.stop = () => stop(false);
   return A;
 })();

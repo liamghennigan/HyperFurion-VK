@@ -118,7 +118,58 @@ export const REGISTERS = {
   prose:    { name: "prose",    smartCaps: true,  grammar: true,  numbersOn: false, numbersMin: 10 },
   terminal: { name: "terminal", smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0 },
   verbatim: { name: "verbatim", smartCaps: false, grammar: false, numbersOn: false, numbersMin: 10 },
+  // semantic registers (code.py): speech is compiled, not transcribed
+  python:   { name: "python",   smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, compiler: "python" },
+  shell:    { name: "shell",    smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, compiler: "shell" },
 };
+
+// ── the semantic compilers (code.py) — pure, prefix-stable folds ──────────
+// "for i in range ten colon" -> `for i in range(10):`; "pipe grep dash i
+// error" -> `| grep -i error`. Deterministic tables only; anything unknown
+// falls through as a plain word. All carried context lives in the fold
+// state's `pending` slot, so the molten commit/preview split stays exact.
+const PY_GLYPHS = { dot: [".", "both"], equals: ["=", "none"], plus: ["+", "none"],
+  minus: ["-", "none"], times: ["*", "none"], modulo: ["%", "none"], arrow: ["->", "none"] };
+const SH_GLYPHS = { pipe: ["|", "none"], dot: [".", "both"], star: ["*", "right"], slash: ["/", "both"] };
+const PY_CALLABLES = new Set(["range", "print", "len", "str", "int", "float", "input",
+  "enumerate", "sorted", "reversed", "abs", "min", "max", "sum", "type", "repr"]);
+const COMPILERS = {
+  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false },
+  shell:  { glyphs: SH_GLYPHS, callables: new Set(), dashHold: true },
+};
+function compileCode(items, state, { glyphs, callables, dashHold }) {
+  const out = [];
+  let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "";
+  const emit = (text, glueLeft) => {
+    if (!atStart && !glueNext && !glueLeft) out.push(" ");
+    out.push(text); atStart = false; glueNext = false;
+  };
+  const emitMode = (glyph, mode) => {
+    if (mode === "left") emit(glyph, true);
+    else if (mode === "right") { emit(glyph, false); glueNext = true; }
+    else if (mode === "both") { emit(glyph, true); glueNext = true; }
+    else emit(glyph, false);
+  };
+  const flushDash = () => { if (pending === "dash") { emit("-", false); pending = ""; } };
+  for (const it of items) {
+    if (it.kind === "break") { flushDash(); pending = ""; out.push(it.text); atStart = false; glueNext = true; }
+    else if (it.kind === "punct") {
+      if (pending === "call" && it.text === ":") { emit("):", true); pending = ""; continue; }
+      if (dashHold && it.text === "-" && it.mode === "none") { flushDash(); pending = "dash"; continue; }
+      flushDash();
+      if (pending === "call" && it.text === ")") pending = "";
+      emitMode(it.text, it.mode);
+    } else if (it.kind === "word") {
+      const c = it.text.toLowerCase();
+      if (pending === "dash") { emit("-" + it.text, false); pending = ""; continue; }
+      const g = glyphs[c];
+      if (g) { emitMode(g[0], g[1]); continue; }
+      if (callables.has(c) && pending !== "call") { emit(it.text + "(", false); glueNext = true; pending = "call"; continue; }
+      emit(it.text, false);
+    }
+  }
+  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending } };
+}
 
 // ── parse: raw tokens -> items, with the frozen fence (grammar.py) ────────
 // items: {kind: word|punct|break|scratch|instruction, text, mode,
@@ -215,11 +266,12 @@ function capitalized(t) {
   return t;
 }
 export function initialState(register) {
-  return { atStart: true, glueNext: false, capNext: (register || REGISTERS.prose).smartCaps };
+  return { atStart: true, glueNext: false, capNext: (register || REGISTERS.prose).smartCaps, pending: "" };
 }
 export function render(items, register, state) {
   const reg = register || REGISTERS.prose;
   const st = state ? { ...state } : initialState(reg);
+  if (reg.compiler && COMPILERS[reg.compiler]) return compileCode(items, st, COMPILERS[reg.compiler]);
   const out = [];
   const emit = (text, glueLeft) => {
     if (!st.atStart && !st.glueNext && !glueLeft) out.push(" ");
