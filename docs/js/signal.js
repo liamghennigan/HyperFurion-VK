@@ -1,6 +1,5 @@
 // ═══ SIGNAL — the one source every gauge reads ════════════════════════════
-import { pill } from "./env.js";
-import { Hero } from "./hero2d.js";
+import { bus } from "./bus.js";
 
 export const Signal = (() => {
   const a = { ctx: null, analyser: null, stream: null, buf: null, fbuf: null };
@@ -19,16 +18,14 @@ export const Signal = (() => {
       a.buf = new Uint8Array(a.analyser.fftSize);
       a.fbuf = new Uint8Array(a.analyser.frequencyBinCount);
       src.connect(a.analyser);
-      pill.classList.add("real");
-      Hero.caption();
+      bus.emit("signal:live", true);
     } catch { /* every gauge falls back to the synthesized signal */ }
   }
   function stop() {
     if (a.stream) a.stream.getTracks().forEach((t) => t.stop());
     a.stream = null;
     a.analyser = null;
-    pill.classList.remove("real");
-    pill.querySelectorAll("i").forEach((b) => { b.style.transform = ""; });
+    bus.emit("signal:live", false);
   }
   function frame() {
     const now = performance.now();
@@ -57,9 +54,8 @@ export const Signal = (() => {
     cached = { peak, fft: simFft, live: false };
     return cached;
   }
-  // log-spaced band energies for the field: 8 values 0..1, bass → sibilance.
-  // Works identically on the live analyser and the synthetic spectrum, so
-  // the field's ambient mode costs nothing extra.
+  // log-spaced band energies: 8 values 0..1, bass → sibilance. Works
+  // identically on the live analyser and the synthetic spectrum.
   const bandBuf = new Float32Array(8);
   function bands() {
     const f = frame().fft, n = f.length;
