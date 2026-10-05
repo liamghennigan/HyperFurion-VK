@@ -3,6 +3,12 @@
 Where HyperFurion VK goes from here. This is direction, not a schedule —
 items land when they are ready, and each one is shippable on its own.
 
+> **Status 2026-10 (2.2.0):** Windows is a first-class platform — native
+> tray app, overlay, Kai orb, one-line installer, CI on real Windows — and
+> rung 1's widget probe reads Windows too (the caret position and classic
+> password fields via Win32; UI Automation for richer widgets is still
+> future work).
+>
 > **Status 2026-07-04:** first implementations of all seven landed,
 > config-gated and off by default where behavior could change: 1 (widget
 > probe + `[stt] hotword_bias`), 2 (`voice-keyboard learned` +

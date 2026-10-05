@@ -77,6 +77,27 @@ class TestUnicodeChunking:
         with pytest.raises(RuntimeError, match="not started"):
             MacTextInjector().type_text("hi")
 
+    def test_suppress_enter_never_types_a_newline(self) -> None:
+        # The intent channel / Kai's terminal route: a typed "\n" is Return
+        # in Terminal, so it must never reach the event stream.
+        quartz = ModuleType("Quartz")
+        quartz.kCGHIDEventTap = 0
+        quartz.CGEventCreateKeyboardEvent = mock.Mock(side_effect=lambda *_: object())
+        quartz.CGEventKeyboardSetUnicodeString = mock.Mock()
+        quartz.CGEventPost = mock.Mock()
+        inj = MacTextInjector()
+        with mock.patch.dict(sys.modules, {"Quartz": quartz}):
+            inj.start()
+            inj.suppress_enter = True
+            inj.type_text("git status\nrm -rf /\r\n")
+        typed = "".join(c.args[2] for c in quartz.CGEventKeyboardSetUnicodeString.call_args_list)
+        assert "\n" not in typed and "\r" not in typed
+        assert "git status rm -rf /" in typed
+
+    def test_daemon_no_enter_path_reaches_the_mac_injector(self) -> None:
+        # The daemon only arms the guard on injectors that expose it.
+        assert hasattr(MacTextInjector(), "suppress_enter")
+
 
 class TestMacHotkeySpec:
     def test_parses_the_default_combo(self) -> None:

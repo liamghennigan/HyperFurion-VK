@@ -323,7 +323,18 @@ class TestHyperFurionSTTProvider:
         assert url.startswith("wss://relay.example.com/v1/stt?")
         query = parse_qs(urlsplit(url).query)
         assert query["sample_rate"] == ["16000"]
+        assert "model" not in query  # the provider's default
         assert connect.call_args.kwargs["additional_headers"]["Authorization"] == "Bearer hfk_abc"
+
+    def test_a_pinned_model_goes_in_the_url(self) -> None:
+        client = stt.create_stt_client(
+            {
+                "providers": {"xai": {"api_key": "k"}},
+                "stt": {"provider": "xai", "model": "grok-voice-transcribe-1.0"},
+            }
+        )
+        query = parse_qs(urlsplit(client._url_for_sample_rate(16000)).query)
+        assert query["model"] == ["grok-voice-transcribe-1.0"]
 
 
 class TestOpenAICompatibleBaseURL:

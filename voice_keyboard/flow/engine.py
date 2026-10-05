@@ -14,6 +14,10 @@ across a clipboard-pasted run). Commits are monotonic: the only way
 committed text shrinks is the user's own "scratch that", which rewinds to
 a segment snapshot.
 
+One exception to "final commits at once": the period a provider puts where
+the speaker paused (flow/pauses.py). That word waits, molten, until the
+words after the pause decide whether the sentence really ended there.
+
 Pure logic — no IO, no clocks of its own. The daemon feeds transcripts,
 tick timestamps, and reads `desired_text()`; the InjectionWorker converges
 the screen toward it.
@@ -25,6 +29,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Optional
 
+from voice_keyboard.flow import pauses
 from voice_keyboard.flow.grammar import Grammar, Item
 from voice_keyboard.flow.registers import (
     Register,
@@ -35,6 +40,15 @@ from voice_keyboard.flow.registers import (
 
 logger = logging.getLogger(__name__)
 
+# A pause's next word counts as settled after surviving an update or this
+# long; a review is asked once this many words follow the pause (or the
+# speaker stopped again, or this long passed).
+PAUSE_SETTLE_S = 0.6
+PAUSE_REVIEW_WORDS = 3
+PAUSE_REVIEW_WAIT_S = 1.2
+# A review that never answered stops holding the text back after this.
+PAUSE_REVIEW_TIMEOUT_S = 4.0
+
 
 @dataclass
 class FlowConfig:
@@ -43,6 +57,10 @@ class FlowConfig:
     stability_updates: int = 2
     max_molten_chars: int = 160
     adaptive: bool = True
+    # Punctuation where the speaker paused: "off" keeps the provider's,
+    # "rules" settles the clear cases, "llm" also asks the daemon's
+    # reviewer about the rest (review_requests / resolve_pause).
+    pause_review: str = "off"
 
 
 @dataclass(frozen=True)
@@ -63,6 +81,24 @@ class _TokenMeta:
 class _Snapshot:
     render_len: int
     render_state: RenderState
+
+
+@dataclass
+class _Pause:
+    """A provider sentence end at a pause; keyed by the index of the first
+    token after the pause."""
+    decision: Optional[pauses.PauseDecision] = None     # settled
+    provisional: Optional[pauses.PauseDecision] = None  # shown meanwhile
+    requested_at: Optional[float] = None                # review asked
+
+
+@dataclass(frozen=True)
+class PauseQuery:
+    """A pause for the reviewer: the text before it (ending with the
+    provider's period) and the words after it."""
+    index: int
+    before: str
+    after: str
 
 
 def risky_backspace(text: str) -> bool:
@@ -100,6 +136,11 @@ class FlowEngine:
         self._snapshots: list[_Snapshot] = [
             _Snapshot(render_len=0, render_state=self._render_state)
         ]
+        # Segment ends (token indexes) whose snapshot waits for their last
+        # word to commit — a pause can hold it back.
+        self._segment_marks: list[int] = []
+        self._pauses: dict[int, _Pause] = {}
+        self._lower_seen: set[str] = set()
         self._instruction = ""
         self._scratches = 0
         self._rev_depth = 0.0  # adaptive: observed ASR revision depth, decaying
@@ -141,11 +182,16 @@ class FlowEngine:
 
         self._tokens = self._tokens[:self._committed_tokens] + new_molten
         self._meta = self._meta[:self._committed_tokens] + merged_meta
+        for index in range(max(1, self._committed_tokens + prefix), len(self._tokens)):
+            if self._tokens[index][:1].islower():
+                self._lower_seen.add(pauses.core(self._tokens[index]))
         if is_final:
             self._final_tokens = max(self._final_tokens, len(self._tokens))
+            self._note_pause()
 
         self._rev_depth *= 0.98
         self._reparse()
+        self._settle_pauses(now)
         self._commit_ready(now)
         if is_final:
             self._mark_segment_boundary()
@@ -159,11 +205,18 @@ class FlowEngine:
                 self._flush_pending = True
                 self._reparse()
         self._rev_depth *= 0.995
+        self._settle_pauses(now)
         self._commit_ready(now)
 
     def finalize(self, merged: str, *, now: float) -> FinalResult:
         self.on_transcript(merged, is_final=True, now=now)
         self._flush_pending = True
+        self._reparse()
+        # Every pause gets its answer now: a review still out, or a pause
+        # nobody asked about, falls back to the rules.
+        for index, pause in sorted(self._pauses.items()):
+            if pause.decision is None:
+                pause.decision = self._rule_decision(index)[0]
         self._reparse()
         for item in list(self._items[self._committed_items:]):
             self._commit_item(item)
@@ -186,7 +239,7 @@ class FlowEngine:
         if self._pending_is_instruction():
             spoken = " ".join(self._tokens[self._pending_from + 1:])
             return f"⌁ {spoken}…" if spoken else "⌁ listening for instruction…"
-        tail = " ".join(self._tokens[self._committed_tokens:])
+        tail = " ".join(self._view_tokens()[self._committed_tokens:])
         return tail
 
     @property
@@ -196,6 +249,60 @@ class FlowEngine:
     @property
     def scratches(self) -> int:
         return self._scratches
+
+    def pauses_pending(self) -> bool:
+        return any(pause.decision is None for pause in self._pauses.values())
+
+    def review_requests(self, now: float, *, final: bool = False) -> list[PauseQuery]:
+        """Pauses ready for the reviewer (enough words after them, or the
+        dictation is ending); each is handed out once."""
+        if self._cfg.pause_review != "llm":
+            return []
+        queries: list[PauseQuery] = []
+        for index, pause in sorted(self._pauses.items()):
+            if pause.decision is not None or pause.requested_at is not None:
+                continue
+            if index >= len(self._tokens) or self._item_at(index) is None:
+                continue
+            if self._rule_decision(index)[1]:
+                continue  # the rules are sure; settled without a review
+            ready = (
+                final
+                or len(self._tokens) - index >= PAUSE_REVIEW_WORDS
+                or index < self._final_tokens
+                or now - self._meta[index].first_seen >= PAUSE_REVIEW_WAIT_S
+            )
+            if not ready:
+                continue
+            pause.requested_at = now
+            view = self._view_tokens()
+            queries.append(
+                PauseQuery(
+                    index=index,
+                    before=" ".join(view[max(0, index - 30):index - 1] + [self._tokens[index - 1]]),
+                    after=" ".join(self._tokens[index:index + 12]),
+                )
+            )
+        return queries
+
+    def resolve_pause(self, index: int, answer: Optional[str], *, now: float) -> bool:
+        """The reviewer's reply for the pause before token `index` (None if
+        it failed): its call if it is a clean one, else the rules'."""
+        pause = self._pauses.get(index)
+        if pause is None or pause.decision is not None:
+            return False
+        if index >= len(self._tokens):
+            pause.requested_at = None  # the words after it were retracted
+            return False
+        decision = pauses.parse_answer(
+            answer if isinstance(answer, str) else "",
+            self._tokens[index - 1],
+            self._tokens[index],
+        )
+        pause.decision = decision or self._rule_decision(index)[0]
+        self._reparse()
+        self._commit_ready(now)
+        return True
 
     # ----------------------------------------------------------- internal
 
@@ -211,9 +318,102 @@ class FlowEngine:
             return False
         return self._grammar.is_wake_word(self._tokens[self._pending_from])
 
+    def _view_tokens(self) -> list[str]:
+        """The tokens as they should read: each pause's punctuation (and the
+        capital after it) as decided, or as provisionally ruled."""
+        if not self._pauses:
+            return self._tokens
+        view = list(self._tokens)
+        for index, pause in sorted(self._pauses.items()):
+            decision = pause.decision or pause.provisional
+            if decision is not None and 0 < index < len(view):
+                view[index - 1], view[index] = pauses.apply(
+                    view[index - 1], view[index], decision
+                )
+        return view
+
+    def _note_pause(self) -> None:
+        """A final segment ending in a provider period: remember the pause."""
+        index = len(self._tokens)
+        if (
+            self._cfg.pause_review not in ("rules", "llm")
+            or not self._register.smart_caps
+            or not self._grammar.enabled
+            or index in self._pauses
+            or index - 1 < self._committed_tokens
+            or not pauses.reviewable(self._tokens[index - 1])
+        ):
+            return
+        self._pauses[index] = _Pause()
+
+    def _item_at(self, index: int) -> Optional[Item]:
+        for item in self._items:
+            if item.span[0] <= index < item.span[1]:
+                return item
+        return None
+
+    def _rule_decision(self, index: int) -> tuple[pauses.PauseDecision, bool]:
+        """The rules' call for the pause before token `index`."""
+        if index >= len(self._tokens):
+            return pauses.PauseDecision(".", False, ""), True  # nothing followed
+        right = self._tokens[index]
+        item = self._item_at(index)
+        if item is not None and item.span[0] < index:
+            # One phrase spans the pause ("hyper. Furion" = "HyperFurion").
+            return pauses.PauseDecision("", False, pauses.core(right)), True
+        return pauses.rule_decision(
+            self._tokens[index - 1],
+            right,
+            right_kind=item.kind if item is not None else "word",
+            lower_seen=frozenset(self._lower_seen),
+        )
+
+    def _settle_pauses(self, now: float) -> None:
+        """Show each open pause per the rules, and settle it once the word
+        after it has settled: the rules decide clear cases (all cases
+        without a reviewer); unclear ones wait for the reviewer."""
+        changed = False
+        for index, pause in sorted(self._pauses.items()):
+            if pause.decision is not None:
+                continue
+            if index >= len(self._tokens):
+                if pause.provisional is not None:
+                    pause.provisional = None
+                    changed = True
+                continue
+            if self._item_at(index) is None:
+                continue  # a phrase still forming after the pause
+            decision, confident = self._rule_decision(index)
+            if decision != pause.provisional:
+                pause.provisional = decision
+                changed = True
+            meta = self._meta[index]
+            settled = (
+                index < self._final_tokens
+                or meta.stable_count >= 1
+                or now - meta.first_seen >= PAUSE_SETTLE_S
+            )
+            asked = pause.requested_at
+            timed_out = (
+                now - asked >= PAUSE_REVIEW_TIMEOUT_S
+                if asked is not None
+                else now - meta.first_seen >= PAUSE_REVIEW_WAIT_S + PAUSE_REVIEW_TIMEOUT_S
+            )
+            if settled and (confident or self._cfg.pause_review != "llm" or timed_out):
+                pause.decision = decision
+        if changed:
+            self._reparse()
+
+    def _holds_pause(self, start: int, end: int) -> bool:
+        """True while an undecided pause sits right after this span."""
+        return any(
+            pause.decision is None and start < index <= end
+            for index, pause in self._pauses.items()
+        )
+
     def _reparse(self) -> None:
         result = self._grammar.parse(
-            self._tokens,
+            self._view_tokens(),
             flush=self._flush_pending,
             frozen=self._committed_tokens,
         )
@@ -239,6 +439,8 @@ class FlowEngine:
             if item.kind == "instruction":
                 # Instructions are consumed at finalize, never mid-stream.
                 break
+            if self._holds_pause(start, end):
+                break  # the words after the pause will decide its period
             committable = end <= self._final_tokens
             if not committable:
                 metas = self._meta[start:end]
@@ -273,6 +475,13 @@ class FlowEngine:
             self._commit_item(self._items[self._committed_items])
 
     def _commit_item(self, item: Item) -> None:
+        start, end = item.span
+        for index, pause in self._pauses.items():
+            if pause.decision is None and start < index <= end:
+                # Forced out by the molten-length valve: what shows, stays.
+                pause.decision = pause.provisional or pauses.keep(
+                    self._tokens[index] if index < len(self._tokens) else ""
+                )
         if item.kind == "scratch":
             self._apply_scratch()
         elif item.kind == "instruction":
@@ -285,6 +494,7 @@ class FlowEngine:
             self._committed_render += delta
         self._committed_tokens = max(self._committed_tokens, item.span[1])
         self._committed_items += 1
+        self._take_snapshots()
 
     def _apply_scratch(self) -> None:
         target: Optional[_Snapshot] = None
@@ -308,14 +518,23 @@ class FlowEngine:
         self._scratches += 1
 
     def _mark_segment_boundary(self) -> None:
-        if (
-            self._snapshots
-            and self._snapshots[-1].render_len == len(self._committed_render)
-        ):
-            return
-        self._snapshots.append(
-            _Snapshot(
-                render_len=len(self._committed_render),
-                render_state=self._render_state,
+        mark = len(self._tokens)
+        if not self._segment_marks or self._segment_marks[-1] != mark:
+            self._segment_marks.append(mark)
+        self._take_snapshots()
+
+    def _take_snapshots(self) -> None:
+        """Snapshot each segment end once all of its words are committed."""
+        while self._segment_marks and self._segment_marks[0] <= self._committed_tokens:
+            self._segment_marks.pop(0)
+            if (
+                self._snapshots
+                and self._snapshots[-1].render_len == len(self._committed_render)
+            ):
+                continue
+            self._snapshots.append(
+                _Snapshot(
+                    render_len=len(self._committed_render),
+                    render_state=self._render_state,
+                )
             )
-        )

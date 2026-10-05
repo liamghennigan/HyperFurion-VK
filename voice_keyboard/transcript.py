@@ -124,3 +124,26 @@ def _merge_transcript_text(current: str, update: str) -> str:
             return f"{current}{update[overlap:]}"
 
     return _join_transcript_text(current, update)
+
+
+def _reconcile_utterance(spoken: str, utterance: str) -> str:
+    """An utterance-final event against the chunks already received for it.
+
+    grok-voice-transcribe-2.0 repeats a whole utterance in its final event,
+    after chunk finals that normally said all of it already. What was
+    received stands (it may be typed by now); only words the utterance has
+    beyond it are added, and it is taken as-is only when no chunk came.
+    """
+    utterance = (utterance or "").strip()
+    if not utterance:
+        return spoken
+    if not spoken.strip():
+        return utterance
+    spoken_words = _transcript_words(spoken)
+    utterance_words = _transcript_words(utterance)
+    if len(utterance_words) > len(spoken_words) and _word_sequence_startswith(
+        utterance_words, spoken_words
+    ):
+        tail_start = utterance_words[len(spoken_words)][1]
+        return _join_transcript_text(spoken, utterance[tail_start:])
+    return spoken

@@ -1,3 +1,4 @@
+import sys
 from unittest import mock
 
 import pytest
@@ -6,6 +7,12 @@ from voice_keyboard import client
 
 
 class TestGetClipboardText:
+    @pytest.fixture(autouse=True)
+    def linux_platform(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The Linux code path (wl-clipboard/xclip, notify-send, the GNOME
+        # overlay over gdbus); Windows has its own tests.
+        monkeypatch.setattr(sys, "platform", "linux")
+
     def test_returns_wl_paste_output_when_available(self) -> None:
         result = mock.Mock()
         result.returncode = 0
@@ -152,6 +159,12 @@ class TestToggleCommand:
 
 
 class TestNotifications:
+    @pytest.fixture(autouse=True)
+    def linux_platform(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The Linux code path (wl-clipboard/xclip, notify-send, the GNOME
+        # overlay over gdbus); Windows has its own tests.
+        monkeypatch.setattr(sys, "platform", "linux")
+
     def test_notify_sends_and_stores_notification_id(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -182,6 +195,12 @@ class TestNotifications:
 
 
 class TestOverlayControl:
+    @pytest.fixture(autouse=True)
+    def linux_platform(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The Linux code path (wl-clipboard/xclip, notify-send, the GNOME
+        # overlay over gdbus); Windows has its own tests.
+        monkeypatch.setattr(sys, "platform", "linux")
+
     def test_show_overlay_calls_shell_extension_with_focused_anchor(self) -> None:
         with mock.patch("voice_keyboard.client._focused_anchor", return_value=(320, 240)), \
              mock.patch("voice_keyboard.client._call_shell_overlay", return_value=True) as shell_call, \

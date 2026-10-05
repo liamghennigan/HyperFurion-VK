@@ -1,7 +1,5 @@
-import io
-import os
+import sys
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -12,6 +10,8 @@ from voice_keyboard import config
 def tmp_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     cfg_dir = tmp_path / "voice-keyboard"
     monkeypatch.setattr(config, "_config_dir", lambda: cfg_dir)
+    # Unix-socket defaults; Windows (loopback TCP) is covered in test_windows*.
+    monkeypatch.setattr(sys, "platform", "linux")
     return cfg_dir
 
 
@@ -45,12 +45,24 @@ class TestConfigLoading:
         cfg_path = tmp_config_dir / "config.toml"
         custom_socket = str(tmp_config_dir / "custom.sock")
         tmp_config_dir.mkdir(parents=True, exist_ok=True)
-        cfg_path.write_text(f"[daemon]\nsocket_path = \"{custom_socket}\"\n")
+        # A TOML literal string: Windows paths carry backslashes.
+        cfg_path.write_text(f"[daemon]\nsocket_path = '{custom_socket}'\n")
         cfg = config.load_config()
         assert cfg["daemon"]["socket_path"] == custom_socket
 
 
 class TestConfigValidation:
+    def test_pause_review_values(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["xai"]["api_key"] = "xai-real"
+        assert cfg["flow"]["pause_review"] == "auto"
+        for value in ("auto", "llm", "rules", "off", "RULES"):
+            cfg["flow"]["pause_review"] = value
+            config.validate_config(cfg)
+        cfg["flow"]["pause_review"] = "always"
+        with pytest.raises(RuntimeError, match="flow.pause_review"):
+            config.validate_config(cfg)
+
     def test_missing_api_key_raises(self) -> None:
         cfg = config._default_config_with_paths()
         with pytest.raises(RuntimeError, match="providers.xai.api_key is not configured"):
@@ -119,6 +131,7 @@ class TestConfigValidation:
     ],
 )
 def test_config_dir(monkeypatch: pytest.MonkeyPatch, xdg: str, expected: Path) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")  # Windows: %APPDATA% (test_windows)
     monkeypatch.setenv("XDG_CONFIG_HOME", xdg)
     assert config._config_dir() == expected
 

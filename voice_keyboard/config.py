@@ -1,12 +1,17 @@
+import codecs
 import copy
-import os
+import logging
 import sys
 from pathlib import Path
+from typing import Optional
 
 import tomllib
 
+from voice_keyboard import paths
 from voice_keyboard.stt import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS
 from voice_keyboard.tts import DEFAULT_TTS_MODELS, DEFAULT_TTS_VOICES, SUPPORTED_TTS_PROVIDERS
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG: dict = {
     "xai": {
@@ -61,6 +66,10 @@ DEFAULT_CONFIG: dict = {
         # "always" opts in cloud TTS (spends tokens on selections never
         # played, and sends selection text before you ask); "off" = never.
         "prefetch": "off",
+        # A global hotkey that reads the highlighted text aloud (press again
+        # to stop). Off by default on Linux, where a desktop shortcut runs
+        # `voice-keyboard tts`; Windows defaults to control+alt+r.
+        "hotkey": "",
     },
     "audio": {
         "sample_rate": 16000,
@@ -105,6 +114,11 @@ DEFAULT_CONFIG: dict = {
         # Merge accepted `voice-keyboard learned` overrides into the
         # grammar vocabulary. Dormant until entries are accepted.
         "personal_dictionary": True,
+        # Punctuation where you paused: streaming recognizers end a sentence
+        # at every pause. auto = rules, plus an [llm] review of the unclear
+        # pauses when [llm] is usable; llm / rules / off (keep the
+        # recognizer's periods).
+        "pause_review": "auto",
         # Molten diffs: a "vk, ..." rewrite is HELD as pending instead
         # of landing — say "keep it" (or `voice-keyboard keep`) to apply,
         # "scratch that" (or `discard`) to drop. Off = rewrites land
@@ -290,10 +304,7 @@ PLACEHOLDER_API_KEYS = {
 
 
 def _config_dir() -> Path:
-    xdg = os.environ.get("XDG_CONFIG_HOME", "")
-    if xdg:
-        return Path(xdg) / "voice-keyboard"
-    return Path.home() / ".config" / "voice-keyboard"
+    return paths.config_dir()
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -315,41 +326,122 @@ def _deep_merge(base: dict, override: dict) -> dict:
 def _default_socket_path() -> str:
     if sys.platform == "win32":
         # Windows Python has no AF_UNIX; loopback TCP is the IPC transport.
-        return "tcp:127.0.0.1:48765"
+        return "tcp:127.0.0.1:0"  # a free port per daemon (see ipc.py)
     return str(_config_dir() / "socket")
+
+
+DEFAULT_WINDOWS_TTS_HOTKEY = "control+alt+r"
 
 
 def _default_config_with_paths() -> dict:
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["daemon"]["socket_path"] = _default_socket_path()
+    if sys.platform == "win32":
+        # No desktop-shortcut system to bind `voice-keyboard tts` to, so the
+        # daemon owns a read-aloud hotkey there.
+        config["tts"]["hotkey"] = DEFAULT_WINDOWS_TTS_HOTKEY
     return config
 
 
-def load_config() -> dict:
-    config = _default_config_with_paths()
-    config_path = _config_dir() / "config.toml"
-    if config_path.exists():
-        with open(config_path, "rb") as f:
-            user_config = tomllib.load(f)
-        config = _deep_merge(config, user_config)
+def read_config_text(path: Path) -> str:
+    """config.toml as text, however Notepad saved it: UTF-8 with or without
+    a byte-order mark, "Unicode" (UTF-16), or the ANSI code page. Line
+    endings come back as \n, so a rewrite (sign-in) can't double them."""
+    data = path.read_bytes()
+    if data.startswith(codecs.BOM_UTF8):
+        text = data[len(codecs.BOM_UTF8):].decode("utf-8")
+    elif data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        text = data.decode("utf-16")
+    else:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            import locale
 
-    legacy_xai_key = str(config.get("xai", {}).get("api_key", "")).strip()
-    providers = config.setdefault("providers", {})
-    xai_provider = providers.setdefault("xai", {})
-    if legacy_xai_key and not str(xai_provider.get("api_key", "")).strip():
-        xai_provider["api_key"] = legacy_xai_key
+            # The ANSI code page even in UTF-8 mode (where
+            # getpreferredencoding would say UTF-8 and mangle every accent).
+            text = data.decode(locale.getencoding() or "cp1252", errors="replace")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _table(config: dict, name: str) -> dict:
+    value = config.get(name, {})
+    return value if isinstance(value, dict) else {}
+
+
+# Bindings besides dictation's whose defaults may step aside (dictation
+# itself always keeps a key).
+_YIELDING_BINDINGS = (("tts", "hotkey"), ("assistant", "hotkey"))
+
+
+def _yield_default_hotkeys(config: dict, user_config: dict) -> None:
+    """A default binding the user never wrote (Windows' read-aloud
+    Ctrl+Alt+R, Kai's Right Ctrl) steps aside when one of the user's own
+    bindings uses the same chord: theirs wins, and the default goes unbound
+    with a warning — rather than refusing to start over a setting they never
+    wrote. Two clashing bindings the user did write stay an error."""
+    from voice_keyboard.hotkey import bindings_clash
+
+    def written(section: str, key: str) -> bool:
+        table = user_config.get(section)
+        return isinstance(table, dict) and key in table
+
+    def value(section: str, key: str) -> str:
+        found = _table(config, section).get(key, "")
+        return found.strip() if isinstance(found, str) else ""
+
+    everything = (("hotkey", "key"),) + _YIELDING_BINDINGS
+    for section, key in _YIELDING_BINDINGS:
+        default = value(section, key)
+        if not default or written(section, key):
+            continue
+        for other_section, other_key in everything:
+            if (other_section, other_key) == (section, key):
+                continue
+            other = value(other_section, other_key)
+            if other and written(other_section, other_key) and bindings_clash(default, other):
+                logger.warning(
+                    "%s is your %s.%s, so the default %s.%s is unbound; set it to"
+                    " another key to use it", default, other_section, other_key, section, key,
+                )
+                _table(config, section)[key] = ""
+                break
+
+
+def load_config(path: Optional[Path] = None) -> dict:
+    """The effective config: defaults merged with config.toml (or `path`)."""
+    config = _default_config_with_paths()
+    config_path = path if path is not None else _config_dir() / "config.toml"
+    if config_path.exists():
+        user_config = tomllib.loads(read_config_text(config_path))
+        config = _deep_merge(config, user_config)
+        _yield_default_hotkeys(config, user_config)
+
+    # Sections written as plain values are reported by validate_config;
+    # nothing here may trip over them first.
+    legacy_xai_key = str(_table(config, "xai").get("api_key", "")).strip()
+    providers = config.get("providers")
+    if isinstance(providers, dict):
+        xai_provider = providers.setdefault("xai", {})
+        if (
+            isinstance(xai_provider, dict)
+            and legacy_xai_key
+            and not str(xai_provider.get("api_key", "")).strip()
+        ):
+            xai_provider["api_key"] = legacy_xai_key
 
     # If the user left socket_path empty (or set an empty string), fall back.
-    if not config.get("daemon", {}).get("socket_path"):
-        config.setdefault("daemon", {})["socket_path"] = _default_socket_path()
+    daemon = config.get("daemon")
+    if isinstance(daemon, dict) and not daemon.get("socket_path"):
+        daemon["socket_path"] = _default_socket_path()
     return config
 
 
 def _active_provider_api_key(config: dict, provider: str) -> str:
-    providers = config.get("providers", {})
-    api_key = str(providers.get(provider, {}).get("api_key", "")).strip()
+    entry = _table(config, "providers").get(provider, {})
+    api_key = str(entry.get("api_key", "") if isinstance(entry, dict) else "").strip()
     if provider == "xai" and not api_key:
-        api_key = str(config.get("xai", {}).get("api_key", "")).strip()
+        api_key = str(_table(config, "xai").get("api_key", "")).strip()
     return api_key
 
 
@@ -388,8 +480,33 @@ def _validate_api_key(config: dict, provider: str) -> None:
         raise RuntimeError(f"providers.{provider}.api_key is not configured")
 
 
+def lacks_credentials(path: Path) -> bool:
+    """True for a config file whose only problem is that no API key was ever
+    filled in — e.g. the early beta installer's copy of the example."""
+    try:
+        validate_config(load_config(path))
+    except RuntimeError as exc:
+        return "api_key is not configured" in str(exc)
+    except Exception:
+        return False
+    return False
+
+
+def is_usable(path: Path) -> bool:
+    try:
+        validate_config(load_config(path))
+    except Exception:
+        return False
+    return True
+
+
 def validate_config(config: dict) -> None:
     """Validate config and raise a clear RuntimeError on missing/invalid values."""
+    for name, default in DEFAULT_CONFIG.items():
+        if isinstance(default, dict) and name in config and not isinstance(config[name], dict):
+            raise RuntimeError(
+                f"{name} must be a [{name}] section, not a {type(config[name]).__name__}"
+            )
     stt_cfg = config.get("stt", {})
     tts_cfg = config.get("tts", {})
     stt_provider = str(stt_cfg.get("provider", "xai")).lower()
@@ -411,6 +528,24 @@ def validate_config(config: dict) -> None:
 
     if str(tts_cfg.get("prefetch", "off")).lower() not in {"off", "auto", "always"}:
         raise RuntimeError("tts.prefetch must be one of: off, auto, always")
+    tts_hotkey = tts_cfg.get("hotkey", "")
+    if not isinstance(tts_hotkey, str):
+        raise RuntimeError("tts.hotkey must be a string")
+    if tts_hotkey.strip():
+        from voice_keyboard.hotkey import parse_binding
+
+        try:
+            parse_binding(tts_hotkey, allow_bare=True)
+        except ValueError as exc:
+            raise RuntimeError(f"tts.hotkey is invalid: {exc}") from exc
+        from voice_keyboard.hotkey import bindings_clash
+
+        main_key = str(config.get("hotkey", {}).get("key", ""))
+        if bindings_clash(tts_hotkey, main_key):
+            raise RuntimeError("tts.hotkey must differ from the dictation hotkey.key")
+        assistant_key = str(config.get("assistant", {}).get("hotkey", ""))
+        if assistant_key.strip() and bindings_clash(tts_hotkey, assistant_key):
+            raise RuntimeError("tts.hotkey must differ from assistant.hotkey")
 
     audio_cfg = config.get("audio", {})
     sample_rate = audio_cfg.get("sample_rate", 0)
@@ -487,18 +622,19 @@ def _validate_assistant_config(config: dict) -> None:
     if hotkey:
         # The summon key is always bound (a press gives a helpful hint even
         # when the mind is off), so a typo must fail loud at load, not
-        # silently at listener start. Skip when evdev is absent (no Linux
-        # keycode table to resolve against).
-        from voice_keyboard.hotkey import MODIFIER_ALIASES, HotkeySpec
+        # silently at listener start. Checked against this platform's
+        # keycode table (skipped where none is available).
+        from voice_keyboard.hotkey import parse_binding
 
-        if MODIFIER_ALIASES:
-            try:
-                HotkeySpec(hotkey, allow_bare=True)
-            except ValueError as exc:
-                raise RuntimeError(f"assistant.hotkey is invalid: {exc}") from exc
-    if cfg.get("enabled", False):
-        main_hotkey = str(config.get("hotkey", {}).get("key", "")).strip().lower()
-        if hotkey and hotkey.lower().replace(" ", "") == main_hotkey.replace(" ", ""):
+        try:
+            parse_binding(hotkey, allow_bare=True)
+        except ValueError as exc:
+            raise RuntimeError(f"assistant.hotkey is invalid: {exc}") from exc
+    # Bound even while the mind is off (a press explains how to turn it on).
+    if hotkey:
+        from voice_keyboard.hotkey import bindings_clash
+
+        if bindings_clash(hotkey, str(config.get("hotkey", {}).get("key", ""))):
             raise RuntimeError(
                 "assistant.hotkey must differ from the dictation hotkey.key"
             )
@@ -576,6 +712,8 @@ def _validate_flow_config(config: dict) -> None:
         raise RuntimeError("flow.live_rest must be one of: auto, always, off")
     if str(flow_cfg.get("numbers", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.numbers must be one of: auto, always, off")
+    if str(flow_cfg.get("pause_review", "auto")).lower() not in {"auto", "llm", "rules", "off"}:
+        raise RuntimeError("flow.pause_review must be one of: auto, llm, rules, off")
     vocabulary = flow_cfg.get("vocabulary", {})
     if not isinstance(vocabulary, dict) or not all(
         isinstance(k, str) and isinstance(v, str) for k, v in vocabulary.items()

@@ -2,10 +2,11 @@
 
 [![Latest release](https://img.shields.io/github/v/release/liamghennigan/HyperFurion-VK)](https://github.com/liamghennigan/HyperFurion-VK/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Linux-first](https://img.shields.io/badge/Linux-first%20·%20Wayland%20%26%20X11-informational)](https://liamghennigan.github.io/HyperFurion-VK/)
+[![Linux and Windows](https://img.shields.io/badge/Linux%20·%20Windows-Wayland%20%26%20X11%20·%20Windows%2010%2F11-informational)](https://liamghennigan.github.io/HyperFurion-VK/)
+[![CI](https://github.com/liamghennigan/HyperFurion-VK/actions/workflows/ci.yml/badge.svg)](https://github.com/liamghennigan/HyperFurion-VK/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/liamghennigan/HyperFurion-VK?style=social)](https://github.com/liamghennigan/HyperFurion-VK/stargazers)
 
-**Type with your voice in any Linux app — including the terminal.** HyperFurion
+**Type with your voice in any app on Linux or Windows — including the terminal.** HyperFurion
 VK is a system-wide voice keyboard: your speech becomes real keystrokes,
 pressed into whatever app your cursor is already in. Words land *while you
 speak* and repair themselves as the sentence firms up ("molten dictation"). It
@@ -30,6 +31,18 @@ Sets up a local daemon, the `uinput` virtual keyboard, and a systemd user
 service. Works offline with a local Whisper/OpenAI-compatible server, or point
 it at a cloud provider (xAI, OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs) —
 or the hosted tier: `voice-keyboard login <email>`, no key to manage.
+
+### Install on Windows — one line
+
+In PowerShell (no administrator rights needed):
+
+```powershell
+irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
+```
+
+A tray app with a native overlay and an on-screen Kai orb; it installs Python
+for you if you don't have it. Press **Ctrl+Alt+V** in any app. See
+[Windows](#windows).
 
 ### Why it's different
 
@@ -85,7 +98,8 @@ routes the just-typed text through an LLM and repairs it on screen.
   provider — see [Flow](#flow--molten-dictation). Say "scratch that",
   "new line", "period"; say "VK, make that formal" to rewrite in place.
 - **Read selected text aloud:** select text in any app, then run
-  `voice-keyboard tts`. You can bind this to `Ctrl+Alt+T` in your desktop.
+  `voice-keyboard tts` — or set `[tts] hotkey = "control+alt+r"` (the default
+  on Windows) and just press it.
 - **Type a command without running it:** `voice-keyboard intent "find every
   TODO in this repo"` — one line lands at your prompt, Enter stays yours
   (enable the voice trigger with `[intent] enabled`).
@@ -99,10 +113,12 @@ routes the just-typed text through an LLM and repairs it on screen.
 - **Config file:** `~/.config/voice-keyboard/config.toml`.
 - **Logs:** `journalctl --user -u voice-keyboard-daemon -f`.
 - **Core desktop support:** Linux desktop sessions with uinput access.
+- **Windows 10/11:** a tray app with its own overlay, Kai orb, and one-line
+  installer. See [Windows](#windows).
 - **macOS (beta):** Quartz keystroke injection + event-tap hotkeys —
   `./packaging/macos/install-macos.sh` from a checkout. See [macOS](#macos-beta).
-- **Best overlay support:** GNOME Shell 50 on Wayland. Other desktops fall back
-  to ordinary desktop notifications.
+- **Best overlay support:** GNOME Shell 45–50 on Wayland (developed on 50), and
+  Windows (native). Other desktops fall back to ordinary desktop notifications.
 - **Works fully offline** — bring your own local provider. A cloud provider
   is the default, but point `providers.openai.base_url` at any local
   OpenAI-compatible server (Whisper, Parakeet, Voxtral, Kokoro) and speech
@@ -135,6 +151,8 @@ systemctl --user start voice-keyboard-daemon
 
 ## Requirements
 
+Linux (Windows needs only Windows 10/11 — see [Windows](#windows)):
+
 - Linux with the `uinput` kernel module
 - Python 3.11+
 - systemd user services for the default daemon installation
@@ -147,7 +165,7 @@ systemctl --user start voice-keyboard-daemon
   selected text
 - A provider API key for the selected STT provider and the selected TTS provider
 
-GNOME Shell 50 on Wayland is required only for the near-field recording overlay.
+GNOME Shell 45–50 on Wayland is required only for the near-field recording overlay.
 Dictation, TTS, manual commands, and fallback notifications are not GNOME-only.
 
 ## Quick Install
@@ -234,24 +252,129 @@ arrives as notification-center toasts.
 Beta means beta: the platform layer is unit-tested, but it has not had the
 months of daily driving the Linux build has. Issues welcome.
 
-## Windows (Beta)
+## Windows
 
-Also native, also pure standard library: injection uses `SendInput` with
-Unicode events, the hotkey uses a low-level keyboard hook (so hold-to-talk
-works, and the daemon's own typing can never re-trigger it), IPC runs on
-loopback TCP (`127.0.0.1:48765` — Windows Python has no Unix sockets)
-guarded by a per-session token file (mode 600) so other local processes
-can't drive typing, and status arrives as toasts. From a checkout, in
-PowerShell:
+A first-class port, not a wrapper: native `SendInput` typing (full Unicode, and
+Enter/Tab are real keys), a low-level keyboard hook for the hotkeys, and a tray
+app that draws the same overlay instrument as the GNOME build. Pure Python +
+`ctypes` — no extra dependencies, no administrator rights. Windows 10 (1809+)
+or 11.
+
+### Install
+
+In PowerShell:
 
 ```powershell
-git clone https://github.com/liamghennigan/HyperFurion-VK
-cd HyperFurion-VK
-powershell -ExecutionPolicy Bypass -File packaging\windows\install-windows.ps1
+irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
 ```
 
-That installs to your user site, writes a starter config, and adds a
-Startup-folder launcher (no admin required). Same beta caveat as macOS.
+(From cmd: `powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex"`.)
+From a checkout, `powershell -ExecutionPolicy Bypass -File
+packaging\windows\install-hyperfurion-vk.ps1` installs that checkout. The
+installer:
+
+- uses your 64-bit Python 3.11–3.13, or installs Python 3.12 for your user
+  (winget, falling back to the python.org installer);
+- installs into `%LOCALAPPDATA%\HyperFurion-VK` and puts a `voice-keyboard`
+  command on your PATH (open a **new** terminal to use it);
+- adds **HyperFurion VK** to the Start menu, to startup, and to
+  **Settings › Apps** (where you can uninstall it);
+- asks how to transcribe — sign in to the hosted service, paste your own API
+  key(s) (typed hidden), point at a local offline server, or skip for now — and
+  starts the app. Re-running it upgrades in place and never touches your
+  settings.
+
+Unattended: `-NonInteractive -Provider xai -ApiKey ...` (groq, deepgram, and
+assemblyai have no voice: add `-TtsProvider xai -TtsApiKey ...`); also
+`-Version vX.Y.Z`, `-Source <checkout>`, `-NoLaunch`, `-NoAutostart`. With
+`irm | iex`, set `HYPERFURION_VK_VERSION` / `HYPERFURION_VK_NONINTERACTIVE=1`
+instead. Coming from the early beta? The installer stops it, removes its
+startup launcher, and brings your settings and history along.
+
+### Using it
+
+| Do this | To |
+| --- | --- |
+| Tap **Ctrl+Alt+V** | start dictating; tap again to stop |
+| Hold **Ctrl+Alt+V** | talk while held; release to stop |
+| Hold **Right Ctrl** (or click the orb) | ask Kai; release to send — a tap cuts Kai off |
+| Select text, press **Ctrl+Alt+R** | read it aloud; press again to stop |
+| Left-click the tray icon | start/stop dictation in the app you were just in |
+| Right-click the tray icon | the menu |
+
+The V of Ctrl+Alt+V is consumed, so apps never see it (in Office it would open
+Paste Special). **Ctrl+Alt+R** copies the selection with Ctrl+Insert (a copy key
+apps honor that, unlike Ctrl+C, never means "interrupt") and then puts your
+clipboard back exactly. It never presses anything in a terminal (yours too:
+it follows `[registers] map`), a password field, or a window it can't
+identify, and if the clipboard holds something it can't save whole (a huge
+image) it leaves it alone. The copied text does appear in clipboard history
+(Win+V), like any copy. The overlay pill appears next to the text cursor — STARTING,
+LISTENING with the live caption and level meter, PROCESSING, INSERTED,
+NO SIGNAL, ERROR — and never takes focus. The **Kai orb** sits bottom-right:
+click to summon, drag to move (the spot is remembered); it never steals focus,
+so Kai still knows which app you were in. The tray icon is cyan when idle, red
+while recording, and amber when setup is needed.
+
+Tray menu: Start/Stop dictation · Ask Kai · Read clipboard aloud · Show Kai
+orb · Open settings file · Open logs folder · Start with Windows · Help ·
+Restart · Quit.
+
+### First run and settings
+
+If there's no usable config yet (no key, or you skipped the question), the app
+still starts: the tray icon is amber and its menu offers **Sign in to the hosted
+service** and **Open settings file**. Save a valid config and dictation starts
+on its own — no restart. Provider, audio, and hotkey changes later need
+**Restart** from the menu; Flow/register/LLM changes apply at the next
+recording.
+
+| What | Where |
+| --- | --- |
+| Settings | `%APPDATA%\voice-keyboard\config.toml` |
+| Logs | `%LOCALAPPDATA%\voice-keyboard\logs\daemon.log` |
+| History, dictionary, Kai memory | `%LOCALAPPDATA%\voice-keyboard\` |
+| The app | `%LOCALAPPDATA%\HyperFurion-VK\` |
+
+The CLI works as on Linux (`voice-keyboard status`, `intent`, `ask`,
+`history`, `devices`, `quit`, …). It talks to the app over loopback TCP, on a
+free port the app picks each time it starts and publishes with a per-session
+token in `%LOCALAPPDATA%\voice-keyboard\ipc-token-<session>` (other standard
+users can't read it) — so nobody else can drive your keyboard, and every
+signed-in session (even the same person's, over Remote Desktop) gets its own.
+`voice-keyboard-daemon` runs the app in a terminal with the log streaming
+alongside.
+
+### Uninstall
+
+**Settings › Apps › HyperFurion VK › Uninstall**, or:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\HyperFurion-VK\uninstall.ps1"
+```
+
+Add `-Purge` to also delete your settings and history.
+
+### Windows troubleshooting
+
+- **Nothing types into an admin window.** Windows blocks input from normal
+  apps into elevated (administrator) windows, and hides their keystrokes from
+  the hotkey too. Use a normal window, or run HyperFurion VK as administrator
+  for that session. The same goes for the UAC prompt and the lock screen.
+- **NO SIGNAL every time.** If the pill says the mic sent pure silence, turn on
+  *Settings › Privacy & security › Microphone › Let desktop apps access your
+  microphone*. To pick a specific mic, run `voice-keyboard devices` and set
+  `[audio] device_name`.
+- **The overlay sits low in the window instead of at the cursor.** That app
+  draws its own text cursor (some UWP and Electron apps) — dictation still goes
+  to the right place.
+- **`voice-keyboard` isn't found.** Open a new terminal (PATH changes reach new
+  ones only), or run `%LOCALAPPDATA%\HyperFurion-VK\bin\voice-keyboard.cmd`.
+- **Antivirus warning.** A global keyboard hook plus synthetic typing is what
+  keyloggers do too; some antivirus tools flag the pattern. The code is all
+  here to read; allow `pythonw.exe` under `%LOCALAPPDATA%\HyperFurion-VK`.
+- **Still stuck?** Tray › Open logs folder, and attach `daemon.log` to an
+  issue.
 
 ## iOS — Why Not (Yet)
 
@@ -345,10 +468,17 @@ Important: TTS reads the **primary selection**, not the clipboard. On most Linux
 desktops, selecting text with the mouse or keyboard is enough. Copying text with
 `Ctrl+C` is not required and may not help if nothing is selected.
 
-### Optional Desktop Shortcut For TTS
+### A Hotkey For TTS
 
-The daemon already owns the voice-input hotkey. For TTS, bind a desktop shortcut
-to:
+Let the daemon own it — this works on any desktop (and is the default on
+Windows):
+
+```toml
+[tts]
+hotkey = "control+alt+r"   # press to read the selection aloud, again to stop
+```
+
+Or bind a desktop shortcut to:
 
 ```bash
 voice-keyboard tts
@@ -395,6 +525,15 @@ Flow is on by default. It has two halves:
 
 While recording, the GNOME overlay pill becomes a live caption: a small VU
 meter plus the molten tail of the transcript, updating as you speak.
+
+**Pauses.** Streaming recognizers end a sentence wherever you pause — xAI's
+grok-voice-transcribe-2.0 punctuates each pause-delimited chunk as a sentence
+of its own, so "I think … we should wait" arrives as "I think. We should
+wait." Flow keeps the period at a pause molten until the next words decide
+it: clear cases by rule ("… the. Project", "… X. And Y"), the rest by a quick
+review through `[llm]` when it's usable (only a few words around the pause are
+sent). `[flow] pause_review = "rules"` sends nothing; `"off"` keeps the
+recognizer's periods.
 
 ### The spoken grammar
 
@@ -731,7 +870,13 @@ Supported modifier names:
 
 Supported trigger keys include common aliases such as `space`, `enter`,
 `return`, and `tab`, plus names that map to Linux `KEY_*` codes through
-`evdev`.
+`evdev` (`f9`, `period`, `rightctrl`, …). The same names work on Windows.
+Keyboards plugged in after the daemon starts are picked up within a few
+seconds.
+
+Two more bindings use the same names: `[assistant] hotkey` (default
+`rightctrl`, held to talk to Kai) and `[tts] hotkey` (read the selection aloud;
+off by default on Linux, `control+alt+r` on Windows).
 
 Modes:
 
@@ -744,7 +889,7 @@ Modes:
 
 ## Overlay And Notifications
 
-On GNOME Shell 50 Wayland, the installer copies and enables a Shell extension
+On GNOME Shell 45–50 (developed on 50, Wayland), the installer copies and enables a Shell extension
 that exposes the D-Bus name `org.voicekeyboard.Overlay`. The CLI and daemon ask
 that extension to show recording state near the focused text field.
 
@@ -817,7 +962,8 @@ your interactive shell.
 ### `Failed to connect to daemon`
 
 The user service is not running, the socket path is different from the config,
-or the daemon failed during startup.
+or the daemon failed during startup. The CLI prints how to start it when
+nothing is listening.
 
 ```bash
 systemctl --user status voice-keyboard-daemon
@@ -931,21 +1077,10 @@ device_name = "default"
 ```
 
 Set `device_name` to a full device name or a unique substring of the PortAudio
-input device name.
-
-One way to list PortAudio input devices from the installed venv:
+input device name. List them (the system default is marked `*`):
 
 ```bash
-~/.local/share/voice-keyboard-venv/bin/python - <<'PY'
-import pyaudio
-
-pa = pyaudio.PyAudio()
-for index in range(pa.get_device_count()):
-    info = pa.get_device_info_by_index(index)
-    if info.get("maxInputChannels", 0) > 0:
-        print(index, info.get("name"))
-pa.terminate()
-PY
+voice-keyboard devices
 ```
 
 ### Provider Authentication Or Quota Errors
@@ -986,8 +1121,9 @@ status UI, IPC, playback, and keyboard injection are already local.
 
 ## Limitations
 
-- Linux is the primary, battle-tested platform; macOS and Windows support is
-  beta. iOS is not possible as a system-wide keyboard (see iOS — Why Not).
+- Linux has the longest daily-driving record; Windows is first-class and
+  tested in CI on real Windows; macOS is beta. iOS is not possible as a
+  system-wide keyboard (see iOS — Why Not).
 - No speech model ships in the box: bring a provider key, the subscription, or
   a local OpenAI-compatible server (see Fully Offline above).
 - uinput injection on Linux types ASCII directly and everything else via a
@@ -997,7 +1133,9 @@ status UI, IPC, playback, and keyboard injection are already local.
   (see Flow limitations above).
 - The built-in global hotkey requires readable Linux input devices (Linux),
   Accessibility permission (macOS), or a keyboard hook (Windows).
-- The near-field overlay is GNOME Shell 50 Wayland specific.
+- The near-field overlay is GNOME Shell (45–50) on Linux, and built in on
+  Windows; Windows can't type into elevated (administrator) windows from a
+  normal process.
 - Other desktops use notification fallback unless they implement the same D-Bus
   overlay interface.
 - Stop-to-text latency depends on the selected provider.
@@ -1010,7 +1148,8 @@ status UI, IPC, playback, and keyboard injection are already local.
 voice-keyboard/
 |-- voice_keyboard/
 |   |-- daemon.py          # Main daemon, recording state, IPC handling, hotkeys
-|   |-- client.py          # CLI, primary-selection reading, overlay calls
+|   |-- client.py          # CLI, selection reading, overlay calls
+|   |-- paths.py           # Config/state/log locations per platform
 |   |-- flow/
 |   |   |-- engine.py      # Molten dictation state machine (pure logic)
 |   |   |-- grammar.py     # Spoken commands, punctuation, vocabulary, wake word
@@ -1028,8 +1167,17 @@ voice-keyboard/
 |   |-- tts.py             # TTS provider clients and playback
 |   |-- injector.py        # UInput virtual keyboard + clipboard paste fallback
 |   |-- ipc.py             # Unix socket / loopback-TCP server & client
-|   |-- hotkey.py          # Linux input-event global hotkey listener
-|   `-- config.py          # Config loading and validation
+|   |-- hotkey.py          # Hotkey state machine + Linux evdev listener (hot-plug)
+|   |-- config.py          # Config loading and validation
+|   |-- macos/             # Quartz injector + event-tap hotkeys (beta)
+|   `-- windows/
+|       |-- app.py         # Tray app hosting the daemon (pythonw -m voice_keyboard.windows)
+|       |-- shell.py       # Overlay pill, Kai orb, tray icon (ctypes Win32)
+|       |-- render.py      # Overlay/orb/icon pixels (numpy), placement
+|       |-- injector.py    # SendInput typing, key chords, no-Enter guard
+|       |-- hotkey.py      # Low-level keyboard hook (hold-to-talk, bare keys)
+|       |-- clipboard.py   # Native clipboard, snapshot/restore
+|       `-- selection.py   # Copy-the-selection for read-aloud and ask
 |-- gnome-shell/
 |   `-- voice-keyboard-overlay@liam-hennigan/
 |       |-- extension.js   # GNOME Shell near-field overlay + live caption
@@ -1038,6 +1186,7 @@ voice-keyboard/
 |-- config.toml.example
 |-- install.sh
 |-- packaging/install-hyperfurion-vk.sh
+|-- packaging/windows/install-hyperfurion-vk.ps1
 |-- pyproject.toml
 `-- README.md
 ```
@@ -1056,36 +1205,38 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 ```
 
-Run the test suite and lightweight syntax checks:
+Run the test suite, the linter, and lightweight syntax checks:
 
 ```bash
 python -m pytest -q
-python -m compileall -q voice_keyboard tests
+ruff check .
 bash -n install.sh
 bash -n packaging/install-hyperfurion-vk.sh
 ```
 
-Some tests intentionally skip when the environment cannot create Unix sockets
-or when host input/uinput access is unavailable.
+CI runs the suite on Linux (Python 3.11–3.13) and on Windows — where
+`tests/test_windows_live.py` types into a real edit box and drives the
+clipboard, keyboard hook, and tray — plus the relay tests, ruff, and a full
+install → run → upgrade → uninstall of the Windows installer. Some tests skip
+where the platform can't run them (Unix sockets, evdev, an interactive
+desktop).
 
 ## Uninstall
 
-There is no dedicated uninstall script yet. To remove the user-local app files:
+Windows: **Settings › Apps › HyperFurion VK › Uninstall** (see
+[Windows](#windows)).
+
+Linux:
 
 ```bash
-systemctl --user disable --now voice-keyboard-daemon.service
-rm -f ~/.config/systemd/user/voice-keyboard-daemon.service
-systemctl --user daemon-reload
-rm -f ~/.local/bin/voice-keyboard ~/.local/bin/voice-keyboard-daemon
-rm -rf ~/.local/share/voice-keyboard-venv
-rm -rf ~/.local/share/gnome-shell/extensions/voice-keyboard-overlay@liam-hennigan
+curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash -s -- --uninstall
+# or, from a checkout:
+./install.sh --uninstall
 ```
 
-Optional user data/config removal:
-
-```bash
-rm -rf ~/.config/voice-keyboard
-```
+That stops and removes the user service, the venv, the `voice-keyboard`
+commands, and the GNOME overlay, and keeps your config. Add `--purge` to also
+delete `~/.config/voice-keyboard` and the dictation history.
 
 The installer also may have added a uinput module-load file, a udev rule, and
 your user to the `input` group. Those are system-level changes and may be shared

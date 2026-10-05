@@ -6,11 +6,35 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 
 from voice_keyboard.config import load_config
 from voice_keyboard.ipc import IPCClient
 
 logger = logging.getLogger(__name__)
+
+# Windows: the overlay/orb/tray live inside the daemon process. The Windows
+# app registers its shell here so the daemon's overlay calls draw natively;
+# a CLI process instead forwards overlay updates to the daemon over IPC.
+_local_shell = None
+_overlay_endpoint: str | None = None
+_daemon_overlay_ok = False
+# Set inside the daemon: it must never forward overlay calls to itself.
+_in_daemon = False
+# Hidden-console flag for helper processes spawned from the windowless app.
+_CREATE_NO_WINDOW = 0x08000000
+
+
+def register_local_shell(shell) -> None:
+    """Route this process's overlay/notify calls to an in-process Windows
+    shell (None to unregister)."""
+    global _local_shell
+    _local_shell = shell
+
+
+def mark_daemon_process() -> None:
+    global _in_daemon
+    _in_daemon = True
 
 
 def _runtime_path(name: str) -> Path:
@@ -62,7 +86,13 @@ def _notify(
             pass
         return
     if sys.platform == "win32":
-        _notify_windows_toast(summary, body)
+        if _local_shell is not None:
+            _local_shell.notify(summary, body, error=urgency == "critical")
+        elif not _daemon_overlay_ok and not _in_daemon and urgency == "critical":
+            # Only failures, and only when the daemon's overlay couldn't say
+            # it: progress toasts ("Listening…") from a CLI whose daemon is
+            # down would be wrong, and each one is a PowerShell spawn.
+            _toast_once(summary, body)
         return
     command = [
         "notify-send",
@@ -143,12 +173,55 @@ def _call_shell_overlay(
 
 
 def _stop_overlay() -> None:
+    if sys.platform == "win32":
+        if _local_shell is not None:
+            _local_shell.hide()
+        return
     _call_shell_overlay("Hide", timeout=0.4)
 
 
 def _set_overlay_button(visible: bool) -> None:
     """Show/hide the always-on Kai orb the overlay extension draws."""
+    if sys.platform == "win32":
+        if _local_shell is not None:
+            _local_shell.set_button(visible)
+        return
     _call_shell_overlay("SetButton", "true" if visible else "false", timeout=0.5)
+
+
+def _forward_overlay(state: str, detail: str, timeout_ms: int, x: int, y: int) -> bool:
+    """CLI side on Windows: ask the running daemon to draw the overlay."""
+    global _daemon_overlay_ok
+    endpoint = _overlay_endpoint
+    if endpoint is None:
+        from voice_keyboard.ipc import DEFAULT_SOCKET_PATH
+
+        endpoint = DEFAULT_SOCKET_PATH
+    payload = {
+        "state": state, "detail": detail, "timeout_ms": int(timeout_ms), "x": x, "y": y,
+    }
+    try:
+        response = IPCClient(endpoint, timeout=1.5).send_command("overlay", payload)
+    except Exception:
+        _daemon_overlay_ok = False
+        return False
+    _daemon_overlay_ok = response.get("status") == "ok"
+    return _daemon_overlay_ok
+
+
+_last_toast: tuple[str, float] = ("", 0.0)
+
+
+def _toast_once(summary: str, body: str) -> None:
+    """A Windows toast, unless the same message was just shown (the
+    overlay fallback and the notification often carry the same error)."""
+    global _last_toast
+    text = body or summary
+    now = time.monotonic()
+    if _last_toast[0] == text and now - _last_toast[1] < 10.0:
+        return
+    _last_toast = (text, now)
+    _notify_windows_toast(summary, body)
 
 
 def _notify_windows_toast(summary: str, body: str) -> None:
@@ -162,6 +235,9 @@ def _notify_windows_toast(summary: str, body: str) -> None:
     def ps_quote(text: str) -> str:
         return "'" + text.replace("'", "''") + "'"
 
+    # Toasts need a registered AppUserModelID to appear; PowerShell's own
+    # is always registered, so the toast is attributed to it.
+    app_id = r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
         "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications,"
@@ -173,7 +249,7 @@ def _notify_windows_toast(summary: str, body: str) -> None:
         f"$x.Item(1).AppendChild($t.CreateTextNode({ps_quote(body)})) > $null;"
         "$n=[Windows.UI.Notifications.ToastNotification]::new($t);"
         "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("
-        "'HyperFurion VK').Show($n);"
+        f"{ps_quote(app_id)}).Show($n);"
     )
     encoded = base64.b64encode(script.encode("utf-16-le")).decode()
     try:
@@ -182,8 +258,9 @@ def _notify_windows_toast(summary: str, body: str) -> None:
             timeout=5,
             check=False,
             capture_output=True,
+            creationflags=_CREATE_NO_WINDOW,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         pass
 
 
@@ -197,29 +274,29 @@ def _show_overlay(
     # A caller with a cached anchor (the daemon's live caption at ~4 Hz)
     # passes it in; re-probing AT-SPI on every update would be too heavy.
     x, y = anchor if anchor is not None else _focused_anchor()
+    if sys.platform == "win32":
+        if _local_shell is not None:
+            _local_shell.show(state, detail=detail, timeout_ms=timeout_ms, anchor=(x, y))
+        elif _in_daemon:
+            logger.debug("overlay %s: no Windows shell in this daemon", state)
+        elif not _forward_overlay(state, detail, timeout_ms, x, y) and state in {
+            "error", "inserted", "empty"
+        }:
+            # No daemon to draw it: a toast for outcomes only, never the
+            # live states (those would be a toast storm).
+            _toast_once("HyperFurion VK", detail or state.replace("_", " ").title())
+        return
     if not _call_shell_overlay("Show", state, str(x), str(y), detail, str(timeout_ms)):
         _notify("Voice Keyboard", detail or state.replace("_", " ").title())
 
 
 def _get_clipboard_text() -> str:
-    # No primary selection exists off Linux; the clipboard is the selection.
-    if sys.platform == "darwin":
-        try:
-            result = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=2)
-            return result.stdout.strip() if result.returncode == 0 else ""
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return ""
-    if sys.platform == "win32":
-        try:
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
-            return result.stdout.strip() if result.returncode == 0 else ""
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return ""
+    # No primary selection exists off Linux; the clipboard is the selection
+    # — never one a password manager marked private.
+    if sys.platform in {"darwin", "win32"}:
+        from voice_keyboard import clipboard
+
+        return (clipboard.get_text(unless_sensitive=True) or "").strip()
     try:
         result = subprocess.run(
             ["wl-paste", "--primary"],
@@ -245,6 +322,73 @@ def _get_clipboard_text() -> str:
         pass
 
     return ""
+
+
+def _daemon_start_hint() -> str:
+    """How to start the daemon on this platform."""
+    if sys.platform == "win32":
+        return 'start "HyperFurion VK" from the Start menu (it lives in the notification area)'
+    if sys.platform == "darwin":
+        return "launchctl kickstart -k gui/$(id -u)/com.hyperfurion.voice-keyboard"
+    return "systemctl --user start voice-keyboard-daemon"
+
+
+def _print_connect_failure(exc: Exception) -> None:
+    print(f"Failed to connect to daemon: {exc}", file=sys.stderr)
+    if isinstance(exc, (ConnectionRefusedError, FileNotFoundError)):
+        print(f"The daemon is not running — {_daemon_start_hint()}", file=sys.stderr)
+
+
+def _package_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("voice-keyboard")
+    except Exception:
+        return "unknown"
+
+
+def _list_input_devices() -> list[dict]:
+    """Audio inputs as PyAudio sees them: [{name, channels, rate, default}]."""
+    import pyaudio
+
+    pa = pyaudio.PyAudio()
+    try:
+        try:
+            default_index = pa.get_default_input_device_info()["index"]
+        except (OSError, IOError):
+            default_index = None
+        devices = []
+        for index in range(pa.get_device_count()):
+            info = pa.get_device_info_by_index(index)
+            if int(info.get("maxInputChannels", 0)) <= 0:
+                continue
+            devices.append({
+                "name": str(info.get("name", "")),
+                "channels": int(info.get("maxInputChannels", 0)),
+                "rate": int(info.get("defaultSampleRate", 0)),
+                "default": index == default_index,
+            })
+        return devices
+    finally:
+        pa.terminate()
+
+
+def _run_devices() -> None:
+    """`voice-keyboard devices`: the names [audio] device_name accepts (an
+    exact name or any unique part of one; "default" follows the system)."""
+    try:
+        devices = _list_input_devices()
+    except Exception as exc:
+        print(f"Could not list audio devices: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not devices:
+        print("No audio input devices found.")
+        return
+    for device in devices:
+        marker = "*" if device["default"] else " "
+        print(f"{marker} {device['name']}  ({device['channels']} ch, {device['rate']} Hz)")
+    print('\n* = the system default. Set [audio] device_name = "<name or a unique part>" to choose.')
 
 
 def _stop_timeout_for_config(config: dict) -> float:
@@ -335,7 +479,7 @@ def _run_recall(client: "IPCClient", extra_args: list[str]) -> None:
             "type", {"text": text}, timeout=max(20.0, len(text) * 0.02)
         )
     except Exception as e:
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         print(f"Re-typed {len(text)} characters")
@@ -356,7 +500,7 @@ def _run_transform(client: "IPCClient", extra_args: list[str]) -> None:
         )
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         text = response.get("text", "")
@@ -497,7 +641,7 @@ def _run_ask_cli(client: "IPCClient", extra_args: list[str]) -> None:
         response = client.send_command("ask", {"instruction": question}, timeout=95.0)
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         print(response.get("text", ""))
@@ -546,7 +690,7 @@ def _run_intent_cli(client: "IPCClient", extra_args: list[str]) -> None:
         response = client.send_command("intent", {"instruction": request}, timeout=50.0)
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
     if response.get("status") == "ok":
         text = response.get("text", "")
@@ -615,10 +759,10 @@ def _apply_hosted_login(text: str, key: str) -> str:
 
 
 def _write_hosted_login(key: str) -> Path:
-    from voice_keyboard.config import _config_dir
+    from voice_keyboard.config import _config_dir, read_config_text
 
     path = _config_dir() / "config.toml"
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    existing = read_config_text(path) if path.exists() else ""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_apply_hosted_login(existing, key), encoding="utf-8")
     return path
@@ -667,14 +811,18 @@ def _run_login(config: dict, argv: list) -> None:
         sys.exit(1)
     path = _write_hosted_login(key)
     print(f"✓ Signed in. Key saved to {path}; speech + dictation set to the hosted service.")
-    print("  Apply it:  systemctl --user restart voice-keyboard-daemon")
+    if sys.platform == "win32":
+        print("  Apply it:  right-click the HyperFurion VK tray icon → Restart")
+        print("             (if it was waiting for setup, it starts by itself)")
+    else:
+        print("  Apply it:  systemctl --user restart voice-keyboard-daemon")
     print("  Lost your key or on a new machine? Just run `voice-keyboard login` again.")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="voice-keyboard",
-        description="Universal Linux voice keyboard with selectable speech providers",
+        description="Universal voice keyboard with selectable speech providers",
     )
     parser.add_argument(
         "command",
@@ -684,7 +832,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login",
+            "login", "quit", "devices",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -699,20 +847,42 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_package_version()}",
+    )
+    parser.add_argument(
         "--socket",
         default=None,
-        help="Unix socket path (default: ~/.config/voice-keyboard/socket)",
+        help=(
+            "daemon IPC endpoint: a Unix socket path, or tcp:HOST:PORT"
+            " (default: ~/.config/voice-keyboard/socket; on Windows loopback TCP"
+            " on the port the daemon publishes)"
+        ),
     )
     args = parser.parse_args()
 
+    if sys.platform == "win32":
+        # A redirected stdout falls back to the ANSI code page; never let a
+        # "✓" or a transcript's emoji crash the CLI over it.
+        for stream in (sys.stdout, sys.stderr):
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(errors="replace")
+
     config = load_config()
+    global _overlay_endpoint
 
     if args.command == "login":
         # Talks to the relay over HTTP + writes config — never the daemon.
         _run_login(config, args.args)
         return
 
+    if args.command == "devices":
+        _run_devices()
+        return
+
     socket_path = args.socket or config["daemon"]["socket_path"]
+    _overlay_endpoint = socket_path
     client = IPCClient(socket_path)
 
     if args.command == "history":
@@ -743,6 +913,18 @@ def main() -> None:
         _run_find(args.args)
         return
 
+    if args.command == "quit":
+        try:
+            response = client.send_command("quit", timeout=5.0)
+        except Exception as e:
+            print(f"Daemon not running ({e})", file=sys.stderr)
+            sys.exit(1)
+        if response.get("status") != "ok":
+            print(f"Error: {response.get('message', 'quit failed')}", file=sys.stderr)
+            sys.exit(1)
+        print("Daemon stopping")
+        return
+
     if args.command in {"converse", "summon"}:
         # Summon Kai (or end/cancel a live turn) — the same toggle the second
         # hotkey and the on-screen orb fire. Fire-and-forget: the turn owns
@@ -750,7 +932,7 @@ def main() -> None:
         try:
             client.send_command("converse", timeout=5.0)
         except Exception as e:
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
         return
 
@@ -759,7 +941,7 @@ def main() -> None:
             response = client.send_command(args.command, timeout=35.0)
         except Exception as e:
             _show_overlay("error", detail=str(e), timeout_ms=3000)
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
         if response.get("status") == "ok":
             if args.command == "keep":
@@ -806,21 +988,22 @@ def main() -> None:
         except Exception as e:
             _show_overlay("error", detail=str(e), timeout_ms=3000)
             _notify("Voice Keyboard", str(e), urgency="critical", timeout_ms=4000)
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
         return
 
     if args.command == "status":
         try:
             response = client.send_command("status", timeout=5.0)
-            if response.get("recording"):
-                print("recording")
-            else:
-                print("idle")
-            _print_status_details(response)
         except Exception as e:
-            print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+            _print_connect_failure(e)
             sys.exit(1)
+        if response.get("status", "ok") != "ok":
+            # e.g. "invalid IPC token": a daemon answered, but not ours.
+            print(f"Error: {response.get('message', 'status failed')}", file=sys.stderr)
+            sys.exit(1)
+        print("recording" if response.get("recording") else "idle")
+        _print_status_details(response)
         return
 
     if args.command == "toggle":
@@ -889,7 +1072,7 @@ def main() -> None:
     except Exception as e:
         _show_overlay("error", detail=str(e), timeout_ms=3000)
         _notify("Voice Keyboard", str(e), urgency="critical", timeout_ms=4000)
-        print(f"Failed to connect to daemon: {e}", file=sys.stderr)
+        _print_connect_failure(e)
         sys.exit(1)
 
 

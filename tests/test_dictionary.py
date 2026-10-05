@@ -2,6 +2,7 @@
 accept/reject gate, and the grammar merge at session start."""
 
 import os
+import sys
 from unittest import mock
 
 import pytest
@@ -133,6 +134,7 @@ class TestDictionaryFile:
             "macros": {},
         }
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
     def test_save_roundtrip_and_mode_600(self) -> None:
         data = dictionary.load_dictionary()
         data["overrides"]["fred"] = "thread"

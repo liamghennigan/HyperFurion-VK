@@ -1,0 +1,79 @@
+name: CI
+
+# Tests on every push and pull request: the daemon on Linux (every
+# supported Python) and on real Windows (where the live Win32 tests type
+# into a real edit box), the hosted relay, and a lint pass.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check .
+
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: System libraries (PortAudio for PyAudio)
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - name: Tests (including live Win32 typing, clipboard, hook, tray)
+        env:
+          HFVK_REQUIRE_DESKTOP: "1"  # the runner has a desktop: never skip the live tests
+        run: python -m pytest -q -rs
+
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            relay/pyproject.toml
+      - name: System libraries (PortAudio for PyAudio)
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
+      # The end-to-end test drives the real daemon against the relay, so
+      # both packages are installed.
+      - run: pip install -e ".[dev]" -e "./relay[dev]"
+      - run: python -m pytest -q relay/tests

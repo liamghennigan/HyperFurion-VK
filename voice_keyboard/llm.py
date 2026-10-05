@@ -35,6 +35,35 @@ SYSTEM_PROMPT = (
 )
 
 
+# Punctuation where the speaker paused (flow/pauses.py). The reply is just
+# the two words around the pause, so a wrong answer is easy to reject.
+PAUSE_REVIEW_SYSTEM_PROMPT = (
+    "You fix punctuation in live dictation. The speech recognizer ends a "
+    "sentence wherever the speaker pauses: it puts a period at the end of "
+    "BEFORE and a capital letter at the start of AFTER, even when the "
+    "speaker only paused mid-sentence to think. Decide what really belongs "
+    "at that pause. Reply with ONLY the last word of BEFORE and the first "
+    "word of AFTER, with the punctuation that belongs between them "
+    "(nothing, a comma, a period, a question mark) and correct "
+    "capitalization. No other text.\n\n"
+    "before: So I was thinking about the project.\n"
+    "after: And how we could make it simpler\n"
+    "reply: project and\n\n"
+    "before: The meeting moved to Friday.\n"
+    "after: Let's get the slides ready\n"
+    "reply: Friday. Let's\n\n"
+    "before: I talked to.\n"
+    "after: Sarah about the budget\n"
+    "reply: to Sarah\n\n"
+    "before: We could ship it today.\n"
+    "after: But the tests are failing\n"
+    "reply: today, but\n\n"
+    "before: I think.\n"
+    "after: We should wait until Monday\n"
+    "reply: think we"
+)
+
+
 ASK_SYSTEM_PROMPT = (
     "You answer a spoken question, usually about the provided text "
     "(selected on the user's screen). Reply with ONLY the answer: plain "
@@ -123,25 +152,38 @@ def _strip_wrapping(text: str) -> str:
     return text
 
 
-def create_llm_client(config: dict) -> Optional["LLMClient"]:
-    """Build the transform client from [llm]; None when not configured."""
+def _llm_settings(config: dict) -> tuple[str, str, str]:
+    """[llm]'s (base_url, api_key, model), defaults and key fallbacks applied."""
     llm_cfg = config.get("llm", {})
     provider = str(llm_cfg.get("provider", "xai")).strip().lower() or "xai"
-    base_url = str(llm_cfg.get("base_url", "")).strip()
-    if not base_url:
-        base_url = DEFAULT_BASE_URLS.get(provider, "")
-    if not base_url:
-        return None
-
+    base_url = str(llm_cfg.get("base_url", "")).strip() or DEFAULT_BASE_URLS.get(provider, "")
     api_key = str(llm_cfg.get("api_key", "")).strip()
     if not api_key:
         providers = config.get("providers", {})
         api_key = str(providers.get(provider, {}).get("api_key", "")).strip()
         if provider == "xai" and not api_key:
             api_key = str(config.get("xai", {}).get("api_key", "")).strip()
-
     model = str(llm_cfg.get("model", "")).strip() or DEFAULT_MODELS.get(provider, "")
-    if not model:
+    return base_url, api_key, model
+
+
+def llm_ready(config: dict) -> bool:
+    """True when [llm] can answer without asking: a model and an endpoint,
+    and a real key unless the endpoint is local."""
+    from voice_keyboard.config import PLACEHOLDER_API_KEYS, _is_local_endpoint
+
+    base_url, api_key, model = _llm_settings(config)
+    if not base_url or not model:
+        return False
+    return _is_local_endpoint(base_url) or (
+        bool(api_key) and api_key not in PLACEHOLDER_API_KEYS
+    )
+
+
+def create_llm_client(config: dict) -> Optional["LLMClient"]:
+    """Build the transform client from [llm]; None when not configured."""
+    base_url, api_key, model = _llm_settings(config)
+    if not base_url or not model:
         return None
     return LLMClient(base_url=base_url, api_key=api_key, model=model)
 
@@ -282,7 +324,27 @@ class LLMClient:
         )
         return _command_from_reply(reply)
 
-    def _chat(self, system: str, user: str, *, temperature: float = 0.2) -> str:
+    def review_pause(self, before: str, after: str) -> str:
+        """The two words around a dictation pause, punctuated and capitalized
+        as they should be (see PAUSE_REVIEW_SYSTEM_PROMPT); the caller
+        checks the reply. Raises RuntimeError on failure."""
+        return self._chat(
+            PAUSE_REVIEW_SYSTEM_PROMPT,
+            f"before: {before}\nafter: {after}\nreply:",
+            temperature=0.0,
+            max_tokens=24,
+            timeout=min(self._timeout, 5.0),
+        )
+
+    def _chat(
+        self,
+        system: str,
+        user: str,
+        *,
+        temperature: float = 0.2,
+        max_tokens: Optional[int] = None,
+        timeout: Optional[float] = None,
+    ) -> str:
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
@@ -294,12 +356,14 @@ class LLMClient:
                 {"role": "user", "content": user},
             ],
         }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         try:
             response = requests.post(
                 f"{self._base_url}/chat/completions",
                 headers=headers,
                 json=payload,
-                timeout=self._timeout,
+                timeout=timeout or self._timeout,
             )
             response.raise_for_status()
             body = response.json()

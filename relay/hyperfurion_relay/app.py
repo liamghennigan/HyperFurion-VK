@@ -37,7 +37,7 @@ DEFAULT_UPSTREAM_TTS_URL = "https://api.x.ai/v1/tts"
 DEFAULT_UPSTREAM_CHAT_URL = "https://api.x.ai/v1/chat/completions"
 
 # Only these reach upstream; everything else a client sends is dropped.
-STT_QUERY_PARAMS = ("sample_rate", "encoding", "interim_results", "language")
+STT_QUERY_PARAMS = ("sample_rate", "encoding", "interim_results", "language", "model")
 TTS_PAYLOAD_KEYS = ("text", "voice_id", "language", "model")
 
 WS_CLOSE_AUTH = 4401

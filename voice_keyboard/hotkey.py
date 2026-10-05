@@ -1,7 +1,10 @@
+import errno
 import logging
+import os
 import select
 import sys
 import threading
+import time
 from collections.abc import Callable
 from typing import Optional
 
@@ -63,7 +66,7 @@ def create_hotkey_listener(
 ):
     """Platform factory: evdev on Linux, a Quartz event tap on macOS, a
     low-level keyboard hook on Windows. on_hold_cancel (bare-key gesture
-    aborted by another key) is a Linux/evdev concept; other backends fall
+    aborted by another key) is honored on Linux and Windows; macOS falls
     back to on_hold_stop semantics."""
     if sys.platform == "darwin":
         from voice_keyboard.macos.hotkey import MacHotkeyListener
@@ -82,6 +85,7 @@ def create_hotkey_listener(
             on_toggle=on_toggle,
             on_hold_start=on_hold_start,
             on_hold_stop=on_hold_stop,
+            on_hold_cancel=on_hold_cancel,
         )
     return HotkeyListener(
         config,
@@ -92,6 +96,77 @@ def create_hotkey_listener(
     )
 
 IGNORED_DEVICE_NAMES = {"voice-keyboard"}
+# How often the evdev listener looks for keyboards that appeared since it
+# started (plugged in, Bluetooth reconnect, re-enumerated after resume).
+RESCAN_INTERVAL_S = 3.0
+
+_PRETTY_KEYS = {
+    "control": "Ctrl", "ctrl": "Ctrl", "alt": "Alt", "shift": "Shift",
+    "rightctrl": "Right Ctrl", "leftctrl": "Left Ctrl",
+    "rightalt": "Right Alt", "leftalt": "Left Alt", "altgr": "AltGr",
+    "rightshift": "Right Shift", "leftshift": "Left Shift",
+    "space": "Space", "enter": "Enter", "return": "Enter", "tab": "Tab",
+    "period": ".", "comma": ",", "slash": "/",
+}
+
+
+def pretty_binding(key: str) -> str:
+    """A binding as people write it: control+alt+v -> Ctrl+Alt+V,
+    rightctrl -> Right Ctrl, super -> Win (Windows) / Super."""
+    meta = "Win" if sys.platform == "win32" else "Super"
+    parts = [p.strip().lower() for p in str(key).split("+") if p.strip()]
+    pretty = []
+    for part in parts:
+        if part in {"super", "meta", "win"}:
+            pretty.append(meta)
+        elif part in _PRETTY_KEYS:
+            pretty.append(_PRETTY_KEYS[part])
+        else:
+            pretty.append(part.upper() if len(part) <= 3 else part.title())
+    return "+".join(pretty)
+
+
+_MODIFIER_WORDS = {
+    "ctrl": "control", "control": "control", "alt": "alt", "option": "alt",
+    "shift": "shift", "super": "super", "meta": "super", "win": "super", "cmd": "super",
+}
+
+
+def binding_signature(key: str):
+    """What a binding means, whatever its spelling or order: ctrl+alt+r,
+    Alt+Control+R, and control + alt + r are one chord. Uses this
+    platform's keycodes when it can, else normalized names."""
+    try:
+        spec = parse_binding(key, allow_bare=True)
+    except ValueError:
+        spec = None
+    if spec is not None:
+        groups = frozenset(frozenset(group) for group in spec.modifier_groups)
+        return ("codes", groups, spec.trigger_code)
+    parts = [part.strip().lower() for part in str(key).split("+") if part.strip()]
+    if not parts:
+        return None
+    return ("names", frozenset(_MODIFIER_WORDS.get(p, p) for p in parts[:-1]), parts[-1])
+
+
+def bindings_clash(first: str, second: str) -> bool:
+    """True when two bindings are the same chord (both listeners would
+    fire, and one would swallow the key from the other)."""
+    a, b = binding_signature(first), binding_signature(second)
+    return a is not None and a == b
+
+
+def parse_binding(key: str, *, allow_bare: bool = False):
+    """Parse a hotkey binding with this platform's keycode table; raises
+    ValueError on a typo. None when no table can be checked (non-Linux
+    hosts without their backend, e.g. macOS until a tap is built)."""
+    if sys.platform == "win32":
+        from voice_keyboard.windows.hotkey import WinHotkeySpec
+
+        return WinHotkeySpec(key, allow_bare=allow_bare)
+    if MODIFIER_ALIASES:
+        return HotkeySpec(key, allow_bare=allow_bare)
+    return None
 
 
 class HotkeySpec:
@@ -133,6 +208,25 @@ class HotkeySpec:
         for group in self.modifier_groups:
             codes.update(group)
         return codes
+
+
+# Open failures that won't fix themselves until the node changes (its
+# permissions, or a new device behind it); anything else is retried.
+_LASTING_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.ENODEV, errno.ENXIO})
+
+
+def _device_key(device):
+    return getattr(device, "path", None) or id(device)
+
+
+def _device_signature(path: str):
+    """Identity of an input node: a recreated node (unplug/replug reusing
+    the number) or changed permissions read as a different device."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_rdev, st.st_ino, st.st_ctime_ns)
 
 
 def _key_code(name: str) -> int:
@@ -195,6 +289,13 @@ class HotkeyListener:
         self._gesture_aborted = False
         self._auto_hold_timer: Optional[threading.Timer] = None
         self._devices: list = []
+        # Keys each device is holding down, so a keyboard that vanishes
+        # mid-press doesn't leave them "held" forever.
+        self._device_keys: dict = {}
+        # Input nodes that aren't a usable keyboard (mice, power buttons,
+        # unreadable), by node identity: the 3 s rescan skips them until the
+        # node is recreated or its permissions change.
+        self._rejected: dict = {}
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
@@ -210,8 +311,12 @@ class HotkeyListener:
 
         self._devices = self._open_devices()
         if not self._devices:
-            logger.warning("No readable keyboard devices found for hotkey %s", self._spec.key)
-            return
+            # Keep listening anyway: a keyboard plugged in (or permissions
+            # fixed) later is picked up by the periodic rescan.
+            logger.warning(
+                "No readable keyboard devices found for hotkey %s yet; watching for one",
+                self._spec.key,
+            )
 
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, name="voice-keyboard-hotkey", daemon=True)
@@ -232,28 +337,57 @@ class HotkeyListener:
         self._devices = []
         logger.info("Hotkey listener stopped")
 
-    def _open_devices(self) -> list[InputDevice]:
+    def _open_devices(self, skip_paths: frozenset = frozenset()) -> list[InputDevice]:
         devices = []
         for path in list_devices():
+            if path in skip_paths:
+                continue
+            signature = _device_signature(path)
+            if signature is not None and self._rejected.get(path) == signature:
+                continue
             try:
                 device = InputDevice(path)
-                name = (device.name or "").strip().lower()
-                if name in IGNORED_DEVICE_NAMES:
-                    device.close()
-                    continue
-                key_codes = _key_capability_codes(device)
-                if self._spec.trigger_code not in key_codes:
-                    device.close()
-                    continue
-                if self._spec.modifier_groups and not any(
-                    group & key_codes for group in self._spec.modifier_groups
-                ):
-                    device.close()
-                    continue
-                devices.append(device)
-            except (OSError, PermissionError) as exc:
+            except OSError as exc:
                 logger.debug("Skipping input device %s: %s", path, exc)
+                if exc.errno in _LASTING_ERRNOS:
+                    self._reject(path, signature)  # else (EMFILE, EIO, ...) retry
+                continue
+            try:
+                usable = self._usable(device)
+            except OSError as exc:
+                logger.debug("Skipping input device %s: %s", path, exc)
+                try:
+                    device.close()
+                except OSError:
+                    pass
+                if exc.errno in _LASTING_ERRNOS:
+                    self._reject(path, signature)
+                continue
+            if usable:
+                devices.append(device)
+                self._rejected.pop(path, None)
+                continue
+            try:
+                device.close()
+            except OSError:
+                pass
+            self._reject(path, signature)
         return devices
+
+    def _usable(self, device) -> bool:
+        name = (device.name or "").strip().lower()
+        if name in IGNORED_DEVICE_NAMES:
+            return False
+        key_codes = _key_capability_codes(device)
+        if self._spec.trigger_code not in key_codes:
+            return False
+        return not self._spec.modifier_groups or any(
+            group & key_codes for group in self._spec.modifier_groups
+        )
+
+    def _reject(self, path: str, signature) -> None:
+        if signature is not None:
+            self._rejected[path] = signature
 
     def _schedule_auto_hold_timer(self) -> None:
         self._cancel_auto_hold_timer()
@@ -286,24 +420,98 @@ class HotkeyListener:
         if callback:
             callback()
 
+    def _rescan(self) -> None:
+        """Adopt keyboards that appeared since the last scan."""
+        known = frozenset(getattr(d, "path", None) for d in self._devices)
+        for device in self._open_devices(skip_paths=known):
+            if self._stop_event.is_set():
+                device.close()
+                return
+            logger.info("Hotkey: now listening on %s", getattr(device, "name", "") or device)
+            self._devices.append(device)
+
+    def _drop(self, device) -> None:
+        """Forget a device that went away (unplugged, suspended). Keys it was
+        holding are let go — their key-ups will never come — and a gesture
+        they were part of is cancelled, not completed: a vanishing keyboard
+        is no tap and no deliberate release."""
+        try:
+            self._devices.remove(device)
+        except ValueError:
+            return
+        try:
+            device.close()
+        except OSError:
+            pass
+        logger.info("Hotkey: keyboard %s went away", getattr(device, "name", "") or device)
+        held = self._device_keys.pop(_device_key(device), set())
+        still_held = set().union(*self._device_keys.values()) if self._device_keys else set()
+        lost = held - still_held
+        if lost and not self._stop_event.is_set():
+            self._abandon_keys(lost)
+
+    def _abandon_keys(self, codes: set) -> None:
+        callback = None
+        with self._lock:
+            self._pressed -= codes
+            if self._spec.is_pressed(self._pressed):
+                return  # the chord is still held on another keyboard
+            self._cancel_auto_hold_timer()
+            if self._hold_active:
+                callback = self._on_hold_cancel
+            self._hold_active = False
+            self._combo_latched = False
+            self._auto_combo_pending = False
+            self._gesture_aborted = False
+        if callback:
+            callback()
+
+    def _note_key(self, device, code: int, value: int) -> None:
+        keys = self._device_keys.setdefault(_device_key(device), set())
+        if value == 1:
+            keys.add(code)
+        elif value == 0:
+            keys.discard(code)
+
     def _run(self) -> None:
-        devices = list(self._devices)
-        while devices and not self._stop_event.is_set():
+        last_scan = time.monotonic()
+        while not self._stop_event.is_set():
+            if time.monotonic() - last_scan >= RESCAN_INTERVAL_S:
+                last_scan = time.monotonic()
+                try:
+                    self._rescan()
+                except Exception:
+                    logger.debug("Hotkey device rescan failed", exc_info=True)
+            devices = list(self._devices)
+            if not devices:
+                self._stop_event.wait(0.5)
+                continue
             try:
                 readable, _, _ = select.select(devices, [], [], 0.5)
             except (OSError, ValueError):
-                break
+                # A device closed or vanished mid-select: find the bad ones
+                # one by one, drop them, and keep listening on the rest.
+                dropped = False
+                for device in devices:
+                    try:
+                        if device.fileno() < 0:
+                            raise ValueError("closed")
+                        select.select([device], [], [], 0)
+                    except (OSError, ValueError):
+                        self._drop(device)
+                        dropped = True
+                if not dropped:
+                    self._stop_event.wait(0.5)  # transient: never spin on it
+                continue
 
             for device in readable:
                 try:
                     for event in device.read():
                         if event.type == e.EV_KEY:
+                            self._note_key(device, event.code, event.value)
                             self._handle_key_event(event.code, event.value)
                 except OSError:
-                    try:
-                        devices.remove(device)
-                    except ValueError:
-                        pass
+                    self._drop(device)
 
     def _handle_key_event(self, code: int, value: int) -> None:
         if value == 2:

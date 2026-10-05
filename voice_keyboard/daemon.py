@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import signal
+import sys
 import threading
 import time
 from typing import Optional
@@ -9,7 +10,6 @@ from typing import Optional
 from voice_keyboard import clipboard, dictionary, history, recall
 from voice_keyboard.ambient import AmbientGate
 from voice_keyboard.assistant import Brain, create_brain
-from voice_keyboard.assistant.citations import format_visual_citations
 from voice_keyboard.audio_capture import AudioCapture
 from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
@@ -22,10 +22,10 @@ from voice_keyboard.flow.registers import (
 from voice_keyboard.flow.vad import SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import common_prefix_len
 from voice_keyboard.focusprobe import FocusInfo, probe_focus
-from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener
+from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty_binding
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
-from voice_keyboard.llm import create_llm_client
+from voice_keyboard.llm import create_llm_client, llm_ready
 from voice_keyboard.prefetch import SelectionWatcher, prefetch_enabled
 from voice_keyboard.remotemic import RemoteAudioSource, RemoteMicServer
 from voice_keyboard.stt import create_stt_client
@@ -36,6 +36,7 @@ from voice_keyboard.transcript import (  # noqa: F401
     _dedupe_repeated_transcript_text,
     _join_transcript_text,
     _merge_transcript_text,
+    _reconcile_utterance,
     _transcript_words,
     _word_prefix_overlap,
     _word_sequence_contains,
@@ -47,6 +48,10 @@ from voice_keyboard.tts import TTSClient, create_tts_client
 logger = logging.getLogger(__name__)
 
 FLOW_TICK_S = 0.25
+# Pause reviews ([flow] pause_review): one call's limit, and how long the
+# stop path waits for the last ones before the rules decide.
+PAUSE_REVIEW_CALL_S = 5.0
+PAUSE_REVIEW_FINAL_S = 2.5
 FOCUS_WATCHDOG_S = 1.5
 # A hands-free Kai question (a tap, or the wake word) ends after this much
 # trailing silence — you just stop talking, no second press.
@@ -80,10 +85,26 @@ class Daemon:
         self._receive_task: Optional[asyncio.Task] = None
         self._final_text: str = ""
         self._interim_text: str = ""
+        # The provider sends chunks and utterances (xAI's speech_final
+        # protocol): finals are appended as they come, never merged.
+        self._chunked_stt = False
+        self._utterance_start = 0  # where the current utterance begins in _final_text
         self._stt_error: Optional[str] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._hotkey_listener: Optional[HotkeyListener] = None
         self._assistant_hotkey_listener: Optional[HotkeyListener] = None
+        # [tts] hotkey: read the highlighted text aloud (press again to stop).
+        self._read_hotkey_listener: Optional[HotkeyListener] = None
+        self._read_task: Optional[asyncio.Task] = None
+        # Set to stop the current read wherever it is: fetching, decoding,
+        # or playing (a thread can't be cancelled, so playback checks it).
+        self._read_cancel: Optional[threading.Event] = None
+        # The same for Kai's spoken answer (barge-in).
+        self._converse_cancel_flag: Optional[threading.Event] = None
+        self._stop_event: Optional[asyncio.Event] = None
+        # A stop requested before run() has its loop (a Quit clicked while
+        # the daemon is still starting) must not be lost.
+        self._stop_requested = False
         self._hotkey_lock: Optional[asyncio.Lock] = None
         # The conversational mind (None until [assistant] enabled).
         self._brain: Optional[Brain] = create_brain(self._config)
@@ -103,6 +124,9 @@ class Daemon:
         self._flow_worker: Optional[InjectionWorker] = None
         self._flow_ticker: Optional[asyncio.Task] = None
         self._focus_watchdog: Optional[asyncio.Task] = None
+        # The [llm] client reviewing punctuation at pauses (None = rules only).
+        self._pause_reviewer = None
+        self._pause_tasks: set = set()
         self._session_focus: Optional[FocusInfo] = None
         self._session_register: Register = resolve_register(
             self._config.get("registers", {}).get("default", "prose")
@@ -113,6 +137,13 @@ class Daemon:
         self._silence_gate: Optional[SilenceGate] = None
         self._auto_stop_started = False
         self._levels: list[float] = []
+        # Was any non-zero sample captured this session? A blocked mic
+        # (Windows privacy settings) delivers pure digital silence.
+        self._chunks_seen = 0
+        self._heard_signal = False
+        # The session's audio came from the phone (remote mic), not this
+        # PC's microphone: its silence says nothing about mic privacy.
+        self._session_remote_audio = False
         self._last_caption = ""
         self._last_typed = ""
         self._last_error = ""
@@ -132,12 +163,62 @@ class Daemon:
         self._config_mtime = self._current_config_mtime()
 
     async def run(self) -> None:
+        from voice_keyboard import client as _client
+
+        _client.mark_daemon_process()
+        if self._stop_requested:
+            return
+        self._stop_event = asyncio.Event()
         self._loop = asyncio.get_running_loop()
+        if self._stop_requested:  # raced with request_stop() above
+            self._stop_event.set()
         self._hotkey_lock = asyncio.Lock()
         self._injector.start()
-        self._ipc_server.start()
+        try:
+            self._ipc_server.start()
+        except BaseException:
+            self._injector.stop()
+            raise
+        try:
+            self._start_services()
+        except BaseException:
+            # A half-started daemon must release its port and listeners, or
+            # an in-process restart can't bind again.
+            await self._shutdown()
+            raise
+        logger.info(
+            "Daemon started, socket: %s", getattr(self._ipc_server, "endpoint", self._socket_path)
+        )
+
+        ipc_thread = threading.Thread(target=self._ipc_loop, daemon=True)
+        ipc_thread.start()
+
+        stop_event = self._stop_event
+
+        def _signal_handler():
+            logger.info("Received shutdown signal")
+            stop_event.set()
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                self._loop.add_signal_handler(sig, _signal_handler)
+            except NotImplementedError:
+                # Windows event loops can't add signal handlers; Ctrl+C still
+                # raises KeyboardInterrupt in the main thread.
+                signal.signal(sig, lambda *_: _signal_handler())
+
+        await stop_event.wait()
+        await self._shutdown()
+
+    def _start_services(self) -> None:
+        """Everything after the injector and the IPC server: hotkeys, the
+        overlay's orb, prefetch, the remote mic, the wake word."""
         self._start_hotkey_listener()
         self._start_assistant_hotkey_listener()
+        self._start_read_hotkey_listener()
+        # The Windows hook installs on its own thread; say so if Windows
+        # refused it, or the hotkeys would just silently do nothing.
+        self._loop.call_later(1.5, self._check_hotkey_hooks)
         self._push_button_visibility()
         # Re-push shortly after start in case the shell extension was not yet
         # listening on the bus (daemon-before-extension ordering).
@@ -161,49 +242,87 @@ class Daemon:
             )
             self._remote_mic.start()
         self._start_wake_listener()
-        logger.info("Daemon started, socket: %s", self._socket_path)
 
-        ipc_thread = threading.Thread(target=self._ipc_loop, daemon=True)
-        ipc_thread.start()
+    def _check_hotkey_hooks(self) -> None:
+        for listener in (
+            self._hotkey_listener, self._assistant_hotkey_listener, self._read_hotkey_listener
+        ):
+            error = getattr(listener, "hook_error", None)
+            if not isinstance(error, int) or isinstance(error, bool):
+                continue
+            message = f"Windows refused the keyboard hook (error {error}): hotkeys won't work"
+            logger.error("%s", message)
+            self._last_error = message
+            asyncio.ensure_future(
+                self._show_hotkey_overlay("error", detail=message, timeout_ms=6000)
+            )
+            return
 
-        stop_event = asyncio.Event()
+    @property
+    def recording(self) -> bool:
+        return self._recording
 
-        def _signal_handler():
-            logger.info("Received shutdown signal")
-            stop_event.set()
+    @property
+    def assistant_enabled(self) -> bool:
+        return self._brain is not None
 
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                self._loop.add_signal_handler(sig, _signal_handler)
-            except NotImplementedError:
-                # Windows event loops can't add signal handlers; Ctrl+C still
-                # raises KeyboardInterrupt in the main thread.
-                signal.signal(sig, lambda *_: _signal_handler())
+    @property
+    def conversing(self) -> bool:
+        """Kai is capturing a question or running a turn."""
+        return self._converse_capture or bool(
+            self._converse_task and not self._converse_task.done()
+        )
 
-        await stop_event.wait()
-        await self._shutdown()
+    def request_stop(self) -> None:
+        """Ask the daemon to shut down cleanly — also before or while it
+        starts. Thread-safe (the Windows tray's Quit and the IPC `quit`
+        command use it)."""
+        self._stop_requested = True
+        loop, event = self._loop, self._stop_event
+        if loop is None or event is None or loop.is_closed():
+            return  # run() sees _stop_requested
+        loop.call_soon_threadsafe(event.set)
+
+    def schedule_action(self, action: str) -> None:
+        """Run a hotkey action (toggle, converse_toggle, read_selection,
+        read_clipboard, ...) from any thread — the tray menu's entry point."""
+        self._schedule_hotkey_action(action)
 
     async def _shutdown(self) -> None:
+        """Stop everything. The injector and the IPC server are released
+        whatever else fails — an in-process restart must be able to bind
+        again, and a dead daemon must not keep answering commands."""
         logger.info("Shutting down daemon")
-        if self._wake_listener is not None:
-            self._wake_listener.stop()
-            self._wake_listener = None
-        if self._remote_mic is not None:
-            self._remote_mic.stop()
-            self._remote_mic = None
-        if self._prefetch_watcher is not None:
-            self._prefetch_watcher.stop()
-            self._prefetch_watcher = None
-        if self._hotkey_listener:
-            self._hotkey_listener.stop()
-            self._hotkey_listener = None
-        if self._assistant_hotkey_listener:
-            self._assistant_hotkey_listener.stop()
-            self._assistant_hotkey_listener = None
-        if self._recording:
-            await self._stop_recording()
-        self._injector.stop()
-        self._ipc_server.stop()
+        try:
+            for name in (
+                "_wake_listener", "_remote_mic", "_prefetch_watcher", "_hotkey_listener",
+                "_assistant_hotkey_listener", "_read_hotkey_listener",
+            ):
+                part = getattr(self, name)
+                if part is not None:
+                    setattr(self, name, None)
+                    try:
+                        part.stop()
+                    except Exception:
+                        logger.exception("Stopping %s failed", name.strip("_"))
+            if await self._stop_reading():
+                # Its pill was shown without a timeout: take it down too.
+                try:
+                    from voice_keyboard.client import _stop_overlay
+
+                    await asyncio.to_thread(_stop_overlay)
+                except Exception:
+                    logger.debug("Could not hide the overlay", exc_info=True)
+            if self._recording:
+                await self._stop_recording()
+        except Exception:
+            logger.exception("Error while shutting down; releasing resources anyway")
+        finally:
+            try:
+                self._injector.stop()
+            except Exception:
+                logger.exception("Stopping the injector failed")
+            self._ipc_server.stop()
 
     def _start_hotkey_listener(self) -> None:
         try:
@@ -257,6 +376,25 @@ class Daemon:
         except Exception:
             logger.exception("Failed to start assistant hotkey listener")
             self._assistant_hotkey_listener = None
+
+    def _start_read_hotkey_listener(self) -> None:
+        """[tts] hotkey: one press reads the highlighted text aloud, the
+        next press stops it. Fires on press (toggle), so it feels instant."""
+        binding = str(self._config.get("tts", {}).get("hotkey", "")).strip()
+        if not binding:
+            return
+        try:
+            self._read_hotkey_listener = create_hotkey_listener(
+                {"enabled": True, "key": binding, "mode": "toggle", "allow_bare": True},
+                on_toggle=lambda: self._schedule_hotkey_action("read_selection"),
+                on_hold_start=lambda: None,
+                on_hold_stop=lambda: None,
+            )
+            self._read_hotkey_listener.start()
+            logger.info("Read-aloud hotkey listening: %s", binding)
+        except Exception:
+            logger.exception("Failed to start read-aloud hotkey listener")
+            self._read_hotkey_listener = None
 
     def _start_wake_listener(self) -> None:
         """Arm the opt-in local wake word. A detection fires the same summon
@@ -320,6 +458,10 @@ class Daemon:
                         )
                     else:
                         await self._converse_start(hands_free=True)
+                elif action in {"read_selection", "read_clipboard"}:
+                    await self._toggle_read_aloud(
+                        from_selection=action == "read_selection"
+                    )
                 elif action == "converse_tap":
                     # A bare-modifier tap: barge in or end a capture, but
                     # NEVER open the mic — a stray Right-Ctrl tap is too easy
@@ -381,16 +523,21 @@ class Daemon:
         except Exception:
             logger.debug("Could not push Kai button visibility")
 
+    def _hotkey_label(self) -> str:
+        """The dictation binding as people write it (Ctrl+Alt+V)."""
+        return pretty_binding(str(self._config.get("hotkey", {}).get("key", "control+alt+v")))
+
     async def _hotkey_start_recording(self, *, hold_to_talk: bool = False) -> None:
         if self._recording:
             return
         mode = self._config.get("hotkey", {}).get("mode", "auto")
+        label = self._hotkey_label()
         if hold_to_talk or mode == "hold":
-            listening_detail = "Release Ctrl+Alt+V to stop"
+            listening_detail = f"Release {label} to stop"
         elif mode == "auto":
-            listening_detail = "Tap Ctrl+Alt+V again to stop; hold to talk"
+            listening_detail = f"Tap {label} again to stop; hold to talk"
         else:
-            listening_detail = "Press Ctrl+Alt+V again to stop"
+            listening_detail = f"Press {label} again to stop"
         await self._show_hotkey_overlay("starting")
         await self._start_recording()
         await self._show_hotkey_overlay("listening", detail=listening_detail)
@@ -407,7 +554,18 @@ class Daemon:
                 timeout_ms=1800,
             )
         else:
-            await self._show_hotkey_overlay("empty", timeout_ms=2200)
+            await self._show_hotkey_overlay(
+                "empty", detail=self._no_signal_hint(), timeout_ms=3200
+            )
+
+    def _no_signal_hint(self) -> str:
+        """NO SIGNAL detail: name the likely cause when the mic delivered
+        nothing but exact zeros for a whole session (over a second)."""
+        if self._heard_signal or self._chunks_seen < 10 or self._session_remote_audio:
+            return ""
+        if sys.platform == "win32":
+            return "Mic sent pure silence — Settings › Privacy & security › Microphone"
+        return "Mic sent pure silence — is it muted?"
 
     def _ipc_loop(self) -> None:
         while True:
@@ -608,6 +766,26 @@ class Daemon:
                         else:
                             response = {"status": "ok", "message": f"pressed {keys}"}
 
+                elif command == "overlay":
+                    # A CLI process asking the daemon to draw its overlay
+                    # (Windows: the overlay lives in the daemon process).
+                    from voice_keyboard.client import _show_overlay
+
+                    anchor = None
+                    if "x" in payload and "y" in payload:
+                        anchor = (int(payload["x"]), int(payload["y"]))
+                    _show_overlay(
+                        str(payload.get("state", "processing")),
+                        detail=str(payload.get("detail", "")),
+                        timeout_ms=int(payload.get("timeout_ms", 0)),
+                        anchor=anchor,
+                    )
+                    response = {"status": "ok", "message": "overlay shown"}
+
+                elif command == "quit":
+                    self.request_stop()
+                    response = {"status": "ok", "message": "daemon stopping"}
+
                 elif command == "converse":
                     # Summon Kai (or end/cancel a turn) — the same toggle the
                     # hotkey fires. Fire-and-forget: the turn is long and owns
@@ -727,7 +905,7 @@ class Daemon:
             numbers_min=register.numbers_min,
         )
 
-    def _flow_config_obj(self) -> FlowConfig:
+    def _flow_config_obj(self, pause_review: str = "off") -> FlowConfig:
         flow_cfg = self._config.get("flow", {})
         defaults = FlowConfig()
 
@@ -743,7 +921,22 @@ class Daemon:
             stability_updates=_int("stability_updates", defaults.stability_updates),
             max_molten_chars=_int("max_molten_chars", defaults.max_molten_chars),
             adaptive=bool(flow_cfg.get("adaptive", True)),
+            pause_review=pause_review,
         )
+
+    def _pause_review_mode(self) -> str:
+        """How this session settles punctuation at pauses: "llm" (rules,
+        then the [llm] reviewer), "rules", or "off". Sets the reviewer."""
+        self._pause_reviewer = None
+        mode = str(self._config.get("flow", {}).get("pause_review", "auto")).strip().lower()
+        if mode == "off":
+            return "off"
+        if mode in ("auto", "llm") and not self._session_secret:
+            if llm_ready(self._config):
+                self._pause_reviewer = create_llm_client(self._config)
+            elif mode == "llm":
+                logger.warning("flow.pause_review = llm, but [llm] has no usable endpoint/key")
+        return "llm" if self._pause_reviewer is not None else "rules"
 
     async def _setup_flow_session(self, probe_task: Optional[asyncio.Task]) -> None:
         self._focus_lost = False
@@ -832,7 +1025,9 @@ class Daemon:
                 logger.info("Ambient containment active: address word %r", address)
 
         self._flow_engine = FlowEngine(
-            self._flow_config_obj(), self._build_grammar(register), register
+            self._flow_config_obj(self._pause_review_mode()),
+            self._build_grammar(register),
+            register,
         )
 
         auto_stop_ms = flow_cfg.get("auto_stop_ms", 0)
@@ -849,13 +1044,18 @@ class Daemon:
         )
         self._flow_worker = InjectionWorker(self._injector) if live else None
         logger.info(
-            "Flow session: register=%s app=%r live=%s",
+            "Flow session: register=%s app=%r live=%s pause_review=%s",
             register.name,
             focus.app if focus else "",
             bool(self._flow_worker),
+            self._flow_engine._cfg.pause_review,
         )
 
     async def _teardown_flow_session(self) -> None:
+        for task in list(self._pause_tasks):
+            task.cancel()
+        self._pause_tasks.clear()
+        self._pause_reviewer = None
         for task_attr in ("_flow_ticker", "_focus_watchdog"):
             task = getattr(self, task_attr)
             if task is not None:
@@ -878,13 +1078,57 @@ class Daemon:
                 engine = self._flow_engine
                 if engine is None or not self._recording:
                     break
-                engine.on_tick(time.monotonic())
                 worker = self._flow_worker
                 if worker is not None:
+                    engine.on_tick(time.monotonic())
+                self._start_pause_reviews(engine)
+                if worker is not None:
                     worker.set_target(engine.desired_text())
-                self._push_live_caption(engine)
+                    self._push_live_caption(engine)
         except asyncio.CancelledError:
             pass
+
+    def _start_pause_reviews(self, engine: FlowEngine, *, final: bool = False) -> None:
+        reviewer = self._pause_reviewer
+        if reviewer is None:
+            return
+        for query in engine.review_requests(time.monotonic(), final=final):
+            task = asyncio.create_task(self._review_pause(engine, reviewer, query))
+            self._pause_tasks.add(task)
+            task.add_done_callback(self._pause_tasks.discard)
+
+    async def _review_pause(self, engine: FlowEngine, reviewer, query) -> None:
+        """Ask the reviewer about one pause; the engine takes its answer (or
+        falls back to the rules), and the screen follows."""
+        try:
+            answer = await asyncio.wait_for(
+                asyncio.to_thread(reviewer.review_pause, query.before, query.after),
+                timeout=PAUSE_REVIEW_CALL_S,
+            )
+        except Exception as exc:
+            logger.info("Pause review failed; the rules decide: %s", exc)
+            answer = None
+        if not isinstance(answer, str):
+            answer = None
+        if engine is not self._flow_engine:
+            return  # that dictation is over
+        engine.resolve_pause(query.index, answer, now=time.monotonic())
+        worker = self._flow_worker
+        if worker is not None:
+            worker.set_target(engine.desired_text())
+
+    async def _settle_pause_reviews(self, engine: FlowEngine, merged: str) -> None:
+        """At stop: the final words are in, so ask about every pause still
+        open, and give the answers a moment before the rules take over."""
+        if self._pause_reviewer is None:
+            return
+        engine.on_transcript(merged, is_final=True, now=time.monotonic())
+        if not engine.pauses_pending():
+            return
+        self._start_pause_reviews(engine, final=True)
+        pending = [task for task in self._pause_tasks if not task.done()]
+        if pending:
+            await asyncio.wait(pending, timeout=PAUSE_REVIEW_FINAL_S)
 
     def _push_live_caption(self, engine: FlowEngine) -> None:
         caption = engine.caption()
@@ -952,6 +1196,7 @@ class Daemon:
             probe_task = asyncio.create_task(asyncio.to_thread(probe_focus))
 
         override = self._audio_source_override
+        self._session_remote_audio = override is not None
         if override is not None:
             # A remote mic session: the phone's frames replace PyAudio.
             self._audio_capture = override
@@ -984,14 +1229,21 @@ class Daemon:
 
         self._final_text = ""
         self._interim_text = ""
+        self._chunked_stt = False
+        self._utterance_start = 0
         self._stt_error = None
+        self._chunks_seen = 0
+        self._heard_signal = False
         self._recording = True
 
         self._receive_task = asyncio.create_task(self._receive_events())
         self._send_task = asyncio.create_task(self._stream_audio())
+        if self._flow_engine is not None:
+            # Live typing's time-based commits, and pause reviews (which a
+            # type-at-stop session wants too).
+            self._flow_ticker = asyncio.create_task(self._flow_ticker_loop())
         if self._flow_worker is not None:
             self._flow_worker.start()
-            self._flow_ticker = asyncio.create_task(self._flow_ticker_loop())
             self._focus_watchdog = asyncio.create_task(self._focus_watchdog_loop())
         logger.info("Recording started")
 
@@ -1088,9 +1340,7 @@ class Daemon:
             await self._teardown_flow_session()
             raise RuntimeError(self._stt_error)
 
-        merged = _dedupe_repeated_transcript_text(
-            _merge_transcript_text(self._final_text, self._interim_text)
-        )
+        merged = self._session_transcript()
 
         if self._converse_capture:
             # A spoken question for the mind, not text for the keyboard. Hand
@@ -1121,6 +1371,7 @@ class Daemon:
             self._remember_typed(final)
             return final
 
+        await self._settle_pause_reviews(engine, merged)
         result = engine.finalize(merged, now=time.monotonic())
         final = result.text
         self._last_scratches = result.scratches
@@ -1455,10 +1706,9 @@ class Daemon:
 
     async def _converse_cancel(self) -> None:
         """Barge-in: cut off Kai's answer, or discard a live question."""
-        try:
-            self._tts_client.stop_playback()
-        except Exception:
-            pass
+        if self._converse_cancel_flag is not None:
+            self._converse_cancel_flag.set()  # an answer not yet playing never will
+        await self._stop_audio()
         task = self._converse_task
         self._converse_task = None
         if task and not task.done():
@@ -1577,17 +1827,21 @@ class Daemon:
             await self._show_hotkey_overlay(
                 "empty", detail="⌁ no answer", timeout_ms=2200
             )
+        # A barge-in stops the answer wherever it is: fetching, decoding, or
+        # playing.
+        cancel = self._converse_cancel_flag = threading.Event()
         # The voice agent speaks its own answer as RAW PCM (s16le), not an
         # MP3 container — play it as PCM or the decoder chews static.
         if result.audio and hasattr(self._tts_client, "play_pcm"):
-            await asyncio.to_thread(
+            await _in_daemon_thread(
                 self._tts_client.play_pcm,
                 result.audio,
                 getattr(result, "audio_sample_rate", 24000),
+                cancel=cancel,
             )
         elif answer:
             try:
-                await self._run_tts(answer)
+                await self._run_tts(answer, cancel=cancel)
             except Exception as exc:
                 logger.debug("Assistant TTS failed: %s", exc)
         logger.info("Kai (%s): heard %r", result.brain or "?", transcript[:60])
@@ -1705,7 +1959,13 @@ class Daemon:
         context = ""
         if not self._session_secret:
             try:
-                context = (clipboard.get_primary_text() or "").strip()[:4000]
+                context = (
+                    await asyncio.to_thread(
+                        clipboard.selection_text,
+                        clipboard_fallback=False,
+                        registers=self._config.get("registers", {}),
+                    )
+                ).strip()[:4000]
             except Exception:
                 context = ""
         await self._show_hotkey_overlay("processing", detail=f"⌁ {question[:40]}")
@@ -1796,6 +2056,9 @@ class Daemon:
                 break
 
     def _observe_audio(self, chunk: bytes, chunk_ms: float) -> None:
+        self._chunks_seen += 1
+        if not self._heard_signal and chunk.strip(b"\x00"):
+            self._heard_signal = True
         level = chunk_rms(chunk)
         self._levels.append(level)
         del self._levels[:-8]
@@ -1814,11 +2077,46 @@ class Daemon:
                 self._handle_hotkey_action(action)
             )
 
+    def _session_transcript(self) -> str:
+        """Everything recognized so far: the finals plus the interim tail."""
+        if self._chunked_stt:
+            return _join_transcript_text(self._final_text, self._interim_text)
+        return _dedupe_repeated_transcript_text(
+            _merge_transcript_text(self._final_text, self._interim_text)
+        )
+
+    def _on_chunked_event(self, event: dict) -> None:
+        """xAI's chunk/utterance protocol (grok-voice-transcribe-2.0): an
+        interim is the current chunk so far; a chunk final locks that chunk
+        (appended — chunks never overlap, so no merging heuristics); an
+        utterance final repeats the whole utterance, which normally adds
+        nothing new."""
+        text = str(event.get("text") or "")
+        if not event.get("is_final"):
+            self._interim_text = text
+            self._feed_flow(is_final=False)
+            return
+        if event.get("speech_final"):
+            before = self._final_text[:self._utterance_start]
+            spoken = self._final_text[self._utterance_start:].strip()
+            self._final_text = _join_transcript_text(
+                before, _reconcile_utterance(spoken, text)
+            )
+            self._utterance_start = len(self._final_text)
+        else:
+            self._final_text = _join_transcript_text(self._final_text, text.strip())
+        self._interim_text = ""
+        self._feed_flow(is_final=True)
+
     async def _receive_events(self) -> None:
         try:
             async for event in self._stt_client.receive_events():
                 event_type = event.get("type", "")
-                if event_type == "transcript.partial":
+                if "speech_final" in event:
+                    self._chunked_stt = True
+                if event_type == "transcript.partial" and self._chunked_stt:
+                    self._on_chunked_event(event)
+                elif event_type == "transcript.partial":
                     self._interim_text = event.get("text", "")
                     logger.debug("Interim: %r", self._interim_text)
                     if event.get("is_final"):
@@ -1831,10 +2129,17 @@ class Daemon:
                     else:
                         self._feed_flow(is_final=False)
                 elif event_type == "transcript.done":
-                    self._final_text = _merge_transcript_text(
-                        self._final_text,
-                        event.get("text", ""),
-                    )
+                    if self._chunked_stt:
+                        # Empty from grok-voice-transcribe-2.0: the chunks
+                        # already carried everything.
+                        self._final_text = _reconcile_utterance(
+                            self._final_text, str(event.get("text") or "")
+                        )
+                    else:
+                        self._final_text = _merge_transcript_text(
+                            self._final_text,
+                            event.get("text", ""),
+                        )
                     self._interim_text = ""
                     logger.debug("Final transcript received")
                     self._feed_flow(is_final=True)
@@ -1853,7 +2158,10 @@ class Daemon:
         engine = self._flow_engine
         if engine is None:
             return
-        merged = _merge_transcript_text(self._final_text, self._interim_text)
+        if self._chunked_stt:
+            merged = _join_transcript_text(self._final_text, self._interim_text)
+        else:
+            merged = _merge_transcript_text(self._final_text, self._interim_text)
         if self._ambient_gate is not None:
             # Containment: room speech never reaches the engine at all.
             merged = self._ambient_gate.filter(merged, is_final=is_final)
@@ -1897,18 +2205,144 @@ class Daemon:
         # Called from the watcher thread; a single tuple swap is atomic.
         self._tts_cache = (text, audio)
 
-    async def _run_tts(self, text: str) -> None:
-        cache = self._tts_cache
-        if cache is not None and cache[0] == text and hasattr(
-            self._tts_client, "play_audio"
-        ):
-            logger.info("TTS prefetch hit (%d chars) — instant playback", len(text))
-            await asyncio.to_thread(self._tts_client.play_audio, cache[1])
+    async def _stop_audio(self) -> None:
+        """stop_playback, off the event loop: it may wait for an audio
+        device that is still opening."""
+        try:
+            await asyncio.to_thread(self._tts_client.stop_playback)
+        except Exception:
+            pass
+
+    async def _stop_reading(self) -> bool:
+        """Stop the read in progress, if any (True when there was one)."""
+        task = self._read_task
+        if task is None or task.done():
+            return False
+        self._read_task = None
+        if self._read_cancel is not None:
+            self._read_cancel.set()  # before stop_playback: no gap to start in
+        task.cancel()
+        await self._stop_audio()
+        return True
+
+    async def _toggle_read_aloud(self, *, from_selection: bool) -> None:
+        """The read-aloud hotkey / tray item: speak the highlighted text (or
+        the clipboard), or stop speaking if it already is. Playback runs as
+        a task, off the hotkey lock, so dictation stays available."""
+        if await self._stop_reading():
+            await self._show_hotkey_overlay("empty", detail="Stopped reading", timeout_ms=1200)
             return
-        await asyncio.to_thread(self._tts_client.synthesize_and_play, text)
+        if self._recording:
+            await self._show_hotkey_overlay(
+                "processing", detail="⌁ busy — dictation is live", timeout_ms=1400
+            )
+            return
+        notes: list[str] = []
+        if from_selection:
+            # Only macOS, which has no way to read a selection, falls back to
+            # the clipboard: elsewhere "nothing selected" must not quietly
+            # read out whatever was copied last.
+            text = await asyncio.to_thread(
+                clipboard.selection_text,
+                clipboard_fallback=sys.platform == "darwin",
+                registers=self._config.get("registers", {}),
+                notes=notes,
+            )
+        else:
+            if await asyncio.to_thread(clipboard.is_sensitive):
+                await self._show_hotkey_overlay(
+                    "empty", detail="Not reading a copied password", timeout_ms=2200
+                )
+                return
+            text = await asyncio.to_thread(clipboard.get_text) or ""
+        text = text.strip()
+        if not text:
+            if notes:
+                detail = notes[0]
+            else:
+                detail = "Select some text first" if from_selection else "Clipboard is empty"
+            await self._show_hotkey_overlay("empty", detail=detail, timeout_ms=2600)
+            return
+        self._read_cancel = threading.Event()
+        self._read_task = asyncio.create_task(self._read_aloud(text, self._read_cancel))
+
+    async def _read_aloud(self, text: str, cancel: threading.Event) -> None:
+        try:
+            await self._show_hotkey_overlay(
+                "processing", detail=f"Reading {len(text)} characters — press again to stop"
+            )
+            await self._run_tts(text, cancel=cancel)
+            if not cancel.is_set():
+                await self._show_hotkey_overlay(
+                    "inserted", detail="Finished reading", timeout_ms=1500
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception("Read-aloud failed")
+            self._last_error = str(exc)
+            await self._show_hotkey_overlay("error", detail=str(exc), timeout_ms=3000)
+        finally:
+            if self._read_task is asyncio.current_task():
+                self._read_task = None
+
+    async def _run_tts(self, text: str, cancel: Optional[threading.Event] = None) -> None:
+        """Speak `text` (a prefetched clip plays at once). With `cancel`
+        (read-aloud), fetching and playing are separate awaits on daemon
+        threads and playback checks the event: a stop at any point is never
+        lost, and Quit never waits for a download it no longer needs."""
+        client = self._tts_client
+        cache = self._tts_cache
+        if cancel is not None and hasattr(client, "synthesize") and hasattr(client, "play_audio"):
+            if cache is not None and cache[0] == text:
+                logger.info("TTS prefetch hit (%d chars) — instant playback", len(text))
+                audio = cache[1]
+            else:
+                audio = await _in_daemon_thread(client.synthesize, text)
+            await _in_daemon_thread(client.play_audio, audio, cancel=cancel)
+            return
+        if cache is not None and cache[0] == text and hasattr(client, "play_audio"):
+            logger.info("TTS prefetch hit (%d chars) — instant playback", len(text))
+            await asyncio.to_thread(client.play_audio, cache[1])
+            return
+        await asyncio.to_thread(client.synthesize_and_play, text)
+
+
+def _in_daemon_thread(func, *args, **kwargs) -> "asyncio.Future":
+    """Like asyncio.to_thread, but on a daemon thread outside the default
+    executor: asyncio.run() (and interpreter exit) never waits for it, so a
+    cancelled read-aloud's download can't hold up Quit or Restart."""
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+
+    def deliver(setter, value) -> None:
+        if not future.done():
+            setter(value)
+
+    def run() -> None:
+        try:
+            result = func(*args, **kwargs)
+        except BaseException as exc:  # handed to the awaiting coroutine
+            outcome = (future.set_exception, exc)
+        else:
+            outcome = (future.set_result, result)
+        try:
+            loop.call_soon_threadsafe(deliver, *outcome)
+        except RuntimeError:
+            pass  # the loop is gone: nobody is waiting any more
+
+    threading.Thread(target=run, name="vk-tts", daemon=True).start()
+    return future
 
 
 def main() -> None:
+    if sys.platform == "win32":
+        # On Windows the daemon always runs inside the app that owns its
+        # overlay, orb, and tray icon; this entry point is the console
+        # flavour (logs to the terminal as well as the log file).
+        from voice_keyboard.windows.app import main as windows_main
+
+        raise SystemExit(windows_main(["--console"]))
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

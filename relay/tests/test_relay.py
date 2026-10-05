@@ -51,7 +51,8 @@ class TestSTTProxy:
             _, key = rig.store.create_user("basic")
             async with aiohttp.ClientSession() as session:
                 async with session.ws_connect(
-                    f"{rig.ws_base}/v1/stt?sample_rate=16000&encoding=pcm&language=en",
+                    f"{rig.ws_base}/v1/stt?sample_rate=16000&encoding=pcm&language=en"
+                    "&model=grok-voice-transcribe-1.0&secret=dropped",
                     headers=_auth(key),
                 ) as ws:
                     ready = json.loads((await ws.receive()).data)
@@ -75,6 +76,9 @@ class TestSTTProxy:
             assert upstream["auth"] == f"Bearer {MASTER_KEY}"
             assert upstream["query"]["sample_rate"] == "16000"
             assert upstream["query"]["language"] == "en"
+            # A pinned model reaches xAI; unknown parameters never do.
+            assert upstream["query"]["model"] == "grok-voice-transcribe-1.0"
+            assert "secret" not in upstream["query"]
 
         run_rig(scenario)
 

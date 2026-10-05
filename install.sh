@@ -1,5 +1,71 @@
 #!/usr/bin/env bash
+# Install (or upgrade) voice-keyboard for this user.
+#   ./install.sh                     install / upgrade
+#   ./install.sh --uninstall         remove the service, venv, commands, overlay
+#   ./install.sh --uninstall --purge also delete config and dictation history
 set -euo pipefail
+
+VENV_DIR="${VOICE_KEYBOARD_VENV:-$HOME/.local/share/voice-keyboard-venv}"
+BIN_DIR="$HOME/.local/bin"
+SYSTEMD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/voice-keyboard"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/voice-keyboard"
+OVERLAY_UUID="voice-keyboard-overlay@liam-hennigan"
+OVERLAY_DEST="$HOME/.local/share/gnome-shell/extensions/$OVERLAY_UUID"
+
+uninstall() {
+    purge="$1"
+    echo "=== voice-keyboard uninstaller ==="
+    if command -v systemctl &>/dev/null; then
+        systemctl --user disable --now voice-keyboard-daemon.service 2>/dev/null || true
+    fi
+    rm -f "$SYSTEMD_DIR/voice-keyboard-daemon.service"
+    if command -v systemctl &>/dev/null; then
+        systemctl --user daemon-reload 2>/dev/null || true
+    fi
+    for script in voice-keyboard voice-keyboard-daemon; do
+        # Only remove our own links into the venv, never someone else's file.
+        if [ -L "$BIN_DIR/$script" ] && [ "$(readlink "$BIN_DIR/$script")" = "$VENV_DIR/bin/$script" ]; then
+            rm -f "$BIN_DIR/$script"
+        fi
+    done
+    rm -rf "$VENV_DIR"
+    if command -v gnome-extensions &>/dev/null; then
+        gnome-extensions disable "$OVERLAY_UUID" 2>/dev/null || true
+    fi
+    rm -rf "$OVERLAY_DEST"
+    if [ "$purge" -eq 1 ]; then
+        rm -rf "$CONFIG_DIR" "$STATE_DIR"
+        echo "Removed config ($CONFIG_DIR) and history ($STATE_DIR)."
+    else
+        echo "Kept your config in $CONFIG_DIR (use --uninstall --purge to remove it)."
+    fi
+    echo "Left in place: the uinput udev rule, /etc/modules-load.d/uinput.conf and"
+    echo "your 'input' group membership (shared system settings other tools may use)."
+    echo "=== voice-keyboard is uninstalled ==="
+}
+
+UNINSTALL=0
+PURGE=0
+for arg in "$@"; do
+    case "$arg" in
+        --uninstall) UNINSTALL=1 ;;
+        --purge) PURGE=1 ;;
+        -h|--help)
+            sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) echo "Unknown option: $arg (try --help)" >&2; exit 2 ;;
+    esac
+done
+if [ "$PURGE" -eq 1 ] && [ "$UNINSTALL" -eq 0 ]; then
+    echo "--purge only makes sense with --uninstall" >&2
+    exit 2
+fi
+if [ "$UNINSTALL" -eq 1 ]; then
+    uninstall "$PURGE"
+    exit 0
+fi
 
 echo "=== voice-keyboard installer ==="
 echo ""
@@ -213,13 +279,11 @@ fi
 # ── Python package (venv) ──────────────────────────────────────────────
 echo "[3/6] Installing Python package into venv..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VENV_DIR="${VOICE_KEYBOARD_VENV:-$HOME/.local/share/voice-keyboard-venv}"
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --upgrade pip
 "$VENV_DIR/bin/pip" install "$SCRIPT_DIR"
 
 # Expose the console scripts on PATH for the user and for systemd.
-BIN_DIR="$HOME/.local/bin"
 mkdir -p "$BIN_DIR"
 for script in voice-keyboard voice-keyboard-daemon; do
     ln -sf "$VENV_DIR/bin/$script" "$BIN_DIR/$script"
@@ -230,9 +294,7 @@ DAEMON_BIN="${VOICE_KEYBOARD_BIN:-$DAEMON_BIN}"
 
 # ── GNOME Shell overlay extension ─────────────────────────────────────
 echo "[4/6] Installing GNOME Shell overlay extension..."
-OVERLAY_UUID="voice-keyboard-overlay@liam-hennigan"
 OVERLAY_SRC="$SCRIPT_DIR/gnome-shell/$OVERLAY_UUID"
-OVERLAY_DEST="$HOME/.local/share/gnome-shell/extensions/$OVERLAY_UUID"
 if [ -d "$OVERLAY_SRC" ]; then
     mkdir -p "$OVERLAY_DEST"
     cp "$OVERLAY_SRC/metadata.json" "$OVERLAY_DEST/metadata.json"
@@ -265,7 +327,6 @@ fi
 
 # ── Config ────────────────────────────────────────────────────────────
 echo "[5/6] Setting up config..."
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/voice-keyboard"
 mkdir -p -m 700 "$CONFIG_DIR"
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
     cp "$SCRIPT_DIR/config.toml.example" "$CONFIG_DIR/config.toml"
@@ -301,7 +362,6 @@ fi
 
 # ── systemd user service ──────────────────────────────────────────────
 echo "[6/6] Installing systemd user service..."
-SYSTEMD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 mkdir -p "$SYSTEMD_DIR"
 
 # %h expands to the user's home directory inside systemd unit files, so the
@@ -348,4 +408,5 @@ echo "Optional shortcuts:"
 echo "  Ctrl+Alt+T → $BIN_DIR/voice-keyboard tts"
 echo ""
 echo "  Check daemon status: systemctl --user status voice-keyboard-daemon"
+echo "  Uninstall:           curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash -s -- --uninstall"
 echo "  Manual test: voice-keyboard start && sleep 3 && voice-keyboard stop"

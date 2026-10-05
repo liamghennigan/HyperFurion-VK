@@ -41,4 +41,5 @@ fi
 
 echo ""
 echo "Running HyperFurion VK installer..."
-exec "$WORK_DIR/install.sh"
+# Arguments pass through, e.g. `... | bash -s -- --uninstall`.
+exec "$WORK_DIR/install.sh" "$@"

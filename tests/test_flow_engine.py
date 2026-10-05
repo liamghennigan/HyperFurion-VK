@@ -158,3 +158,147 @@ class TestTerminalRegister:
         engine = FlowEngine(FlowConfig(), grammar, TERMINAL)
         result = engine.finalize("head dash n twenty lines period", now=0.0)
         assert result.text == "head - n 20 lines."
+
+
+class TestPausePunctuation:
+    """A provider's sentence end at a pause stays revisable until the words
+    after the pause decide it (grok-voice-transcribe-2.0 punctuates every
+    pause-delimited chunk as a sentence)."""
+
+    def _engine(self, mode="rules", **kwargs) -> FlowEngine:
+        return make_engine(pause_review=mode, **kwargs)
+
+    def test_off_keeps_the_providers_periods(self) -> None:
+        engine = self._engine("off")
+        engine.on_transcript("I was thinking about the project.", is_final=True, now=0.0)
+        engine.on_transcript(
+            "I was thinking about the project. And how", is_final=False, now=1.0
+        )
+        assert engine.desired_text() == "I was thinking about the project. And how"
+
+    def test_a_continuation_joins_and_the_period_never_froze(self) -> None:
+        engine = self._engine()
+        engine.on_transcript("I was thinking about the project.", is_final=True, now=0.0)
+        # The pause's word is final but still molten: nothing after it yet.
+        assert engine._committed_render == "I was thinking about the"
+        assert engine.desired_text() == "I was thinking about the project."
+        engine.on_transcript(
+            "I was thinking about the project. And how", is_final=False, now=1.0
+        )
+        assert engine.desired_text() == "I was thinking about the project and how"
+        engine.on_transcript(
+            "I was thinking about the project. And how we", is_final=False, now=1.5
+        )
+        assert engine._committed_render.endswith("project")
+        result = engine.finalize(
+            "I was thinking about the project. And how we could.", now=2.0
+        )
+        assert result.text == "I was thinking about the project and how we could."
+
+    def test_a_real_sentence_end_keeps_its_period(self) -> None:
+        engine = self._engine()
+        engine.on_transcript("That works.", is_final=True, now=0.0)
+        engine.on_transcript("That works. Thanks", is_final=False, now=1.0)
+        engine.on_tick(now=2.0)
+        result = engine.finalize("That works. Thanks.", now=2.5)
+        assert result.text == "That works. Thanks."
+
+    def test_the_period_ending_the_dictation_stays(self) -> None:
+        engine = self._engine()
+        result = engine.finalize("Send it to the team.", now=0.0)
+        assert result.text == "Send it to the team."
+
+    def test_an_unclear_pause_waits_for_the_reviewer(self) -> None:
+        engine = self._engine("llm")
+        engine.on_transcript("I think.", is_final=True, now=0.0)
+        engine.on_transcript("I think. We should", is_final=False, now=0.5)
+        assert engine.review_requests(now=0.5) == []  # too few words yet
+        engine.on_transcript("I think. We should wait", is_final=False, now=1.0)
+        engine.on_tick(now=1.1)
+        # Still the provider's period: the reviewer hasn't answered, and
+        # only the word before the pause is held back.
+        assert engine.desired_text() == "I think. We should wait"
+        assert engine._committed_render == "I"
+        queries = engine.review_requests(now=1.1)
+        assert [(q.index, q.before, q.after) for q in queries] == [
+            (2, "I think.", "We should wait")
+        ]
+        assert engine.review_requests(now=1.2) == []  # handed out once
+        assert engine.resolve_pause(2, "think we", now=1.5)
+        assert engine.desired_text() == "I think we should wait"
+        result = engine.finalize("I think. We should wait.", now=2.0)
+        assert result.text == "I think we should wait."
+
+    def test_a_bad_or_missing_reply_falls_back_to_the_rules(self) -> None:
+        engine = self._engine("llm")
+        engine.on_transcript("I think.", is_final=True, now=0.0)
+        engine.on_transcript("I think. We should wait", is_final=False, now=0.5)
+        [query] = engine.review_requests(now=0.6)
+        assert engine.resolve_pause(query.index, "I don't know", now=0.7)
+        assert engine.desired_text() == "I think. We should wait"
+        assert not engine.resolve_pause(query.index, "think we", now=0.8)  # settled
+
+    def test_a_review_that_never_answers_stops_holding_the_text(self) -> None:
+        engine = self._engine("llm")
+        engine.on_transcript("I think.", is_final=True, now=0.0)
+        engine.on_transcript("I think. We should wait", is_final=True, now=0.5)
+        assert engine.review_requests(now=0.6)
+        engine.on_tick(now=3.0)
+        assert engine._committed_render == "I"
+        engine.on_tick(now=5.0)
+        assert engine._committed_render == "I think. We should wait"
+
+    def test_the_rules_settle_clear_pauses_without_a_review(self) -> None:
+        engine = self._engine("llm")
+        engine.on_transcript("Ship it today.", is_final=True, now=0.0)
+        engine.on_transcript("Ship it today. But not the docs", is_final=False, now=0.5)
+        assert engine.review_requests(now=0.5) == []
+        assert engine.desired_text() == "Ship it today, but not the docs"
+
+    def test_review_queries_show_earlier_decisions(self) -> None:
+        engine = self._engine("llm")
+        engine.on_transcript("Look at the.", is_final=True, now=0.0)
+        engine.on_transcript("Look at the. Numbers first.", is_final=True, now=0.5)
+        engine.on_transcript(
+            "Look at the. Numbers first. Then we decide", is_final=False, now=1.0
+        )
+        [query] = engine.review_requests(now=1.0)
+        assert query.before == "Look at the Numbers first."
+
+    def test_scratch_after_a_pause_removes_the_segment_before_it(self) -> None:
+        engine = self._engine()
+        engine.on_transcript("Hello there.", is_final=True, now=0.0)
+        engine.on_transcript("Hello there. Send the email.", is_final=True, now=1.0)
+        engine.on_transcript(
+            "Hello there. Send the email. Scratch that.", is_final=True, now=2.0
+        )
+        result = engine.finalize("Hello there. Send the email. Scratch that.", now=3.0)
+        assert result.text == "Hello there."
+        assert result.scratches == 1
+
+    def test_the_molten_valve_freezes_what_shows(self) -> None:
+        engine = self._engine("llm", max_molten_chars=20)
+        engine.on_transcript("I think.", is_final=True, now=0.0)
+        engine.on_transcript(
+            "I think. We should wait for the numbers before deciding",
+            is_final=False,
+            now=0.5,
+        )
+        # Over the molten limit: the pause is committed as it showed.
+        assert engine._committed_render.startswith("I think.")
+        assert not engine.resolve_pause(2, "think we", now=0.6)
+
+    def test_a_terminal_never_reviews_pauses(self) -> None:
+        engine = make_engine(register=TERMINAL, pause_review="rules")
+        engine.on_transcript("git status.", is_final=True, now=0.0)
+        engine.on_transcript("git status. And", is_final=False, now=0.5)
+        assert engine.desired_text() == "git status. And"
+
+    def test_a_pause_nobody_asks_about_is_released_too(self) -> None:
+        engine = self._engine("llm")
+        engine.on_transcript("I think.", is_final=True, now=0.0)
+        engine.on_transcript("I think. We should wait", is_final=False, now=0.5)
+        engine.on_tick(now=4.0)
+        assert engine._committed_render == "I"
+        engine.on_tick(now=6.0)  # never requested: released by the rules
+        assert engine._committed_render.startswith("I think.")

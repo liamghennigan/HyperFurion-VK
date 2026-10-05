@@ -16,9 +16,9 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "HyperFurion VK",
-    "operatingSystem": "Linux; macOS (beta); Windows (beta)",
+    "operatingSystem": "Linux; Windows 10, 11; macOS (beta)",
     "applicationCategory": "UtilitiesApplication",
-    "softwareVersion": "2.1.3",
+    "softwareVersion": "2.2.0",
     "license": "https://opensource.org/licenses/MIT",
     "url": "https://liamghennigan.github.io/HyperFurion-VK/",
     "description": "A Linux-first voice keyboard. Press Ctrl+Alt+V and words type into the focused app while you speak — molten at first, repairing in place, frozen once stable. Spoken edit grammar, per-app registers, spoken numbers, a wake-word LLM rewrite, full Unicode, text-to-speech for any selection, and a push-to-talk assistant.",
@@ -1241,6 +1241,7 @@
       font-size: 11px;
       color: var(--faint);
     }
+    .install-terminals { display: grid; gap: 14px; align-self: center; min-width: 0; }
     .terminal pre {
       margin: 0;
       padding: 18px 20px;
@@ -1829,6 +1830,16 @@
       .grammar-grid { grid-template-columns: 1fr; }
       .limits { grid-template-columns: 1fr; }
     }
+    @media (max-width: 420px) {
+      /* brand + "how it works" + install overflowed a 390px phone by ~27px */
+      .nav-inner { gap: 10px; }
+      .brand { font-size: 17px; gap: 8px; }
+      .nav-links { gap: 10px !important; }
+      .nav-cta { padding: 7px 11px; }
+    }
+    @media (max-width: 380px) {
+      .nav-links a.nav-keep { display: none !important; }
+    }
     @media (max-width: 640px) {
       .wrap { width: calc(100% - 32px); }
       /* keep the highest-intent wayfinding on phones; hide only the secondary links */
@@ -1879,7 +1890,7 @@
       <canvas id="hero-canvas" aria-hidden="true"></canvas>
       <div class="wrap hero-grid">
         <div>
-          <span class="hero-pill"><span class="dot"></span> Linux-first · macOS &amp; Windows beta · MIT · open source</span>
+          <span class="hero-pill"><span class="dot"></span> Linux &amp; Windows · macOS beta · MIT · open source</span>
           <h1>Your voice is <em>the keyboard.</em></h1>
           <p class="hero-sub"><strong>Type with your voice — in any app you're already in.</strong> HyperFurion VK is a system-wide input device: your speech types, edits, rewrites, drafts terminal commands, reads text back aloud, and remembers what you said — pressed into whatever app you already have focused.</p>
           <div class="hero-actions">
@@ -2085,7 +2096,7 @@
             <div class="guarantee"><span class="ico">◌</span><div><b>Audio lives in memory</b><span>Speech is held in memory while transcribed, never written to disk. Password fields always force <code>verbatim</code> and are never logged.</span></div></div>
           </div>
         </div>
-        <p class="sigcap" style="margin-top:26px;">honest about the edges: Linux-first (macOS &amp; Windows in beta) · cloud by default, fully offline in one config line · live typing needs a streaming provider. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">full list on GitHub →</a></p>
+        <p class="sigcap" style="margin-top:26px;">honest about the edges: Linux &amp; Windows (macOS in beta) · cloud by default, fully offline in one config line · live typing needs a streaming provider. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">full list on GitHub →</a></p>
       </div>
     </section>
 
@@ -2096,15 +2107,16 @@
           <div class="install-copy">
             <span class="eyebrow">two minutes to first words</span>
             <h3 id="install-title">Install the input device you already have.</h3>
-            <p>One installer sets up the daemon, the hotkey, and the GNOME overlay. Then tap the hotkey and speak — VK decides whether your phrase is text, a correction, a rewrite, a readback, a recall, a terminal draft, or a question for Kai.</p>
+            <p>One installer sets up the daemon, the hotkey, and the overlay — on Linux or Windows. Then tap the hotkey and speak — VK decides whether your phrase is text, a correction, a rewrite, a readback, a recall, a terminal draft, or a question for Kai.</p>
             <p><strong style="color:var(--ivory)">Free and open source forever.</strong> Every feature works with your own provider key — nothing is paywalled. <span style="color:var(--muted)">A hosted subscription is coming soon — entirely optional, to help support ongoing maintenance.</span></p>
             <div class="hero-actions">
               <a class="btn primary" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest" rel="noopener">Get the latest release</a>
               <a class="btn" href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">Read the source</a>
             </div>
           </div>
+          <div class="install-terminals">
           <div class="terminal">
-            <div class="terminal-bar"><span>install-hyperfurion-vk.sh</span><button class="copy" id="copyInstall" type="button">copy</button></div>
+            <div class="terminal-bar"><span>linux · install-hyperfurion-vk.sh</span><button class="copy" id="copyInstall" type="button">copy</button></div>
             <pre id="install-cmd"><code><span class="c"># download the release installer</span>
 curl -L https://github.com/liamghennigan/HyperFurion-VK\
 /releases/latest/download/install-hyperfurion-vk.sh \
@@ -2115,6 +2127,12 @@ chmod +x install-hyperfurion-vk.sh
 
 <span class="c"># then tap</span> <span class="a">Ctrl + Alt + V</span>
 <span class="c"># and speak into the app already focused.</span></code></pre>
+          </div>
+          <div class="terminal">
+            <div class="terminal-bar"><span>windows · powershell</span><button class="copy" id="copyInstallWin" type="button">copy</button></div>
+            <pre id="install-cmd-win"><code><span class="c"># a tray app; installs Python if you need it</span>
+irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex</code></pre>
+          </div>
           </div>
         </div>
       </div>
@@ -2242,18 +2260,23 @@ chmod +x install-hyperfurion-vk.sh
     }, 5200);
     buttons.forEach(b => b.addEventListener('pointerdown', () => clearInterval(cycle), { once: true }));
 
-    /* ---------- copy the install command ---------- */
-    const copyBtn = document.getElementById('copyInstall');
-    const INSTALL_CMD = 'curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh\nchmod +x install-hyperfurion-vk.sh\n./install-hyperfurion-vk.sh';
-    copyBtn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(INSTALL_CMD);
-        copyBtn.textContent = 'copied';
-        copyBtn.classList.add('ok');
-      } catch {
-        copyBtn.textContent = 'select it';
-      }
-      setTimeout(() => { copyBtn.textContent = 'copy'; copyBtn.classList.remove('ok'); }, 1800);
+    /* ---------- copy the install commands ---------- */
+    const INSTALL_CMDS = {
+      copyInstall: 'curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh\nchmod +x install-hyperfurion-vk.sh\n./install-hyperfurion-vk.sh',
+      copyInstallWin: 'irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex',
+    };
+    Object.entries(INSTALL_CMDS).forEach(([id, cmd]) => {
+      const copyBtn = document.getElementById(id);
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(cmd);
+          copyBtn.textContent = 'copied';
+          copyBtn.classList.add('ok');
+        } catch {
+          copyBtn.textContent = 'select it';
+        }
+        setTimeout(() => { copyBtn.textContent = 'copy'; copyBtn.classList.remove('ok'); }, 1800);
+      });
     });
   </script>
 </body>

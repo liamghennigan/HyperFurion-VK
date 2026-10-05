@@ -6,6 +6,35 @@ import St from 'gi://St';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+
+const SHELL_MAJOR = parseInt(Config.PACKAGE_VERSION.split('.')[0], 10);
+
+// St.BoxLayout gained `orientation` in GNOME 48 (the boolean `vertical`
+// before it). Use the property this shell knows; 48+ takes exactly the
+// path that has always run on 50.
+function boxLayout(vertical, params = {}) {
+    if (SHELL_MAJOR >= 48) {
+        return new St.BoxLayout({
+            ...params,
+            orientation: vertical
+                ? Clutter.Orientation.VERTICAL
+                : Clutter.Orientation.HORIZONTAL,
+        });
+    }
+    return new St.BoxLayout({...params, vertical});
+}
+
+// The click-through pill must stay out of the shell's input region. GNOME
+// 45-49 put chrome IN it by default (on X11 the pill then swallows clicks
+// on whatever is under it); GNOME 50 removed the parameter, and its
+// Params.parse throws on an unknown key — so it is passed only where it
+// exists. The orb is reactive and keeps the default.
+function pillChromeParams(params) {
+    if (SHELL_MAJOR < 50)
+        return {...params, affectsInputRegion: false};
+    return params;
+}
 
 const BUS_NAME = 'org.voicekeyboard.Overlay';
 const OBJECT_PATH = '/org/voicekeyboard/Overlay';
@@ -269,15 +298,13 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         this._state = state;
         const style = STATE_STYLES[state] || STATE_STYLES.listening;
         const actor = this._buildActor(style, detail || style.detail);
-        // NOTE: do NOT re-add the input-region param that GNOME 50 removed
-        // from addChrome's params — Params.parse throws on the unknown key
-        // and the pill stops drawing entirely (see tests for the regression
-        // guard). Click-through is preserved because the actors are
-        // non-reactive (reactive defaults to false) on GNOME 50.
-        Main.layoutManager.addChrome(actor, {
+        // Version-gated params: see pillChromeParams (and the regression
+        // guard in tests/test_gnome_overlay.py). The actors are
+        // non-reactive, so the pill is click-through on every version.
+        Main.layoutManager.addChrome(actor, pillChromeParams({
             affectsStruts: false,
             trackFullscreen: true,
-        });
+        }));
         actor.opacity = 245;
         actor.set_position(0, 0);
         actor.show();
@@ -302,8 +329,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
     }
 
     _buildActor(style, detail) {
-        const box = new St.BoxLayout({
-            orientation: Clutter.Orientation.HORIZONTAL,
+        const box = boxLayout(false, {
             style: [
                 `background-color: ${INSTRUMENT_BG}`,
                 'border-radius: 12px',
@@ -316,8 +342,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         // four thin phosphor bars, the state's signal colour, bottom-anchored
         // in a fixed field so they read as a live level meter.
         this._accent = style.accent;
-        this._bars = new St.BoxLayout({
-            orientation: Clutter.Orientation.HORIZONTAL,
+        this._bars = boxLayout(false, {
             style: 'margin-right: 16px;',
         });
         this._barWidgets = [];
@@ -328,9 +353,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         }
         box.add_child(this._bars);
 
-        const textBox = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
-        });
+        const textBox = boxLayout(true);
         box.add_child(textBox);
 
         // the engraved-label voice: mono, tracked, uppercase (the .sigcap

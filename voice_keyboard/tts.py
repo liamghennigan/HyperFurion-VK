@@ -1,5 +1,6 @@
 import logging
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -107,6 +108,10 @@ class TTSClient:
             f"{openai_base_url.rstrip('/')}/audio/speech" if openai_base_url else OPENAI_TTS_URL
         )
         self._session: Optional[requests.Session] = None
+        # Starting playback and stopping it never interleave: a stop that
+        # arrives while the audio device is still opening waits for it and
+        # then stops the stream that just started (not the previous one).
+        self._play_lock = threading.Lock()
 
     @property
     def session(self) -> requests.Session:
@@ -215,7 +220,9 @@ class TTSClient:
         resp.raise_for_status()
         return resp.content
 
-    def play_pcm(self, pcm: bytes, sample_rate: int = 24000) -> None:
+    def play_pcm(
+        self, pcm: bytes, sample_rate: int = 24000, *, cancel: Optional[threading.Event] = None
+    ) -> None:
         """Play RAW s16le mono PCM — the realtime voice agent's answer
         format. Feeding this to the MP3 path makes the decoder chew static
         (mpg123 'Illegal Audio-MPEG-Header' spam)."""
@@ -225,49 +232,59 @@ class TTSClient:
         import sounddevice as sd
 
         data = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        sd.play(data, sample_rate)
+        with self._play_lock:
+            if cancel is not None and cancel.is_set():
+                return
+            sd.play(data, sample_rate)
         sd.wait()
 
     def stop_playback(self) -> None:
-        """Cut off any in-flight speech immediately — the barge-in path.
-        Safe to call when nothing is playing."""
-        try:
-            import sounddevice as sd
+        """Cut off any in-flight speech — the barge-in path. Safe to call
+        when nothing is playing. May wait for a playback that is still
+        opening its audio device (to stop that one), so call it off the
+        event loop; set the playback's `cancel` first so one that hasn't
+        started yet never does."""
+        with self._play_lock:
+            try:
+                import sounddevice as sd
 
-            sd.stop()
-        except Exception:
-            pass
-        try:
-            import pygame
+                sd.stop()
+            except Exception:
+                pass
+            try:
+                import pygame
 
-            if pygame.mixer.get_init():
-                pygame.mixer.music.stop()
-        except Exception:
-            pass
+                if pygame.mixer.get_init():
+                    pygame.mixer.music.stop()
+            except Exception:
+                pass
 
     def synthesize_and_play(self, text: str) -> None:
         self.play_audio(self.synthesize(text))
 
-    def play_audio(self, audio_data: bytes) -> None:
+    def play_audio(self, audio_data: bytes, *, cancel: Optional[threading.Event] = None) -> None:
         """Play already-synthesized audio — the instant half of the TTS
-        path, used directly on a prefetch-cache hit."""
+        path, used directly on a prefetch-cache hit. Once `cancel` is set
+        (before or during decoding) nothing more plays."""
+        if cancel is not None and cancel.is_set():
+            return
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             f.write(audio_data)
             tmp_path = f.name
 
         try:
-            self._play_sounddevice(tmp_path)
+            self._play_sounddevice(tmp_path, cancel)
         except Exception:
             logger.exception("sounddevice playback failed, falling back to pygame")
             try:
-                self._play_pygame(tmp_path)
+                self._play_pygame(tmp_path, cancel)
             except Exception:
                 logger.exception("pygame playback also failed")
                 raise RuntimeError("Failed to play TTS audio with any backend")
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
-    def _play_sounddevice(self, tmp_path: str) -> None:
+    def _play_sounddevice(self, tmp_path: str, cancel: Optional[threading.Event] = None) -> None:
         import numpy as np
         import sounddevice as sd
         import soundfile as sf
@@ -275,19 +292,28 @@ class TTSClient:
         data, samplerate = sf.read(tmp_path)
         if data.ndim == 1:
             data = data[:, np.newaxis]
-        sd.play(data, samplerate)
+        with self._play_lock:
+            if cancel is not None and cancel.is_set():
+                return
+            sd.play(data, samplerate)
         sd.wait()
 
-    def _play_pygame(self, tmp_path: str) -> None:
+    def _play_pygame(self, tmp_path: str, cancel: Optional[threading.Event] = None) -> None:
         import pygame
 
         mixer_ready = False
         try:
-            pygame.mixer.init()
-            mixer_ready = True
-            pygame.mixer.music.load(tmp_path)
-            pygame.mixer.music.play()
+            with self._play_lock:
+                if cancel is not None and cancel.is_set():
+                    return
+                pygame.mixer.init()
+                mixer_ready = True
+                pygame.mixer.music.load(tmp_path)
+                pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
+                if cancel is not None and cancel.is_set():
+                    pygame.mixer.music.stop()
+                    break
                 pygame.time.Clock().tick(10)
         finally:
             if mixer_ready:
