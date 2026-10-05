@@ -117,6 +117,7 @@ jobs:
           $env:HYPERFURION_VK_SOURCE = Join-Path $env:TEMP "no-such-checkout"
           cmd /c "dist\HyperFurion-VK-Setup.cmd"
           if ($LASTEXITCODE -ne 1) { throw "a failed install exited $LASTEXITCODE, not 1" }
+          $global:LASTEXITCODE = 0   # the runner would fail the step on that expected 1
 
       - name: Upgrade over an early beta's settings
         run: |
