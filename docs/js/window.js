@@ -2,7 +2,8 @@
 // One window, four registers, picked the way the daemon's focus probe picks
 // them: the editor renders prose (smart caps, spoken punctuation), the
 // terminal renders digits and no caps, python and shell compile speech.
-// Committed lines are announced once; the molten tail is decoration.
+// Committed lines are announced once; the molten tail is decoration. The
+// window never changes height: one status line, replaced, never stacked.
 import { $, fwin } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
@@ -16,35 +17,13 @@ export const Window = (() => {
   };
   const el = {
     title: $("fwin-title"), app: $("fwin-app"), frozen: $("fwin-frozen"), molten: $("fwin-molten"),
-    instr: $("fwin-instr"), lines: $("fwin-lines"), log: $("fwin-log"), engine: $("fwin-engine"),
-    latency: $("fwin-latency"), tabs: $("regtabs"), panes: $("register-panes"), chips: $("chips"),
+    instr: $("fwin-instr"), lines: $("fwin-lines"), status: $("fwin-status"),
+    tabs: $("regtabs"), panes: $("register-panes"),
   };
-  // the try-saying chips: one register lesson each, compiled through the
-  // same molten engine a live session uses
-  const SAY = {
-    prose: [
-      { label: "“fixed the race condition … period”",
-        script: { text: "fixed the race condition in the audio thread period", revise: { at: 3, wrong: "addition" } },
-        title: "watch the third word arrive wrong, repair itself, then freeze" },
-      { label: "“… it works now VK, make that formal”",
-        script: { text: "we fixed a bunch of bugs and it works now VK, make that formal" },
-        title: "the wake word rewrites what you just dictated, in place" },
-    ],
-    terminal: [
-      { label: "“twenty three failed tests comma rerun …”",
-        script: { text: "twenty three failed tests comma rerun the flaky ones" },
-        title: "terminal register: no auto-caps, spoken numbers become digits" },
-    ],
-    python: [
-      { label: "“for i in range ten colon”", script: { text: "for i in range ten colon" },
-        title: "python register: speech compiles into code" },
-    ],
-    shell: [
-      { label: "“grep dash i error star dot log”", script: { text: "grep dash i error star dot log" },
-        title: "shell register: dashes become flags, star globs" },
-    ],
-  };
-  let regName = "prose", logT = 0;
+  let regName = "prose";
+  // the one status line: a transient note wins over the steady engine line
+  const st = { engine: "", cls: "", latency: "", note: "", noteCls: "" };
+  let noteT = 0;
 
   function setRegister(name, { silent = false } = {}) {
     if (!REGISTERS[name]) return;
@@ -60,7 +39,6 @@ export const Window = (() => {
       t.setAttribute("aria-selected", String(on));
       t.tabIndex = on ? 0 : -1;
     }
-    chips();
     if (changed && !silent) bus.emit("register:change", { name });
     if (changed && state.recording) bus.emit("focus:changed", { name });
   }
@@ -86,34 +64,40 @@ export const Window = (() => {
     p.className = "line";
     p.dataset.register = regName;
     p.textContent = text;
+    if (register().compiler || regName === "terminal") {
+      // drafted at the prompt: the send is the human's
+      const tag = document.createElement("span");
+      tag.className = "yours";
+      tag.textContent = "⏎ yours";
+      p.appendChild(tag);
+    }
     el.lines.appendChild(p);
-    while (el.lines.children.length > 5) el.lines.firstChild.remove();
-    if (register().compiler || regName === "terminal") log("drafted at the prompt — Enter is yours", "consent");
+    while (el.lines.children.length > 4) el.lines.firstChild.remove();
     panes();
   }
   function retract() { if (el.lines && el.lines.lastElementChild) el.lines.lastElementChild.remove(); }
-  function replaceLast(text) { if (el.lines && el.lines.lastElementChild) el.lines.lastElementChild.textContent = text; }
+  function replaceLast(text) { if (el.lines && el.lines.lastElementChild) el.lines.lastElementChild.firstChild.textContent = text; }
   function clearLines() { if (el.lines) el.lines.replaceChildren(); }
 
-  // ── status ──────────────────────────────────────────────────────────────
+  // ── status: one line ────────────────────────────────────────────────────
+  function paintStatus() {
+    if (!el.status) return;
+    if (st.note) { el.status.textContent = st.note; el.status.className = "fwin-status " + st.noteCls; return; }
+    el.status.textContent = [st.engine, st.latency].filter(Boolean).join(" · ");
+    el.status.className = "fwin-status " + st.cls;
+  }
   function log(text, cls = "") {
-    if (!el.log) return;
-    el.log.textContent = text;
-    el.log.className = "fwin-log " + cls;
-    clearTimeout(logT);
-    if (text) logT = setTimeout(() => { if (el.log.textContent === text) el.log.textContent = ""; }, 9000);
+    clearTimeout(noteT);
+    st.note = text || ""; st.noteCls = cls;
+    paintStatus();
+    if (text) noteT = setTimeout(() => { st.note = ""; paintStatus(); }, 7000);
   }
-  function setEngine(label, cls = "") {
-    if (!el.engine) return;
-    el.engine.textContent = label;
-    el.engine.className = "engine " + cls;
-  }
+  function setEngine(label, cls = "") { st.engine = label || ""; st.cls = cls; paintStatus(); }
   function setLatency(ms, median) {
-    if (!el.latency) return;
-    if (ms == null) { el.latency.textContent = ""; return; }
-    el.latency.textContent = "speech → first keystroke " + Math.round(ms) + " ms · median " + Math.round(median) + " ms (this page, your browser)";
+    st.latency = ms == null ? "" : Math.round(ms) + " ms to first key";
+    paintStatus();
   }
-  function setLatencyNote(text) { if (el.latency) el.latency.textContent = text; }
+  function setLatencyNote(text) { st.latency = text || ""; paintStatus(); }
 
   // ── the registers section: the last phrase through every register ──────
   function panes() {
@@ -125,21 +109,6 @@ export const Window = (() => {
       const { items } = parse(tokens, { flush: true, frozen: 0, register: reg, cfg: settings });
       const r = render(items.filter((it) => it.kind !== "instruction" && it.kind !== "scratch"), reg, initialState(reg));
       pane.querySelector(".pane-text").textContent = r.text;
-    }
-  }
-
-  // ── chips: scripted lines for the no-mic case ──────────────────────────
-  function chips() {
-    if (!el.chips) return;
-    el.chips.replaceChildren();
-    for (const s of SAY[regName] || []) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip";
-      b.textContent = s.label;
-      b.title = s.title;
-      b.addEventListener("click", () => bus.emit("simulate", { script: s.script }));
-      el.chips.appendChild(b);
     }
   }
 
