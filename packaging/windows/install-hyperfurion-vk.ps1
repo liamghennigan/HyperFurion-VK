@@ -11,9 +11,10 @@
 #                       -Provider xai -ApiKey xai-...   (unattended config;
 #                       add -TtsProvider/-TtsApiKey when the speech-to-text
 #                       provider has no voice: groq, deepgram, assemblyai)
-# With irm | iex, use environment variables instead: HYPERFURION_VK_VERSION
-# (a release tag, a branch, or a commit), HYPERFURION_VK_REPO,
-# HYPERFURION_VK_NONINTERACTIVE=1.
+# With irm | iex (or HyperFurion-VK-Setup.cmd, the double-click download
+# that carries this script), use environment variables instead:
+# HYPERFURION_VK_VERSION (a release tag, a branch, or a commit),
+# HYPERFURION_VK_REPO, HYPERFURION_VK_SOURCE, HYPERFURION_VK_NONINTERACTIVE=1.
 #
 # What it does (per user, no administrator rights needed):
 #   - finds Python 3.11-3.13 (64-bit), or installs Python 3.12 for you
@@ -21,7 +22,8 @@
 #   - adds the `voice-keyboard` command to your PATH
 #   - adds "HyperFurion VK" to the Start menu, to Settings > Apps (for
 #     uninstalling), and to startup (it lives in the notification area)
-#   - helps you sign in or add a speech provider key, then starts it
+#   - walks you through the settings (a running llama.cpp model is offered
+#     as the default model), then starts it
 # Your settings in %APPDATA%\voice-keyboard are never overwritten.
 
 param(
@@ -55,6 +57,7 @@ function Install-HyperFurionVK {
     $Repo = "liamghennigan/HyperFurion-VK"
     if ($env:HYPERFURION_VK_REPO) { $Repo = $env:HYPERFURION_VK_REPO }
     if (-not $Version -and $env:HYPERFURION_VK_VERSION) { $Version = $env:HYPERFURION_VK_VERSION }
+    if (-not $Source -and $env:HYPERFURION_VK_SOURCE) { $Source = $env:HYPERFURION_VK_SOURCE }
     if ($env:HYPERFURION_VK_NONINTERACTIVE -eq "1" -or $env:CI) { $NonInteractive = $true }
     try {
         if (-not [Environment]::UserInteractive) { $NonInteractive = $true }
@@ -205,6 +208,10 @@ function Install-HyperFurionVK {
     $ConfigFile = Get-PythonPath $VenvPython "paths.config_dir() / 'config.toml'"
     if (Test-Path -LiteralPath $ConfigFile) {
         Write-Step "Keeping your settings in $ConfigFile"
+        if (-not $NonInteractive -and -not $Provider) {
+            $again = (Read-Host "Walk through your settings again? (y/N)").Trim().ToLower()
+            if ($again -like "y*") { Invoke-SetupPrompt -VenvPython $VenvPython }
+        }
     } elseif ($Provider) {
         Write-Step "Writing settings for $Provider"
         Write-InitialConfig -VenvPython $VenvPython -Stt $Provider -SttKey $ApiKey -Tts $TtsProvider -TtsKey $TtsApiKey
@@ -450,16 +457,6 @@ function Add-UserPath([string]$Dir) {
     Send-EnvironmentChange
 }
 
-function Read-Secret([string]$Prompt) {
-    $secure = Read-Host -Prompt $Prompt -AsSecureString
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try {
-        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim()
-    } finally {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-    }
-}
-
 function Write-InitialConfig {
     param([string]$VenvPython, [string]$Stt, [string]$Tts = "", [string]$SttKey = "", [string]$TtsKey = "", [string]$BaseUrl = "")
     if (-not $Tts) {
@@ -481,46 +478,14 @@ function Write-InitialConfig {
 }
 
 function Invoke-SetupPrompt([string]$VenvPython) {
-    Write-Host ""
-    Write-Host "How should your speech be transcribed?" -ForegroundColor Cyan
-    Write-Host "  1) HyperFurion hosted service - sign in with your subscription email"
-    Write-Host "  2) My own API key (xAI, OpenAI, Groq, Deepgram, AssemblyAI)"
-    Write-Host "  3) A local OpenAI-compatible server (fully offline)"
-    Write-Host "  4) Skip for now (set it up later from the tray icon)"
-    $choice = (Read-Host "Choose 1-4 [4]").Trim()
-    switch ($choice) {
-        "1" {
-            try {
-                Invoke-Checked $VenvPython @("-m", "voice_keyboard.client", "login") "signing in"
-            } catch {
-                Write-Host "    Sign-in did not finish. Run 'voice-keyboard login' in a new terminal, or use the tray icon." -ForegroundColor Yellow
-            }
-        }
-        "2" {
-            $stt = (Read-Host "Speech-to-text provider: xai, openai, groq, deepgram, assemblyai [xai]").Trim().ToLower()
-            if (-not $stt) { $stt = "xai" }
-            if (@("xai", "openai", "groq", "deepgram", "assemblyai") -notcontains $stt) { throw "Unknown provider '$stt'." }
-            $sttKey = Read-Secret "$stt API key (input hidden)"
-            $tts = $stt
-            $ttsKey = ""
-            if (@("xai", "openai") -notcontains $stt) {
-                Write-Host "$stt does not do text-to-speech (used for read-aloud and Kai's voice)."
-                $tts = (Read-Host "Text-to-speech provider: xai, openai, elevenlabs [xai]").Trim().ToLower()
-                if (-not $tts) { $tts = "xai" }
-                if (@("xai", "openai", "elevenlabs") -notcontains $tts) { throw "Unknown provider '$tts'." }
-                $ttsKey = Read-Secret "$tts API key (input hidden)"
-            }
-            Write-InitialConfig -VenvPython $VenvPython -Stt $stt -Tts $tts -SttKey $sttKey -TtsKey $ttsKey
-        }
-        "3" {
-            $url = (Read-Host "Server base URL [http://127.0.0.1:8000/v1]").Trim()
-            if (-not $url) { $url = "http://127.0.0.1:8000/v1" }
-            Write-InitialConfig -VenvPython $VenvPython -Stt "openai" -Tts "openai" -BaseUrl $url
-        }
-        default {
-            Write-Host "    Skipped: right-click the amber tray icon to sign in or open the settings file."
-        }
+    # The settings walkthrough (voice_keyboard/setup_wizard.py), shared with
+    # Linux: a running llama.cpp model, speech provider and keys, hotkey,
+    # language, Kai. Re-run any time with `voice-keyboard setup`.
+    & $VenvPython -m voice_keyboard.client setup
+    if ($LASTEXITCODE) {
+        Write-Host "    Setup did not finish: run 'voice-keyboard setup' in a new terminal, or right-click the tray icon." -ForegroundColor Yellow
     }
+    $global:LASTEXITCODE = 0
 }
 
 function Get-UninstallerScript {
@@ -606,7 +571,8 @@ try {
     Write-Host ""
     Write-Host "Installation failed: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "Help: https://github.com/liamghennigan/HyperFurion-VK#windows"
-    # Run as a file (-File, CI): report failure through the exit code. Under
-    # irm | iex there is no script file, and exit would close the window.
-    if ($PSCommandPath) { exit 1 }
+    # Run as a file (-File, CI) or from HyperFurion-VK-Setup.cmd: report
+    # failure through the exit code. Under irm | iex there is no script
+    # file, and exit would close the window.
+    if ($PSCommandPath -or $env:HFVK_SETUP_FILE) { exit 1 }
 }

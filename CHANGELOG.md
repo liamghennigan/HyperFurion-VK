@@ -5,6 +5,29 @@ All notable changes to HyperFurion VK. The format follows
 [semantic versioning](https://semver.org/). A version bump in `pyproject.toml`
 on `main` cuts the GitHub release automatically.
 
+## [2.3.0] — 2026-10
+
+Download it, run it, and it walks you through the settings.
+
+### Added
+
+- **Download-and-run setup files** on every release:
+  `HyperFurion-VK-Setup.run` (Linux; a self-extracting installer that reopens
+  itself in a terminal when double-clicked) and `HyperFurion-VK-Setup.cmd`
+  (Windows; double-click, no PowerShell step). Both install for the user who
+  runs them; the Linux one refuses to run as root, as does `install.sh`.
+- **`voice-keyboard setup`**, a walkthrough of the settings — speech provider
+  and keys (or the hosted sign-in, or a local server), the language model,
+  the dictation hotkey and its mode, the language, Kai, dictation history.
+  It edits `config.toml` in place (comments and everything else kept), shows
+  a summary before saving, and saves nothing on Ctrl+C. Both installers end
+  in it; an upgrade that already works only offers it.
+- **llama.cpp detection**: setup first looks for a `llama-server` running on
+  this computer (ports 8080, 8081, 8000, 8012, `$LLAMA_ARG_PORT`, or
+  `HFVK_LLAMA_URL`) and offers its model as the default `[llm]`. A server
+  with `--api-key` is recognized and asks for the key; one serving several
+  models lets you pick.
+
 ## [2.2.0] — 2026-10
 
 Windows becomes a first-class platform, and the whole repo gets a polish pass.
