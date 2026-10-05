@@ -32,6 +32,7 @@ api_key = "elevenlabs-your-api-key-here"
 # Choices: xai, hyperfurion, openai, groq, deepgram, assemblyai
 provider = "xai"
 # Defaults by provider:
+# xai / hyperfurion = the provider's default (grok-voice-transcribe-2.0)
 # openai = "gpt-4o-transcribe"
 # groq = "whisper-large-v3-turbo"
 # deepgram = "nova-3"
@@ -127,6 +128,14 @@ history = false
 # grammar vocabulary. Dormant until you accept something; your explicit
 # [flow.vocabulary] entries always win.
 personal_dictionary = true
+# Punctuation where you paused. Streaming recognizers (xai, hyperfurion)
+# end a sentence at every pause — "I think. We should wait." — so a
+# period you paused after stays revisable until the next words decide it.
+# "auto" = clear cases by rule ("... the. Project", "... X. And Y"), the
+# rest reviewed by [llm] when it is usable (a few words around each pause
+# are sent to it); "llm" = the same, and warn when [llm] isn't usable;
+# "rules" = rules only, nothing sent; "off" = keep the recognizer's periods.
+pause_review = "auto"
 # Molten diffs: hold a "vk, ..." rewrite as PENDING instead of
 # landing it — say "keep it" (or `voice-keyboard keep`) to apply,
 # "scratch that" (or `discard`) to drop; unkept rewrites evaporate

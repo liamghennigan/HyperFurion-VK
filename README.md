@@ -526,6 +526,15 @@ Flow is on by default. It has two halves:
 While recording, the GNOME overlay pill becomes a live caption: a small VU
 meter plus the molten tail of the transcript, updating as you speak.
 
+**Pauses.** Streaming recognizers end a sentence wherever you pause — xAI's
+grok-voice-transcribe-2.0 punctuates each pause-delimited chunk as a sentence
+of its own, so "I think … we should wait" arrives as "I think. We should
+wait." Flow keeps the period at a pause molten until the next words decide
+it: clear cases by rule ("… the. Project", "… X. And Y"), the rest by a quick
+review through `[llm]` when it's usable (only a few words around the pause are
+sent). `[flow] pause_review = "rules"` sends nothing; `"off"` keeps the
+recognizer's periods.
+
 ### The spoken grammar
 
 | You say | You get |

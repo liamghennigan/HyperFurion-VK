@@ -110,6 +110,7 @@ def create_stt_client(config: dict):
             language=language,
             interim_results=bool(stt_cfg.get("interim_results", True)),
             ws_url=XAI_STT_WS_URL if provider == "xai" else hyperfurion_ws_url(config),
+            model=model,
         )
 
     base_url = ""
@@ -179,8 +180,10 @@ class STTClient:
         interim_results: bool = True,
         connect_timeout: float = 5.0,
         ws_url: str = XAI_STT_WS_URL,
+        model: str = "",
     ):
         self._api_key = api_key
+        self._model = model
         self._language = language
         self._interim_results = interim_results
         self._connect_timeout = connect_timeout
@@ -198,6 +201,9 @@ class STTClient:
         }
         if self._language:
             query["language"] = self._language
+        if self._model:
+            # Empty = the provider's default (grok-voice-transcribe-2.0).
+            query["model"] = self._model
         return f"{self._ws_url}?{urlencode(query)}"
 
     @staticmethod

@@ -52,6 +52,17 @@ class TestConfigLoading:
 
 
 class TestConfigValidation:
+    def test_pause_review_values(self) -> None:
+        cfg = config._default_config_with_paths()
+        cfg["xai"]["api_key"] = "xai-real"
+        assert cfg["flow"]["pause_review"] == "auto"
+        for value in ("auto", "llm", "rules", "off", "RULES"):
+            cfg["flow"]["pause_review"] = value
+            config.validate_config(cfg)
+        cfg["flow"]["pause_review"] = "always"
+        with pytest.raises(RuntimeError, match="flow.pause_review"):
+            config.validate_config(cfg)
+
     def test_missing_api_key_raises(self) -> None:
         cfg = config._default_config_with_paths()
         with pytest.raises(RuntimeError, match="providers.xai.api_key is not configured"):

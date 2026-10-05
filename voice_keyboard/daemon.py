@@ -25,7 +25,7 @@ from voice_keyboard.focusprobe import FocusInfo, probe_focus
 from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty_binding
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
-from voice_keyboard.llm import create_llm_client
+from voice_keyboard.llm import create_llm_client, llm_ready
 from voice_keyboard.prefetch import SelectionWatcher, prefetch_enabled
 from voice_keyboard.remotemic import RemoteAudioSource, RemoteMicServer
 from voice_keyboard.stt import create_stt_client
@@ -36,6 +36,7 @@ from voice_keyboard.transcript import (  # noqa: F401
     _dedupe_repeated_transcript_text,
     _join_transcript_text,
     _merge_transcript_text,
+    _reconcile_utterance,
     _transcript_words,
     _word_prefix_overlap,
     _word_sequence_contains,
@@ -47,6 +48,10 @@ from voice_keyboard.tts import TTSClient, create_tts_client
 logger = logging.getLogger(__name__)
 
 FLOW_TICK_S = 0.25
+# Pause reviews ([flow] pause_review): one call's limit, and how long the
+# stop path waits for the last ones before the rules decide.
+PAUSE_REVIEW_CALL_S = 5.0
+PAUSE_REVIEW_FINAL_S = 2.5
 FOCUS_WATCHDOG_S = 1.5
 # A hands-free Kai question (a tap, or the wake word) ends after this much
 # trailing silence — you just stop talking, no second press.
@@ -80,6 +85,10 @@ class Daemon:
         self._receive_task: Optional[asyncio.Task] = None
         self._final_text: str = ""
         self._interim_text: str = ""
+        # The provider sends chunks and utterances (xAI's speech_final
+        # protocol): finals are appended as they come, never merged.
+        self._chunked_stt = False
+        self._utterance_start = 0  # where the current utterance begins in _final_text
         self._stt_error: Optional[str] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._hotkey_listener: Optional[HotkeyListener] = None
@@ -115,6 +124,9 @@ class Daemon:
         self._flow_worker: Optional[InjectionWorker] = None
         self._flow_ticker: Optional[asyncio.Task] = None
         self._focus_watchdog: Optional[asyncio.Task] = None
+        # The [llm] client reviewing punctuation at pauses (None = rules only).
+        self._pause_reviewer = None
+        self._pause_tasks: set = set()
         self._session_focus: Optional[FocusInfo] = None
         self._session_register: Register = resolve_register(
             self._config.get("registers", {}).get("default", "prose")
@@ -893,7 +905,7 @@ class Daemon:
             numbers_min=register.numbers_min,
         )
 
-    def _flow_config_obj(self) -> FlowConfig:
+    def _flow_config_obj(self, pause_review: str = "off") -> FlowConfig:
         flow_cfg = self._config.get("flow", {})
         defaults = FlowConfig()
 
@@ -909,7 +921,22 @@ class Daemon:
             stability_updates=_int("stability_updates", defaults.stability_updates),
             max_molten_chars=_int("max_molten_chars", defaults.max_molten_chars),
             adaptive=bool(flow_cfg.get("adaptive", True)),
+            pause_review=pause_review,
         )
+
+    def _pause_review_mode(self) -> str:
+        """How this session settles punctuation at pauses: "llm" (rules,
+        then the [llm] reviewer), "rules", or "off". Sets the reviewer."""
+        self._pause_reviewer = None
+        mode = str(self._config.get("flow", {}).get("pause_review", "auto")).strip().lower()
+        if mode == "off":
+            return "off"
+        if mode in ("auto", "llm") and not self._session_secret:
+            if llm_ready(self._config):
+                self._pause_reviewer = create_llm_client(self._config)
+            elif mode == "llm":
+                logger.warning("flow.pause_review = llm, but [llm] has no usable endpoint/key")
+        return "llm" if self._pause_reviewer is not None else "rules"
 
     async def _setup_flow_session(self, probe_task: Optional[asyncio.Task]) -> None:
         self._focus_lost = False
@@ -998,7 +1025,9 @@ class Daemon:
                 logger.info("Ambient containment active: address word %r", address)
 
         self._flow_engine = FlowEngine(
-            self._flow_config_obj(), self._build_grammar(register), register
+            self._flow_config_obj(self._pause_review_mode()),
+            self._build_grammar(register),
+            register,
         )
 
         auto_stop_ms = flow_cfg.get("auto_stop_ms", 0)
@@ -1015,13 +1044,18 @@ class Daemon:
         )
         self._flow_worker = InjectionWorker(self._injector) if live else None
         logger.info(
-            "Flow session: register=%s app=%r live=%s",
+            "Flow session: register=%s app=%r live=%s pause_review=%s",
             register.name,
             focus.app if focus else "",
             bool(self._flow_worker),
+            self._flow_engine._cfg.pause_review,
         )
 
     async def _teardown_flow_session(self) -> None:
+        for task in list(self._pause_tasks):
+            task.cancel()
+        self._pause_tasks.clear()
+        self._pause_reviewer = None
         for task_attr in ("_flow_ticker", "_focus_watchdog"):
             task = getattr(self, task_attr)
             if task is not None:
@@ -1044,13 +1078,57 @@ class Daemon:
                 engine = self._flow_engine
                 if engine is None or not self._recording:
                     break
-                engine.on_tick(time.monotonic())
                 worker = self._flow_worker
                 if worker is not None:
+                    engine.on_tick(time.monotonic())
+                self._start_pause_reviews(engine)
+                if worker is not None:
                     worker.set_target(engine.desired_text())
-                self._push_live_caption(engine)
+                    self._push_live_caption(engine)
         except asyncio.CancelledError:
             pass
+
+    def _start_pause_reviews(self, engine: FlowEngine, *, final: bool = False) -> None:
+        reviewer = self._pause_reviewer
+        if reviewer is None:
+            return
+        for query in engine.review_requests(time.monotonic(), final=final):
+            task = asyncio.create_task(self._review_pause(engine, reviewer, query))
+            self._pause_tasks.add(task)
+            task.add_done_callback(self._pause_tasks.discard)
+
+    async def _review_pause(self, engine: FlowEngine, reviewer, query) -> None:
+        """Ask the reviewer about one pause; the engine takes its answer (or
+        falls back to the rules), and the screen follows."""
+        try:
+            answer = await asyncio.wait_for(
+                asyncio.to_thread(reviewer.review_pause, query.before, query.after),
+                timeout=PAUSE_REVIEW_CALL_S,
+            )
+        except Exception as exc:
+            logger.info("Pause review failed; the rules decide: %s", exc)
+            answer = None
+        if not isinstance(answer, str):
+            answer = None
+        if engine is not self._flow_engine:
+            return  # that dictation is over
+        engine.resolve_pause(query.index, answer, now=time.monotonic())
+        worker = self._flow_worker
+        if worker is not None:
+            worker.set_target(engine.desired_text())
+
+    async def _settle_pause_reviews(self, engine: FlowEngine, merged: str) -> None:
+        """At stop: the final words are in, so ask about every pause still
+        open, and give the answers a moment before the rules take over."""
+        if self._pause_reviewer is None:
+            return
+        engine.on_transcript(merged, is_final=True, now=time.monotonic())
+        if not engine.pauses_pending():
+            return
+        self._start_pause_reviews(engine, final=True)
+        pending = [task for task in self._pause_tasks if not task.done()]
+        if pending:
+            await asyncio.wait(pending, timeout=PAUSE_REVIEW_FINAL_S)
 
     def _push_live_caption(self, engine: FlowEngine) -> None:
         caption = engine.caption()
@@ -1151,6 +1229,8 @@ class Daemon:
 
         self._final_text = ""
         self._interim_text = ""
+        self._chunked_stt = False
+        self._utterance_start = 0
         self._stt_error = None
         self._chunks_seen = 0
         self._heard_signal = False
@@ -1158,9 +1238,12 @@ class Daemon:
 
         self._receive_task = asyncio.create_task(self._receive_events())
         self._send_task = asyncio.create_task(self._stream_audio())
+        if self._flow_engine is not None:
+            # Live typing's time-based commits, and pause reviews (which a
+            # type-at-stop session wants too).
+            self._flow_ticker = asyncio.create_task(self._flow_ticker_loop())
         if self._flow_worker is not None:
             self._flow_worker.start()
-            self._flow_ticker = asyncio.create_task(self._flow_ticker_loop())
             self._focus_watchdog = asyncio.create_task(self._focus_watchdog_loop())
         logger.info("Recording started")
 
@@ -1257,9 +1340,7 @@ class Daemon:
             await self._teardown_flow_session()
             raise RuntimeError(self._stt_error)
 
-        merged = _dedupe_repeated_transcript_text(
-            _merge_transcript_text(self._final_text, self._interim_text)
-        )
+        merged = self._session_transcript()
 
         if self._converse_capture:
             # A spoken question for the mind, not text for the keyboard. Hand
@@ -1290,6 +1371,7 @@ class Daemon:
             self._remember_typed(final)
             return final
 
+        await self._settle_pause_reviews(engine, merged)
         result = engine.finalize(merged, now=time.monotonic())
         final = result.text
         self._last_scratches = result.scratches
@@ -1995,11 +2077,46 @@ class Daemon:
                 self._handle_hotkey_action(action)
             )
 
+    def _session_transcript(self) -> str:
+        """Everything recognized so far: the finals plus the interim tail."""
+        if self._chunked_stt:
+            return _join_transcript_text(self._final_text, self._interim_text)
+        return _dedupe_repeated_transcript_text(
+            _merge_transcript_text(self._final_text, self._interim_text)
+        )
+
+    def _on_chunked_event(self, event: dict) -> None:
+        """xAI's chunk/utterance protocol (grok-voice-transcribe-2.0): an
+        interim is the current chunk so far; a chunk final locks that chunk
+        (appended — chunks never overlap, so no merging heuristics); an
+        utterance final repeats the whole utterance, which normally adds
+        nothing new."""
+        text = str(event.get("text") or "")
+        if not event.get("is_final"):
+            self._interim_text = text
+            self._feed_flow(is_final=False)
+            return
+        if event.get("speech_final"):
+            before = self._final_text[:self._utterance_start]
+            spoken = self._final_text[self._utterance_start:].strip()
+            self._final_text = _join_transcript_text(
+                before, _reconcile_utterance(spoken, text)
+            )
+            self._utterance_start = len(self._final_text)
+        else:
+            self._final_text = _join_transcript_text(self._final_text, text.strip())
+        self._interim_text = ""
+        self._feed_flow(is_final=True)
+
     async def _receive_events(self) -> None:
         try:
             async for event in self._stt_client.receive_events():
                 event_type = event.get("type", "")
-                if event_type == "transcript.partial":
+                if "speech_final" in event:
+                    self._chunked_stt = True
+                if event_type == "transcript.partial" and self._chunked_stt:
+                    self._on_chunked_event(event)
+                elif event_type == "transcript.partial":
                     self._interim_text = event.get("text", "")
                     logger.debug("Interim: %r", self._interim_text)
                     if event.get("is_final"):
@@ -2012,10 +2129,17 @@ class Daemon:
                     else:
                         self._feed_flow(is_final=False)
                 elif event_type == "transcript.done":
-                    self._final_text = _merge_transcript_text(
-                        self._final_text,
-                        event.get("text", ""),
-                    )
+                    if self._chunked_stt:
+                        # Empty from grok-voice-transcribe-2.0: the chunks
+                        # already carried everything.
+                        self._final_text = _reconcile_utterance(
+                            self._final_text, str(event.get("text") or "")
+                        )
+                    else:
+                        self._final_text = _merge_transcript_text(
+                            self._final_text,
+                            event.get("text", ""),
+                        )
                     self._interim_text = ""
                     logger.debug("Final transcript received")
                     self._feed_flow(is_final=True)
@@ -2034,7 +2158,10 @@ class Daemon:
         engine = self._flow_engine
         if engine is None:
             return
-        merged = _merge_transcript_text(self._final_text, self._interim_text)
+        if self._chunked_stt:
+            merged = _join_transcript_text(self._final_text, self._interim_text)
+        else:
+            merged = _merge_transcript_text(self._final_text, self._interim_text)
         if self._ambient_gate is not None:
             # Containment: room speech never reaches the engine at all.
             merged = self._ambient_gate.filter(merged, is_final=is_final)

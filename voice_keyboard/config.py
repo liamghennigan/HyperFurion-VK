@@ -114,6 +114,11 @@ DEFAULT_CONFIG: dict = {
         # Merge accepted `voice-keyboard learned` overrides into the
         # grammar vocabulary. Dormant until entries are accepted.
         "personal_dictionary": True,
+        # Punctuation where you paused: streaming recognizers end a sentence
+        # at every pause. auto = rules, plus an [llm] review of the unclear
+        # pauses when [llm] is usable; llm / rules / off (keep the
+        # recognizer's periods).
+        "pause_review": "auto",
         # Molten diffs: a "vk, ..." rewrite is HELD as pending instead
         # of landing — say "keep it" (or `voice-keyboard keep`) to apply,
         # "scratch that" (or `discard`) to drop. Off = rewrites land
@@ -707,6 +712,8 @@ def _validate_flow_config(config: dict) -> None:
         raise RuntimeError("flow.live_rest must be one of: auto, always, off")
     if str(flow_cfg.get("numbers", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.numbers must be one of: auto, always, off")
+    if str(flow_cfg.get("pause_review", "auto")).lower() not in {"auto", "llm", "rules", "off"}:
+        raise RuntimeError("flow.pause_review must be one of: auto, llm, rules, off")
     vocabulary = flow_cfg.get("vocabulary", {})
     if not isinstance(vocabulary, dict) or not all(
         isinstance(k, str) and isinstance(v, str) for k, v in vocabulary.items()

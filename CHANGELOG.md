@@ -41,6 +41,17 @@ Windows becomes a first-class platform, and the whole repo gets a polish pass.
 
 ### Added — everywhere
 
+- **Punctuation where you paused** (`[flow] pause_review`). xAI's
+  grok-voice-transcribe-2.0, the server default since 2026-09-18, punctuates
+  every pause-delimited chunk as a sentence of its own, so thinking out loud
+  came out as "I think. We should wait." The period at a pause now stays
+  revisable until the next words decide it: clear cases by rule ("… the.
+  Project", "… X. And Y", "… X. But Y"), the rest reviewed by `[llm]` when it
+  is usable (only a few words around the pause are sent), and repaired on
+  screen like any molten word. `rules` sends nothing; `off` keeps the
+  recognizer's periods.
+- `[stt] model` now reaches xAI and the HyperFurion relay (pin
+  `grok-voice-transcribe-1.0` while xAI still serves it).
 - `[tts] hotkey`: a daemon-owned read-aloud hotkey (off by default on Linux).
 - `voice-keyboard quit`, `voice-keyboard devices` (lists input devices for
   `[audio] device_name`), and `voice-keyboard --version`.
@@ -54,6 +65,10 @@ Windows becomes a first-class platform, and the whole repo gets a polish pass.
 
 ### Fixed
 
+- Streaming dictation follows xAI's chunk/utterance protocol: chunks are
+  appended as they come instead of being overlap-merged, which could drop a
+  phrase you repeated (or merge a word that ended one chunk and began the
+  next) until the utterance ended — after it was already typed.
 - **Windows could not start**: the installer wrote the config to `%APPDATA%`
   while the daemon read `~\.config`. Config now lives in `%APPDATA%`, state and
   logs in `%LOCALAPPDATA%` (an old `~\.config` config is still honored).

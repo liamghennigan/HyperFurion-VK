@@ -19,6 +19,8 @@ def _flow_config() -> dict:
     cfg["flow"]["stability_ms"] = 10
     cfg["flow"]["stability_updates"] = 1
     cfg["flow"]["adaptive"] = False
+    # The test key would make [llm] look usable: no real pause reviews.
+    cfg["flow"]["pause_review"] = "rules"
     return cfg
 
 
@@ -214,3 +216,184 @@ class TestLiveFlow:
                 assert injector.screen == final
 
         asyncio.run(run())
+
+
+def _partial(text: str, is_final: bool = False, speech_final: bool = False) -> dict:
+    return {
+        "type": "transcript.partial",
+        "text": text,
+        "is_final": is_final,
+        "speech_final": speech_final,
+    }
+
+
+# A real grok-voice-transcribe-2.0 session (captured 2026-10-05): one
+# sentence spoken with two short thinking pauses. Each pause ends a chunk,
+# and every chunk is punctuated as a sentence of its own.
+PAUSED_SENTENCE_LIVE = [
+    _partial("So I was"),
+    _partial("So I was thinking about the project."),
+    _partial("So I was thinking about the project.", is_final=True),
+    _partial("And"),
+    _partial("And how we could make the"),
+    _partial("And how we could make the setup simpler."),
+    _partial("And how we could make the setup simpler.", is_final=True),
+    _partial("For"),
+    _partial("For people who have never used."),
+    _partial("For people who have never used it before."),
+]
+PAUSED_SENTENCE_AFTER_STOP = [
+    _partial("For people who have never used it before.", is_final=True),
+    _partial(
+        "So I was thinking about the project. And how we could make the setup "
+        "simpler. For people who have never used it before.",
+        is_final=True,
+        speech_final=True,
+    ),
+    {"type": "transcript.done", "text": "", "duration": 8.03},
+]
+
+
+class FakeChunkedSTT(FakeStreamingSTT):
+    """The xAI 2.0 protocol: some events only arrive after audio.done."""
+
+    def __init__(self, live: list[dict], after_stop: list[dict]):
+        super().__init__(live)
+        self._after_stop = after_stop
+
+    async def receive_events(self):
+        for event in self._events:
+            yield event
+            await asyncio.sleep(0.02)
+        await self._done.wait()
+        for event in self._after_stop:
+            yield event
+
+
+class PauseReviewer:
+    """Answers every pause with "the sentence goes on"."""
+
+    def __init__(self, fail: bool = False):
+        self.calls: list[tuple[str, str]] = []
+        self._fail = fail
+
+    def review_pause(self, before: str, after: str) -> str:
+        self.calls.append((before, after))
+        if self._fail:
+            raise RuntimeError("review request failed: 503")
+        return f"{before.split()[-1].rstrip('.')} {after.split()[0].lower()}"
+
+
+class TestPausePunctuation:
+    def _run(
+        self, live, after_stop, *, mode: str, reviewer=None, typing_live: bool = True
+    ) -> tuple[str, str, list]:
+        async def run():
+            injector = RecordingInjector()
+            daemon = _make_daemon(FakeChunkedSTT(live, after_stop), injector)
+            daemon._config["flow"]["pause_review"] = mode
+            daemon._config["flow"]["live"] = typing_live
+            daemon._config["flow"]["stability_ms"] = 1500
+            daemon._config["flow"]["stability_updates"] = 2
+            screens: list[str] = []
+            with daemon._audio_patch, daemon._stt_patch, daemon._probe_patch, \
+                 mock.patch("voice_keyboard.daemon.llm_ready", return_value=reviewer is not None), \
+                 mock.patch("voice_keyboard.daemon.create_llm_client", return_value=reviewer):
+                await daemon._start_recording()
+                for _ in range(30):
+                    await asyncio.sleep(0.03)
+                    if not screens or screens[-1] != injector.screen:
+                        screens.append(injector.screen)
+                final = await daemon._stop_recording()
+            return final, injector.screen, screens
+
+        return asyncio.run(run())
+
+    def test_off_types_the_recognizers_sentence_per_pause(self) -> None:
+        final, screen, _ = self._run(
+            PAUSED_SENTENCE_LIVE, PAUSED_SENTENCE_AFTER_STOP, mode="off"
+        )
+        assert final == screen == (
+            "So I was thinking about the project. And how we could make the "
+            "setup simpler. For people who have never used it before."
+        )
+
+    def test_rules_join_a_pause_before_and(self) -> None:
+        final, screen, screens = self._run(
+            PAUSED_SENTENCE_LIVE, PAUSED_SENTENCE_AFTER_STOP, mode="rules"
+        )
+        assert final == screen == (
+            "So I was thinking about the project and how we could make the "
+            "setup simpler. For people who have never used it before."
+        )
+        # The period was typed at the pause, then repaired while speaking.
+        assert "So I was thinking about the project." in screens
+        assert any(s.startswith("So I was thinking about the project and") for s in screens)
+
+    def test_the_reviewer_settles_the_unclear_pause(self) -> None:
+        reviewer = PauseReviewer()
+        final, screen, _ = self._run(
+            PAUSED_SENTENCE_LIVE, PAUSED_SENTENCE_AFTER_STOP, mode="auto", reviewer=reviewer
+        )
+        assert final == screen == (
+            "So I was thinking about the project and how we could make the "
+            "setup simpler for people who have never used it before."
+        )
+        # Only the pause the rules couldn't call went to the reviewer, with
+        # the first decision already applied to its context.
+        [(before, after)] = reviewer.calls
+        assert before == (
+            "So I was thinking about the project and how we could make the setup simpler."
+        )
+        assert after.startswith("For people who")
+
+    def test_a_failing_reviewer_leaves_the_rules_call(self) -> None:
+        reviewer = PauseReviewer(fail=True)
+        final, _, _ = self._run(
+            PAUSED_SENTENCE_LIVE, PAUSED_SENTENCE_AFTER_STOP, mode="llm", reviewer=reviewer
+        )
+        assert reviewer.calls
+        assert final == (
+            "So I was thinking about the project and how we could make the "
+            "setup simpler. For people who have never used it before."
+        )
+
+    def test_a_repeated_chunk_is_never_swallowed(self) -> None:
+        # Also captured: the same phrase twice, a short pause between. The
+        # old overlap merging dropped the second copy until the utterance
+        # final restored it — after it had been typed.
+        live = [
+            _partial("So I was thinking about the project.", is_final=True),
+            _partial("So"),
+            _partial("So I was thinking about"),
+            _partial("So I was thinking about the project."),
+            _partial("So I was thinking about the project.", is_final=True),
+        ]
+        after_stop = [
+            _partial(
+                "So I was thinking about the project. So I was thinking about the project.",
+                is_final=True,
+                speech_final=True,
+            ),
+            {"type": "transcript.done", "text": "", "duration": 5.7},
+        ]
+        final, screen, screens = self._run(live, after_stop, mode="rules")
+        twice = "So I was thinking about the project. So I was thinking about the project."
+        assert final == screen == twice
+        assert all(twice.startswith(s) for s in screens), screens
+
+    def test_type_at_stop_sessions_are_reviewed_too(self) -> None:
+        reviewer = PauseReviewer()
+        final, screen, screens = self._run(
+            PAUSED_SENTENCE_LIVE,
+            PAUSED_SENTENCE_AFTER_STOP,
+            mode="auto",
+            reviewer=reviewer,
+            typing_live=False,
+        )
+        assert screens == [""]  # nothing typed while speaking
+        assert final == screen == (
+            "So I was thinking about the project and how we could make the "
+            "setup simpler for people who have never used it before."
+        )
+
