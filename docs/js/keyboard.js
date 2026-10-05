@@ -1,6 +1,6 @@
 // ═══ KEYBOARD — the 3D board: 61 keycaps that press themselves ═══════════
-// DOM keycaps under CSS 3D transforms (crisp legends, a press is a
-// transform + an opacity, nothing repaints) over the WebGL light layer.
+// DOM keycaps under one CSS 3D transform (crisp legends; a press is a
+// transform, nothing repaints). The board is still; only presses move.
 // The Typist hands this module a queue of presses; one Ticker subscriber
 // drains it at a human cadence. The Enter key is guarded in code: the page
 // can light it, never press it — the daemon's suppress_enter, on screen.
@@ -52,13 +52,6 @@ export const Keyboard = (() => {
     }
   }
 
-  function center(el) {
-    // the key's projected centre in stage-relative 0..1 coordinates
-    const r = el.getBoundingClientRect();
-    const s = board.closest(".stage").getBoundingClientRect();
-    return { x: (r.left + r.width / 2 - s.left) / s.width, y: (r.top + r.height / 2 - s.top) / s.height };
-  }
-
   // the one guarded press: Enter is lit, never pushed
   function down(code, heat, dur) {
     const el = keys.get(code);
@@ -69,12 +62,9 @@ export const Keyboard = (() => {
       return;
     }
     el.classList.add("down");
-    el.classList.remove("cool");
     el.classList.toggle("repair", heat === "repair");
-    el.classList.toggle("user", heat === "user");
-    el.classList.remove("lit"); void el.offsetWidth; el.classList.add("lit");
     downUntil.set(code, performance.now() + Math.max(DWELL, dur || 0));
-    bus.emit("key:down", { code, heat, ...center(el) });
+    bus.emit("key:down", { code, heat });
   }
   function up(code) {
     const el = keys.get(code);
@@ -128,29 +118,17 @@ export const Keyboard = (() => {
   function release(code) { held.delete(code); up(code); }
   function releaseAll() { for (const c of [...held]) release(c); for (const c of [...downUntil.keys()]) up(c); }
 
-  // freeze: the keys that typed the now-frozen span cool from saffron to sand
-  function cool(codes) {
-    for (const c of codes) {
-      const el = keys.get(c);
-      if (!el) continue;
-      el.classList.remove("lit", "repair");
-      el.classList.remove("cool"); void el.offsetWidth; el.classList.add("cool");
-    }
-  }
   function burst(code, n) {
     // a fast run of one key (a long retract) — shown as repeat, not n presses
     const presses = [];
     for (let i = 0; i < Math.min(n, 24); i++) presses.push({ code, kind: "bs", heat: "repair" });
     replaceQueue(presses);
   }
-  function light(codes, on) {
-    for (const c of codes) { const el = keys.get(c); if (el) el.classList.toggle("hint", on); }
-  }
   const rectOf = (code) => { const el = keys.get(code); return el ? el.getBoundingClientRect() : null; };
   const boardRect = () => board.getBoundingClientRect();
 
   mount();
   Ticker.add({ fn: tick });
-  return { mount, replaceQueue, clearQueue, press, release, releaseAll, cool, burst, light, rectOf, boardRect,
+  return { mount, replaceQueue, clearQueue, press, release, releaseAll, burst, rectOf, boardRect,
            has: (c) => keys.has(c), queued: () => queue.length };
 })();

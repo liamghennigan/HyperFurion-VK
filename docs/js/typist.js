@@ -7,7 +7,7 @@ import { bus } from "./bus.js";
 import { state } from "./state.js";
 import { Keyboard } from "./keyboard.js";
 import { Window } from "./window.js";
-import { toPresses, codeFor } from "./layout.js";
+import { toPresses } from "./layout.js";
 
 export const Typist = (() => {
   let shown = "", frozenLen = 0, target = { frozen: "", molten: "" }, heat = "molten";
@@ -73,10 +73,7 @@ export const Typist = (() => {
   }
   function checkFreeze() {
     const nf = prefix(shown, target.frozen);
-    if (nf > frozenLen) {
-      Keyboard.cool([...shown.slice(frozenLen, nf)].map(codeFor).filter(Boolean));
-      bus.emit("flow:freeze", { text: shown.slice(frozenLen, nf) });
-    }
+    if (nf > frozenLen) bus.emit("flow:freeze", { text: shown.slice(frozenLen, nf) });
     frozenLen = nf;
   }
   function paint() { Window.renderLine(shown, frozenLen, { heat }); }

@@ -11,6 +11,7 @@ import { Ticker } from "./ticker.js";
 import { Signal } from "./signal.js";
 import { settings } from "./settings.js";
 import { Demo } from "./demo-relay.js";
+import { LocalSTT } from "./stt-local.js";
 import { Window } from "./window.js";
 import { Typist } from "./typist.js";
 import { moltenLine, compileScript, pageRewrite } from "./flow.js";
@@ -24,6 +25,7 @@ export const Dictation = (() => {
   const D = { recording: false };
   let engine = "none", rec = null, simIdx = 0;
   let relay = null, relayT = 0, funneled = false;
+  let local = null;           // the in-tab model session
   let line = null;            // the molten line for the current utterance
   let rawFinal = "", rawInterim = "";
   let guard = false;          // focus changed mid-dictation: typing is frozen
@@ -37,6 +39,8 @@ export const Dictation = (() => {
 
   function engineLabel() {
     if (scripted) return ["scripted — nothing is listening", "sim"];
+    if (engine === "local") return [LocalSTT.label + " on " + (LocalSTT.device === "webgpu" ? "your GPU (WebGPU)" : "your CPU (WASM)") + " — audio never leaves this tab", "live"];
+    if (engine === "loading") return ["loading " + LocalSTT.label + "…", "live"];
     if (engine === "relay") return ["xAI via relay — opt-in", "live"];
     if (engine === "live") return ["your browser's speech engine", "live"];
     if (engine === "trying") return ["listening…", "live"];
@@ -56,8 +60,10 @@ export const Dictation = (() => {
     document.body.classList.toggle("recording", on);
     if (micCap) micCap.textContent = on
       ? "listening — speak, then tap again to stop"
-      : (SR ? "this page listens through your browser's speech engine; nothing is uploaded"
-            : "your browser has no speech engine — the demo is scripted and says so");
+      : LocalSTT.supported()
+        ? "tap the mic: " + LocalSTT.label + ", an open-source model (~" + LocalSTT.sizeMB + " MB, fetched once), runs on your " + (LocalSTT.gpu() ? "GPU" : "CPU") + " in this tab. audio never leaves."
+        : (SR ? "this page listens through your browser's speech engine; nothing is uploaded"
+              : "your browser has no speech engine — the demo is scripted and says so");
   }
 
   // ── one render pipe: raw transcript -> engine -> the focused window ─────
@@ -93,7 +99,6 @@ export const Dictation = (() => {
     scripted = false;
     newLine();
     Typist.reset();
-    Window.probe();
     setRecording(true);
     Window.setLatency(null);
     const sigP = Signal.start();
@@ -108,9 +113,59 @@ export const Dictation = (() => {
       startRelay(sigP);
       return;
     }
+    if (LocalSTT.supported()) {
+      engine = LocalSTT.state === "ready" ? "local" : "loading";
+      caption();
+      bus.emit("rec:start", { engine: "local" });
+      startLocal(sigP);
+      return;
+    }
     bus.emit("rec:start", { engine });
     startBrowser();
     caption();
+  }
+
+  // — the in-tab path: mic PCM → an open-source model on your GPU —
+  async function startLocal(sigP) {
+    try {
+      if (LocalSTT.state !== "ready") {
+        log("fetching " + LocalSTT.label + " — once; the browser keeps it", "dim");
+        await LocalSTT.load((loaded, total) => {
+          log("loading " + LocalSTT.label + " onto your " + (LocalSTT.gpu() ? "GPU" : "CPU") + " — " +
+              Math.round(loaded / 1e6) + " of " + Math.round(total / 1e6) + " MB, once", "dim");
+        });
+      }
+      if (!D.recording) { Signal.stop(); return; }
+      await sigP;
+      if (!D.recording) { Signal.stop(); return; }
+      const au = Signal.audio();
+      if (!au.stream) throw new Error("microphone not granted");
+      local = await LocalSTT.start(au.stream, {
+        onInterim(text) {
+          rawInterim = text;
+          state.mark = performance.now();
+          pump(); armAutoStop();
+          bus.emit("rec:interim", { text });
+        },
+        onFinal(text) {
+          rawFinal += " " + text; rawInterim = "";
+          state.mark = performance.now();
+          pump(); armAutoStop();
+          bus.emit("rec:final", { text });
+        },
+      });
+      engine = "local";
+      log("", "");
+      caption();
+    } catch (err) {
+      localFail(err && err.message ? err.message : "unavailable");
+    }
+  }
+  function localFail(msg) {
+    local = null;
+    state.lastError = "local model: " + msg;
+    log("local model: " + msg + " — falling back to your browser's engine", "err");
+    if (D.recording) { engine = "none"; startBrowser(); caption(); }
   }
   function startBrowser() {
     if (SR) {
@@ -321,6 +376,12 @@ export const Dictation = (() => {
       else if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
       return;
     }
+    if (engine === "local" || engine === "loading") {
+      const l = local; local = null;
+      const finish = () => { if (!settleLine()) playScript(SIM_LINES[simIdx++ % SIM_LINES.length]); caption(); };
+      if (l) l.stop().then(finish, finish); else finish();
+      return;
+    }
     // give a final result a beat to arrive, then settle the line
     setTimeout(() => {
       if (!settleLine()) {
@@ -342,7 +403,6 @@ export const Dictation = (() => {
     scripted = true;
     caption();
     Window.setLatencyNote("scripted — no latency to measure");
-    Window.probe();   // playback shows the focus probe too
     if (opts.raw) line = moltenLine({ register: { name: "verbatim", smartCaps: false, grammar: false }, cfg: settings });
     if (reduced || !liveFlow()) {
       rawFinal = compiled.final;
@@ -392,6 +452,7 @@ export const Dictation = (() => {
   };
 
   bus.on("simulate", ({ script }) => D.simulate(script));
+  bus.on("stt:slow", ({ ms }) => log("this device takes " + (ms / 1000).toFixed(1) + " s per pass — words will land late here; a GPU, or the hosted engine, is quicker", "dim"));
   bus.on("focus:changed", () => D.guard());
   mic.addEventListener("click", () => D.toggle());
   stopBtn.addEventListener("click", () => stop());

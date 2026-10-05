@@ -3,10 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- enforced, not promised: this page may talk to its own origin, fetch the
+       speech model and its runtime when you ask, and reach the opt-in relay.
+       Nothing else. No analytics, no cookies, no storage of anything you say. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob: https://cdn.jsdelivr.net 'wasm-unsafe-eval'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.hyperfurion.com wss://api.hyperfurion.com; worker-src 'self' blob:; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; base-uri 'self'; form-action 'self'" />
+  <meta name="referrer" content="no-referrer" />
   <title>HyperFurion VK — Your voice is the keyboard</title>
-  <meta name="description" content="HyperFurion VK is an open-source voice keyboard for Linux and Windows. Speak, and real keystrokes land in whatever app has focus — editors, browsers, the terminal. Words appear while you talk and repair themselves in place. Runs fully offline. Never presses Enter to send. This page is a working instance: tap the mic and the keyboard on screen types what you say." />
+  <meta name="description" content="HyperFurion VK is an open-source voice keyboard for Linux and Windows. Speak, and real keystrokes land in whatever app has focus — editors, browsers, the terminal. Words appear while you talk and repair themselves in place. Runs fully offline. Never presses Enter to send. This page is a working instance: an open-source speech model runs on your GPU, in your browser." />
   <meta property="og:title" content="HyperFurion VK — Your voice is the keyboard" />
-  <meta property="og:description" content="A voice keyboard, not a dictation app: your speech becomes real keystrokes in the app you already have focused — molten while you speak, frozen once sure. Works offline. Enter stays yours. Try it: this page listens." />
+  <meta property="og:description" content="A voice keyboard, not a dictation app: your speech becomes real keystrokes in the app you already have focused — molten while you speak, frozen once sure. Works offline. Enter stays yours. Try it: this page listens, on your own GPU." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/" />
   <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/" />
@@ -39,14 +44,14 @@
   </style>
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body data-scene="0">
+<body>
   <a class="skip" href="#install">Skip to install</a>
 
   <nav class="nav" aria-label="Primary">
     <div class="wrap nav-inner">
       <a class="brand" href="#top"><span class="brand-key" aria-hidden="true">VK</span><span>HyperFurion&nbsp;VK</span></a>
       <div class="nav-links">
-        <a href="#story">how it works</a>
+        <a href="#molten">how it works</a>
         <a href="#install">install</a>
         <a href="#compare">compare</a>
         <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">GitHub</a>
@@ -56,122 +61,127 @@
   </nav>
 
   <main id="top">
-    <!-- ═══ the story: a pinned stage, six scenes scrolling past ═══ -->
-    <section class="story" id="story" aria-label="How it works">
-      <div class="stage" id="stage">
-        <canvas id="light" aria-hidden="true"></canvas>
-        <div class="stage-3d">
-          <div class="board" id="board" aria-hidden="true"><div class="plate"></div></div>
+    <!-- ═══ hero: the copy, and a working instance beside it ═══ -->
+    <section class="hero" aria-label="Introduction and live demo">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="dot live"></span>Linux · Windows · macOS beta · MIT</span>
+          <h1>Your voice is <em>the keyboard.</em></h1>
+          <p class="lead">Speak, and real keystrokes land in whatever app has focus — editors, browsers, the terminal. Words appear while you talk. Works offline. Never presses Enter to send.</p>
+          <div class="actions">
+            <a class="btn primary" id="hero-dl" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
+            <a class="btn" id="hero-try" href="#stage">Try it — tap the mic</a>
+          </div>
+          <p class="hint"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> works on this page too. Hold to talk, release to stop.</p>
         </div>
-        <p class="sr-only">A 3D keyboard that presses its own keys as the words you speak are typed into a window above it. Enter is lit but never pressed.</p>
 
-        <aside class="fwin glass" id="fwin" data-register="prose" aria-label="The focused app">
-          <div class="fwin-bar">
-            <span class="fwin-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="fwin-title" id="fwin-title">notes.md</span>
-            <span class="fwin-app" id="fwin-app">editor</span>
-            <span class="probe" id="fwin-probe" hidden></span>
+        <div class="stage" id="stage">
+          <aside class="fwin" id="fwin" data-register="prose" aria-label="The focused app">
+            <div class="fwin-bar">
+              <span class="fwin-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="fwin-title" id="fwin-title">notes.md</span>
+              <span class="fwin-app" id="fwin-app">editor</span>
+              <div class="fwin-tabs" role="tablist" id="regtabs" aria-label="Register of the focused app">
+                <button type="button" role="tab" data-register="prose" aria-selected="true">prose</button>
+                <button type="button" role="tab" data-register="terminal" aria-selected="false" tabindex="-1">terminal</button>
+                <button type="button" role="tab" data-register="python" aria-selected="false" tabindex="-1">python</button>
+                <button type="button" role="tab" data-register="shell" aria-selected="false" tabindex="-1">shell</button>
+              </div>
+            </div>
+            <div class="fwin-body">
+              <div class="fwin-lines" id="fwin-lines" aria-live="polite"></div>
+              <div class="fwin-text" aria-hidden="true"><span class="prompt"></span><span class="frozen" id="fwin-frozen"></span><span class="molten" id="fwin-molten"></span><span class="caret"></span></div>
+              <p class="fwin-instr" id="fwin-instr" hidden></p>
+            </div>
+            <div class="fwin-status">
+              <span class="engine" id="fwin-engine"></span>
+              <span class="fwin-log" id="fwin-log"></span>
+              <span class="fwin-latency" id="fwin-latency"></span>
+            </div>
+            <div class="chips" id="chips"></div>
+          </aside>
+
+          <div class="stage-3d">
+            <div class="board" id="board" aria-hidden="true"><div class="plate"></div></div>
           </div>
-          <div class="fwin-tabs" role="tablist" id="regtabs" aria-label="Register of the focused app">
-            <button type="button" role="tab" data-register="prose" aria-selected="true">prose</button>
-            <button type="button" role="tab" data-register="terminal" aria-selected="false" tabindex="-1">terminal</button>
-            <button type="button" role="tab" data-register="python" aria-selected="false" tabindex="-1">python</button>
-            <button type="button" role="tab" data-register="shell" aria-selected="false" tabindex="-1">shell</button>
+          <p class="sr-only">A keyboard that presses its own keys as the words you speak are typed into the window above it. Enter is marked yours and is never pressed.</p>
+
+          <div class="stage-bar">
+            <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <span class="mic-cap" id="mic-cap">tap the mic: an open-source model runs on your GPU in this tab. audio never leaves.</span>
+            <button class="sbtn stop" id="stop" type="button" hidden>stop</button>
+            <span class="spacer"></span>
+            <button class="sbtn" id="autopilot" type="button" aria-pressed="false">play the scripted demo</button>
+            <button class="sbtn" id="sound" type="button" aria-pressed="false">key clicks off</button>
+            <button class="sbtn" id="relay" type="button">use the hosted engine</button>
           </div>
-          <div class="fwin-body">
-            <div class="fwin-lines" id="fwin-lines" aria-live="polite"></div>
-            <div class="fwin-text" aria-hidden="true"><span class="prompt"></span><span class="frozen" id="fwin-frozen"></span><span class="molten" id="fwin-molten"></span><span class="caret"></span></div>
-            <p class="fwin-instr" id="fwin-instr" hidden></p>
-          </div>
-          <div class="fwin-split" id="fwin-split" aria-hidden="true">
-            <div class="pane" data-register="prose"><span class="pane-title">notes.md · prose</span><span class="pane-text"></span></div>
-            <div class="pane" data-register="terminal"><span class="pane-title">~ · terminal</span><span class="pane-text"></span></div>
-            <div class="pane" data-register="python"><span class="pane-title">main.py · python</span><span class="pane-text"></span></div>
-          </div>
-          <div class="fwin-provider" aria-hidden="true"><pre><span class="c"># ~/.config/voice-keyboard/config.toml</span>
+          <p class="sigcap stage-note">recognition on this page: <a href="https://github.com/usefulsensors/moonshine" rel="noopener">Moonshine tiny</a>, open source (MIT) from Useful Sensors, Mountain View, California — fetched once when you tap the mic (about 55 MB on WebGPU, 28 MB on the CPU path), cached by your browser, run on your machine. nothing you say is stored or sent anywhere.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ how it works ═══ -->
+    <section class="section" id="molten" aria-labelledby="molten-title">
+      <div class="wrap row-grid">
+        <div>
+          <span class="eyebrow">01 · molten dictation</span>
+          <h2 id="molten-title">Words land while you speak.</h2>
+          <p>Each word stays molten for 1.5 seconds — long enough to repair itself in place — then freezes and is never touched again. Say “scratch that” to take a sentence back, “period” for punctuation, “new line” for a break.</p>
+        </div>
+        <figure class="fig">
+          <p class="sample"><span class="frozen">Fixed the race condition in the </span><span class="molten repair">audio thread</span><span class="caret"></span></p>
+          <figcaption class="legend-dots"><i class="m"></i>molten <i class="r"></i>repaired <i class="f"></i>frozen</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="registers" aria-labelledby="registers-title">
+      <div class="wrap row-grid">
+        <div>
+          <span class="eyebrow">02 · registers</span>
+          <h2 id="registers-title">The same words, typed the way the app wants.</h2>
+          <p>It probes the focused app and picks a register: prose gets capitals and punctuation, a terminal gets digits and no caps, python and shell compile speech into code. The panes show your last dictation through each.</p>
+        </div>
+        <figure class="fig" id="register-panes">
+          <div class="pane" data-register="prose"><span class="pane-title">notes.md · prose</span><span class="pane-text"></span></div>
+          <div class="pane" data-register="terminal"><span class="pane-title">~ · terminal</span><span class="pane-text"></span></div>
+          <div class="pane" data-register="python"><span class="pane-title">main.py · python</span><span class="pane-text"></span></div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="consent" aria-labelledby="consent-title">
+      <div class="wrap row-grid">
+        <div>
+          <span class="eyebrow consent">03 · consent</span>
+          <h2 id="consent-title">Only a hand may send.</h2>
+          <p>In a terminal it drafts one line and stops. It never presses Enter to send — enforced in the injector, on every path, not promised in copy.</p>
+          <p class="aphorism">The machine may draft. Only a hand may send.</p>
+        </div>
+        <figure class="fig">
+          <p class="sample term"><span class="frozen">rg -n "TODO|FIXME" .</span><span class="caret"></span></p>
+          <figcaption class="sigcap"><span class="held">⏎ enter — yours</span> drafted for review; the injector cannot send it</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="privacy" aria-labelledby="privacy-title">
+      <div class="wrap row-grid">
+        <div>
+          <span class="eyebrow">04 · private by default</span>
+          <h2 id="privacy-title">Your machine. Your keys. Nothing phones home.</h2>
+          <p>Point it at a local OpenAI-compatible server and it runs fully offline. Or bring a key for xAI, OpenAI, Groq, Deepgram or AssemblyAI. Zero analytics, ever. Audio is held in memory while transcribed and never written to disk.</p>
+          <p class="muted">This page keeps the same rule. No analytics, no cookies, no storage. A Content-Security-Policy in the page itself forbids any request except to this site, the model and its runtime when you tap the mic, and the hosted engine if you opt in. The footer counts every request.</p>
+        </div>
+        <figure class="fig">
+          <pre class="conf"><span class="c"># ~/.config/voice-keyboard/config.toml</span>
 [providers.openai]
 base_url = <span class="s">"http://localhost:8000/v1"</span>
 <span class="c"># whisper · parakeet · voxtral · kokoro
-# no key · no network · nothing leaves</span></pre></div>
-          <div class="fwin-status">
-            <span class="engine" id="fwin-engine"></span>
-            <span class="legend-dots" aria-hidden="true"><i class="m"></i>molten <i class="r"></i>repaired <i class="f"></i>frozen</span>
-            <span class="fwin-log" id="fwin-log"></span>
-            <span class="fwin-latency" id="fwin-latency"></span>
-          </div>
-          <div class="chips" id="chips"></div>
-        </aside>
-
-        <div class="stage-bar">
-          <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
-          <span class="mic-cap" id="mic-cap">this page listens through your browser's speech engine; nothing is uploaded</span>
-          <button class="sbtn stop" id="stop" type="button" hidden>stop</button>
-          <span class="spacer"></span>
-          <button class="sbtn" id="autopilot" type="button" aria-pressed="false">play the scripted demo</button>
-          <button class="sbtn" id="sound" type="button" aria-pressed="false">key clicks off</button>
-          <button class="sbtn" id="relay" type="button">use the real engine</button>
-        </div>
-        <div class="ghost" id="ghost" hidden aria-live="polite">
-          <span class="ghost-cap" id="ghost-cap"></span>
-          <span class="ghost-tag">scripted demo — nothing is listening · tap the mic to drive it · Esc stops</span>
-        </div>
-        <nav class="dots" id="dots" aria-label="Scenes"></nav>
-      </div>
-
-      <div class="scenes">
-        <article class="scene" data-scene="0">
-          <div class="scene-card hero-card">
-            <span class="eyebrow"><span class="dot live"></span>Linux · Windows · macOS beta · MIT</span>
-            <h1>Your voice is <em>the keyboard.</em></h1>
-            <p class="lead">Speak, and real keystrokes land in whatever app has focus — editors, browsers, the terminal. Words appear while you talk. Works offline. Never presses Enter to send.</p>
-            <div class="actions">
-              <a class="btn primary" id="hero-dl" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
-              <a class="btn" id="hero-try" href="#stage">Try it — tap the mic</a>
-            </div>
-            <p class="hint"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> works on this page too. Hold to talk, release to stop.</p>
-          </div>
-        </article>
-        <article class="scene" data-scene="1">
-          <div class="scene-card glass">
-            <span class="eyebrow">01 · molten dictation</span>
-            <h2>Words land while you speak.</h2>
-            <p>Each word stays molten for 1.5 seconds — long enough to repair itself in place — then freezes and is never touched again. Say “scratch that” to take a sentence back.</p>
-          </div>
-        </article>
-        <article class="scene" data-scene="2">
-          <div class="scene-card glass">
-            <span class="eyebrow">02 · registers</span>
-            <h2>The same words, typed the way the app wants.</h2>
-            <p>It probes the focused app and picks a register: prose gets capitals and punctuation, a terminal gets digits and no caps, python and shell compile speech into code.</p>
-          </div>
-        </article>
-        <article class="scene" data-scene="3">
-          <div class="scene-card glass consent-card">
-            <span class="eyebrow">03 · consent</span>
-            <h2>Only a hand may send.</h2>
-            <p>In a terminal it drafts one line and stops. It never presses Enter to send — enforced in the injector, on every path.</p>
-            <p class="aphorism">The machine may draft. Only a hand may send.</p>
-          </div>
-        </article>
-        <article class="scene" data-scene="4">
-          <div class="scene-card glass">
-            <span class="eyebrow">04 · private by default</span>
-            <h2>Your machine. Your keys. Nothing phones home.</h2>
-            <p>Point it at a local OpenAI-compatible server and it runs fully offline. Or bring a key for xAI, OpenAI, Groq, Deepgram or AssemblyAI. Zero analytics, ever.</p>
-          </div>
-        </article>
-        <article class="scene" data-scene="5">
-          <div class="scene-card glass">
-            <span class="eyebrow">05 · two minutes to first words</span>
-            <h2>Download, run it as yourself, press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd>, speak.</h2>
-            <div class="actions">
-              <a class="btn primary" href="#install">Install HyperFurion VK</a>
-              <a class="btn" href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">Read the source</a>
-            </div>
-          </div>
-        </article>
+# no key · no network · nothing leaves</span></pre>
+        </figure>
       </div>
     </section>
 
@@ -193,7 +203,7 @@ base_url = <span class="s">"http://localhost:8000/v1"</span>
             <ul>
               <li><strong>Linux:</strong> a Python package in <code>~/.local/share/voice-keyboard-venv</code>, the <code>voice-keyboard</code> CLI, a systemd user service, a GNOME Shell overlay extension (45–50), and the <code>uinput</code> rule for the virtual keyboard. Your password is asked once, for the audio libraries and keyboard access.</li>
               <li><strong>Windows 10/11:</strong> a tray app with a native overlay and the Kai orb. Installs Python for you if needed. Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> in any app.</li>
-              <li><strong>Config:</strong> <code>~/.config/voice-keyboard/config.toml</code>, mode 600. Audio is held in memory while transcribed, never written to disk. Password fields always force the verbatim register and are never logged.</li>
+              <li><strong>Config:</strong> <code>~/.config/voice-keyboard/config.toml</code>, mode 600. Password fields always force the verbatim register and are never logged.</li>
             </ul>
           </details>
         </div>
@@ -222,12 +232,12 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
         <span class="eyebrow">the full board</span>
         <h2 id="features-title">Everything a keyboard does, spoken.</h2>
         <div class="feature-grid">
-          <article class="feature glass"><small>edit</small><h3>Spoken edits</h3><p>“Scratch that”, “new line”, “period”, “open quote” — a real edit grammar, parsed before anything is typed. Say <code>literal</code> to type the next word as-is.</p></article>
-          <article class="feature glass"><small>numbers</small><h3>Digits where they belong</h3><p>“Twenty three” becomes 23 in a terminal and stays words in prose. “One two seven” is 127. Decimals too.</p></article>
-          <article class="feature glass"><small>rewrite</small><h3>“VK, make that formal”</h3><p>The wake word sends what you just said through your language model and repairs it on screen, in place. Hold it for approval if you like.</p></article>
-          <article class="feature glass"><small>assistant</small><h3>Kai, in the keyboard</h3><p>Hold Right Ctrl and ask. In a terminal Kai drafts the command and stops. Anywhere else it answers aloud. A one-gigabyte local model is enough.</p></article>
-          <article class="feature glass"><small>read</small><h3>Read anything aloud</h3><p>Select text in any app and the keyboard speaks it — xAI, OpenAI, ElevenLabs, or a local voice.</p></article>
-          <article class="feature glass"><small>recall</small><h3>An opt-in memory</h3><p>A local ledger of what you dictated: list it, re-type it, search it. It also mines your corrections to learn your vocabulary. Off until you turn it on.</p></article>
+          <article class="feature"><small>edit</small><h3>Spoken edits</h3><p>“Scratch that”, “new line”, “period”, “open quote” — a real edit grammar, parsed before anything is typed. Say <code>literal</code> to type the next word as-is.</p></article>
+          <article class="feature"><small>numbers</small><h3>Digits where they belong</h3><p>“Twenty three” becomes 23 in a terminal and stays words in prose. “One two seven” is 127. Decimals too.</p></article>
+          <article class="feature"><small>rewrite</small><h3>“VK, make that formal”</h3><p>The wake word sends what you just said through your language model and repairs it on screen, in place. Hold it for approval if you like.</p></article>
+          <article class="feature"><small>assistant</small><h3>Kai, in the keyboard</h3><p>Hold Right Ctrl and ask. In a terminal Kai drafts the command and stops. Anywhere else it answers aloud. A one-gigabyte local model is enough.</p></article>
+          <article class="feature"><small>read</small><h3>Read anything aloud</h3><p>Select text in any app and the keyboard speaks it — xAI, OpenAI, ElevenLabs, or a local voice.</p></article>
+          <article class="feature"><small>recall</small><h3>An opt-in memory</h3><p>A local ledger of what you dictated: list it, re-type it, search it. It also mines your corrections to learn your vocabulary. Off until you turn it on.</p></article>
         </div>
       </div>
     </section>
@@ -237,7 +247,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
       <div class="wrap">
         <span class="eyebrow">how it compares</span>
         <h2 id="compare-title">Built for typing on Linux. Honest about the rest.</h2>
-        <div class="tblwrap glass">
+        <div class="tblwrap">
           <table>
             <thead><tr><th scope="col"></th><th scope="col">HyperFurion&nbsp;VK</th><th scope="col">Talon</th><th scope="col">Numen</th><th scope="col">nerd-dictation</th><th scope="col">Dragon</th></tr></thead>
             <tbody>
@@ -269,7 +279,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
 
   <footer>
     <div class="wrap">
-      <p class="sigcap"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · works offline once loaded · the hosted demo speaks only when spoken to</p>
+      <p class="sigcap"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · no cookies · nothing you say is stored · the hosted engine speaks only when spoken to</p>
       <div class="footer-grid">
         <div>HyperFurion VK · MIT · a voice keyboard, not a dictation app · a hosted subscription may return; nothing is paywalled</div>
         <div class="footer-links">
@@ -283,9 +293,9 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
     </div>
   </footer>
 
-  <dialog class="sheet glass" id="relay-sheet" aria-labelledby="relay-title">
-    <h3 id="relay-title">Use the real engine</h3>
-    <p>Until now this page has sent nothing anywhere. If you turn this on, your <strong>next dictation's audio</strong> goes to <code>api.hyperfurion.com</code> — our relay — and on to xAI's speech engine, exactly as the daemon would send it to a provider you configure. The relay keeps no audio and shares a small daily budget with everyone. The footer will count every request.</p>
+  <dialog class="sheet" id="relay-sheet" aria-labelledby="relay-title">
+    <h3 id="relay-title">Use the hosted engine</h3>
+    <p>By default this page recognizes speech on your own machine and sends nothing anywhere. If you turn this on, your <strong>next dictation's audio</strong> goes to <code>api.hyperfurion.com</code> — our relay — and on to xAI's speech engine, exactly as the daemon would send it to a provider you configure. The relay keeps no audio and shares a small daily budget with everyone. The footer will count every request.</p>
     <p class="sigcap" id="relay-status">not checked yet</p>
     <label class="switch"><input type="checkbox" id="relay-arm" disabled /> <span>send my next dictation through xAI via the relay</span></label>
     <form class="ask" id="relay-ask"><input type="text" placeholder="ask Kai something…" aria-label="Ask Kai" disabled /><button class="btn small" type="submit">ask</button></form>

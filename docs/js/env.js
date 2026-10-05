@@ -1,7 +1,7 @@
 // ═══ ENV — shared DOM handles and capability flags ═══════════════════════
 // Every instrument reads these; nothing here has behavior of its own.
 export const $ = (id) => document.getElementById(id);
-export const board = $("board"), stage = $("stage"), story = $("story");
+export const board = $("board"), stage = $("stage");
 export const fwin = $("fwin"), mic = $("mic"), micCap = $("mic-cap"), stopBtn = $("stop");
 export const favicon = $("favicon");
 export const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -1,9 +1,9 @@
-// ═══ WINDOW — the focused app, floating above the board ═══════════════════
+// ═══ WINDOW — the focused app, above the board ════════════════════════════
 // One window, four registers, picked the way the daemon's focus probe picks
 // them: the editor renders prose (smart caps, spoken punctuation), the
 // terminal renders digits and no caps, python and shell compile speech.
 // Committed lines are announced once; the molten tail is decoration.
-import { $, fwin, reduced } from "./env.js";
+import { $, fwin } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
 import { settings } from "./settings.js";
@@ -17,8 +17,7 @@ export const Window = (() => {
   const el = {
     title: $("fwin-title"), app: $("fwin-app"), frozen: $("fwin-frozen"), molten: $("fwin-molten"),
     instr: $("fwin-instr"), lines: $("fwin-lines"), log: $("fwin-log"), engine: $("fwin-engine"),
-    latency: $("fwin-latency"), probe: $("fwin-probe"), tabs: $("regtabs"), split: $("fwin-split"),
-    chips: $("chips"),
+    latency: $("fwin-latency"), tabs: $("regtabs"), panes: $("register-panes"), chips: $("chips"),
   };
   // the try-saying chips: one register lesson each, compiled through the
   // same molten engine a live session uses
@@ -45,7 +44,7 @@ export const Window = (() => {
         title: "shell register: dashes become flags, star globs" },
     ],
   };
-  let regName = "prose", probeT = 0, logT = 0;
+  let regName = "prose", logT = 0;
 
   function setRegister(name, { silent = false } = {}) {
     if (!REGISTERS[name]) return;
@@ -78,7 +77,7 @@ export const Window = (() => {
   }
   function instr(text) {
     if (!el.instr) return;
-    el.instr.textContent = text ? "“" + (settings.wakeWord) + ", " + text + "” — listening for the instruction" : "";
+    el.instr.textContent = text ? "“" + settings.wakeWord + ", " + text + "” — listening for the instruction" : "";
     el.instr.hidden = !text;
   }
   function commitLine(text) {
@@ -90,7 +89,7 @@ export const Window = (() => {
     el.lines.appendChild(p);
     while (el.lines.children.length > 5) el.lines.firstChild.remove();
     if (register().compiler || regName === "terminal") log("drafted at the prompt — Enter is yours", "consent");
-    splitView();
+    panes();
   }
   function retract() { if (el.lines && el.lines.lastElementChild) el.lines.lastElementChild.remove(); }
   function replaceLast(text) { if (el.lines && el.lines.lastElementChild) el.lines.lastElementChild.textContent = text; }
@@ -102,7 +101,7 @@ export const Window = (() => {
     el.log.textContent = text;
     el.log.className = "fwin-log " + cls;
     clearTimeout(logT);
-    if (text) logT = setTimeout(() => { if (el.log.textContent === text) { el.log.textContent = ""; } }, 9000);
+    if (text) logT = setTimeout(() => { if (el.log.textContent === text) el.log.textContent = ""; }, 9000);
   }
   function setEngine(label, cls = "") {
     if (!el.engine) return;
@@ -115,25 +114,17 @@ export const Window = (() => {
     el.latency.textContent = "speech → first keystroke " + Math.round(ms) + " ms · median " + Math.round(median) + " ms (this page, your browser)";
   }
   function setLatencyNote(text) { if (el.latency) el.latency.textContent = text; }
-  function probe() {
-    if (!el.probe) return;
-    el.probe.textContent = "probe → " + regName;
-    el.probe.hidden = false;
-    clearTimeout(probeT);
-    probeT = setTimeout(() => { el.probe.hidden = true; }, 3000);
-  }
 
-  // ── scene 2: the same words through every register ─────────────────────
-  function splitView() {
-    if (!el.split) return;
+  // ── the registers section: the last phrase through every register ──────
+  function panes() {
+    if (!el.panes) return;
     const raw = state.lastRaw || "twenty three failed tests comma rerun the flaky ones";
     const tokens = raw.trim().split(/\s+/);
-    for (const pane of el.split.querySelectorAll("[data-register]")) {
+    for (const pane of el.panes.querySelectorAll("[data-register]")) {
       const reg = REGISTERS[pane.dataset.register];
       const { items } = parse(tokens, { flush: true, frozen: 0, register: reg, cfg: settings });
-      const r = render(items.filter((it) => it.kind !== "instruction"), reg, initialState(reg));
+      const r = render(items.filter((it) => it.kind !== "instruction" && it.kind !== "scratch"), reg, initialState(reg));
       pane.querySelector(".pane-text").textContent = r.text;
-      pane.classList.toggle("active", pane.dataset.register === regName);
     }
   }
 
@@ -152,7 +143,6 @@ export const Window = (() => {
     }
   }
 
-  // tabs
   if (el.tabs) {
     const tabs = [...el.tabs.querySelectorAll("[role=tab]")];
     tabs.forEach((t, i) => {
@@ -166,17 +156,9 @@ export const Window = (() => {
       });
     });
   }
-  // the focus probe follows the story: the consent scene is a terminal,
-  // the registers scene shows every register, the rest is prose
-  bus.on("story:scene", ({ index }) => {
-    if (index === 2) splitView();
-    if (state.recording || document.body.classList.contains("autopilot")) return;
-    if (index === 3) setRegister("terminal", { silent: true });
-    else if (index === 0 || index === 1 || index === 5) setRegister("prose", { silent: true });
-  });
   setRegister("prose", { silent: true });
-  splitView();
+  panes();
 
   return { setRegister, register, focusedName, renderLine, instr, commitLine, retract, replaceLast,
-           clearLines, log, setEngine, setLatency, setLatencyNote, probe, splitView };
+           clearLines, log, setEngine, setLatency, setLatencyNote, panes };
 })();
