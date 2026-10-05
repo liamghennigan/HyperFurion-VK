@@ -72,7 +72,6 @@
             <a class="btn primary" id="hero-dl" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
             <a class="btn" id="hero-try" href="#stage">Try it — tap the mic</a>
           </div>
-          <p class="hint"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> works on this page too. Hold to talk, release to stop.</p>
         </div>
 
         <div class="stage" id="stage">
@@ -90,15 +89,10 @@
             </div>
             <div class="fwin-body">
               <div class="fwin-lines" id="fwin-lines" aria-live="polite"></div>
-              <div class="fwin-text" aria-hidden="true"><span class="prompt"></span><span class="frozen" id="fwin-frozen"></span><span class="molten" id="fwin-molten"></span><span class="caret"></span></div>
+              <div class="fwin-text" aria-hidden="true"><span class="prompt"></span><span class="frozen" id="fwin-frozen"></span><span class="molten" id="fwin-molten"></span><span class="caret"></span><span class="placeholder" id="fwin-placeholder">tap the mic and speak</span></div>
               <p class="fwin-instr" id="fwin-instr" hidden></p>
             </div>
-            <div class="fwin-status">
-              <span class="engine" id="fwin-engine"></span>
-              <span class="fwin-log" id="fwin-log"></span>
-              <span class="fwin-latency" id="fwin-latency"></span>
-            </div>
-            <div class="chips" id="chips"></div>
+            <div class="fwin-status" id="fwin-status" aria-live="polite"></div>
           </aside>
 
           <div class="stage-3d">
@@ -110,14 +104,12 @@
             <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             </button>
-            <span class="mic-cap" id="mic-cap">tap the mic: an open-source model runs on your GPU in this tab. audio never leaves.</span>
+            <span class="mic-cap" id="mic-cap">Tap and speak</span>
             <button class="sbtn stop" id="stop" type="button" hidden>stop</button>
             <span class="spacer"></span>
-            <button class="sbtn" id="autopilot" type="button" aria-pressed="false">play the scripted demo</button>
-            <button class="sbtn" id="sound" type="button" aria-pressed="false">key clicks off</button>
-            <button class="sbtn" id="relay" type="button">use the hosted engine</button>
+            <button class="textbtn" id="autopilot" type="button" aria-pressed="false">watch a scripted demo</button>
           </div>
-          <p class="sigcap stage-note">recognition on this page: <a href="https://github.com/usefulsensors/moonshine" rel="noopener">Moonshine tiny</a>, open source (MIT) from Useful Sensors, Mountain View, California — fetched once when you tap the mic (about 55 MB on WebGPU, 28 MB on the CPU path), cached by your browser, run on your machine. nothing you say is stored or sent anywhere.</p>
+          <p class="sigcap stage-note">Recognition runs in your browser: <a href="https://github.com/usefulsensors/moonshine" rel="noopener">Moonshine tiny</a> (MIT, Useful Sensors, California), fetched once, about 55 MB. Nothing you say leaves this tab.</p>
         </div>
       </div>
     </section>
@@ -173,7 +165,7 @@
           <span class="eyebrow">04 · private by default</span>
           <h2 id="privacy-title">Your machine. Your keys. Nothing phones home.</h2>
           <p>Point it at a local OpenAI-compatible server and it runs fully offline. Or bring a key for xAI, OpenAI, Groq, Deepgram or AssemblyAI. Zero analytics, ever. Audio is held in memory while transcribed and never written to disk.</p>
-          <p class="muted">This page keeps the same rule. No analytics, no cookies, no storage. A Content-Security-Policy in the page itself forbids any request except to this site, the model and its runtime when you tap the mic, and the hosted engine if you opt in. The footer counts every request.</p>
+          <p class="muted">This page keeps the same rule: no analytics, no cookies, no storage, and a Content-Security-Policy that forbids every request except this site, the speech model when you tap the mic, and our hosted engine if you <button class="linkbtn" id="relay" type="button">opt in</button>.</p>
         </div>
         <figure class="fig">
           <pre class="conf"><span class="c"># ~/.config/voice-keyboard/config.toml</span>
@@ -279,7 +271,8 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
 
   <footer>
     <div class="wrap">
-      <p class="sigcap"><span id="bytes">self-hosted · zero third-party requests · zero analytics</span> · no cookies · nothing you say is stored · the hosted engine speaks only when spoken to</p>
+      <p class="sigcap"><span id="bytes">self-hosted · no third-party requests</span> · no analytics · no cookies · nothing you say is stored</p>
+      <p class="sigcap" id="fetched" hidden></p>
       <div class="footer-grid">
         <div>HyperFurion VK · MIT · a voice keyboard, not a dictation app · a hosted subscription may return; nothing is paywalled</div>
         <div class="footer-links">

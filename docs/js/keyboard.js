@@ -33,13 +33,7 @@ export const Keyboard = (() => {
         leg.className = "legend" + (k.l.length === 1 && !/[a-z0-9]/i.test(k.l) ? " sym" : "");
         leg.textContent = k.l;
         el.appendChild(leg);
-        if (k.s && k.s.length === 1 && !/[A-Z]/.test(k.s)) {
-          const up = document.createElement("span");
-          up.className = "legend up sym";
-          up.textContent = k.s;
-          el.appendChild(up);
-        }
-        if (k.sub) {
+        if (k.sub && k.c === "Enter") {
           const sub = document.createElement("span");
           sub.className = "sub";
           sub.textContent = k.sub;

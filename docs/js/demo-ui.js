@@ -34,7 +34,7 @@ export const DemoUI = (() => {
   }
   arm.addEventListener("change", () => {
     Demo.want = arm.checked;
-    Window.log(arm.checked ? "next dictation goes through xAI via the relay — opt-in, labeled" : "back to your browser's engine", "dim");
+    Window.log(arm.checked ? "next dictation goes through xAI via the relay" : "back to in-tab recognition", "dim");
   });
   ask.addEventListener("submit", async (e) => {
     e.preventDefault();

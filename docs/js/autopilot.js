@@ -46,7 +46,7 @@ export const Autopilot = (() => {
     timers = [];
     if (!natural) Dictation.cancelScript();
     document.body.classList.remove("autopilot");
-    if (btn) { btn.textContent = natural ? "replay the demo" : "play the scripted demo"; btn.setAttribute("aria-pressed", "false"); }
+    if (btn) { btn.textContent = natural ? "replay the demo" : "watch a scripted demo"; btn.setAttribute("aria-pressed", "false"); }
   }
 
   if (btn) btn.addEventListener("click", () => (A.running ? stop(false) : start()));

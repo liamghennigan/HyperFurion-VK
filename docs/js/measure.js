@@ -26,10 +26,13 @@ import { bus } from "./bus.js";
     } catch {}
     return { files: own + 1, kb: Math.round((htmlBytes + ownBytes) / 1024), foreign: Math.max(foreign, optIn) };
   }
+  const fetchedEl = $("fetched");
   function paint(m, kb) {
-    bytesEl.textContent = m.files + " files · " + kb + " KB · all self-hosted · " +
-      (m.foreign ? m.foreign + " opt-in request" + (m.foreign > 1 ? "s" : "") + " (you asked)" : "zero third-party requests") +
-      " · zero analytics";
+    bytesEl.textContent = m.files + " files · " + kb + " KB · self-hosted" + (m.foreign ? "" : " · no third-party requests");
+    if (fetchedEl) {
+      fetchedEl.hidden = !m.foreign;
+      if (m.foreign) fetchedEl.textContent = "the only requests that left this page: the speech model and its runtime (" + m.foreign + " files), because you tapped the mic" + (optIn && m.foreign === optIn ? "" : "") + ".";
+    }
   }
   bus.on("relay:request", () => { optIn++; const m = measure(); paint(m, m.kb); });
   if (reduced || !("IntersectionObserver" in window)) { const m = measure(); paint(m, m.kb); return; }
