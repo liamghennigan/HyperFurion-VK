@@ -41,6 +41,7 @@ from typing import Optional
 from voice_keyboard.flow import pauses
 from voice_keyboard.flow.grammar import Grammar, Item
 from voice_keyboard.flow.nav import FRESH_FIELD, GLUED
+from voice_keyboard.flow.code import flush_code
 from voice_keyboard.flow.registers import (
     Register,
     RenderState,
@@ -304,6 +305,9 @@ class FlowEngine:
         barrier (the daemon resumes with complete_action)."""
         while self._barrier is None and self._committed_items < len(self._items):
             self._commit_item(self._items[self._committed_items])
+        if self._barrier is None:
+            tail, self._render_state = flush_code(self._render_state, self._register)
+            self._committed_render += tail
         return FinalResult(
             text=self._committed_render,
             instruction=self._instruction if self._barrier is None else "",

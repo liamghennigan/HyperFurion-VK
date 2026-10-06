@@ -397,6 +397,70 @@
   ]
  },
  {
+  "name": "python operators from two words",
+  "register": "python",
+  "segments": [
+   "if a double equals b colon",
+   "x plus equals one",
+   "if not x less than equals y colon",
+   "def f open paren close paren arrow str colon",
+   "return x is not"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "if a == b:"
+   ],
+   [
+    "screen",
+    "if a == b: x +="
+   ],
+   [
+    "screen",
+    "if a == b: x += 1 if not x <= y:"
+   ],
+   [
+    "screen",
+    "if a == b: x += 1 if not x <= y: def f() -> str:"
+   ],
+   [
+    "screen",
+    "if a == b: x += 1 if not x <= y: def f() -> str: return x is"
+   ],
+   [
+    "final",
+    "if a == b: x += 1 if not x <= y: def f() -> str: return x is not",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held dash is typed at the end",
+  "register": "shell",
+  "segments": [
+   "ls dash"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ls"
+   ],
+   [
+    "final",
+    "ls -",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "shell path",
   "register": "shell",
   "segments": [

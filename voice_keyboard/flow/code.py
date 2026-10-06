@@ -44,6 +44,18 @@ _SHELL_WORD_GLYPHS = {
     "slash": ("/", "both"),
 }
 
+# Two spoken words, one operator: "double equals" -> "==". The first word
+# is held until the next says whether it was half an operator ("if not x"
+# types "not").
+_PYTHON_PAIRS = {
+    ("double", "equals"): "==",
+    ("not", "equals"): "!=",
+    ("less", "than"): "<",
+    ("greater", "than"): ">",
+}
+# "=" glues onto these: "plus equals" -> "+=", "less than equals" -> "<=".
+_AUGMENTED = frozenset({"+", "-", "*", "/", "%", "<", ">", "!", "=", "//", "**"})
+
 # Shell glues these on both sides: "FOO=bar", "--name=value", "8080:80".
 _SHELL_GLUED = {"=": "both", ":": "both"}
 
@@ -76,6 +88,7 @@ def _compile(
     glue_calls: bool = False,
     constants: dict | None = None,
     glued: dict | None = None,
+    pairs: dict | None = None,
 ) -> tuple[str, RenderState]:
     out: list[str] = []
     at_start = state.at_start
@@ -84,17 +97,20 @@ def _compile(
     after_name = state.after_name
     open_calls = state.open_calls
     inner_parens = state.inner_parens
-    after_prefix = state.after_prefix
+    last_atom = state.last_atom
+    firsts = {first for first, _ in (pairs or {})}
 
-    def emit(text: str, *, glue_left: bool, name: bool = False, prefix: bool = False) -> None:
-        nonlocal at_start, glue_next, after_name, after_prefix
+    def emit(text: str, *, glue_left: bool, name: bool = False) -> None:
+        nonlocal at_start, glue_next, after_name, last_atom
+        if text == "=" and last_atom in _AUGMENTED and glue_calls:
+            glue_left = True  # "+=", "==", "<=", "!="
         if not at_start and not glue_next and not glue_left:
             out.append(" ")
         out.append(text)
         at_start = False
         glue_next = False
         after_name = name
-        after_prefix = prefix
+        last_atom = text
 
     def emit_mode(glyph: str, mode: str) -> None:
         nonlocal glue_next
@@ -114,8 +130,36 @@ def _compile(
         if pending in ("dash", "dashes"):
             emit("--" if pending == "dashes" else "-", glue_left=False)
             pending = ""
+        elif pending.startswith("hold:"):
+            held, pending = pending[5:], ""
+            word(held)
+
+    def word(text: str) -> None:
+        nonlocal pending, glue_next, open_calls
+        core = text.casefold()
+        if pending == "call-open":
+            pending = "call"
+        glyph = word_glyphs.get(core)
+        if glyph is not None:
+            emit_mode(glyph[0], glyph[1])
+            return
+        if core in callables and last_atom != "->":
+            # Calls nest: "print range ten close paren close paren". After
+            # "->" it is a type: "-> str:".
+            emit(text + "(", glue_left=False)
+            glue_next = True
+            pending = "call-open"  # an explicit "open paren" next is absorbed
+            open_calls += 1
+            return
+        if constants and core in constants:
+            emit(constants[core], glue_left=False)
+            return
+        emit(text, glue_left=False, name=glue_calls and _is_name(text))
 
     for item in items:
+        if item.kind == "flush":
+            flush_dash()  # the dictation ended: a hold is typed as said
+            continue
         if item.kind == "break" and item.mode in ("bullet", "number"):
             continue  # a list item means nothing in code
         if item.kind == "break":
@@ -147,7 +191,7 @@ def _compile(
                 pending = "dash"
                 continue
             flush_dash()
-            if after_prefix and item.text == '"' and item.mode == "right":
+            if glue_calls and last_atom.casefold() in _STRING_PREFIXES and item.text == '"' and item.mode == "right":
                 emit('"', glue_left=True)  # f"…", r"…"
                 glue_next = True
                 continue
@@ -172,28 +216,19 @@ def _compile(
                 emit(("--" if pending == "dashes" else "-") + item.text, glue_left=False)
                 pending = ""
                 continue
-            if pending == "call-open":
-                pending = "call"
-            glyph = word_glyphs.get(core)
-            if glyph is not None:
-                emit_mode(glyph[0], glyph[1])
+            if pending.startswith("hold:"):
+                operator = (pairs or {}).get((pending[5:].casefold(), core))
+                if operator is not None:
+                    pending = ""
+                    emit(operator, glue_left=False)
+                    continue
+                flush_dash()  # the held word was a word
+            if core in firsts:
+                if pending == "call-open":
+                    pending = "call" if open_calls else ""
+                pending = "hold:" + item.text
                 continue
-            if core in callables:
-                # Calls nest: "print range ten close paren close paren".
-                emit(item.text + "(", glue_left=False)
-                glue_next = True
-                pending = "call-open"  # an explicit "open paren" next is absorbed
-                open_calls += 1
-                continue
-            if constants and core in constants:
-                emit(constants[core], glue_left=False)
-                continue
-            emit(
-                item.text,
-                glue_left=False,
-                name=glue_calls and _is_name(item.text),
-                prefix=glue_calls and core in _STRING_PREFIXES,
-            )
+            word(item.text)
         # scratch/instruction items render nothing; the engine acts on them.
 
     return "".join(out), replace(
@@ -205,7 +240,7 @@ def _compile(
         after_name=after_name,
         open_calls=open_calls,
         inner_parens=inner_parens,
-        after_prefix=after_prefix,
+        last_atom=last_atom,
     )
 
 
@@ -220,6 +255,7 @@ def compile_python(
         dash_hold=False,
         glue_calls=True,
         constants=_PYTHON_CONSTANTS,
+        pairs=_PYTHON_PAIRS,
     )
 
 
@@ -234,6 +270,17 @@ def compile_shell(
         dash_hold=True,
         glued=_SHELL_GLUED,
     )
+
+
+def flush_code(state: RenderState, register: Register) -> tuple[str, RenderState]:
+    """At the end of a dictation: what a compiler still holds (a dash, the
+    first word of a two-word operator) is typed as said."""
+    if not register.compiler or not (state.pending in ("dash", "dashes") or state.pending.startswith("hold:")):
+        return "", state
+    compiler = COMPILERS[register.compiler]
+    # an empty item list only flushes: a break would reset more than the hold
+    text, after = compiler([Item(kind="flush")], state, register)
+    return text, after
 
 
 COMPILERS = {

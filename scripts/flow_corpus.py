@@ -58,6 +58,8 @@ CASES = [
     ("shell compiles flags", "shell", ["pipe grep dash i error"], {}),
     ("shell long flags and glued pairs", "shell", ["docker run dash dash rm dash p eight zero eight zero colon eighty nginx", "export foo equals sign bar"], {}),
     ("python constants and string prefixes", "python", ["if x is not none colon", "print open paren f quote hello unquote close paren", "x equals true"], {}),
+    ("python operators from two words", "python", ["if a double equals b colon", "x plus equals one", "if not x less than equals y colon", "def f open paren close paren arrow str colon", "return x is not"], {}),
+    ("a held dash is typed at the end", "shell", ["ls dash"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
     ("years read in pairs", "prose", ["born in nineteen eighty four, moved in nineteen oh five", "back in twenty twenty six with twenty twenty vision and nineteen people"], {}),
     ("a stutter is dropped", "prose", ["the the meeting is", "tomorrow and i i think he had had enough of the the the plan"], {}),

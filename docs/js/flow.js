@@ -448,8 +448,12 @@ const PY_CALLABLES = new Set(["range", "print", "len", "str", "int", "float", "i
 const PY_CONSTANTS = { none: "None", true: "True", false: "False" };
 const STRING_PREFIXES = new Set(["f", "r", "b", "rb", "br", "fr", "rf", "u"]);
 const SH_GLUED = { "=": "both", ":": "both" };
+// two spoken words, one operator; the first is held until the next says
+// whether it was half an operator ("if not x" types "not")
+const PY_PAIRS = { "double equals": "==", "not equals": "!=", "less than": "<", "greater than": ">" };
+const AUGMENTED = new Set(["+", "-", "*", "/", "%", "<", ">", "!", "=", "//", "**"]);
 const COMPILERS = {
-  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS },
+  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS, pairs: PY_PAIRS },
   shell:  { glyphs: SH_GLYPHS, callables: new Set(), dashHold: true, glued: SH_GLUED },
 };
 // a name an opening paren or bracket glues to ("get_user (" -> get_user();
@@ -457,13 +461,15 @@ const COMPILERS = {
 const PY_KEYWORDS = new Set(("False None True and as assert async await break class continue def del elif else except " +
   "finally for from global if import in is lambda nonlocal not or pass raise return try while with yield _ case match type").split(" "));
 const isName = (t) => /^[A-Za-z_][\w.]*$/.test(t) && !PY_KEYWORDS.has(t);
-function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, constants = null, glued = null }) {
+function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, constants = null, glued = null, pairs = null }) {
   const out = [];
   let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "", afterName = !!state.afterName;
-  let openCalls = state.openCalls || 0, innerParens = state.innerParens || 0, afterPrefix = !!state.afterPrefix;
-  const emit = (text, glueLeft, name = false, prefix = false) => {
+  let openCalls = state.openCalls || 0, innerParens = state.innerParens || 0, lastAtom = state.lastAtom || "";
+  const firsts = new Set(Object.keys(pairs || {}).map((k) => k.split(" ")[0]));
+  const emit = (text, glueLeft, name = false) => {
+    if (text === "=" && glueCalls && AUGMENTED.has(lastAtom)) glueLeft = true;  // "+=", "==", "<=", "!="
     if (!atStart && !glueNext && !glueLeft) out.push(" ");
-    out.push(text); atStart = false; glueNext = false; afterName = name; afterPrefix = prefix;
+    out.push(text); atStart = false; glueNext = false; afterName = name; lastAtom = text;
   };
   const emitMode = (glyph, mode) => {
     if (mode === "left") emit(glyph, true);
@@ -471,8 +477,21 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
     else if (mode === "both") { emit(glyph, true); glueNext = true; }
     else emit(glyph, false);
   };
-  const flushDash = () => { if (pending === "dash" || pending === "dashes") { emit(pending === "dashes" ? "--" : "-", false); pending = ""; } };
+  const word = (text) => {
+    const c = text.toLowerCase();
+    if (pending === "call-open") pending = "call";
+    const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
+    if (g) { emitMode(g[0], g[1]); return; }
+    if (callables.has(c) && lastAtom !== "->") { emit(text + "(", false); glueNext = true; pending = "call-open"; openCalls += 1; return; }  // calls nest; after "->" it is a type
+    if (constants && Object.hasOwn(constants, c)) { emit(constants[c], false); return; }
+    emit(text, false, !!glueCalls && isName(text));
+  };
+  const flushDash = () => {
+    if (pending === "dash" || pending === "dashes") { emit(pending === "dashes" ? "--" : "-", false); pending = ""; }
+    else if (pending.startsWith("hold:")) { const held = pending.slice(5); pending = ""; word(held); }  // the held word was a word
+  };
   for (const it of items) {
+    if (it.kind === "flush") { flushDash(); continue; }  // the dictation ended: a hold is typed as said
     if (it.kind === "break" && (it.mode === "bullet" || it.mode === "number")) continue;  // a list item means nothing in code
     if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; innerParens = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
@@ -483,7 +502,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
         flushDash(); pending = "dash"; continue;
       }
       flushDash();
-      if (afterPrefix && it.text === '"' && it.mode === "right") { emit('"', true); glueNext = true; continue; }  // f"…"
+      if (glueCalls && STRING_PREFIXES.has(lastAtom.toLowerCase()) && it.text === '"' && it.mode === "right") { emit('"', true); glueNext = true; continue; }  // f"…"
       if (pending === "call-open") pending = openCalls ? "call" : "";
       if (it.text === ")" && innerParens) innerParens -= 1;  // closes a paren said inside the call
       else if (openCalls && it.text === ")") { openCalls -= 1; if (!openCalls) pending = ""; }
@@ -493,15 +512,23 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
     } else if (it.kind === "word") {
       const c = it.text.toLowerCase();
       if (pending === "dash" || pending === "dashes") { emit((pending === "dashes" ? "--" : "-") + it.text, false); pending = ""; continue; }
-      if (pending === "call-open") pending = "call";
-      const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
-      if (g) { emitMode(g[0], g[1]); continue; }
-      if (callables.has(c)) { emit(it.text + "(", false); glueNext = true; pending = "call-open"; openCalls += 1; continue; }  // calls nest
-      if (constants && Object.hasOwn(constants, c)) { emit(constants[c], false); continue; }
-      emit(it.text, false, !!glueCalls && isName(it.text), !!glueCalls && STRING_PREFIXES.has(c));
+      if (pending.startsWith("hold:")) {
+        const key = pending.slice(5).toLowerCase() + " " + c;
+        if (pairs && Object.hasOwn(pairs, key)) { pending = ""; emit(pairs[key], false); continue; }  // "double equals" -> "=="
+        flushDash();
+      }
+      if (firsts.has(c)) { if (pending === "call-open") pending = openCalls ? "call" : ""; pending = "hold:" + it.text; continue; }
+      word(it.text);
     }
   }
-  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName, openCalls, innerParens, afterPrefix } };
+  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName, openCalls, innerParens, lastAtom } };
+}
+// at the end of a dictation (code.py flush_code): a held dash or half an
+// operator is typed as said
+function flushCode(st, reg) {
+  const p = st.pending || "";
+  if (!reg.compiler || !COMPILERS[reg.compiler] || !(p === "dash" || p === "dashes" || p.startsWith("hold:"))) return { text: "", st };
+  return compileCode([{ kind: "flush" }], st, COMPILERS[reg.compiler]);
 }
 
 // ── parse: raw tokens -> items, with the frozen fence (grammar.py) ────────
@@ -1100,6 +1127,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   // page resumes with completeAction)
   function commitRest() {
     while (barrier === null && committedItems < items.length) commitItem(items[committedItems]);
+    if (barrier === null) { const f = flushCode(renderState, reg); committedRender += f.text; renderState = f.st; }
     return result();
   }
   function result() {
