@@ -65,6 +65,15 @@ proven to be the daemon's.
   "keep out of history"); a focus change or a nav command resets it. On
   by default; `rejoin = false` restores a fresh caret every time. The
   landing page mirrors it.
+- **"Spell that NGINX".** A recognizer that hears spelled letters as one
+  word writes it in capitals; after "spell" or "spell that" such a token
+  ("NGINX", "K8S") now counts as the letters, spelled. Both engines.
+- **The page keeps a period you paused on revisable.** `pauses.py` is
+  ported too: with the page's utterance-per-pause recognizer, "I think.
+  We should wait" is exactly the case the daemon's pause rules exist for,
+  and the page now runs them (`pause_review = "rules"`; the `[llm]`
+  review needs the daemon). The parity corpus gains thirteen pause cases,
+  two of them streamed on the clock.
 - **Hands-free navigation on macOS.** The Quartz injector can press
   chords now (modifier keys down, the key posted with their flags, release
   in reverse), so `[nav]` works there: option+arrows by word, command+

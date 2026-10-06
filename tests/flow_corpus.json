@@ -603,6 +603,60 @@
   ]
  },
  {
+  "name": "spell that heard as one capitalized word",
+  "register": "prose",
+  "segments": [
+   "the proxy is engine-x",
+   "spell that NGINX"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The proxy is engine-x"
+   ],
+   [
+    "screen",
+    "The proxy is nginx"
+   ],
+   [
+    "final",
+    "The proxy is nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "engine-x",
+      "nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell a capitalized word inserts",
+  "register": "terminal",
+  "segments": [
+   "kubectl spell K8S now"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "kubectl k8s now"
+   ],
+   [
+    "final",
+    "kubectl k8s now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "spell letters follow in the next segment",
   "register": "prose",
   "segments": [
@@ -1653,6 +1707,333 @@
   ]
  },
  {
+  "name": "pause · a pause before and joins the sentence",
+  "register": "prose",
+  "segments": [
+   "i was thinking about the project.",
+   "And how we could make it simpler."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how we could make it simpler."
+   ],
+   [
+    "final",
+    "I was thinking about the project and how we could make it simpler.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a pause before but takes a comma",
+  "register": "prose",
+  "segments": [
+   "we could ship today.",
+   "But the tests are red."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "We could ship today."
+   ],
+   [
+    "screen",
+    "We could ship today, but the tests are red."
+   ],
+   [
+    "final",
+    "We could ship today, but the tests are red.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a pause after an open ending joins",
+  "register": "prose",
+  "segments": [
+   "send it to the.",
+   "Team by noon."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "Send it to the."
+   ],
+   [
+    "screen",
+    "Send it to the Team by noon."
+   ],
+   [
+    "final",
+    "Send it to the Team by noon.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a pause after an open ending keeps a name's capital",
+  "register": "prose",
+  "segments": [
+   "send it to.",
+   "Friday is fine."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "Send it to."
+   ],
+   [
+    "screen",
+    "Send it to Friday is fine."
+   ],
+   [
+    "final",
+    "Send it to Friday is fine.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · an unclear pause keeps the period",
+  "register": "prose",
+  "segments": [
+   "that is done.",
+   "Next the docs."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done. Next the docs."
+   ],
+   [
+    "final",
+    "That is done. Next the docs.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · spoken punctuation replaces the guess",
+  "register": "prose",
+  "segments": [
+   "that is done.",
+   "comma then the docs"
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done, then the docs"
+   ],
+   [
+    "final",
+    "That is done, then the docs",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a command after a pause keeps the sentence end",
+  "register": "prose",
+  "segments": [
+   "that is done.",
+   "scratch that",
+   "all done."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "All done."
+   ],
+   [
+    "final",
+    "All done.",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · an abbreviation's period is not a pause",
+  "register": "prose",
+  "segments": [
+   "see fig.",
+   "Two for details."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "See fig."
+   ],
+   [
+    "screen",
+    "See fig. Two for details."
+   ],
+   [
+    "final",
+    "See fig. Two for details.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a lowercase word seen earlier loses its capital",
+  "register": "prose",
+  "segments": [
+   "the furion daemon.",
+   "The.",
+   "Furion overlay too."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "The furion daemon."
+   ],
+   [
+    "screen",
+    "The furion daemon. The."
+   ],
+   [
+    "screen",
+    "The furion daemon. The furion overlay too."
+   ],
+   [
+    "final",
+    "The furion daemon. The furion overlay too.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause review off keeps the recognizer's periods",
+  "register": "prose",
+  "segments": [
+   "i was thinking about the project.",
+   "And how we could make it simpler."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project. And how we could make it simpler."
+   ],
+   [
+    "final",
+    "I was thinking about the project. And how we could make it simpler.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pauses are a prose thing",
+  "register": "terminal",
+  "segments": [
+   "cd the.",
+   "And then ls"
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "cd the."
+   ],
+   [
+    "screen",
+    "cd the. And then ls"
+   ],
+   [
+    "final",
+    "cd the. And then ls",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "words land and freeze on the window",
   "register": "prose",
   "steps": [
@@ -2400,6 +2781,147 @@
    [
     "final",
     "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a pause settles once the next word has",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "i was thinking about the project.",
+    "final"
+   ],
+   [
+    0.3,
+    "i was thinking about the project. And",
+    "interim"
+   ],
+   [
+    0.5,
+    "i was thinking about the project. And how",
+    "interim"
+   ],
+   [
+    1.5,
+    "tick"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    3.0,
+    "i was thinking about the project. And how we could make it simpler.",
+    "final"
+   ]
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project and"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how we could make it simpler."
+   ],
+   [
+    "final",
+    "I was thinking about the project and how we could make it simpler.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a pause with nothing after it yet",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "that is done.",
+    "final"
+   ],
+   [
+    1.0,
+    "tick"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.5,
+    "that is done. Next",
+    "interim"
+   ],
+   [
+    3.5,
+    "tick"
+   ],
+   [
+    4.0,
+    "that is done. Next the docs.",
+    "final"
+   ]
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done. Next"
+   ],
+   [
+    "screen",
+    "That is done. Next"
+   ],
+   [
+    "screen",
+    "That is done. Next the docs."
+   ],
+   [
+    "final",
+    "That is done. Next the docs.",
     "",
     "",
     0,

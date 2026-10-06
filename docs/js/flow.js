@@ -10,6 +10,7 @@
 
 import { MAX_SPELLED_LETTERS, lettersAt, couldBeCapital } from "./spelling.js";
 import { VERBS as NAV_VERBS, PENDING as NAV_PENDING, parseNav, GLUED, FRESH_FIELD } from "./nav.js";
+import * as pauses from "./pauses.js";
 
 // ── the spoken grammar (grammar.py, verbatim defaults) ────────────────────
 const PUNCT_STRIP = /[.,!?;:]+$/;
@@ -490,6 +491,8 @@ export function riskyBackspace(text) {
 // moved, so nothing before the command can be repaired or scratched.
 const LAST_WORD = /(\S+?)([.,!?;:)\]}"'»”’]*)(\s*)$/;
 const FINAL_ONLY = new Set(["respell", "key"]);  // rewrite committed text: never on a stability guess
+// a pause's next word counts as settled after surviving an update or this long
+const PAUSE_SETTLE_MS = 600;
 
 export function moltenLine({ register, cfg, state } = {}) {
   const reg = register || REGISTERS.prose;
@@ -510,6 +513,13 @@ export function moltenLine({ register, cfg, state } = {}) {
   let instruction = "", scratches = 0, corrections = [];
   let barrier = null, lastAction = null, typedBefore = "", finalizing = false;
   let lastRepair = false;
+  // punctuation where the speaker paused (pauses.js): "off" keeps the
+  // recognizer's periods; "rules" settles the clear cases and keeps the
+  // recognizer's call for the rest (the daemon's [llm] reviewer is not on
+  // this page, so "llm" and "auto" read as "rules" here)
+  const pauseMode = (cfg && cfg.pauseReview === "off") || !(cfg && cfg.pauseReview) ? "off" : "rules";
+  const pauseMap = new Map();   // index of the first token after a pause -> {decision, provisional}
+  const lowerSeen = new Set();  // words seen lowercase mid-sentence
 
   // ── inputs ─────────────────────────────────────────────────────────────
   function update(raw, now, { final = false } = {}) {
@@ -528,9 +538,12 @@ export function moltenLine({ register, cfg, state } = {}) {
     });
     tokens = tokens.slice(0, committedTokens).concat(newMolten);
     meta = meta.slice(0, committedTokens).concat(merged);
-    if (final) { finalTokens = Math.max(finalTokens, tokens.length); segmentBounds.add(tokens.length); }
+    for (let i = Math.max(1, committedTokens + prefix); i < tokens.length; i++)
+      if (/^\p{Ll}/u.test(tokens[i])) lowerSeen.add(pauses.core(tokens[i]));
+    if (final) { finalTokens = Math.max(finalTokens, tokens.length); segmentBounds.add(tokens.length); notePause(); }
     revDepth *= 0.98;
     reparse();
+    settlePauses(now);
     commitReady(now);
     if (final) markSegmentBoundary();
     return view();
@@ -542,12 +555,17 @@ export function moltenLine({ register, cfg, state } = {}) {
       if (now - meta[pendingFrom].since >= 2 * stabMs()) { flushPending = true; reparse(); }
     }
     revDepth *= 0.995;
+    settlePauses(now);
     commitReady(now);
     return view();
   }
   function finalize(raw, now) {
     update(raw, now, { final: true });
     flushPending = true;
+    reparse();
+    // every pause gets its answer now: one nobody decided falls to the rules
+    for (const [index, pause] of [...pauseMap].sort((a, b) => a[0] - b[0]))
+      if (pause.decision === null) pause.decision = ruleDecisionAt(index)[0];
     reparse();
     finalizing = true;
     return commitRest();
@@ -608,7 +626,8 @@ export function moltenLine({ register, cfg, state } = {}) {
     const molten = barrier !== null ? "" : render(previewItems(), reg, { ...renderState }).text;
     let instr = "";
     if (pendingIsInstruction()) instr = tokens.slice(pendingFrom + 1).join(" ") || " ";
-    return { frozen: committedRender, molten, instr: instr.trim(), repair: lastRepair, action: barrier };
+    const captionTail = viewTokens().slice(committedTokens).join(" ");
+    return { frozen: committedRender, molten, instr: instr.trim(), repair: lastRepair, action: barrier, caption: captionTail };
   }
 
   // ── internal ───────────────────────────────────────────────────────────
@@ -624,8 +643,55 @@ export function moltenLine({ register, cfg, state } = {}) {
     if (pendingFrom === null || pendingFrom >= tokens.length) return false;
     return wakeAt(tokens.map(core), pendingFrom, (cfg && cfg.wakeWord) || "vk") > 0;
   }
+  // ── pauses ─────────────────────────────────────────────────────────────
+  // the tokens as they should read: each pause's punctuation (and the
+  // capital after it) as decided, or as provisionally ruled
+  function viewTokens() {
+    if (!pauseMap.size) return tokens;
+    const v = [...tokens];
+    for (const [index, pause] of [...pauseMap].sort((a, b) => a[0] - b[0])) {
+      const d = pause.decision || pause.provisional;
+      if (d && index > 0 && index < v.length) [v[index - 1], v[index]] = pauses.apply(v[index - 1], v[index], d);
+    }
+    return v;
+  }
+  // a final segment ending in a provider period: remember the pause
+  function notePause() {
+    const index = tokens.length;
+    if (pauseMode === "off" || !reg.smartCaps || !reg.grammar || pauseMap.has(index)) return;
+    if (index - 1 < committedTokens || !pauses.reviewable(tokens[index - 1])) return;
+    pauseMap.set(index, { decision: null, provisional: null });
+  }
+  const itemAt = (index) => items.find((it) => it.s <= index && index < it.e) || null;
+  // the rules' call for the pause before token `index`: [decision, confident]
+  function ruleDecisionAt(index) {
+    if (index >= tokens.length) return [pauses.decision(".", false, ""), true];  // nothing followed
+    const right = tokens[index];
+    const it = itemAt(index);
+    if (it && it.s < index) return [pauses.decision("", false, pauses.core(right)), true];  // one phrase spans the pause
+    return pauses.ruleDecision(tokens[index - 1], right, { rightKind: it ? it.kind : "word", lowerSeen });
+  }
+  // show each open pause per the rules, and settle it once the word after
+  // it has settled
+  function settlePauses(now) {
+    let changed = false;
+    for (const [index, pause] of [...pauseMap].sort((a, b) => a[0] - b[0])) {
+      if (pause.decision !== null) continue;
+      if (index >= tokens.length) { if (pause.provisional) { pause.provisional = null; changed = true; } continue; }
+      if (!itemAt(index)) continue;  // a phrase still forming after the pause
+      const [d] = ruleDecisionAt(index);
+      if (!pauses.same(d, pause.provisional)) { pause.provisional = d; changed = true; }
+      const m = meta[index];
+      const settled = index < finalTokens || m.stable >= 1 || now - m.since >= PAUSE_SETTLE_MS;
+      if (settled) pause.decision = d;  // rules mode: the rules decide every pause
+    }
+    if (changed) reparse();
+  }
+  // true while an undecided pause sits right after this span
+  const holdsPause = (start, end) => [...pauseMap].some(([index, p]) => p.decision === null && start < index && index <= end);
+
   function reparse() {
-    const r = parse(tokens, { flush: flushPending, frozen: committedTokens, settled: finalTokens,
+    const r = parse(viewTokens(), { flush: flushPending, frozen: committedTokens, settled: finalTokens,
                               bounds: [...segmentBounds].sort((a, b) => a - b),
                               commits: items.slice(0, committedItems).map((it) => it.e), register: reg, cfg });
     items = r.items; pendingFrom = r.pendingFrom;
@@ -635,6 +701,7 @@ export function moltenLine({ register, cfg, state } = {}) {
     while (barrier === null && committedItems < items.length) {
       const it = items[committedItems];
       if (it.kind === "instruction") break;  // consumed at finalize, never mid-stream
+      if (holdsPause(it.s, it.e)) break;  // the words after the pause will decide its period
       let committable = it.e <= finalTokens;
       if (!committable && FINAL_ONLY.has(it.kind)) break;
       if (!committable) {
@@ -656,6 +723,9 @@ export function moltenLine({ register, cfg, state } = {}) {
     }
   }
   function commitItem(it) {
+    for (const [index, pause] of pauseMap)
+      if (pause.decision === null && it.s < index && index <= it.e)
+        pause.decision = pause.provisional || pauses.keep(index < tokens.length ? tokens[index] : "");  // forced out: what shows, stays
     if (it.kind === "scratch") applyScratch();
     else if (it.kind === "respell" && it.mode === "replace") applyRespell(it.text);
     else if (it.kind === "respell") append([{ kind: "word", text: it.text, s: it.s, e: it.e }]);

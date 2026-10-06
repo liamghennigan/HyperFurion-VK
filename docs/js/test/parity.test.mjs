@@ -13,7 +13,8 @@ const corpus = JSON.parse(readFileSync(fileURLToPath(new URL("../../../tests/flo
 const S = 1000;  // the corpus clock is in seconds; the page's in ms
 function makeEngine({ register, options }) {
   const cfg = { wakeWord: "vk", numbers: options.numbers || "auto", spelling: options.spelling !== false,
-                nav: !!options.nav, stabilityMs: 1500, stabilityUpdates: 2, adaptive: true };
+                nav: !!options.nav, stabilityMs: 1500, stabilityUpdates: 2, adaptive: true,
+                pauseReview: options.pause_review || "off" };
   const state = options.continues ? continuationState(options.continues, REGISTERS[register]) : null;
   return moltenLine({ register: REGISTERS[register], cfg, state });
 }
@@ -72,6 +73,7 @@ test("the corpus covers the page's lanes", () => {
   assert.ok(corpus.length >= 40);
   assert.ok(corpus.some((c) => c.steps), "streaming cases");
   assert.ok(corpus.some((c) => c.options.continues), "rejoin cases");
+  assert.ok(corpus.some((c) => c.options.pause_review), "pause cases");
   assert.ok(corpus.some((c) => c.options.nav), "navigation cases");
   assert.ok(corpus.some((c) => c.events.some((e) => e[0] === "final" && e[5].length)), "spelling corrections");
 });

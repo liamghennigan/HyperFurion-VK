@@ -67,6 +67,8 @@ CASES = [
     ("spell that with nato and capital", "prose", ["the host is engine-x", "spell that capital n golf india november x-ray"], {}),
     ("spell that hyphenated", "prose", ["use ngnix", "spell that n-g-i-n-x"], {}),
     ("spell inserts", "terminal", ["kubectl spell k eight s"], {}),
+    ("spell that heard as one capitalized word", "prose", ["the proxy is engine-x", "spell that NGINX"], {}),
+    ("spell a capitalized word inserts", "terminal", ["kubectl spell K8S now"], {}),
     ("spell letters follow in the next segment", "prose", ["hello wrold", "spell that", "w o r l d"], {}),
     ("spell then more words", "prose", ["hello wrold spell that w o r l d then more"], {}),
     ("spell ambiguous tail stays prose", "prose", ["mark it x spell that y a good one"], {}),
@@ -105,6 +107,25 @@ CASES = [
     ("rejoin in a terminal glues", "terminal", ["tmp"], {"continues": "cd"}),
 ]
 
+# [flow] pause_review = "rules": the recognizer's period at a pause stays
+# revisable until the words after the pause decide it
+PAUSES = [
+    ("a pause before and joins the sentence", ["i was thinking about the project.", "And how we could make it simpler."]),
+    ("a pause before but takes a comma", ["we could ship today.", "But the tests are red."]),
+    ("a pause after an open ending joins", ["send it to the.", "Team by noon."]),
+    ("a pause after an open ending keeps a name's capital", ["send it to.", "Friday is fine."]),
+    ("an unclear pause keeps the period", ["that is done.", "Next the docs."]),
+    ("spoken punctuation replaces the guess", ["that is done.", "comma then the docs"]),
+    ("a command after a pause keeps the sentence end", ["that is done.", "scratch that", "all done."]),
+    ("an abbreviation's period is not a pause", ["see fig.", "Two for details."]),
+    ("a lowercase word seen earlier loses its capital", ["the furion daemon.", "The.", "Furion overlay too."]),
+]
+for name, segments in PAUSES:
+    CASES.append(("pause · " + name, "prose", segments, {"pause_review": "rules"}))
+CASES.append(("pause review off keeps the recognizer's periods", "prose",
+              ["i was thinking about the project.", "And how we could make it simpler."], {}))
+CASES.append(("pauses are a prose thing", "terminal", ["cd the.", "And then ls"], {"pause_review": "rules"}))
+
 # streaming cases: (name, register, steps, options); a step is
 # [t, text, "interim" | "final"] or [t, "tick"]
 STREAMS = [
@@ -142,6 +163,13 @@ STREAMS = [
     ("a long molten tail is forced to commit", "prose", [
         [0.0, " ".join(["word"] * 40), "interim"], [0.1, " ".join(["word"] * 45), "interim"], [0.2, "tick"],
         [1.0, " ".join(["word"] * 45), "final"]], {}),
+    ("a pause settles once the next word has", "prose", [
+        [0.0, "i was thinking about the project.", "final"], [0.3, "i was thinking about the project. And", "interim"],
+        [0.5, "i was thinking about the project. And how", "interim"], [1.5, "tick"], [2.5, "tick"],
+        [3.0, "i was thinking about the project. And how we could make it simpler.", "final"]], {"pause_review": "rules"}),
+    ("a pause with nothing after it yet", "prose", [
+        [0.0, "that is done.", "final"], [1.0, "tick"], [2.0, "tick"], [2.5, "that is done. Next", "interim"], [3.5, "tick"],
+        [4.0, "that is done. Next the docs.", "final"]], {"pause_review": "rules"}),
     ("a command waits at a barrier while words keep coming", "prose", [
         [0.0, "hello world", "final"], [1.0, "hello world select previous word", "final"],
         [1.2, "hello world select previous word pla", "interim"], [1.4, "hello world select previous word planet", "interim"],
@@ -164,7 +192,8 @@ def make_engine(register_name: str, opts: dict) -> FlowEngine:
         spelling=opts.get("spelling", True),
         nav=opts.get("nav", False),
     )
-    return FlowEngine(FlowConfig(), grammar, register, initial_state=initial)
+    config = FlowConfig(pause_review=opts.get("pause_review", "off"))
+    return FlowEngine(config, grammar, register, initial_state=initial)
 
 
 def run_case(register_name: str, segments: list[str], opts: dict) -> list:

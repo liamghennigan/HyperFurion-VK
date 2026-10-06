@@ -13,6 +13,9 @@ export const settings = {
   spelling: true, nav: true,
   // [flow] rejoin = true: a recording started within 30 s continues the last
   rejoin: true, adaptive: true,
+  // [flow] pause_review: the daemon's default "auto" is rules plus an [llm]
+  // review of the unclear pauses; the page has no model, so: rules
+  pauseReview: "rules",
   lang: (navigator.language || "en-US"),
   // [tts]
   tts: { rate: 1, pitch: 1, voice: null },

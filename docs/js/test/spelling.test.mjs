@@ -7,6 +7,7 @@ test("letters in every spoken shape", () => {
   const cases = [
     [["N"], ["n", 1]], [["x."], ["x", 1]], [["november"], ["n", 1]], [["X-ray"], ["x", 1]], [["eight"], ["8", 1]],
     [["capital", "k"], ["K", 2]], [["Capital", "kilo"], ["K", 2]], [["N-G-I-N-X"], ["nginx", 1]],
+    [["NGINX"], ["nginx", 1]], [["K8S,"], ["k8s", 1]], [["Nginx"], ["", 0]], [["42"], ["", 0]],
     [["hello"], ["", 0]], [["capital"], ["", 0]], [["capital", "eight"], ["", 0]],
   ];
   for (const [tokens, want] of cases) assert.deepEqual(lettersAt(tokens, 0), want, tokens.join(" "));

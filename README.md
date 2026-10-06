@@ -575,7 +575,7 @@ recognizer's periods.
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
 | `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
-| `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits |
+| `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |
 
 Every phrase is remappable and removable in config (`[flow.commands]`,

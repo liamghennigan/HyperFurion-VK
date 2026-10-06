@@ -12,7 +12,8 @@
 //                they survive the stability window — the same flow engine
 //                the daemon runs (./js/flow.js is a port of
 //                voice_keyboard/flow/: grammar, registers, code compilers,
-//                "spell that", navigation; tests/flow_corpus.json proves it)
+//                "spell that", navigation, the pause rules;
+//                tests/flow_corpus.json proves it)
 //   autopilot -> a scripted demo for browsers without a speech engine,
 //                labeled as scripted, and only ever started by a click
 //   relay     -> the hosted xAI engines, strictly opt-in behind a sheet

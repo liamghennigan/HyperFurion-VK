@@ -1,7 +1,8 @@
 // ═══ SPELLING — "spell that n g i n x", letter by letter ═══════════════════
 // A port of voice_keyboard/flow/spelling.py. Recognizers hand spelled
 // letters back in several shapes — single-letter tokens ("N G I N X"),
-// one hyphenated token ("N-G-I-N-X"), NATO words ("november golf …") —
+// one hyphenated token ("N-G-I-N-X"), one capitalized token ("NGINX"),
+// NATO words ("november golf …") —
 // and a letter can be marked upper case with "capital". lettersAt reads
 // one letter (or a hyphenated run) at a token index; the grammar strings
 // them together. Pure functions: the parse stays deterministic.
@@ -54,6 +55,10 @@ export function lettersAt(tokens, index) {
     const spelled = parts.map(one);
     if (parts.length > 1 && spelled.every(Boolean)) return [spelled.join(""), 1];
   }
+  // a recognizer that heard the letters as one word writes it in capitals
+  // ("NGINX", "K8S"): those are the letters, spelled
+  const raw = tokens[index].replace(STRIP, "");
+  if (raw.length >= 2 && /^[A-Z0-9]+$/.test(raw) && /[A-Z]/.test(raw)) return [raw.toLowerCase(), 1];
   return ["", 0];
 }
 
