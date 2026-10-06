@@ -7,7 +7,7 @@ import threading
 import time
 from typing import Optional
 
-from voice_keyboard import clipboard, dictionary, history, recall
+from voice_keyboard import clipboard, dictionary, history, latency, recall
 from voice_keyboard.ambient import AmbientGate
 from voice_keyboard.assistant import Brain, create_brain
 from voice_keyboard.audio_capture import AudioCapture
@@ -19,7 +19,7 @@ from voice_keyboard.flow.registers import (
     register_for_app,
     resolve_register,
 )
-from voice_keyboard.flow.vad import SilenceGate, chunk_rms, vu_bar
+from voice_keyboard.flow.vad import OnsetDetector, SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import common_prefix_len
 from voice_keyboard.focusprobe import FocusInfo, probe_focus
 from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty_binding
@@ -150,6 +150,12 @@ class Daemon:
         # Molten diffs: a rewrite held for approval ([flow] rewrite_pending).
         self._pending_rewrite: Optional[dict] = None
         self._last_scratches = 0
+        # Per-utterance latency for `voice-keyboard stats`.
+        self._timer: Optional[latency.UtteranceTimer] = None
+        self._onset: Optional[OnsetDetector] = None
+        self._latency = latency.LatencyLog(
+            persist=bool(self._config.get("flow", {}).get("latency_log", False))
+        )
         # Speculative TTS: (text, audio) for the last stable selection.
         self._tts_cache: Optional[tuple[str, bytes]] = None
         self._prefetch_watcher: Optional[SelectionWatcher] = None
@@ -799,6 +805,15 @@ class Daemon:
                 elif command == "status":
                     response = self._status_response()
 
+                elif command == "stats":
+                    records = self._latency.records()
+                    response = {
+                        "status": "ok",
+                        "summary": self._latency.summary(),
+                        "count": len(records),
+                        "last": records[-1] if records else None,
+                    }
+
                 else:
                     response = {"status": "error", "message": f"unknown command: {command}"}
 
@@ -880,6 +895,7 @@ class Daemon:
         # privacy) take effect at the next turn without a restart. The
         # assistant HOTKEY still needs a restart — it owns a listener.
         self._brain = create_brain(self._config)
+        self._latency.persist = bool(self._config["flow"].get("latency_log", False))
         logger.info("Reloaded flow/registers/llm/intent/ambient/ask/recall/assistant config")
 
     # ------------------------------------------------------- flow session
@@ -1042,7 +1058,14 @@ class Daemon:
         live = bool(flow_cfg.get("live", True)) and bool(
             getattr(self._stt_client, "supports_streaming", False)
         )
-        self._flow_worker = InjectionWorker(self._injector) if live else None
+        self._flow_worker = (
+            InjectionWorker(
+                self._injector,
+                on_first_output=lambda: self._mark_latency("first_key"),
+            )
+            if live
+            else None
+        )
         logger.info(
             "Flow session: register=%s app=%r live=%s pause_review=%s",
             register.name,
@@ -1184,6 +1207,9 @@ class Daemon:
     async def _start_recording(self) -> None:
         if self._recording:
             return
+        self._timer = latency.UtteranceTimer()
+        self._timer.mark("start")
+        self._onset = OnsetDetector()
         self._maybe_reload_flow_config()
         validate_config(self._config)
 
@@ -1277,6 +1303,7 @@ class Daemon:
             return ""
 
         self._recording = False
+        self._mark_latency("stop")
 
         # Let any in-flight PyAudio read complete before closing the stream.
         # Closing a PortAudio stream from another thread while read() is active
@@ -1365,9 +1392,11 @@ class Daemon:
             final = merged
             if final:
                 await asyncio.to_thread(self._injector.type_text, final)
+                self._mark_latency("first_key")
                 logger.info("Injected %d characters", len(final))
             else:
                 logger.info("No transcript received")
+            self._record_latency(final)
             self._remember_typed(final)
             return final
 
@@ -1388,6 +1417,7 @@ class Daemon:
             logger.info("Inserted %d characters", len(final))
         else:
             logger.info("No transcript received")
+        self._record_latency(final)
         self._remember_typed(final)
         return final
 
@@ -1410,6 +1440,7 @@ class Daemon:
 
         worker.set_target(final)
         typed = await worker.drain(timeout=self._drain_timeout(final))
+        self._mark_latency("settled")
         if typed != final:
             logger.warning(
                 "Live injection finished at %d/%d characters", len(typed), len(final)
@@ -1460,6 +1491,8 @@ class Daemon:
                     logger.info("Focus changed; transcript is on the clipboard")
                     return ""
             await asyncio.to_thread(self._injector.type_text, final)
+            self._mark_latency("first_key")
+            self._mark_latency("settled")
         return final
 
     async def _transform_previous_or_report(self, instruction: str) -> str:
@@ -1500,6 +1533,23 @@ class Daemon:
         except Exception:
             accepted = []
         return ", ".join(accepted[:24])
+
+    def _mark_latency(self, name: str) -> None:
+        if self._timer is not None:
+            self._timer.mark(name)
+
+    def _record_latency(self, final: str) -> None:
+        """Close this dictation's timer into the latency ring (never for a
+        secret field, or a session that typed nothing)."""
+        timer, self._timer = self._timer, None
+        if timer is None or not final or self._session_secret:
+            return
+        timer.mark("settled")
+        self._latency.record(
+            timer,
+            app=self._session_focus.app if self._session_focus else "",
+            register=self._session_register.name,
+        )
 
     def _remember_typed(self, final: str, *, register: str = "") -> None:
         if not final:
@@ -2060,6 +2110,8 @@ class Daemon:
         if not self._heard_signal and chunk.strip(b"\x00"):
             self._heard_signal = True
         level = chunk_rms(chunk)
+        if self._onset is not None and self._onset.feed(level):
+            self._mark_latency("onset")
         self._levels.append(level)
         del self._levels[:-8]
         gate = self._silence_gate
@@ -2155,6 +2207,8 @@ class Daemon:
             logger.exception("Error receiving STT events")
 
     def _feed_flow(self, *, is_final: bool) -> None:
+        if self._final_text or self._interim_text:
+            self._mark_latency("first_partial")
         engine = self._flow_engine
         if engine is None:
             return

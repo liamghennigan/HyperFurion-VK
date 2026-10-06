@@ -84,3 +84,31 @@ class SilenceGate:
                     self._fired = True
                     return True
         return False
+
+
+@dataclass
+class OnsetDetector:
+    """The first chunk loud enough to be speech, by SilenceGate's rule (an
+    adaptive noise floor times a ratio, with an absolute minimum). Feeds
+    True exactly once. Independent of auto-stop, so latency timing works
+    whether or not the endpointer is on."""
+
+    floor: float = 0.004
+    floor_alpha: float = 0.05
+    speech_ratio: float = 3.0
+    min_threshold: float = 0.010
+
+    _fired: bool = False
+
+    @property
+    def fired(self) -> bool:
+        return self._fired
+
+    def feed(self, level: float) -> bool:
+        if self._fired:
+            return False
+        if level >= max(self.min_threshold, self.floor * self.speech_ratio):
+            self._fired = True
+            return True
+        self.floor += self.floor_alpha * (level - self.floor)
+        return False

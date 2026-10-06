@@ -111,6 +111,10 @@ DEFAULT_CONFIG: dict = {
         "numbers": "auto",
         # Opt-in local dictation ledger (history/recall).
         "history": False,
+        # Also append per-dictation latency numbers (no text) to
+        # latency.jsonl in the state dir. `voice-keyboard stats` works
+        # either way, from the daemon's in-memory ring.
+        "latency_log": False,
         # Merge accepted `voice-keyboard learned` overrides into the
         # grammar vocabulary. Dormant until entries are accepted.
         "personal_dictionary": True,
@@ -282,6 +286,7 @@ _FLOW_BOOL_KEYS = (
     "grammar",
     "adaptive",
     "history",
+    "latency_log",
     "personal_dictionary",
     "rewrite_pending",
 )

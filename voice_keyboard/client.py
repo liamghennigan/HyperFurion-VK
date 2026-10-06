@@ -434,6 +434,25 @@ def _format_history_time(ts: float) -> str:
         return "?"
 
 
+def _run_stats(client: IPCClient, extra_args: list[str]) -> None:
+    """Latency percentiles for recent dictations, from the daemon's ring."""
+    from voice_keyboard.latency import format_summary
+
+    try:
+        response = client.send_command("stats", timeout=5.0)
+    except Exception as e:
+        _print_connect_failure(e)
+        sys.exit(1)
+    if response.get("status") != "ok":
+        print(f"Error: {response.get('message', 'stats failed')}", file=sys.stderr)
+        sys.exit(1)
+    if "--json" in extra_args:
+        print(json.dumps(response, indent=2))
+        return
+    print(f"Last {response.get('count', 0)} dictations:")
+    print(format_summary(response.get("summary") or {}))
+
+
 def _run_history(extra_args: list[str]) -> None:
     from voice_keyboard.history import history_path, last_entries
 
@@ -836,7 +855,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login", "quit", "devices", "setup",
+            "login", "quit", "devices", "setup", "stats",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -847,7 +866,7 @@ def main() -> None:
             "history [count] | recall [n-back] | transform <instruction...>"
             " | intent <request...> | ask <question...> | find <query...>"
             " | learned [accept N | reject N | hotword N | macro N <name> |"
-            " forget <spoken>]"
+            " forget <spoken>] | stats [--json]"
         ),
     )
     parser.add_argument(
@@ -1001,6 +1020,10 @@ def main() -> None:
             _notify("Voice Keyboard", str(e), urgency="critical", timeout_ms=4000)
             _print_connect_failure(e)
             sys.exit(1)
+        return
+
+    if args.command == "stats":
+        _run_stats(client, args.args)
         return
 
     if args.command == "status":

@@ -124,6 +124,9 @@ numbers = "auto"
 # Opt-in local dictation ledger for `voice-keyboard history` / `recall`.
 # Entries: ~/.local/state/voice-keyboard/history.jsonl (mode 600).
 history = false
+# Also log per-dictation latency numbers (never text) to latency.jsonl
+# next to history. `voice-keyboard stats` works either way.
+latency_log = false
 # Merge corrections you accepted via `voice-keyboard learned` into the
 # grammar vocabulary. Dormant until you accept something; your explicit
 # [flow.vocabulary] entries always win.
