@@ -17,7 +17,9 @@ proven to be the daemon's.
   In `python`, "none", "true" and "false" type `None`, `True` and
   `False`, a quote glues to its string prefix (`f"hello"`), two-word
   operators fold ("double equals" `==`, "not equals" `!=`, "less than"
-  `<`, "plus equals" `+=`, "less than equals" `<=`), and after `->` a
+  `<`, "plus equals" `+=`, "less than equals" `<=`), builtin exceptions
+  are names ("raise value error" `raise ValueError`, "except key error"
+  `except KeyError`), and after `->` a
   callable is a type (`-> str:`). A dash or half an operator still held
   when the dictation ends is typed as said, never dropped.
 - **Stutters are dropped.** "the the meeting" types "The meeting", "I I

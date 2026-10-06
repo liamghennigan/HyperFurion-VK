@@ -52,6 +52,25 @@ _PYTHON_PAIRS = {
     ("not", "equals"): "!=",
     ("less", "than"): "<",
     ("greater", "than"): ">",
+    # builtin exceptions: "raise value error" -> ValueError
+    ("value", "error"): "ValueError",
+    ("type", "error"): "TypeError",
+    ("key", "error"): "KeyError",
+    ("index", "error"): "IndexError",
+    ("runtime", "error"): "RuntimeError",
+    ("attribute", "error"): "AttributeError",
+    ("import", "error"): "ImportError",
+    ("name", "error"): "NameError",
+    ("assertion", "error"): "AssertionError",
+    ("lookup", "error"): "LookupError",
+    ("permission", "error"): "PermissionError",
+    ("timeout", "error"): "TimeoutError",
+    ("connection", "error"): "ConnectionError",
+    ("os", "error"): "OSError",
+    ("memory", "error"): "MemoryError",
+    ("recursion", "error"): "RecursionError",
+    ("stop", "iteration"): "StopIteration",
+    ("keyboard", "interrupt"): "KeyboardInterrupt",
 }
 # "=" glues onto these: "plus equals" -> "+=", "less than equals" -> "<=".
 _AUGMENTED = frozenset({"+", "-", "*", "/", "%", "<", ">", "!", "=", "//", "**"})
@@ -172,6 +191,8 @@ def _compile(
             glue_next = True
             after_name = False
         elif item.kind == "punct":
+            if pending.startswith("hold:"):
+                flush_dash()  # the held word was a word ("type (" opens its call)
             if pending == "call-open" and item.text == "(" and item.mode == "right":
                 pending = "call"  # "print open paren": the callable already opened it
                 continue
@@ -220,7 +241,7 @@ def _compile(
                 operator = (pairs or {}).get((pending[5:].casefold(), core))
                 if operator is not None:
                     pending = ""
-                    emit(operator, glue_left=False)
+                    emit(operator, glue_left=False, name=glue_calls and _is_name(operator))
                     continue
                 flush_dash()  # the held word was a word
             if core in firsts:

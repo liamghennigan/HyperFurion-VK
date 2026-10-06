@@ -450,7 +450,7 @@ const STRING_PREFIXES = new Set(["f", "r", "b", "rb", "br", "fr", "rf", "u"]);
 const SH_GLUED = { "=": "both", ":": "both" };
 // two spoken words, one operator; the first is held until the next says
 // whether it was half an operator ("if not x" types "not")
-const PY_PAIRS = { "double equals": "==", "not equals": "!=", "less than": "<", "greater than": ">" };
+const PY_PAIRS = { "double equals": "==", "not equals": "!=", "less than": "<", "greater than": ">", "value error": "ValueError", "type error": "TypeError", "key error": "KeyError", "index error": "IndexError", "runtime error": "RuntimeError", "attribute error": "AttributeError", "import error": "ImportError", "name error": "NameError", "assertion error": "AssertionError", "lookup error": "LookupError", "permission error": "PermissionError", "timeout error": "TimeoutError", "connection error": "ConnectionError", "os error": "OSError", "memory error": "MemoryError", "recursion error": "RecursionError", "stop iteration": "StopIteration", "keyboard interrupt": "KeyboardInterrupt" };  // operators and builtin exceptions (code.py _PYTHON_PAIRS)
 const AUGMENTED = new Set(["+", "-", "*", "/", "%", "<", ">", "!", "=", "//", "**"]);
 const COMPILERS = {
   python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS, pairs: PY_PAIRS },
@@ -495,6 +495,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
     if (it.kind === "break" && (it.mode === "bullet" || it.mode === "number")) continue;  // a list item means nothing in code
     if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; innerParens = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
+      if (pending.startsWith("hold:")) flushDash();  // the held word was a word ("type (" opens its call)
       if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
       if (openCalls && it.text === ":") { emit(")".repeat(innerParens + openCalls) + ":", true); pending = ""; openCalls = innerParens = 0; continue; }  // a colon closes every open call
       if (dashHold && it.text === "-" && it.mode === "none") {  // the next word becomes a flag: "-i", "--rm"
@@ -514,7 +515,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
       if (pending === "dash" || pending === "dashes") { emit((pending === "dashes" ? "--" : "-") + it.text, false); pending = ""; continue; }
       if (pending.startsWith("hold:")) {
         const key = pending.slice(5).toLowerCase() + " " + c;
-        if (pairs && Object.hasOwn(pairs, key)) { pending = ""; emit(pairs[key], false); continue; }  // "double equals" -> "=="
+        if (pairs && Object.hasOwn(pairs, key)) { pending = ""; emit(pairs[key], false, !!glueCalls && isName(pairs[key])); continue; }  // "double equals" -> "=="
         flushDash();
       }
       if (firsts.has(c)) { if (pending === "call-open") pending = openCalls ? "call" : ""; pending = "hold:" + it.text; continue; }

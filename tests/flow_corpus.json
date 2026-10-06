@@ -439,6 +439,43 @@
   ]
  },
  {
+  "name": "builtin exceptions by name",
+  "register": "python",
+  "segments": [
+   "raise value error open paren quote bad unquote close paren",
+   "except key error colon",
+   "x equals type open paren y close paren",
+   "return value"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "raise ValueError(\"bad\")"
+   ],
+   [
+    "screen",
+    "raise ValueError(\"bad\") except KeyError:"
+   ],
+   [
+    "screen",
+    "raise ValueError(\"bad\") except KeyError: x = type(y)"
+   ],
+   [
+    "screen",
+    "raise ValueError(\"bad\") except KeyError: x = type(y) return"
+   ],
+   [
+    "final",
+    "raise ValueError(\"bad\") except KeyError: x = type(y) return value",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a held dash is typed at the end",
   "register": "shell",
   "segments": [
