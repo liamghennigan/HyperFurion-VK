@@ -16,8 +16,9 @@ def _say(text: str, **kwargs) -> str:
     [
         ("es", "abre interrogación vienes mañana cierra interrogación nueva línea sí coma claro punto",
          "¿Vienes mañana?\nSí, claro."),
-        ("fr", "bonjour virgule ça va point d'interrogation à la ligne oui point", "Bonjour, ça va?\nOui."),
+        ("fr", "bonjour virgule ça va point d'interrogation à la ligne oui point", "Bonjour, ça va\u202f?\nOui."),
         ("de", "hallo komma wie geht's fragezeichen neuer absatz gut punkt", "Hallo, wie geht's?\n\nGut."),
+        ("de", "er sagt anführungszeichen auf ja anführungszeichen zu", "Er sagt \u201eja\u201c"),
     ],
 )
 def test_a_language_pack_adds_its_phrases(language: str, spoken: str, typed: str) -> None:

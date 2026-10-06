@@ -22,10 +22,14 @@ _ES_PUNCT = {
     "abre paréntesis": ("(", "right", False), "cierra paréntesis": (")", "left", False),
     "guion": ("-", "none", False),
 }
+# French typography: a narrow no-break space before ? ! : ; (it never
+# wraps away from the word, and one Backspace removes it).
+_NNBSP = "\u202f"
 _FR_PUNCT = {
     "point": (".", "left", True), "virgule": (",", "left", False),
-    "deux points": (":", "left", False), "point virgule": (";", "left", False),
-    "point d'interrogation": ("?", "left", True), "point d'exclamation": ("!", "left", True),
+    "deux points": (_NNBSP + ":", "left", False), "point virgule": (_NNBSP + ";", "left", False),
+    "point d'interrogation": (_NNBSP + "?", "left", True),
+    "point d'exclamation": (_NNBSP + "!", "left", True),
     "points de suspension": ("...", "left", False),
     "ouvrez les guillemets": ('"', "right", False), "fermez les guillemets": ('"', "left", False),
     "ouvrez la parenthèse": ("(", "right", False), "fermez la parenthèse": (")", "left", False),
@@ -36,7 +40,8 @@ _DE_PUNCT = {
     "doppelpunkt": (":", "left", False), "semikolon": (";", "left", False),
     "strichpunkt": (";", "left", False), "fragezeichen": ("?", "left", True),
     "ausrufezeichen": ("!", "left", True), "auslassungspunkte": ("...", "left", False),
-    "anführungszeichen auf": ('"', "right", False), "anführungszeichen zu": ('"', "left", False),
+    # German quotation marks: „ … “
+    "anführungszeichen auf": ("\u201e", "right", False), "anführungszeichen zu": ("\u201c", "left", False),
     "klammer auf": ("(", "right", False), "klammer zu": (")", "left", False),
     "bindestrich": ("-", "both", False),
 }

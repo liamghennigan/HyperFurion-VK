@@ -17,7 +17,8 @@ proven to be the daemon's.
   commands to the English set — "punto", "coma", "abre interrogación"
   (`¿`), "nueva línea", "borra eso"; "virgule", "point d'interrogation",
   "à la ligne", "efface ça"; "Komma", "Fragezeichen", "neue Zeile",
-  "streich das". Listed by `voice-keyboard commands`.
+  "streich das". Listed by `voice-keyboard commands`. French puts a narrow
+  no-break space before `? ! : ;`; German quotes are „…“.
 - **`voice-keyboard learned add <spoken> = <written>`.** Teach a word now,
   without waiting for the miner: `learned add hyper furion = HyperFurion`.
   A one-word written form also becomes a hotword for the recognizer.
