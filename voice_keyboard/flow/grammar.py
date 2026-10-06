@@ -29,6 +29,7 @@ from voice_keyboard.flow.numbers import (
     SCALE_WORDS,
     UNIT_WORDS,
     convert_numbers,
+    fold_clock,
     fold_digits,
     fold_year,
     fold_unit,
@@ -1097,7 +1098,35 @@ class Grammar:
                         year = None  # half a year never folds ("nineteen ninety nine's")
                     elif _core(after.text) in NOT_A_YEAR_AFTER:
                         year = None  # a count: "nineteen forty people"
+            at_time = None
+            prev = result[-1] if result else None
+            if year is None and prev is not None and prev.kind == "word" and prev.text.casefold() == "at":
+                # "meet at three thirty" -> "at 3:30"; a bare hour stays a word
+                at, tail = end, []
+                if at < size and items[at].kind == "word" and _clean(items[at].text) and _core(items[at].text) == "oh":
+                    at, tail = at + 1, ["oh"]  # "twelve oh five.": the run trimmed its "oh"
+                closer = items[at] if at < size and items[at].kind == "word" and inside(items[at]) else None
+                if (
+                    closer is not None and not _clean(closer.text)
+                    and closer.text.lstrip(_PUNCT_STRIP) == closer.text
+                    and (stamp := fold_clock(words + tail + [_core(closer.text)])) is not None
+                ):
+                    stamp += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]  # "…thirty." keeps its stop
+                    result.append(Item(kind="word", text=stamp, span=(item.span[0], closer.span[1])))
+                    index = at + 1
+                    continue
+                if at == size and molten(item.span[0]) and len(words) + len(tail) <= 2:
+                    return result, item.span[0]  # "at three" may yet be "at three thirty five"
+                at_time = fold_clock(words)
+                after = items[end] if end < size and items[end].kind == "word" and inside(items[end]) else None
+                if at_time is not None and after is not None and not committed and (
+                    _core(after.text) in NOT_A_YEAR_AFTER or not _clean(after.text) and _LEADING_WORD.match(
+                        after.text.casefold()) and _LEADING_WORD.match(after.text.casefold()).group(0) in NUMBER_WORDS
+                ):
+                    at_time = None  # a count ("at three thirty people") or half a time
             digits = fold_digits(words)
+            if digits is None and at_time is not None:
+                digits = at_time
             if digits is None and year is not None:
                 digits = year
                 year_comma(index, (item.span[0], items[end - 1].span[1]))

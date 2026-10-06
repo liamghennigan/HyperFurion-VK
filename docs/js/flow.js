@@ -379,7 +379,31 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
         else if (NOT_A_YEAR_AFTER.has(core(after.text))) year = null;  // a count: "nineteen forty people"
       }
     }
+    let atTime = null;
+    const prev = out.length ? out[out.length - 1] : null;
+    if (year === null && prev && prev.kind === "word" && prev.text.toLowerCase() === "at") {
+      // "meet at three thirty" -> "at 3:30"; a bare hour stays a word
+      let at = end, tail = [];
+      if (at < n && items[at].kind === "word" && clean(items[at].text) && core(items[at].text) === "oh") { at += 1; tail = ["oh"]; }  // "twelve oh five."
+      const closer = at < n && items[at].kind === "word" && inside(items[at]) ? items[at] : null;
+      if (closer && !clean(closer.text) && !PUNCT_HEAD.test(closer.text)) {
+        const c = clock([...words, ...tail, core(closer.text)]);
+        if (c && c.includes(":")) {  // "…thirty." keeps its stop
+          out.push({ kind: "word", text: c + (closer.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: closer.e });
+          i = at + 1; continue;
+        }
+      }
+      if (at === n && molten(it.s) && words.length + tail.length <= 2) return { items: out, pendingFrom: it.s };  // "at three" may yet grow
+      const c = clock(words);
+      atTime = c && c.includes(":") ? c : null;
+      const after = end < n && items[end].kind === "word" && inside(items[end]) ? items[end] : null;
+      if (atTime !== null && after && !committed) {
+        const lead = after.text.toLowerCase().match(/^[a-z]+/);
+        if (NOT_A_YEAR_AFTER.has(core(after.text)) || (!clean(after.text) && lead && NUMBER_WORDS.has(lead[0]))) atTime = null;  // a count, or half a time
+      }
+    }
     let digits = foldDigits(words);
+    if (digits === null && atTime !== null) digits = atTime;
     if (digits === null && year !== null) { digits = year; yearComma(i, it.s, items[end - 1].e); }
     if (digits !== null) out.push({ kind: "word", text: digits, s: it.s, e: items[end - 1].e });
     else out.push(...items.slice(i, end));  // a run that did not fold stays words, all of it

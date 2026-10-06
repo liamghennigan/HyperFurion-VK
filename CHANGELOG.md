@@ -33,7 +33,10 @@ proven to be the daemon's.
 - **Stutters are dropped.** "the the meeting" types "The meeting", "I I
   think" types "I think" — only for words a speaker restarts on, never a
   repeat a sentence means ("had had", "that that"), and never in code.
-- **"five o'clock" types `5 o'clock`.**
+- **"five o'clock" types `5 o'clock`, and a time after "at" is a time:**
+  "meet at three thirty" types `meet at 3:30`, "at twelve oh five" `at
+  12:05`. A bare hour ("at three") and a count ("at three thirty people")
+  stay words.
 - **Years read as years.** "nineteen eighty four" types `1984`, "nineteen
   oh five" `1905`, "twenty twenty six" `2026`. "Twenty twenty vision" and
   "nineteen people" stay words, and so does a count ("nineteen forty

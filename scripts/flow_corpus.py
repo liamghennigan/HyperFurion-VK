@@ -84,6 +84,7 @@ CASES = [
     ("a path stops at a common word", "prose", ["see example dot com slash docs dot then we leave"], {}),
     ("a hashtag is a word", "prose", ["what hashtag should we use"], {}),
     ("a date and its year", "prose", ["on june fifth nineteen ninety nine we met", "and on october sixth, twenty twenty six", "june fifth nineteen people came"], {}),
+    ("a time after at", "prose", ["meet at three thirty tomorrow, or at twelve oh five.", "look at three thirty people at three"], {}),
     ("o'clock", "prose", ["meet at five o'clock, or six o\u2019clock. it's ten o'clock"], {}),
     ("a price shows its cents", "prose", ["it costs one point five dollars or two point two five euros"], {}),
     ("a scale stays a word after the figure", "prose", ["we raised three point two billion dollars", "from five million users and two million, dollars"], {}),

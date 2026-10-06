@@ -201,6 +201,13 @@ def _clock(words: list[str]) -> Optional[str]:
     return f"{hour}:{minutes:02d}"
 
 
+def fold_clock(words: list[str]) -> Optional[str]:
+    """A time with its minutes: "three thirty" -> "3:30", "twelve oh five"
+    -> "12:05"; None for a bare hour (which reads as a count)."""
+    clock = _clock([w.casefold() for w in words])
+    return clock if clock and ":" in clock else None
+
+
 def _ascii_number(token: str) -> bool:
     """"25", "2.5": ASCII digits only (str.isdigit takes "٢٥" and "²")."""
     whole, _, frac = token.partition(".")

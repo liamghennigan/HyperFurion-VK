@@ -1202,6 +1202,33 @@
   ]
  },
  {
+  "name": "a time after at",
+  "register": "prose",
+  "segments": [
+   "meet at three thirty tomorrow, or at twelve oh five.",
+   "look at three thirty people at three"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 3:30 tomorrow, or at 12:05."
+   ],
+   [
+    "screen",
+    "Meet at 3:30 tomorrow, or at 12:05. Look at three thirty people at three"
+   ],
+   [
+    "final",
+    "Meet at 3:30 tomorrow, or at 12:05. Look at three thirty people at three",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "o'clock",
   "register": "prose",
   "segments": [
