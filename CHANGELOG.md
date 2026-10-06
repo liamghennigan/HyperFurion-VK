@@ -77,6 +77,10 @@ proven to be the daemon's.
 
 ### Added
 
+- **Spoken bullets.** "Shopping list colon bullet point milk bullet point
+  eggs" types a list: `Shopping list:` then `- Milk` and `- Eggs` on lines
+  of their own. A bullet at the start of a line needs no extra break; in
+  a terminal or a code register it types nothing. "New bullet" works too.
 - **Spoken case formatters (`[flow] formatters`).** "snake case user id"
   types `user_id`, "camel case get user name" `getUserName`, "pascal case
   http client" `HttpClient`; kebab, constant, dot and title case, "all

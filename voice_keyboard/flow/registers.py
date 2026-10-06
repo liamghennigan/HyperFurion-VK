@@ -106,6 +106,7 @@ class RenderState:
     pending: str = ""              # semantic-compiler hold (dash, call-open, call)
     after_name: bool = False       # code: the last atom was a name ("f" before "(")
     open_calls: int = 0            # code: calls a spoken callable opened, not yet closed
+    line_start: bool = True        # the caret is at the start of a line
 
 
 def initial_state(register: Register) -> RenderState:
@@ -124,6 +125,7 @@ def continuation_state(previous_tail: str, register: Register) -> Optional[Rende
         at_start=False,
         glue_next=False,
         capitalize_next=register.smart_caps and tail in _SENTENCE_ENDERS,
+        line_start=False,
     )
 
 
@@ -165,18 +167,24 @@ def render_items(
     at_start = state.at_start
     glue_next = state.glue_next
     capitalize_next = state.capitalize_next
+    line_start = state.line_start
 
     def emit(text: str, *, glue_left: bool) -> None:
-        nonlocal at_start, glue_next
+        nonlocal at_start, glue_next, line_start
         if not at_start and not glue_next and not glue_left:
             out.append(" ")
         out.append(text)
         at_start = False
         glue_next = False
+        line_start = False
 
     for item in items:
         if item.kind == "break":
-            out.append(item.text)
+            if item.mode == "bullet":
+                out.append(("" if line_start else "\n") + item.text)
+            else:
+                out.append(item.text)
+            line_start = item.mode != "bullet"
             at_start = False
             glue_next = True
             capitalize_next = register.smart_caps
@@ -207,4 +215,5 @@ def render_items(
         at_start=at_start,
         glue_next=glue_next,
         capitalize_next=capitalize_next,
+        line_start=line_start,
     )

@@ -19,7 +19,7 @@ const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "");
 const COMMANDS = {
   "scratch that": "scratch", "scratched that": "scratch", "scratch this": "scratch",
   "strike that": "scratch", "delete that": "scratch", "undo that": "scratch",
-  "new line": "\n", "new paragraph": "\n\n",
+  "new line": "\n", "new paragraph": "\n\n", "bullet point": "bullet", "new bullet": "bullet",
 };
 // the wake word as a speech model is likely to write it
 const WAKE_ALIASES = ["vk", "v.k.", "vk.", "vicky", "vikki", "veekay", "veek"];
@@ -213,6 +213,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
   };
   const flushDash = () => { if (pending === "dash") { emit("-", false); pending = ""; } };
   for (const it of items) {
+    if (it.kind === "break" && it.mode === "bullet") continue;  // a list bullet means nothing in code
     if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
       if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
@@ -460,6 +461,10 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
         i = target + 1; continue;
       } else if (payload === "scratch") {
         items.push({ kind: "scratch", s: i, e: i + used });
+      } else if (payload === "bullet") {
+        // "- " on a line of its own: the renderer adds the line break
+        // unless the caret is already at a line start
+        items.push({ kind: "break", text: "- ", mode: "bullet", s: i, e: i + used });
       } else {  // "\n" | "\n\n"
         items.push({ kind: "break", text: payload, s: i, e: i + used });
       }
@@ -572,7 +577,7 @@ function capitalized(t) {
   return t;
 }
 export function initialState(register) {
-  return { atStart: true, glueNext: false, capNext: (register || REGISTERS.prose).smartCaps, pending: "" };
+  return { atStart: true, glueNext: false, capNext: (register || REGISTERS.prose).smartCaps, pending: "", lineStart: true };
 }
 // the state a recording starts in when it continues text the previous one
 // left at the caret ([flow] rejoin): a space before its first word, and a
@@ -581,7 +586,7 @@ export function initialState(register) {
 export function continuationState(previousTail, register) {
   const tail = previousTail ? previousTail.slice(-1) : "";
   if (!tail || /\s/.test(tail)) return null;
-  return { atStart: false, glueNext: false, capNext: !!(register || REGISTERS.prose).smartCaps && ".!?".includes(tail), pending: "" };
+  return { atStart: false, glueNext: false, capNext: !!(register || REGISTERS.prose).smartCaps && ".!?".includes(tail), pending: "", lineStart: false };
 }
 export function render(items, register, state) {
   const reg = register || REGISTERS.prose;
@@ -591,12 +596,17 @@ export function render(items, register, state) {
   const st = state ? { ...state } : initialState(reg);
   if (reg.compiler && COMPILERS[reg.compiler]) return compileCode(items, st, COMPILERS[reg.compiler]);
   const out = [];
+  if (st.lineStart === undefined) st.lineStart = true;
   const emit = (text, glueLeft) => {
     if (!st.atStart && !st.glueNext && !glueLeft) out.push(" ");
-    out.push(text); st.atStart = false; st.glueNext = false;
+    out.push(text); st.atStart = false; st.glueNext = false; st.lineStart = false;
   };
   for (const it of items) {
-    if (it.kind === "break") { out.push(it.text); st.atStart = false; st.glueNext = true; st.capNext = reg.smartCaps; }
+    if (it.kind === "break") {
+      out.push(it.mode === "bullet" ? (st.lineStart ? "" : "\n") + it.text : it.text);
+      st.lineStart = it.mode !== "bullet";
+      st.atStart = false; st.glueNext = true; st.capNext = reg.smartCaps;
+    }
     else if (it.kind === "punct") {
       if (it.mode === "left") emit(it.text, true);
       else if (it.mode === "right") { emit(it.text, false); st.glueNext = true; }

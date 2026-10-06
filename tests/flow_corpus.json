@@ -404,6 +404,136 @@
   ]
  },
  {
+  "name": "bullets",
+  "register": "prose",
+  "segments": [
+   "shopping list colon bullet point milk bullet point eggs"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Shopping list:\n- Milk\n- Eggs"
+   ],
+   [
+    "final",
+    "Shopping list:\n- Milk\n- Eggs",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a bullet at a line start needs no break",
+  "register": "prose",
+  "segments": [
+   "bullet point first new bullet second",
+   "notes new line bullet point one"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "- First\n- Second"
+   ],
+   [
+    "screen",
+    "- First\n- Second notes\n- One"
+   ],
+   [
+    "final",
+    "- First\n- Second notes\n- One",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a bullet in a terminal is nothing",
+  "register": "terminal",
+  "segments": [
+   "ls bullet point x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ls x"
+   ],
+   [
+    "final",
+    "ls x",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a bullet in code is nothing",
+  "register": "python",
+  "segments": [
+   "x bullet point equals one"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "final",
+    "x = 1",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch after a bullet",
+  "register": "prose",
+  "segments": [
+   "todo colon",
+   "bullet point milk",
+   "scratch that",
+   "bullet point eggs"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Todo:"
+   ],
+   [
+    "screen",
+    "Todo:\n- Milk"
+   ],
+   [
+    "screen",
+    "Todo:"
+   ],
+   [
+    "screen",
+    "Todo:\n- Eggs"
+   ],
+   [
+    "final",
+    "Todo:\n- Eggs",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a terminal never gets a line break",
   "register": "terminal",
   "segments": [
