@@ -1223,6 +1223,50 @@
   ]
  },
  {
+  "name": "headings and tasks",
+  "register": "prose",
+  "segments": [
+   "new heading groceries new checkbox milk new checkbox eggs new subheading later"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n# Groceries\n- [ ] Milk\n- [ ] Eggs\n## Later"
+   ],
+   [
+    "final",
+    "\n# Groceries\n- [ ] Milk\n- [ ] Eggs\n## Later",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a heading in a terminal is nothing",
+  "register": "terminal",
+  "segments": [
+   "ls new heading x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ls x"
+   ],
+   [
+    "final",
+    "ls x",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "numbered lists count",
   "register": "prose",
   "segments": [

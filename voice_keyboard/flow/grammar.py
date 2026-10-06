@@ -77,6 +77,9 @@ DEFAULT_COMMANDS: dict[str, tuple[str, ...]] = {
     "upper_that": ("uppercase that",),
     "lower_that": ("lowercase that",),
     "bullet": ("new bullet",),  # not "bullet point": that is a noun phrase
+    "heading": ("new heading",),  # "# " — markdown, and Notion/Obsidian live
+    "subheading": ("new subheading",),  # "## "
+    "checkbox": ("new checkbox",),  # "- [ ] " — a task list item
     "number": ("new number",),  # "1. ", "2. ", … a numbered list
     "literal": ("literal",),
 }
@@ -152,6 +155,7 @@ DEFAULT_EMOJI: dict[str, str] = {
 }
 
 _BREAKS = {"new_line": "\n", "new_paragraph": "\n\n"}
+_MARKERS = {"bullet": "- ", "heading": "# ", "subheading": "## ", "checkbox": "- [ ] "}
 _RECASE = {"cap_that": "title", "upper_that": "upper", "lower_that": "lower"}
 
 SPELL_WORD = "spell"
@@ -653,10 +657,10 @@ class Grammar:
                     items.append(
                         Item(kind="break", text=_BREAKS[str(payload)], span=span)
                     )
-                elif payload == "bullet":
-                    # "- " on a line of its own: the renderer adds the line
-                    # break unless the caret is already at a line start.
-                    items.append(Item(kind="break", text="- ", mode="bullet", span=span))
+                elif payload in _MARKERS:
+                    # "- ", "# ", … on a line of its own: the renderer adds
+                    # the line break unless the caret is already at a line start.
+                    items.append(Item(kind="break", text=_MARKERS[str(payload)], mode="bullet", span=span))
                 elif payload == "number":
                     # "1. ", then "2. ": the renderer counts.
                     items.append(Item(kind="break", text="", mode="number", span=span))

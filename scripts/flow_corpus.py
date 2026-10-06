@@ -95,6 +95,8 @@ CASES = [
     ("glue never starts an amount", "prose", ["this and five percent"], {}),
     ("units across a pause stay words", "prose", ["twenty five", "percent"], {}),
     ("numbers off leaves units alone", "prose", ["twenty five percent"], {"numbers": "off"}),
+    ("headings and tasks", "prose", ["new heading groceries new checkbox milk new checkbox eggs new subheading later"], {}),
+    ("a heading in a terminal is nothing", "terminal", ["ls new heading x"], {}),
     ("numbered lists count", "prose", ["steps colon new number build new number test new number ship"], {}),
     ("a new paragraph starts a new list", "prose", ["new number a new number b new paragraph new number c"], {}),
     ("scratching a numbered item gives its number back", "prose", ["new number a", "new number b", "scratch that", "new number c"], {}),

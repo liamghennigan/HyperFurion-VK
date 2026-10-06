@@ -28,10 +28,12 @@ const COMMANDS = {
   // decision"); "scratched that" is how recognizers write the command
   "scratch that": "scratch", "scratched that": "scratch", "delete that": "scratch",
   "new line": "\n", "new paragraph": "\n\n", "new bullet": "bullet", "new number": "number",
+  "new heading": "heading", "new subheading": "subheading", "new checkbox": "checkbox",
   // recase the last utterance, said on its own (grammar.py _RECASE)
   "cap that": "recase:title", "capitalize that": "recase:title",
   "uppercase that": "recase:upper", "lowercase that": "recase:lower",
 };
+const MARKERS = { bullet: "- ", heading: "# ", subheading: "## ", checkbox: "- [ ] " };  // grammar.py _MARKERS
 // the wake word as a speech model is likely to write it
 const WAKE_ALIASES = ["vk", "v.k.", "vk.", "vicky", "vikki", "veekay", "veek"];
 // returns how many tokens at i spell the wake word (0 = none)
@@ -634,10 +636,10 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
         items.push({ kind: "scratch", s: i, e: i + used });
       } else if (payload.startsWith("recase:")) {
         items.push({ kind: "recase", text: tokens.slice(i, i + used).join(" "), mode: payload.slice(7), s: i, e: i + used });
-      } else if (payload === "bullet") {
-        // "- " on a line of its own: the renderer adds the line break
-        // unless the caret is already at a line start
-        items.push({ kind: "break", text: "- ", mode: "bullet", s: i, e: i + used });
+      } else if (payload in MARKERS) {
+        // "- ", "# ", … on a line of its own: the renderer adds the line
+        // break unless the caret is already at a line start
+        items.push({ kind: "break", text: MARKERS[payload], mode: "bullet", s: i, e: i + used });
       } else if (payload === "number") {
         items.push({ kind: "break", text: "", mode: "number", s: i, e: i + used });  // "1. ", "2. ": the renderer counts
       } else {  // "\n" | "\n\n"

@@ -12,6 +12,9 @@ proven to be the daemon's.
 
 ### Added
 
+- **Spoken headings and to-dos.** "New heading", "new subheading" and
+  "new checkbox" type `# `, `## ` and `- [ ] ` on a line of their own —
+  markdown, and live headings and to-dos in Notion and Obsidian.
 - **`voice-keyboard commands [filter]`**: everything you can say — commands,
   punctuation, emoji, caret commands, formatters, wake-word channels and
   your own vocabulary and snippets — built from the live grammar with your
