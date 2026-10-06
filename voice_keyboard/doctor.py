@@ -88,9 +88,27 @@ def check_typing() -> Finding:
     if not os.path.exists("/dev/uinput"):
         return Finding(FAIL, "typing", "/dev/uinput is missing", "sudo modprobe uinput")
     if not os.access("/dev/uinput", os.W_OK):
-        return Finding(FAIL, "typing", "can't write /dev/uinput",
-                       "add a udev rule and join its group: see the README's install section")
+        return Finding(FAIL, "typing", "can't write /dev/uinput", _uinput_fix())
     return Finding(OK, "typing", "/dev/uinput is writable")
+
+
+def _uinput_fix() -> str:
+    """The step that is actually missing: the group, a fresh login, or the rule."""
+    try:
+        import grp
+
+        group = grp.getgrnam("input")
+    except (ImportError, KeyError):
+        group = None
+    user = os.environ.get("USER", "")
+    if group is not None and user and user not in group.gr_mem and group.gr_gid not in os.getgroups():
+        return "sudo usermod -aG input $USER, then log out and back in"
+    if group is not None and group.gr_gid not in os.getgroups():
+        return "log out and back in (your session predates joining the input group)"
+    return (
+        "echo 'KERNEL==\"uinput\", GROUP=\"input\", MODE=\"0660\"' | "
+        "sudo tee /etc/udev/rules.d/99-uinput.rules && sudo udevadm trigger"
+    )
 
 
 def check_clipboard() -> Finding:
