@@ -328,6 +328,55 @@
   ]
  },
  {
+  "name": "a terminal never gets a line break",
+  "register": "terminal",
+  "segments": [
+   "rm dash rf build new line",
+   "ls new paragraph"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "rm - rf build"
+   ],
+   [
+    "screen",
+    "rm - rf build ls"
+   ],
+   [
+    "final",
+    "rm - rf build ls",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a shell never gets a line break",
+  "register": "shell",
+  "segments": [
+   "make clean new line make"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "make clean make"
+   ],
+   [
+    "final",
+    "make clean make",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "quotes and dashes",
   "register": "prose",
   "segments": [

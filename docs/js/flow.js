@@ -585,6 +585,9 @@ export function continuationState(previousTail, register) {
 }
 export function render(items, register, state) {
   const reg = register || REGISTERS.prose;
+  // in a terminal a line break is Enter, and Enter runs the command: a
+  // spoken "new line" renders as nothing there — only a hand sends
+  if (reg.terminal) items = items.filter((it) => it.kind !== "break");
   const st = state ? { ...state } : initialState(reg);
   if (reg.compiler && COMPILERS[reg.compiler]) return compileCode(items, st, COMPILERS[reg.compiler]);
   const out = [];

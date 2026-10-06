@@ -56,6 +56,8 @@ CASES = [
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
     ("verbatim is words", "verbatim", ["scratch that period new line"], {}),
     ("new line and paragraph", "prose", ["first line new line second line new paragraph third"], {}),
+    ("a terminal never gets a line break", "terminal", ["rm dash rf build new line", "ls new paragraph"], {}),
+    ("a shell never gets a line break", "shell", ["make clean new line make"], {}),
     ("quotes and dashes", "prose", ["open quote hyper furion close quote em dash a voice keyboard"], {}),
     ("literal", "prose", ["say literal period to type the word"], {}),
     ("vocabulary with trailing punctuation", "prose", ["hyper furion, is open source period"], {}),

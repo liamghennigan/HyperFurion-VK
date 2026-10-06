@@ -147,7 +147,12 @@ def render_items(
 
     Pure and associative over concatenation: render(a+b) ==
     render(a) + render_continue(b) — the prefix-stability property.
+
+    In a terminal register a spoken line break renders as nothing: there,
+    a line break is Enter, and Enter runs the command. Only a hand sends.
     """
+    if register.terminal:
+        items = [item for item in items if item.kind != "break"]
     if register.compiler:
         # Semantic registers compile speech; lazy import avoids a cycle.
         from voice_keyboard.flow.code import COMPILERS

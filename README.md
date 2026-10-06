@@ -570,7 +570,7 @@ recognizer's periods.
 | You say | You get |
 | --- | --- |
 | `scratch that` / `delete that` / `strike that` / `undo that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |
-| `new line` / `new paragraph` | `\n` / `\n\n` |
+| `new line` / `new paragraph` | `\n` / `\n\n` — nothing in a terminal or shell, where a line break is Enter and would run the line |
 | `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |

@@ -1058,6 +1058,11 @@ class Daemon:
         )
         if hasattr(self._injector, "paste_chord_shift"):
             self._injector.paste_chord_shift = register.paste_chord_shift
+        # In a terminal a line break IS Enter, and Enter runs the line. The
+        # grammar already drops a spoken "new line" there; the injector
+        # refuses Enter for the whole session as well, on every path.
+        if hasattr(self._injector, "suppress_enter"):
+            self._injector.suppress_enter = bool(register.terminal)
 
         # A secret widget gets maximum protection: verbatim register (set
         # above via the role), no ledger entry, no vocabulary bias.
@@ -1115,6 +1120,8 @@ class Daemon:
         )
 
     async def _teardown_flow_session(self) -> None:
+        if hasattr(self._injector, "suppress_enter"):
+            self._injector.suppress_enter = False
         if self._nav_task is not None:
             self._nav_task.cancel()
             self._nav_task = None
@@ -2066,13 +2073,14 @@ class Daemon:
         used by the intent channel AND the assistant's hands."""
         injector = self._injector
         has_flag = hasattr(injector, "suppress_enter")
+        before = bool(getattr(injector, "suppress_enter", False))
         if has_flag:
             injector.suppress_enter = True
         try:
             await asyncio.to_thread(injector.type_text, command)
         finally:
             if has_flag:
-                injector.suppress_enter = False
+                injector.suppress_enter = before  # a terminal session keeps refusing
 
     # --------------------------------------------------------- the mind
 
@@ -2412,13 +2420,14 @@ class Daemon:
         if str(self._config.get("ask", {}).get("mode", "say")).lower() == "type":
             injector = self._injector
             has_flag = hasattr(injector, "suppress_enter")
+            before = bool(getattr(injector, "suppress_enter", False))
             if has_flag:
                 injector.suppress_enter = True
             try:
                 await asyncio.to_thread(injector.type_text, answer)
             finally:
                 if has_flag:
-                    injector.suppress_enter = False
+                    injector.suppress_enter = before
             self._remember_typed(answer, register="ask")
         else:
             await self._run_tts(answer)
