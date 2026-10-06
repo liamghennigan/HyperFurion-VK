@@ -7,18 +7,8 @@ on `main` cuts the GitHub release automatically.
 
 ## [Unreleased]
 
-### Fixed
-
-- **Caret and recase commands, from review.** Words after "select that"
-  continue from before the selected utterance (its capital, spacing and list
-  number), and the selection now includes its leading space or line break.
-  Recasing that would change the length ("straße" → "STRASSE") is refused
-  instead of skewing "scratch that". Undo, redo and paste need focus that is
-  surely not a terminal, whatever `[registers.map]` says. A recognizer's
-  period on a command ("Undo that.") no longer holds it until the next
-  words. "Select that" stops if the hold-to-talk keys go down mid-way; the
-  overlay says why a command was refused; and the page and the daemon agree
-  on which characters are unsafe to backspace over (any combining mark).
+The landing page becomes a real text field, and the engine it runs is
+proven to be the daemon's.
 
 ### Added
 
@@ -78,56 +68,6 @@ on `main` cuts the GitHub release automatically.
     readline keys on Linux and Windows Terminal/PSReadLine keys on Windows.
   - Safety: a command fires only as an utterance of its own and never
     presses Enter. With hold-to-talk it waits until the hotkey is released.
-
-## [Unreleased]
-
-The landing page becomes a real text field, and the engine it runs is
-proven to be the daemon's.
-
-### Fixed
-
-- **Safety: "new line" in a terminal no longer presses Enter.** The
-  grammar rendered a spoken line break as `\n` in every register, and in
-  a terminal the injector types `\n` as the Enter key — so "rm dash rf
-  build new line" ran the command. Terminal and shell registers now
-  render a spoken line break as nothing, and the daemon arms the
-  injector's Enter refusal for the whole of a terminal session (every
-  path: keycodes, newlines, clipboard paste), released at teardown; the
-  intent and ask paths restore that state instead of clearing it. The
-  paths that type outside a recording — `voice-keyboard type` (and so
-  `recall`) and `voice-keyboard transform` — probe the focused app and
-  refuse Enter there too when it is a terminal; an integrator that means
-  Enter presses it with `voice-keyboard key`. Only a hand sends, as the
-  landing page always said.
-- **Python register: calls read like Python.** An opening paren or
-  bracket right after a name glues to it — "def get user open paren"
-  types `def get_user(`, "items open bracket zero close bracket" types
-  `items[0]` — while keywords and operators keep their space (`x = (a +
-  b)`, `if (x)`). "print open paren x close paren" no longer types
-  `print((x)`: a spoken open paren right after a callable that already
-  opened one is absorbed. Spoken calls nest, and a colon closes every
-  open one: "for i in range len xs colon" types `for i in range(len(xs)):`.
-- **Flow: words committed one at a time never merge later.** "open" let
-  go by the holdback timer, then "quote" committed on its own, read back
-  as the phrase `"` on the next reparse — the fence only guarded the
-  latest commit. The grammar now parses everything behind the fence item
-  by item (the engine hands it each committed item's end), so no phrase,
-  number run, or spelled run can cross a commit boundary; the two fixes
-  below are special cases of this rule.
-- **Flow: a word duplicated at stop.** When a dictation contained a spoken
-  number that was folded to digits ("twenty three" → `23`) or a `literal`
-  phrase, finalizing re-committed the last word: a terminal got
-  `23 failed tests tests`. The grammar re-read the committed tokens
-  differently once they sat behind the fence (number runs could not start
-  there; a bare `literal` read back as two words). Both now reproduce the
-  committed items exactly, and the engine's "committed items changed under
-  reparse" warning is a test failure in the new parity corpus.
-- **Flow: a verb that closed a segment stays a word.** "select" said alone,
-  then "previous word" after a pause, could be re-read as one navigation
-  command at stop. A command is now decided against the segment it started
-  in, so a split command is typed as the words it was.
-
-### Added
 
 - **Spoken bullets.** "Shopping list colon new bullet milk new bullet
   eggs" types a list: `Shopping list:` then `- Milk` and `- Eggs` on lines
@@ -285,6 +225,60 @@ proven to be the daemon's.
   commit agree over time, not just at stop. A new `landing` CI job runs
   it; `tests/test_flow_corpus.py` keeps the file current on the Python
   side and fails on any "committed items changed under reparse".
+
+### Fixed
+
+- **Caret and recase commands, from review.** Words after "select that"
+  continue from before the selected utterance (its capital, spacing and list
+  number), and the selection now includes its leading space or line break.
+  Recasing that would change the length ("straße" → "STRASSE") is refused
+  instead of skewing "scratch that". Undo, redo and paste need focus that is
+  surely not a terminal, whatever `[registers.map]` says. A recognizer's
+  period on a command ("Undo that.") no longer holds it until the next
+  words. "Select that" stops if the hold-to-talk keys go down mid-way; the
+  overlay says why a command was refused; and the page and the daemon agree
+  on which characters are unsafe to backspace over (any combining mark).
+
+- **Safety: "new line" in a terminal no longer presses Enter.** The
+  grammar rendered a spoken line break as `\n` in every register, and in
+  a terminal the injector types `\n` as the Enter key — so "rm dash rf
+  build new line" ran the command. Terminal and shell registers now
+  render a spoken line break as nothing, and the daemon arms the
+  injector's Enter refusal for the whole of a terminal session (every
+  path: keycodes, newlines, clipboard paste), released at teardown; the
+  intent and ask paths restore that state instead of clearing it. The
+  paths that type outside a recording — `voice-keyboard type` (and so
+  `recall`) and `voice-keyboard transform` — probe the focused app and
+  refuse Enter there too when it is a terminal; an integrator that means
+  Enter presses it with `voice-keyboard key`. Only a hand sends, as the
+  landing page always said.
+- **Python register: calls read like Python.** An opening paren or
+  bracket right after a name glues to it — "def get user open paren"
+  types `def get_user(`, "items open bracket zero close bracket" types
+  `items[0]` — while keywords and operators keep their space (`x = (a +
+  b)`, `if (x)`). "print open paren x close paren" no longer types
+  `print((x)`: a spoken open paren right after a callable that already
+  opened one is absorbed. Spoken calls nest, and a colon closes every
+  open one: "for i in range len xs colon" types `for i in range(len(xs)):`.
+- **Flow: words committed one at a time never merge later.** "open" let
+  go by the holdback timer, then "quote" committed on its own, read back
+  as the phrase `"` on the next reparse — the fence only guarded the
+  latest commit. The grammar now parses everything behind the fence item
+  by item (the engine hands it each committed item's end), so no phrase,
+  number run, or spelled run can cross a commit boundary; the two fixes
+  below are special cases of this rule.
+- **Flow: a word duplicated at stop.** When a dictation contained a spoken
+  number that was folded to digits ("twenty three" → `23`) or a `literal`
+  phrase, finalizing re-committed the last word: a terminal got
+  `23 failed tests tests`. The grammar re-read the committed tokens
+  differently once they sat behind the fence (number runs could not start
+  there; a bare `literal` read back as two words). Both now reproduce the
+  committed items exactly, and the engine's "committed items changed under
+  reparse" warning is a test failure in the new parity corpus.
+- **Flow: a verb that closed a segment stays a word.** "select" said alone,
+  then "previous word" after a pause, could be re-read as one navigation
+  command at stop. A command is now decided against the segment it started
+  in, so a split command is typed as the words it was.
 
 ## [2.3.0] — 2026-10
 
