@@ -6,8 +6,10 @@ items land when they are ready, and each one is shippable on its own.
 > **Status 2026-10 (unreleased):** the spoken grammar grew into an editor —
 > "correct monday to friday", "select that", "cap that", "undo/redo/paste
 > that", quotes, numbered lists, headings and to-dos — and prose writes
-> amounts, times, dates and phone numbers the way you would (25%, $5.50,
-> 3:30 PM, October 6, 555-1234). Rung 3 reaches past code: Spanish,
+> amounts, times, dates, years, links and phone numbers the way you would
+> (25%, $1.50, $3.2 billion, 3:30 PM, June 5, 1999, example.com/docs,
+> 555-1234), and drops stutters ("the the"). In chat apps a spoken line
+> break is Shift+Enter, so it never sends half a message. Rung 3 reaches past code: Spanish,
 > French and German command sets. Rung 4 meets polish: `[polish.map]`
 > restyles dictation per app through your own model, guarded so a bad
 > answer never replaces your words. Correctness is fuzzed now: random
