@@ -56,6 +56,20 @@ proven to be the daemon's.
 
 ### Added
 
+- **Rewrite any selection, in any app.** Highlight text, say "VK, make
+  this shorter" (or fix the grammar, translate, make it friendlier) and
+  the answer from `[llm]` is typed over the selection; the app's undo
+  restores the original. The selection is read where the platform can
+  say for sure what typing would replace: on Linux from the focused,
+  editable widget through AT-SPI, by a separate probe that runs only when
+  you ask (the focus probe at every recording start still never reads
+  screen text; never the PRIMARY selection, which can belong to another
+  window), on Windows by copying from the focused app with the clipboard
+  restored. Never in
+  a terminal or a password field; a single-line selection never gains an
+  Enter; over 4000 characters is refused out loud rather than rewriting
+  something else. With nothing selected, an instruction alone still
+  rewrites your previous dictation.
 - **Hesitations never reach the page (`[flow] fillers`).** Streaming
   recognizers write down "um" and "uh"; they are now dropped from what is
   typed, with the commas that bracket them: "Um, so we should, uh, ship

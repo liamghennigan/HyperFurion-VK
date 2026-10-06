@@ -16,6 +16,7 @@ from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
 from voice_keyboard.flow.grammar import DEFAULT_FILLERS
+from voice_keyboard.focusprobe import MAX_SELECTION_CHARS
 from voice_keyboard.flow.registers import (
     RenderState,
     continuation_state,
@@ -25,7 +26,7 @@ from voice_keyboard.flow.registers import (
 )
 from voice_keyboard.flow.vad import OnsetDetector, SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import common_prefix_len
-from voice_keyboard.focusprobe import FocusInfo, probe_focus
+from voice_keyboard.focusprobe import FocusInfo, probe_focus, probe_selection
 from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty_binding
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
@@ -1681,6 +1682,9 @@ class Daemon:
             if self._verb_request("recall", instruction):
                 query = self._strip_verb(instruction, {"recall", "remember"})
                 return await self._run_recall(query)
+            selection = await self._focused_selection()
+            if selection:
+                return await self._run_selection_rewrite(instruction, selection)
             return await self._run_transform(instruction, worker=None)
         except Exception as exc:
             logger.warning("Voice transform failed: %s", exc)
@@ -1787,6 +1791,73 @@ class Daemon:
             text = await self._run_transform(instruction, worker=None)
             self._remember_typed(text)
             return text
+
+    async def _focused_selection(self) -> str:
+        """The text selected in the focused field — what typing would
+        replace — or "" when there is none or the platform can't say for
+        sure. Linux asks the focused widget itself, on demand (editable
+        widgets only — never the PRIMARY selection, which may belong to
+        another window); Windows
+        copies the focused app's selection and puts the clipboard back.
+        Never in a secret field, never in a terminal (typing does not
+        replace a terminal's selection). Raises when the selection is too
+        long to rewrite, rather than quietly rewriting something else."""
+        if self._session_secret or self._session_register.terminal:
+            return ""
+        if sys.platform == "win32":
+            notes: list = []
+            text = await asyncio.to_thread(
+                clipboard.selection_text,
+                clipboard_fallback=False,
+                registers=self._config.get("registers", {}),
+                notes=notes,
+            )
+            chars = len(text or "")
+            text = text if chars <= MAX_SELECTION_CHARS else ""
+        elif sys.platform == "darwin":
+            return ""
+        else:
+            # Read now, because the user asked: the always-on focus probe
+            # never reads what is on screen.
+            read = await asyncio.to_thread(probe_selection)
+            if read is None:
+                return ""
+            text, chars = read
+        if chars and not text:
+            raise RuntimeError(
+                f"the selection is too long to rewrite ({chars} characters; "
+                f"up to {MAX_SELECTION_CHARS})"
+            )
+        return text if text and text.strip() else ""
+
+    async def _run_selection_rewrite(self, instruction: str, selection: str) -> str:
+        """"VK, make this shorter" with text selected: send the selection
+        and the instruction to [llm] and type the answer over it — typing
+        replaces a selection in any editor. Your app's own undo puts the
+        original back. A single-line selection never gains an Enter: in a
+        chat box that would send the message."""
+        llm_client = create_llm_client(self._config)
+        if llm_client is None:
+            raise RuntimeError("[llm] is not configured")
+        await self._show_hotkey_overlay("processing", detail=f"⌁ {instruction} — the selection")
+        rewritten = (await asyncio.to_thread(llm_client.rewrite, selection, instruction)).strip()
+        if not rewritten:
+            raise RuntimeError("the rewrite came back empty")
+        if await self._focus_changed_since_session():
+            clipboard.set_text(rewritten)
+            raise RuntimeError("focus changed — the rewrite is on the clipboard")
+        if rewritten == selection.strip():
+            await self._show_hotkey_overlay("empty", detail="⌁ nothing to change", timeout_ms=1500)
+            return ""
+        if "\n" in selection:
+            await asyncio.to_thread(self._injector.type_text, rewritten)
+        else:
+            await self._type_no_enter(rewritten)
+        logger.info("Rewrote a %d-character selection", len(selection))
+        await self._show_hotkey_overlay(
+            "inserted", detail="⌁ rewritten — your app's undo brings it back", timeout_ms=2200
+        )
+        return rewritten
 
     async def _run_transform(
         self, instruction: str, *, worker: Optional[InjectionWorker]

@@ -575,6 +575,7 @@ recognizer's periods.
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
 | `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
+| `VK, make this shorter` with text **selected** (alone) | rewrites the selection in any app via `[llm]` and types the answer over it; your app's undo brings the original back |
 | `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |
 | "um", "uh" and the like | nothing — hesitation sounds the recognizer writes down are dropped, with the commas around them (`[flow] fillers`) |
@@ -592,6 +593,21 @@ the last one, in the same app and the same prose register, continues its
 text — a space before the first word, a capital only after a sentence
 end — instead of gluing itself to it. Terminals and code registers never
 get a leading space. `[flow] rejoin = false` turns it off.
+
+**Rewrite any selection.** Highlight text in any editor, browser field or
+chat box, press the hotkey and say only the instruction — "VK, make this
+shorter", "VK, fix the grammar", "VK, translate to German". The selection
+and the instruction go to `[llm]`, and the answer is typed over the
+selection (typing replaces a selection everywhere); the app's own undo
+restores the original. On Linux the selection is read from the focused
+widget through accessibility, and only when you ask — the probe that runs
+at every recording never reads what is on screen, and the PRIMARY
+selection, which can belong to another window, is never used — and on
+Windows it is copied from the focused app with your clipboard put back. Terminals and password fields never
+take part, a single-line selection never gains an Enter (in a chat box
+that would send it), and up to 4000 characters are read. Not on macOS
+yet; there, an instruction alone rewrites your previous dictation, as it
+does everywhere when nothing is selected.
 
 ### Hands-free navigation
 
