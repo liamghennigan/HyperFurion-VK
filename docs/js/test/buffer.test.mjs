@@ -66,3 +66,22 @@ test("a long document is trimmed from the top, caret kept", () => {
   assert.ok(b.text.length <= 40);
   assert.equal(b.caret, b.text.length);
 });
+
+test("undo and redo step back a run of typing at a time, like an editor", () => {
+  const b = createBuffer();
+  for (const ch of "hello world") b.insert(ch);
+  b.press(["ctrl", "backspace"]);
+  assert.equal(b.text, "hello ");
+  assert.ok(b.press(["ctrl", "z"]));
+  assert.equal(b.text, "hello world");
+  assert.ok(b.press(["ctrl", "z"]));
+  assert.equal(b.text, "");
+  assert.ok(b.press(["ctrl", "shift", "z"]));
+  assert.equal(b.text, "hello world");
+  assert.ok(b.press(["ctrl", "y"]));
+  assert.equal(b.text, "hello ");
+  assert.equal(b.press(["ctrl", "y"]), false);  // nothing left to redo
+  const t = createBuffer({ terminal: true });
+  for (const ch of "ls") t.insert(ch);
+  assert.equal(t.press(["ctrl", "z"]), false);  // a terminal's ctrl+z is not ours to show
+});

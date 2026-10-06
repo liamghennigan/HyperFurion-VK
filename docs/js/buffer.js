@@ -52,6 +52,23 @@ export const lineEnd = (text, i) => { const k = text.indexOf("\n", i); return k 
 export function createBuffer({ terminal = false, max = 1600 } = {}) {
   let text = "", caret = 0, anchor = 0;
   let meta = false;  // a terminal's Escape prefix, pending for the next key
+  // undo history, grouped like an editor's: a run of typing is one step,
+  // and so is each deletion or chord
+  let undo = [], redo = [], lastKind = null;
+  const UNDO_MAX = 100;
+  function remember(kind) {
+    if (kind === "type" && lastKind === "type") return;
+    undo.push({ text, caret, anchor });
+    if (undo.length > UNDO_MAX) undo.shift();
+    redo = []; lastKind = kind;
+  }
+  function restore(from, to) {
+    if (!from.length) return false;
+    to.push({ text, caret, anchor });
+    ({ text, caret, anchor } = from.pop());
+    lastKind = null;
+    return true;
+  }
   const B = {};
   Object.defineProperties(B, {
     text: { get: () => text }, caret: { get: () => caret }, anchor: { get: () => anchor },
@@ -86,14 +103,17 @@ export function createBuffer({ terminal = false, max = 1600 } = {}) {
 
   B.insert = (ch) => {
     if (ch === "\t" && terminal) return;  // completion, not a character
+    remember(sel() ? "replace" : "type");
     deleteSelection();
     splice(caret, caret, ch);
   };
   B.backspace = () => {
+    if (!sel() && caret === 0) return;
+    remember("delete");
     if (deleteSelection()) return;
     if (caret > 0) splice(caret - 1, caret, "");
   };
-  B.clear = () => { text = ""; caret = anchor = 0; };
+  B.clear = () => { text = ""; caret = anchor = 0; undo = []; redo = []; lastKind = null; };
   B.setCaret = (i, { extend = false } = {}) => {
     caret = Math.max(0, Math.min(text.length, i));
     if (!extend) anchor = caret;
@@ -109,8 +129,8 @@ export function createBuffer({ terminal = false, max = 1600 } = {}) {
     const key = names.map((n) => String(n).toLowerCase())
       .find((n) => !["ctrl", "control", "shift", "alt", "option", "super", "meta", "cmd", "command"].includes(n));
     if (!key || key === "enter" || key === "return") return false;
-    const move = (to) => { B.setCaret(to, { extend: shift && !terminal }); return true; };
-    const kill = (a, b) => { if (a < b) splice(a, b, ""); return true; };
+    const move = (to) => { lastKind = null; B.setCaret(to, { extend: shift && !terminal }); return true; };
+    const kill = (a, b) => { if (a < b) { remember("delete"); splice(a, b, ""); } return true; };
     if (terminal) {
       // readline / zsh emacs keys — no selection to extend; an Escape
       // prefix is Meta for the key that follows it
@@ -133,6 +153,8 @@ export function createBuffer({ terminal = false, max = 1600 } = {}) {
       return false;  // tab (completion), escape, history keys: nothing to show
     }
     // an editor — on a Mac, option moves by word and command to the ends
+    if ((ctrl || cmd) && key === "z") return shift ? restore(redo, undo) : restore(undo, redo);
+    if (ctrl && key === "y") return restore(redo, undo);
     if ((ctrl || cmd) && key === "a") { anchor = 0; caret = text.length; return true; }
     if (cmd && key === "up") return move(0);
     if (cmd && key === "down") return move(text.length);
@@ -153,8 +175,8 @@ export function createBuffer({ terminal = false, max = 1600 } = {}) {
       if (le >= text.length) return move(text.length);
       return move(Math.min(le + 1 + col, lineEnd(text, le + 1)));
     }
-    if (key === "backspace") { if (deleteSelection()) return true; return kill(ctrl || alt ? wordLeft(text, caret) : caret - 1, caret); }
-    if (key === "delete") { if (deleteSelection()) return true; return kill(caret, ctrl || alt ? wordRight(text, caret) : caret + 1); }
+    if (key === "backspace") { if (sel()) { remember("delete"); deleteSelection(); return true; } return kill(ctrl || alt ? wordLeft(text, caret) : caret - 1, caret); }
+    if (key === "delete") { if (sel()) { remember("delete"); deleteSelection(); return true; } return kill(caret, ctrl || alt ? wordRight(text, caret) : caret + 1); }
     if (key === "tab") { B.insert("\t"); return true; }
     if (key === "escape") { anchor = caret; return true; }
     if (key === "space") { B.insert(" "); return true; }
