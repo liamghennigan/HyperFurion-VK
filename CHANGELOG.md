@@ -12,6 +12,9 @@ proven to be the daemon's.
 
 ### Added
 
+- **More symbols by name.** "asterisk", "hashtag" / "hash sign", "less
+  than sign", "greater than sign" and "caret sign". A word after `#` or `@`
+  is never capitalized, so tags and mentions stay as said.
 - **Line breaks in chat apps are Shift+Enter.** In Slack, Discord, Teams,
   Signal, Telegram, WhatsApp, Element, Mattermost and others, Enter sends —
   so a spoken "new line", a list or a multi-line snippet no longer sends

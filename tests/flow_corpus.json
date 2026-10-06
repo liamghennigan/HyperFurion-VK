@@ -360,6 +360,33 @@
   ]
  },
  {
+  "name": "symbols by name",
+  "register": "prose",
+  "segments": [
+   "hashtag launch day and two asterisk three",
+   "a less than sign b greater than sign c caret sign d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "#launch day and two * three"
+   ],
+   [
+    "screen",
+    "#launch day and two * three a < b > c ^ d"
+   ],
+   [
+    "final",
+    "#launch day and two * three a < b > c ^ d",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "verbatim is words",
   "register": "verbatim",
   "segments": [

@@ -121,6 +121,12 @@ DEFAULT_PUNCTUATION: dict[str, tuple[str, str, bool]] = {
     "backtick": ("`", "both", False),
     "equals sign": ("=", "none", False),
     "plus sign": ("+", "none", False),
+    "asterisk": ("*", "none", False),
+    "hash sign": ("#", "right", False),
+    "hashtag": ("#", "right", False),
+    "less than sign": ("<", "none", False),
+    "greater than sign": (">", "none", False),
+    "caret sign": ("^", "none", False),
 }
 
 # "emoji thumbs up" -> 👍. One code point each, so one Backspace removes

@@ -57,6 +57,7 @@ CASES = [
     ("a nested call across segments", "python", ["for i in range", "len xs colon"], {}),
     ("shell compiles flags", "shell", ["pipe grep dash i error"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
+    ("symbols by name", "prose", ["hashtag launch day and two asterisk three", "a less than sign b greater than sign c caret sign d"], {}),
     ("verbatim is words", "verbatim", ["scratch that period new line"], {}),
     ("new line and paragraph", "prose", ["first line new line second line new paragraph third"], {}),
     ("bullets", "prose", ["shopping list colon new bullet milk new bullet eggs"], {}),

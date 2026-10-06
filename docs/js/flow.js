@@ -64,6 +64,9 @@ const PUNCT = {
   "backslash": ["\\", "both", false], "pipe symbol": ["|", "none", false],
   "tilde": ["~", "right", false], "backtick": ["`", "both", false],
   "equals sign": ["=", "none", false], "plus sign": ["+", "none", false],
+  "asterisk": ["*", "none", false], "hash sign": ["#", "right", false],
+  "hashtag": ["#", "right", false], "less than sign": ["<", "none", false],
+  "greater than sign": [">", "none", false], "caret sign": ["^", "none", false],
 };
 // [flow.vocabulary] — the documented example ships live on this page
 const VOCAB = { "hyper furion": "HyperFurion" };
@@ -861,6 +864,7 @@ export function render(items, register, state) {
       else if (it.mode === "both") { emit(it.text, true); st.glueNext = true; }
       else emit(it.text, false);
       if (it.sentenceEnd && reg.smartCaps) st.capNext = true;
+      if (it.text === "#" || it.text === "@") st.capNext = false;  // #tags and @mentions stay as said
     } else if (it.kind === "word") {
       let t = it.text;
       const tc = t.replace(PUNCT_STRIP, "");

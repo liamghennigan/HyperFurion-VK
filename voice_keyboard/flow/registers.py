@@ -243,6 +243,8 @@ def render_items(
                 emit(glyph, glue_left=False)
             if item.sentence_end and register.smart_caps:
                 capitalize_next = True
+            if glyph in ("#", "@"):
+                capitalize_next = False  # #tags and @mentions stay as said
         elif item.kind == "word":
             text = item.text
             core = text.rstrip(".,!?;:")
