@@ -217,6 +217,7 @@ export const LocalSTT = (() => {
         };
       } catch { node = null; }
     }
+    S.capture = (node ? "AudioWorklet" : "ScriptProcessor") + " at " + ctx.sampleRate + " Hz";
     if (!node) {
       node = ctx.createScriptProcessor(2048, 1, 1);
       node.onaudioprocess = (e) => feed(new Float32Array(e.inputBuffer.getChannelData(0)));

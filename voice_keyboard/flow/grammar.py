@@ -436,7 +436,11 @@ class Grammar:
         for action, phrases in merged_commands.items():
             for phrase in phrases:
                 self._phrases[_phrase_tokens(phrase)] = ("command", action)
-        emoji = {} if code else DEFAULT_EMOJI  # no paste into a terminal, as above
+        # no paste into a terminal, as above; "Imoji rocket" is how a
+        # recognizer may hear "emoji rocket" (not an English word)
+        emoji = {} if code else {
+            **DEFAULT_EMOJI, **{"imoji" + phrase[5:]: glyph for phrase, glyph in DEFAULT_EMOJI.items()},
+        }
         for phrase, replacement in {**emoji, **(vocabulary or {})}.items():
             tokens = _phrase_tokens(str(phrase))
             if tokens:
@@ -589,9 +593,9 @@ class Grammar:
             return 2  # "V K"
         return 0
 
-    def starts_instruction(self, tokens: list[str], index: int) -> bool:
-        """The wake word starts at token `index`."""
-        return self.wake_at([_core(token) for token in tokens], index) > 0
+    def wake_in(self, tokens: list[str], index: int) -> int:
+        """How many of these raw tokens at `index` spell the wake word."""
+        return self.wake_at([_core(token) for token in tokens], index)
 
     def _match_phrase(
         self, cores: list[str], index: int, max_len: int

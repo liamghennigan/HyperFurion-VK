@@ -6605,7 +6605,8 @@
    "We launched today.",
    "Emoji rocket.",
    "Ship it emoji rocket.",
-   "Emoji fire! Nice."
+   "Emoji fire! Nice.",
+   "Imoji rocket."
   ],
   "options": {
    "pause_review": "rules"
@@ -6628,8 +6629,39 @@
     "We launched today. 🚀 Ship it 🚀. 🔥 Nice."
    ],
    [
+    "screen",
+    "We launched today. 🚀 Ship it 🚀. 🔥 Nice. 🚀"
+   ],
+   [
     "final",
-    "We launched today. 🚀 Ship it 🚀. 🔥 Nice.",
+    "We launched today. 🚀 Ship it 🚀. 🔥 Nice. 🚀",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "per cent is percent",
+  "register": "prose",
+  "segments": [
+   "Twenty five per cent by October sixth.",
+   "Paid per cent, five dollars per cent."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "25% by October 6."
+   ],
+   [
+    "screen",
+    "25% by October 6. Paid per cent, $5 per cent."
+   ],
+   [
+    "final",
+    "25% by October 6. Paid per cent, $5 per cent.",
     "",
     "",
     0,

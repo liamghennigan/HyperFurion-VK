@@ -87,7 +87,8 @@ for (const [p, act] of Object.entries(COMMANDS)) PHRASES.set(p, ["cmd", act]);
 PHRASES.set("literal", ["cmd", "literal"]);
 // "emoji thumbs up" -> 👍 (grammar.py DEFAULT_EMOJI): one code point each
 const EMOJI = { "emoji thumbs up": "👍", "emoji thumbs down": "👎", "emoji smile": "🙂", "emoji grin": "😁", "emoji laughing": "😂", "emoji wink": "😉", "emoji sad": "😢", "emoji crying": "😭", "emoji thinking": "🤔", "emoji heart eyes": "😍", "emoji fire": "🔥", "emoji party": "🎉", "emoji check mark": "✅", "emoji cross mark": "❌", "emoji eyes": "👀", "emoji pray": "🙏", "emoji rocket": "🚀", "emoji clap": "👏", "emoji hundred": "💯", "emoji shrug": "🤷", "emoji wave": "👋", "emoji sparkles": "✨", "emoji star": "⭐", "emoji skull": "💀", "emoji facepalm": "🤦", "emoji ok hand": "👌", "emoji muscle": "💪" };
-for (const [p, r] of Object.entries(EMOJI)) PHRASES.set(p, ["vocab", r, "emoji"]);
+// "Imoji rocket" is how a recognizer may hear "emoji rocket" (not an English word)
+for (const [p, r] of Object.entries(EMOJI)) { PHRASES.set(p, ["vocab", r, "emoji"]); PHRASES.set("imoji" + p.slice(5), ["vocab", r, "emoji"]); }
 for (const [p, r] of Object.entries(VOCAB)) PHRASES.set(p, ["vocab", r]);
 const MAX_PHRASE = 3;
 

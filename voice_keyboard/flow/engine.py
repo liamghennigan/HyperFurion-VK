@@ -372,8 +372,7 @@ class FlowEngine:
     def caption(self) -> str:
         """The uncommitted tail for the overlay's live caption."""
         if self._pending_is_instruction():
-            wake = self._grammar.wake_at([token.casefold().strip(".,!?;:") for token in self._tokens], self._pending_from)
-            spoken = " ".join(self._tokens[self._pending_from + wake:])
+            spoken = " ".join(self._tokens[self._pending_from + self._grammar.wake_in(self._tokens, self._pending_from):])
             return f"⌁ {spoken}…" if spoken else "⌁ listening for instruction…"
         tail = " ".join(self._view_tokens()[self._committed_tokens:])
         return tail
@@ -467,7 +466,7 @@ class FlowEngine:
     def _pending_is_instruction(self) -> bool:
         if self._pending_from is None or self._pending_from >= len(self._tokens):
             return False
-        return self._grammar.starts_instruction(self._tokens, self._pending_from)
+        return self._grammar.wake_in(self._tokens, self._pending_from) > 0
 
     def _view_tokens(self) -> list[str]:
         """The tokens as they should read: each pause's punctuation (and the

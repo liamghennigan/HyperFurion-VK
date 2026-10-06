@@ -83,7 +83,7 @@ export const Dictation = (() => {
         return ["Moonshine · in this tab · " + (LocalSTT.device === "webgpu" ? "on your GPU (WebGPU)" : "on your CPU (WebAssembly)"), "live"];
       if (LocalSTT.state === "loading")
         return [(LocalSTT.pct != null ? "downloading Moonshine to this tab · " + LocalSTT.pct + "%" : "starting Moonshine in this tab") +
-                (D.recording ? " · what you say now is typed once it's ready" : settling ? " · what you said is typed once it's ready" : ""), "live"];
+                (D.recording ? " · your words appear when it's ready" : settling ? " · what you said appears when it's ready" : ""), "live"];
       return ["", ""];
     }
     if (engine === "relay") return ["xAI via relay · opt-in", "live"];
@@ -98,11 +98,11 @@ export const Dictation = (() => {
     if (D.recording) {
       if (!listening) t = engine === "relay" ? "Connecting to the hosted engine…" : "Opening the microphone…";
       else if (engine === "local" && LocalSTT.state !== "ready")
-        t = "Listening · the speech model is still loading" + (LocalSTT.pct != null ? " (" + LocalSTT.pct + "%)" : "…");
+        t = "Listening · model loading" + (LocalSTT.pct != null ? " " + LocalSTT.pct + "%" : "…");
       else t = "Listening… tap to stop";
     } else if (settling) {
       t = LocalSTT.state === "loading"
-        ? "Transcribing once the speech model is ready" + (LocalSTT.pct != null ? " (" + LocalSTT.pct + "%)" : "…")
+        ? "Transcribing once the model loads" + (LocalSTT.pct != null ? " · " + LocalSTT.pct + "%" : "…")
         : "Transcribing…";
     }
     micCap.textContent = t;
