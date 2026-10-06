@@ -503,6 +503,9 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
 // or a navigation command starting inside them is decided there — it
 // never waits for, or grows into, the next segment.
 const SPELL_WORD = "spell";
+// words a speaker restarts on (grammar.py STUTTER_WORDS); never ones a
+// sentence can say twice ("had had", "that that")
+const STUTTER_WORDS = new Set("the a an i to and we you my in of for on at with i'm it's i'll we're they".split(" "));
 // hesitation sounds a streaming recognizer writes down: dropped ([flow] fillers)
 export const DEFAULT_FILLERS = ["um", "umm", "uh", "uhh", "uhm", "erm"];
 const SENTENCE_STOPS = ".?!";
@@ -663,6 +666,12 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       items.push({ kind: "instruction", text: tokens.slice(i + wk).join(" "),
                    s: i, e: tokens.length });
       break;
+    }
+    const prev = items.length ? items[items.length - 1] : null;
+    if (fillers.size && !codeReg && i > 0 && STUTTER_WORDS.has(cores[i]) && tokens[i - 1].toLowerCase() === tokens[i].toLowerCase() &&
+        clean(tokens[i]) && prev && prev.s === i - 1 && prev.e === i && (prev.kind === "word" || prev.kind === "filler")) {
+      items.push({ kind: "filler", s: i, e: i + 1 });  // "the the meeting", "I I think": the repeat renders nothing
+      i += 1; continue;
     }
     if (fillers.has(cores[i])) {
       // a hesitation sound renders nothing; a comma attached to it goes too

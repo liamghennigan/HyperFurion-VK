@@ -12,6 +12,9 @@ proven to be the daemon's.
 
 ### Added
 
+- **Stutters are dropped.** "the the meeting" types "The meeting", "I I
+  think" types "I think" — only for words a speaker restarts on, never a
+  repeat a sentence means ("had had", "that that"), and never in code.
 - **Years read as years.** "nineteen eighty four" types `1984`, "nineteen
   oh five" `1905`, "twenty twenty six" `2026`. "Twenty twenty vision" and
   "nineteen people" stay words, and so does a count ("nineteen forty

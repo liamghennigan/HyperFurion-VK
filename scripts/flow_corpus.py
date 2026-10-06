@@ -58,6 +58,8 @@ CASES = [
     ("shell compiles flags", "shell", ["pipe grep dash i error"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
     ("years read in pairs", "prose", ["born in nineteen eighty four, moved in nineteen oh five", "back in twenty twenty six with twenty twenty vision and nineteen people"], {}),
+    ("a stutter is dropped", "prose", ["the the meeting is", "tomorrow and i i think he had had enough of the the the plan"], {}),
+    ("code keeps a repeat", "python", ["the the"], {}),
     ("half a year never folds", "prose", ["the class of nineteen ninety nine's reunion, nineteen sixty nine-ish"], {}),
     ("a count is not a year", "prose", ["there were nineteen forty people and it costs nineteen ninety nine dollars"], {}),
     ("a year after oh carries the stop", "prose", ["born in nineteen oh five. and on june fifth nineteen oh five."], {}),

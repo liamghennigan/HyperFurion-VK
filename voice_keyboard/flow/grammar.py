@@ -264,6 +264,11 @@ def _core(token: str) -> str:
 DATE_MONTHS_SET = frozenset(DATE_MONTHS)
 
 
+# Words a speaker restarts on ("the the", "I I"). Never ones a sentence
+# can say twice ("had had", "that that", "is is").
+STUTTER_WORDS = frozenset(
+    "the a an i to and we you my in of for on at with i'm it's i'll we're they".split()
+)
 _LEADING_WORD = re.compile(r"[a-z]+")
 
 
@@ -309,6 +314,8 @@ class Grammar:
         ) - frozenset(
             LANGUAGE_PACKS.get(str(language or "en").lower(), {}).get("not_fillers", ())
         )
+        # "the the meeting": a stutter is dropped wherever hesitations are
+        self._stutters = bool(self._fillers) and not code and str(language or "en").lower() == "en"
         self._nav = nav
         self._wake = (wake_word or "").strip().casefold()
         numbers = numbers if numbers in {"auto", "always", "off"} else "auto"
@@ -599,6 +606,17 @@ class Grammar:
                 # goes with it.
                 items.append(Item(kind="filler", span=(index, index + 1)))
                 self._filler_stop(tokens[index], items, (index, index + 1))
+                index += 1
+                continue
+
+            if (
+                self._stutters and index > 0 and core in STUTTER_WORDS
+                and tokens[index - 1].casefold() == tokens[index].casefold()
+                and _clean(tokens[index]) and items and items[-1].span == (index - 1, index)
+                and items[-1].kind in ("word", "filler")
+            ):
+                # "the the meeting", "I I think": the repeat renders nothing
+                items.append(Item(kind="filler", span=(index, index + 1)))
                 index += 1
                 continue
 

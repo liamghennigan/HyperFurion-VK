@@ -22,7 +22,7 @@ import flow_corpus  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 VOCAB = (
-    "the a we ship it on friday monday october sixth twenty five nineteen eighty one two three four seven oh "
+    "the the a we ship it on friday monday october sixth twenty five nineteen eighty one two three four seven oh "
     "percent dollars and fifty cents pm am i quote unquote end said period comma new line "
     "bullet number heading scratch that spell n g x correct to cap uppercase select undo "
     "go left word emoji rocket point hundred thousand euros june first second graders "

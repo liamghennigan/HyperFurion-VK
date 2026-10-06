@@ -387,6 +387,55 @@
   ]
  },
  {
+  "name": "a stutter is dropped",
+  "register": "prose",
+  "segments": [
+   "the the meeting is",
+   "tomorrow and i i think he had had enough of the the the plan"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The meeting is"
+   ],
+   [
+    "screen",
+    "The meeting is tomorrow and I think he had had enough of the plan"
+   ],
+   [
+    "final",
+    "The meeting is tomorrow and I think he had had enough of the plan",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "code keeps a repeat",
+  "register": "python",
+  "segments": [
+   "the the"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "the the"
+   ],
+   [
+    "final",
+    "the the",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "half a year never folds",
   "register": "prose",
   "segments": [
