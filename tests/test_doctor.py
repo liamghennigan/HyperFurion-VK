@@ -43,3 +43,14 @@ def test_device_name_must_match_one_device(monkeypatch) -> None:
     assert doctor.check_audio({"audio": {"device_name": "usb"}}).status == doctor.OK
     assert doctor.check_audio({"audio": {"device_name": "mic"}}).status == doctor.FAIL  # two match
     assert doctor.check_audio({"audio": {}}).detail == "Built-in Mic"
+
+
+def test_llm_features_without_llm_fail(monkeypatch) -> None:
+    import voice_keyboard.llm as llm
+
+    monkeypatch.setattr(llm, "llm_ready", lambda config: False)
+    finding = doctor.check_llm({"polish": {"map": {"slack": "casual"}}, "flow": {}})
+    assert finding.status == doctor.FAIL and "[polish.map]" in finding.detail
+    assert doctor.check_llm({"flow": {}}).status == doctor.OK
+    monkeypatch.setattr(llm, "llm_ready", lambda config: True)
+    assert doctor.check_llm({"flow": {"corrections": "llm"}}).detail == "ready for self-corrections"

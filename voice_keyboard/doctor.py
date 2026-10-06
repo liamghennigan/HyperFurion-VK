@@ -162,12 +162,33 @@ def check_speech(config: dict) -> Finding:
     return Finding(OK, "speech", f"{provider} ({where})")
 
 
+def check_llm(config: dict) -> Finding:
+    """Features that need [llm], and whether [llm] can answer."""
+    from voice_keyboard.llm import llm_ready
+
+    wants = []
+    if (config.get("polish", {}) or {}).get("map"):
+        wants.append("[polish.map]")
+    if str(config.get("flow", {}).get("corrections", "off")).lower() == "llm":
+        wants.append("self-corrections")
+    for section in ("intent", "ask", "recall"):
+        if (config.get(section, {}) or {}).get("enabled"):
+            wants.append(f"[{section}]")
+    ready = llm_ready(config)
+    if not wants:
+        return Finding(OK, "llm", "ready (for \"VK, make that …\")" if ready else "not set (nothing needs it)")
+    if ready:
+        return Finding(OK, "llm", "ready for " + ", ".join(wants))
+    return Finding(FAIL, "llm", ", ".join(wants) + " need [llm], which has no model, endpoint or key",
+                   "set [llm] base_url, model and api_key (or point base_url at a local server)")
+
+
 def run(config_path: Path, config: Optional[dict]) -> list[Finding]:
     findings = [check_config(config_path)]
     checks: list[Callable[[], Finding]] = [check_typing, check_clipboard, check_focus_probe]
     if config is not None:
         checks = [lambda: check_speech(config), lambda: check_audio(config),
-                  lambda: check_daemon(config)] + checks
+                  lambda: check_daemon(config), lambda: check_llm(config)] + checks
     for check in checks:
         try:
             findings.append(check())
