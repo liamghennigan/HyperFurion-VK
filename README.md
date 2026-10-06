@@ -571,10 +571,46 @@ recognizer's periods.
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
 | `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
+| `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits |
+| `spell k eight s` | types the spelled word (`k8s`) |
 
 Every phrase is remappable and removable in config (`[flow.commands]`,
 `[flow.punctuation]`), `[flow.vocabulary]` expands your own phrases
 ("hyper furion" → "HyperFurion"), and the wake word is configurable.
+Each `spell that …` fix is offered under `voice-keyboard learned` as a
+correction (and hotword) candidate. It is never applied on its own: one
+spelled word is not a rule ("their" → "there"). `spelling = false` under
+`[flow]` turns spelling off.
+
+### Hands-free navigation
+
+Off by default: `enabled = true` under `[nav]`. Say a command as an
+utterance of its own, with a pause before and after. In the middle of a
+sentence, "delete the previous word" is just typed as words.
+
+| You say | Editors (Linux and Windows) | Terminals: Linux / Windows |
+| --- | --- | --- |
+| `go left` / `go right [N] [words]` | arrows, `ctrl+←/→` | arrows, `alt+b/f` / `ctrl+←/→` |
+| `go up` / `go down [N] lines` | arrows | arrows (shell history) |
+| `go to start` / `end of line` | `home` / `end` | `ctrl+a` / `ctrl+e`, or `home` / `end` |
+| `go to start` / `end of document` | `ctrl+home` / `ctrl+end` | — |
+| `select previous` / `next [N] words`, `select all`, `select line` | `shift` + the motion, `ctrl+a` | refused: a terminal has no selection to extend |
+| `delete previous` / `next [N] words`, `delete line` | `ctrl+backspace` / `ctrl+delete` | `ctrl+w` / `alt+d`, or `ctrl+backspace` / `ctrl+delete` |
+| `press tab`, `press escape twice`, `press page down` | that key | that key |
+
+- Text you dictated before the command is on screen before the keys are
+  pressed. After the keys, dictation starts a new segment: repairs and
+  `scratch that` never reach behind the caret's old position.
+- After `select …` or `delete …`, the next word fills the gap with no
+  leading space.
+- With hold-to-talk, the keys fire after you let go of the hotkey, so the
+  hotkey's modifiers never combine with them.
+- **Enter is never pressed.** No command produces it, and a `[nav.keys]`
+  override that would press it (`enter`, `ctrl+m`, `ctrl+j`) is rejected.
+- Remap or disable a command per kind of app with `[nav.keys.editor]` and
+  `[nav.keys.terminal]`, for example `"move:word:left" = "ctrl+left"`.
+- Not on macOS yet: there are no key chords on that backend, so commands
+  stay words.
 
 ### Context registers
 
@@ -694,6 +730,15 @@ warning as before.
   second-most-recent entry. Off by default.
 - `voice-keyboard status` now reports provider, register, flow state,
   focused app, and the last error.
+- `voice-keyboard stats` shows latency percentiles (p50/p95/max) over the
+  last 200 dictations:
+  - speech → first transcript (the recognizer);
+  - first transcript → first keystroke (VK itself);
+  - speech → screen;
+  - stop → settled.
+
+  Add `--json` for the raw numbers. `latency_log = true` under `[flow]`
+  also appends them to `latency.jsonl` (numbers only, never text).
 
 `[flow]`, `[registers]`, and `[llm]` edits hot-reload at the next recording
 — no daemon restart.
@@ -709,6 +754,12 @@ warning as before.
   form; only the still-molten tail adopts late revisions.
 - `live_rest = "always"` re-bills cloud REST providers on every interim
   probe; the default `"auto"` only pseudo-streams against local endpoints.
+- A navigation command needs its own final segment. Recognizers that
+  finalize on fixed time chunks can split a command or merge it with the
+  words around it. When that happens it is typed as words.
+- Old Win32 EDIT controls (classic dialogs) don't understand
+  `ctrl+backspace`; "delete previous word" types a box there. Modern apps,
+  browsers and Notepad handle it.
 
 ## Configuration
 

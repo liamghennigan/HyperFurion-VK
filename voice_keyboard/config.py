@@ -261,6 +261,16 @@ DEFAULT_CONFIG: dict = {
         # The instruction's first word that routes to the intent channel.
         "verbs": ["run", "command", "execute"],
     },
+    "nav": {
+        # Hands-free navigation: "go left three words", "select previous
+        # word", "go to end of line", "press tab". A command fires only as
+        # a whole utterance of its own (pause before and after); said
+        # mid-sentence it is typed as words. Never presses Enter.
+        "enabled": False,
+        # Chord overrides per kind of app, e.g. under [nav.keys.terminal]:
+        # "move:word:left" = "ctrl+left"; "" disables a command.
+        "keys": {"editor": {}, "terminal": {}},
+    },
     "wake": {
         # Summon Kai hands-free by saying her name. A tiny LOCAL openWakeWord
         # model scores a rolling mic buffer — no transcription, nothing
@@ -580,6 +590,7 @@ def validate_config(config: dict) -> None:
 
     _validate_flow_config(config)
     _validate_intent_config(config)
+    _validate_nav_config(config)
     _validate_ambient_config(config)
     _validate_verb_channel(config, "ask")
     _validate_verb_channel(config, "recall")
@@ -702,6 +713,27 @@ def _validate_intent_config(config: dict) -> None:
         isinstance(v, str) and v.strip() for v in verbs
     ):
         raise RuntimeError("intent.verbs must be a list of non-empty strings")
+
+
+def _validate_nav_config(config: dict) -> None:
+    from voice_keyboard.flow.nav import parse_override
+
+    nav_cfg = config.get("nav", {})
+    if not isinstance(nav_cfg.get("enabled", False), bool):
+        raise RuntimeError("nav.enabled must be a boolean")
+    keys = nav_cfg.get("keys", {})
+    if not isinstance(keys, dict):
+        raise RuntimeError("nav.keys must be a table")
+    for kind, table in keys.items():
+        if kind not in ("editor", "terminal"):
+            raise RuntimeError(f"nav.keys.{kind}: use nav.keys.editor or nav.keys.terminal")
+        if not isinstance(table, dict):
+            raise RuntimeError(f"nav.keys.{kind} must be a table")
+        for action, value in table.items():
+            try:
+                parse_override(value)
+            except ValueError as exc:
+                raise RuntimeError(f"nav.keys.{kind}.{action}: {exc}") from None
 
 
 def _validate_flow_config(config: dict) -> None:

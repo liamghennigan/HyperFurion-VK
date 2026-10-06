@@ -65,6 +65,12 @@ class InjectionWorker:
         self._idle.clear()
         self._dirty.set()
 
+    def reset(self) -> None:
+        """Forget what was typed: the caret moved (navigation), so the text
+        behind it is no longer ours to repair. Call only when idle."""
+        self.screen = ""
+        self._desired = ""
+
     def abandon(self) -> None:
         """Freeze the screen as-is: no further typing or deleting."""
         self._abandoned = True

@@ -327,6 +327,27 @@ enabled = false
 # The instruction's first word that routes to the intent channel.
 verbs = ["run", "command", "execute"]
 
+[nav]
+# Hands-free navigation by voice, in editors and terminals alike:
+#   go left / go right [N] [words|characters]   go up / go down [N] lines
+#   go to start / end of line (or document)     select previous / next [N] words
+#   select all · select line · delete line       delete previous / next [N] words
+#   press tab · press escape twice · press page down
+# A command fires only when it is a whole utterance of its own (a pause
+# before and after); mid-sentence, "delete the previous word" is just
+# words. Terminals get readline keys on Linux (alt+b, ctrl+a, ctrl+w) and
+# Windows Terminal/PSReadLine keys on Windows; selection is refused there.
+# Enter is never pressed. With hold-to-talk, keys fire after you release.
+enabled = false
+
+[nav.keys.editor]
+# Override a command's chords; "" disables it. A list is a sequence.
+# "move:word:left" = "ctrl+left"
+# "select:line:here" = ["home", "shift+end"]
+
+[nav.keys.terminal]
+# "move:word:left" = "ctrl+left"    # if your shell binds it
+
 [wake]
 # Summon Kai hands-free by saying her name. A tiny LOCAL openWakeWord model
 # scores a rolling mic buffer — no transcription, nothing leaves the box —

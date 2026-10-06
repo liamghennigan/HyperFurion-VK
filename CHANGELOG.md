@@ -5,6 +5,28 @@ All notable changes to HyperFurion VK. The format follows
 [semantic versioning](https://semver.org/). A version bump in `pyproject.toml`
 on `main` cuts the GitHub release automatically.
 
+## [Unreleased]
+
+### Added
+
+- **`voice-keyboard stats`**: per-dictation latency, from speech onset to
+  first transcript, first keystroke and settled screen. It reports p50/p95
+  over the last 200 dictations. `[flow] latency_log` also writes a
+  numbers-only `latency.jsonl`. A benchmark in CI drives the real daemon on
+  Linux and Windows, guards VK's own pipeline overhead, and posts the table
+  to the job summary.
+- **Spell to fix**: `spell that n g i n x` replaces the last word, and
+  `spell k eight s` types one. It accepts letters, hyphenated runs, NATO
+  words, `capital x` and spoken digits. Each fix is offered as a
+  `voice-keyboard learned` candidate; none is applied on its own.
+- **Hands-free navigation** (`[nav] enabled`, off by default):
+  - Commands: `go left three words`, `select previous word`,
+    `go to end of line`, `delete next word`, `press tab`.
+  - Keys: editors use the same chords on Linux and Windows. Terminals get
+    readline keys on Linux and Windows Terminal/PSReadLine keys on Windows.
+  - Safety: a command fires only as an utterance of its own and never
+    presses Enter. With hold-to-talk it waits until the hotkey is released.
+
 ## [2.3.0] — 2026-10
 
 Download it, run it, and it walks you through the settings.

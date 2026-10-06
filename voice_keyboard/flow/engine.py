@@ -14,6 +14,14 @@ across a clipboard-pasted run). Commits are monotonic: the only way
 committed text shrinks is the user's own "scratch that", which rewinds to
 a segment snapshot.
 
+A navigation command ("select previous word") is a barrier: it fires only
+when it is a whole final segment of its own — said with a pause before
+and after — and then everything before it must be on screen before its
+keys are pressed. The engine stops committing at the barrier; the daemon
+converges the screen, presses the keys, and calls `complete_action()`,
+which starts a fresh segment: the caret has moved, so nothing before the
+command can be repaired or scratched any more.
+
 One exception to "final commits at once": the period a provider puts where
 the speaker paused (flow/pauses.py). That word waits, molten, until the
 words after the pause decide whether the sentence really ended there.
@@ -27,11 +35,12 @@ import logging
 import math
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from voice_keyboard.flow import pauses
 from voice_keyboard.flow.grammar import Grammar, Item
+from voice_keyboard.flow.nav import REPLACING
 from voice_keyboard.flow.registers import (
     Register,
     RenderState,
@@ -71,6 +80,17 @@ class FinalResult:
     scratches: int     # segments discarded by "scratch that"
     # (heard, meant) for each "spell that ..." that replaced a word.
     corrections: tuple[tuple[str, str], ...] = ()
+    # A navigation command waiting at a barrier: `text` is what must be on
+    # screen before its keys; call complete_action() after pressing them.
+    action: Optional["NavAction"] = None
+    # Text typed in earlier segments, before navigation moved the caret.
+    typed_before: str = ""
+
+
+@dataclass(frozen=True)
+class NavAction:
+    action: str   # e.g. "select:word:left", "press:tab"
+    count: int = 1
 
 
 @dataclass
@@ -110,7 +130,7 @@ _LAST_WORD = re.compile(r"(\S+?)([.,!?;:)\]}\"'»”’]*)(\s*)\Z")
 
 # Actions that rewrite committed text: they wait for a final transcript,
 # never a stability guess, so a misheard partial can't fire them.
-_FINAL_ONLY = ("respell",)
+_FINAL_ONLY = ("respell", "key")
 
 
 def risky_backspace(text: str) -> bool:
@@ -156,6 +176,11 @@ class FlowEngine:
         self._instruction = ""
         self._scratches = 0
         self._corrections: list[tuple[str, str]] = []
+        # Token counts at each final: segment boundaries for navigation.
+        self._segment_bounds: set[int] = {0}
+        self._barrier: Optional[NavAction] = None
+        self._typed_before = ""
+        self._finalizing = False
         self._rev_depth = 0.0  # adaptive: observed ASR revision depth, decaying
 
     # ------------------------------------------------------------- inputs
@@ -200,6 +225,7 @@ class FlowEngine:
                 self._lower_seen.add(pauses.core(self._tokens[index]))
         if is_final:
             self._final_tokens = max(self._final_tokens, len(self._tokens))
+            self._segment_bounds.add(len(self._tokens))
             self._note_pause()
 
         self._rev_depth *= 0.98
@@ -231,18 +257,53 @@ class FlowEngine:
             if pause.decision is None:
                 pause.decision = self._rule_decision(index)[0]
         self._reparse()
-        for item in list(self._items[self._committed_items:]):
-            self._commit_item(item)
+        self._finalizing = True
+        return self._commit_rest()
+
+    def _commit_rest(self) -> FinalResult:
+        """At finalize: commit everything, stopping at a navigation
+        barrier (the daemon resumes with complete_action)."""
+        while self._barrier is None and self._committed_items < len(self._items):
+            self._commit_item(self._items[self._committed_items])
         return FinalResult(
             text=self._committed_render,
-            instruction=self._instruction,
+            instruction=self._instruction if self._barrier is None else "",
             scratches=self._scratches,
             corrections=tuple(self._corrections),
+            action=self._barrier,
+            typed_before=self._typed_before,
         )
+
+    def pending_action(self) -> Optional[NavAction]:
+        """The navigation command waiting for the screen to catch up."""
+        return self._barrier
+
+    def complete_action(self, now: float) -> Optional[FinalResult]:
+        """The daemon pressed the barrier's keys (or refused them): start a
+        fresh segment after it. When finalizing, returns the next result
+        (which may stop at another barrier)."""
+        action = self._barrier
+        if action is None:
+            return self._commit_rest() if self._finalizing else None
+        self._barrier = None
+        self._typed_before += self._committed_render
+        self._committed_render = ""
+        state = self._render_state
+        if action.action.startswith(REPLACING):
+            # The next word fills a selection or a gap: no leading space.
+            state = replace(state, glue_next=True)
+        self._render_state = state
+        self._snapshots = [_Snapshot(render_len=0, render_state=state)]
+        if self._finalizing:
+            return self._commit_rest()
+        self._commit_ready(now)
+        return None
 
     # ------------------------------------------------------------ outputs
 
     def desired_text(self) -> str:
+        if self._barrier is not None:
+            return self._committed_render  # converge, then press the keys
         preview, _ = render_items(
             self._preview_items(), self._render_state, self._register
         )
@@ -432,6 +493,7 @@ class FlowEngine:
             self._view_tokens(),
             flush=self._flush_pending,
             frozen=self._committed_tokens,
+            settled=self._final_tokens,
         )
         if result.items[:self._committed_items] != self._items[:self._committed_items]:
             # Deterministic parsing plus the frozen fence should make this
@@ -449,7 +511,7 @@ class FlowEngine:
         horizon_s = self._cfg.stability_ms / 1000.0
         required = self._effective_required_stability()
 
-        while self._committed_items < len(self._items):
+        while self._barrier is None and self._committed_items < len(self._items):
             item = self._items[self._committed_items]
             start, end = item.span
             if item.kind == "instruction":
@@ -482,8 +544,9 @@ class FlowEngine:
         # Safety valve: an endlessly-revising provider must not grow the
         # repairable tail without bound.
         while (
-            self._committed_items < len(self._items)
-            and self._items[self._committed_items].kind != "instruction"
+            self._barrier is None
+            and self._committed_items < len(self._items)
+            and self._items[self._committed_items].kind not in ("instruction",) + _FINAL_ONLY
         ):
             preview, _ = render_items(
                 self._preview_items(), self._render_state, self._register
@@ -511,6 +574,8 @@ class FlowEngine:
                 self._register,
             )
             self._committed_render += delta
+        elif item.kind == "key":
+            self._commit_key(item)
         elif item.kind == "instruction":
             if item.text:
                 self._instruction = item.text
@@ -543,6 +608,20 @@ class FlowEngine:
         while self._snapshots and self._snapshots[-1].render_len > target.render_len:
             self._snapshots.pop()
         self._scratches += 1
+
+    def _commit_key(self, item: Item) -> None:
+        """A navigation command fires only as a whole final segment; said
+        mid-sentence it was dictation after all, and types as words."""
+        start, end = item.span
+        if start in self._segment_bounds and end in self._segment_bounds:
+            self._barrier = NavAction(action=item.text, count=item.count)
+            return
+        words = [
+            Item(kind="word", text=token, span=(index, index + 1))
+            for index, token in enumerate(self._tokens[start:end], start)
+        ]
+        delta, self._render_state = render_items(words, self._render_state, self._register)
+        self._committed_render += delta
 
     def _apply_respell(self, spelled: str) -> None:
         """"spell that ...": swap the last committed word for the spelled

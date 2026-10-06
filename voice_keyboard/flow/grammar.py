@@ -2,7 +2,7 @@
 
 Turns raw transcript tokens into render items — words, punctuation glyphs,
 line breaks — plus action items the engine executes ("scratch that", a
-wake-word instruction, "spell that n g i n x"). Parsing is a deterministic left-to-right scan with
+wake-word instruction, "spell that n g i n x", "select previous word"). Parsing is a deterministic left-to-right scan with
 bounded lookahead, so parsing a token prefix yields a prefix of the items:
 the engine relies on this to keep committed output frozen.
 
@@ -13,6 +13,9 @@ user vocabulary all come from config and can be remapped or disabled.
 from dataclasses import dataclass
 from typing import Optional
 
+from voice_keyboard.flow.nav import PENDING as NAV_PENDING
+from voice_keyboard.flow.nav import VERBS as NAV_VERBS
+from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import NUMBER_WORDS, convert_numbers
 from voice_keyboard.flow.spelling import (
     MAX_SPELLED_LETTERS,
@@ -28,12 +31,13 @@ MAX_PHRASE_TOKENS = 4
 
 @dataclass(frozen=True)
 class Item:
-    kind: str                    # word | punct | break | scratch | instruction | respell
+    kind: str  # word | punct | break | scratch | instruction | respell | key
     text: str = ""               # word text, punct glyph, break chars, instruction
     mode: str = "none"           # punct spacing: left | right | both | none;
     # respell: replace (the previous word) | insert
     sentence_end: bool = False
     span: tuple[int, int] = (0, 0)  # [start, end) raw-token indices
+    count: int = 1               # key: how many times (go left THREE words)
 
 
 @dataclass(frozen=True)
@@ -116,9 +120,11 @@ class Grammar:
         numbers_on: bool = False,
         numbers_min: int = 10,
         spelling: bool = True,
+        nav: bool = False,
     ):
         self.enabled = enabled
         self._spelling = spelling
+        self._nav = nav
         self._wake = (wake_word or "").strip().casefold()
         numbers = numbers if numbers in {"auto", "always", "off"} else "auto"
         self._numbers_on = numbers == "always" or (numbers == "auto" and numbers_on)
@@ -212,6 +218,7 @@ class Grammar:
         *,
         flush: bool = False,
         frozen: int = 0,
+        settled: int = 0,
     ) -> ParseResult:
         """Parse raw tokens into items.
 
@@ -224,6 +231,10 @@ class Grammar:
         it. Tokens before it were already committed under some parse, and
         fencing guarantees this parse reproduces those items exactly even
         if later tokens would retroactively complete a longer phrase.
+
+        `settled` is how many tokens the provider has finalized. A spelled
+        run or a navigation command starting inside them is decided there:
+        it never waits for, or grows into, the next segment.
         """
         if not self.enabled:
             items = [
@@ -260,11 +271,9 @@ class Grammar:
                 break
 
             if self._spelling and core == SPELL_WORD:
-                # Behind the fence the run is already decided: it may not
-                # grow past the fence, and it never waits.
-                limit = frozen if index < frozen else len(tokens)
+                limit, decided = self._limit(index, len(tokens), frozen, settled, flush)
                 spelled = self._parse_spelling(
-                    tokens[:limit], cores[:limit], index, flush or index < frozen
+                    tokens[:limit], cores[:limit], index, decided
                 )
                 if spelled == _PENDING:
                     pending_from = index
@@ -272,6 +281,20 @@ class Grammar:
                 if spelled is not None:
                     item, index = spelled  # type: ignore[misc]
                     items.append(item)
+                    continue
+
+            if self._nav and core in NAV_VERBS:
+                limit, decided = self._limit(index, len(tokens), frozen, settled, flush)
+                command = parse_nav(cores[:limit], index, decided=decided)
+                if command == NAV_PENDING:
+                    pending_from = index
+                    break
+                if command is not None:
+                    action, count, end = command  # type: ignore[misc]
+                    items.append(
+                        Item(kind="key", text=action, count=count, span=(index, end))
+                    )
+                    index = end
                     continue
 
             entry, consumed = self._match_phrase(cores, index, fence)
@@ -351,6 +374,19 @@ class Grammar:
                 pending_from = number_pending
 
         return ParseResult(items=items, pending_from=pending_from)
+
+    @staticmethod
+    def _limit(
+        index: int, total: int, frozen: int, settled: int, flush: bool
+    ) -> tuple[int, bool]:
+        """How far an open-ended command at `index` may read, and whether
+        its end is decided: behind the committed fence or inside a final
+        segment it may not cross that boundary and never waits."""
+        if index < frozen:
+            return frozen, True
+        if index < settled:
+            return settled, True
+        return total, flush
 
     def _parse_spelling(
         self, tokens: list[str], cores: list[str], index: int, flush: bool
