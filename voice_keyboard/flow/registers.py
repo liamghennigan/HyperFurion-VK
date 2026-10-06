@@ -54,7 +54,15 @@ SHELL = Register(
     terminal=True,
 )
 
-REGISTERS = {r.name: r for r in (PROSE, TERMINAL, VERBATIM, PYTHON, SHELL)}
+JAVASCRIPT = Register(
+    name="javascript",
+    smart_caps=False,
+    numbers_on=True,
+    numbers_min=0,
+    compiler="javascript",
+)
+
+REGISTERS = {r.name: r for r in (PROSE, TERMINAL, VERBATIM, PYTHON, SHELL, JAVASCRIPT)}
 
 # App identifiers (AT-SPI application names, macOS app names, Windows exe
 # basenames — lowercased) that default to the terminal register.

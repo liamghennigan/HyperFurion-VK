@@ -691,6 +691,7 @@ Quartz on macOS, Win32 on Windows — and picks a register:
 | `terminal` | no auto-caps, numbers as digits, pastes with `Ctrl+Shift+V` |
 | `verbatim` | grammar off; words exactly as recognized |
 | `python` | compiles speech: "for i in range ten colon" → `for i in range(10):`, "for i in range len xs colon" → `for i in range(len(xs)):`, "if a double equals b colon" → `if a == b:` (also `!=`, `<`, `>`, `+=`, `<=`), "if x is not none colon" → `if x is not None:`, "raise value error" → `raise ValueError`, "print open paren f quote hi unquote close paren" → `print(f"hi")`, "arrow str colon" → `-> str:` |
+| `javascript` | compiles speech: "const add equals open paren a comma b close paren arrow a plus b" → `const add = (a, b) => a + b`, "x triple equals null and and y not equals z" → `x === null && y !== z`, "a or or b" → `a || b`, "console dot log open paren" → `console.log(` |
 | `shell` | compiles speech: "pipe grep dash i error" → `| grep -i error`, "docker run dash dash rm dash p eight zero eight zero colon eighty" → `docker run --rm -p 8080:80`, "cd dot dot slash src and and ls" → `cd ../src && ls`, "find dot dash name star dot py" → `find . -name *.py`, "chmod plus x dot slash run dot sh" → `chmod +x ./run.sh`, "echo hi greater than out dot txt" → `echo hi > out.txt` |
 
 Known terminals (kitty, alacritty, foot, konsole, GNOME Terminal, wezterm,

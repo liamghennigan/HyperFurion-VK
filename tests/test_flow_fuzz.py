@@ -22,7 +22,7 @@ VOCAB = (
     "percent dollars and fifty cents pm am i quote unquote end said period comma new line "
     "bullet number heading scratch that spell n g x correct to cap uppercase select undo "
     "go left word emoji rocket point hundred thousand euros june first second graders "
-    "literal snake case user id dot com at example slash million dollars people double equals not less than value error type and greater than um "
+    "literal snake case user id dot com at example slash million dollars people double equals not less than value error type and greater than triple or um "
     # language-pack words, used when a seed picks es / fr / de
     "punto coma de en a y final point virgule à la ligne vue punkt komma neue zeile um"
 ).split()
@@ -63,7 +63,7 @@ def test_random_dictations_keep_the_fence(chunk: int, caplog: pytest.LogCaptureF
     with caplog.at_level("WARNING", logger="voice_keyboard.flow.engine"):
         for seed in SEEDS[chunk::4]:
             rng = random.Random(seed)
-            register = rng.choice(("prose", "prose", "prose", "terminal", "python", "shell"))
+            register = rng.choice(("prose", "prose", "prose", "terminal", "python", "shell", "javascript"))
             opts = {"nav": rng.random() < 0.5, "pause_review": rng.choice(("off", "rules")),
                     "language": rng.choice(("en", "en", "es", "fr", "de"))}
             caplog.clear()

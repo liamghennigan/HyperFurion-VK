@@ -327,7 +327,7 @@ DEFAULT_CONFIG: dict = {
     },
 }
 
-VALID_REGISTERS = {"prose", "terminal", "verbatim", "python", "shell"}
+VALID_REGISTERS = {"prose", "terminal", "verbatim", "python", "shell", "javascript"}
 _FLOW_BOOL_KEYS = (
     "enabled",
     "live",

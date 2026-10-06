@@ -205,7 +205,7 @@ wake_word = "vk"
 [registers]
 # How dictation renders per app: prose (smart caps + punctuation),
 # terminal (verbatim-ish, numbers as digits, ctrl+shift+v paste),
-# verbatim (grammar off), python / shell (semantic registers that COMPILE
+# verbatim (grammar off), python / shell / javascript (semantic registers that COMPILE
 # speech: "for i in range ten colon" -> `for i in range(10):`,
 # "pipe grep dash i error" -> `| grep -i error`).
 # Password fields always force verbatim and are never remembered.

@@ -431,6 +431,7 @@ export const REGISTERS = {
   // semantic registers (code.py): speech is compiled, not transcribed
   python:   { name: "python",   smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, compiler: "python" },
   shell:    { name: "shell",    smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, compiler: "shell", terminal: true },
+  javascript: { name: "javascript", smartCaps: false, grammar: true, numbersOn: true, numbersMin: 0, compiler: "javascript" },
 };
 
 // ── the semantic compilers (code.py) — pure, prefix-stable folds ──────────
@@ -456,16 +457,25 @@ const SH_GLUED = { "=": "both", ":": "both" };
 // whether it was half an operator ("if not x" types "not")
 const PY_PAIRS = { "double equals": "==", "not equals": "!=", "double equal": "==", "not equal": "!=", "less than": "<", "greater than": ">", "value error": "ValueError", "type error": "TypeError", "key error": "KeyError", "index error": "IndexError", "runtime error": "RuntimeError", "attribute error": "AttributeError", "import error": "ImportError", "name error": "NameError", "assertion error": "AssertionError", "lookup error": "LookupError", "permission error": "PermissionError", "timeout error": "TimeoutError", "connection error": "ConnectionError", "os error": "OSError", "memory error": "MemoryError", "recursion error": "RecursionError", "stop iteration": "StopIteration", "keyboard interrupt": "KeyboardInterrupt" };  // operators and builtin exceptions (code.py _PYTHON_PAIRS)
 const AUGMENTED = new Set(["+", "-", "*", "/", "%", "<", ">", "!", "=", "//", "**"]);
+// JavaScript / TypeScript (code.py compile_javascript)
+const JS_GLYPHS = { dot: [".", "both"], equals: ["=", "none"], plus: ["+", "none"], minus: ["-", "none"],
+  times: ["*", "none"], modulo: ["%", "none"], arrow: ["=>", "none"] };
+const JS_PAIRS = { "triple equals": "===", "double equals": "==", "not equals": "!==", "not equal": "!==",
+  "less than": "<", "greater than": ">", "and and": "&&", "or or": "||", "fat arrow": "=>" };
+const JS_KEYWORDS = new Set(("await break case catch class const continue debugger default delete do else export extends " +
+  "finally for function if import in instanceof let new of return super switch this throw try " +
+  "typeof var void while with yield async static get set").split(" "));
 const COMPILERS = {
-  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS, pairs: PY_PAIRS },
+  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS, pairs: PY_PAIRS, prefixes: STRING_PREFIXES },
+  javascript: { glyphs: JS_GLYPHS, callables: new Set(), dashHold: false, glueCalls: true, pairs: JS_PAIRS, keywords: JS_KEYWORDS },
   shell:  { glyphs: SH_GLYPHS, callables: new Set(), dashHold: true, glued: SH_GLUED, pairs: SH_PAIRS, dotHold: true },
 };
 // a name an opening paren or bracket glues to ("get_user (" -> get_user();
 // keywords keep their space ("if (", "in [")
 const PY_KEYWORDS = new Set(("False None True and as assert async await break class continue def del elif else except " +
   "finally for from global if import in is lambda nonlocal not or pass raise return try while with yield _ case match type").split(" "));
-const isName = (t) => /^[A-Za-z_][\w.]*$/.test(t) && !PY_KEYWORDS.has(t);
-function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, constants = null, glued = null, pairs = null, dotHold = false }) {
+const isName = (t, keywords = PY_KEYWORDS) => /^[A-Za-z_][\w.]*$/.test(t) && !keywords.has(t);
+function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, constants = null, glued = null, pairs = null, dotHold = false, keywords = PY_KEYWORDS, prefixes = new Set() }) {
   const out = [];
   let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "", afterName = !!state.afterName;
   let openCalls = state.openCalls || 0, innerParens = state.innerParens || 0, lastAtom = state.lastAtom || "";
@@ -491,7 +501,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
     }
     if (callables.has(c) && lastAtom !== "->" && !plain) { emit(text + "(", false); glueNext = true; pending = "call-open"; openCalls += 1; return; }  // calls nest; after "->" it is a type
     if (constants && Object.hasOwn(constants, c)) { emit(constants[c], false); return; }
-    emit(text, false, !!glueCalls && isName(text));
+    emit(text, false, !!glueCalls && isName(text, keywords));
   };
   const flushDash = () => {
     if (pending === "dash" || pending === "dashes") { emit(pending === "dashes" ? "--" : "-", false); pending = ""; }
@@ -520,7 +530,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
         flushDash(); pending = "dash"; continue;
       }
       flushDash();
-      if (glueCalls && STRING_PREFIXES.has(lastAtom.toLowerCase()) && it.text === '"' && it.mode === "right") { emit('"', true); glueNext = true; continue; }  // f"…"
+      if (prefixes.has(lastAtom.toLowerCase()) && it.text === '"' && it.mode === "right") { emit('"', true); glueNext = true; continue; }  // f"…"
       if (pending === "call-open") pending = openCalls ? "call" : "";
       if (it.text === ")" && innerParens) innerParens -= 1;  // closes a paren said inside the call
       else if (openCalls && it.text === ")") { openCalls -= 1; if (!openCalls) pending = ""; }
@@ -546,7 +556,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
       if (pending === "dash" || pending === "dashes") { emit((pending === "dashes" ? "--" : "-") + it.text, false); pending = ""; continue; }
       if (pending.startsWith("hold:")) {
         const key = pending.slice(5).toLowerCase() + " " + c;
-        if (pairs && Object.hasOwn(pairs, key)) { pending = ""; emit(pairs[key], false, !!glueCalls && isName(pairs[key])); continue; }  // "double equals" -> "=="
+        if (pairs && Object.hasOwn(pairs, key)) { pending = ""; emit(pairs[key], false, !!glueCalls && isName(pairs[key], keywords)); continue; }  // "double equals" -> "=="
         const held = pending.slice(5); pending = "";
         word(held, Object.hasOwn(glyphs, c) && glyphs[c][1] === "none");  // before an operator a callable is a name: "type = 5"
       }

@@ -12,6 +12,10 @@ proven to be the daemon's.
 
 ### Added
 
+- **A `javascript` register.** Map your editor to it in `[registers.map]`:
+  "triple equals" `===`, "not equals" `!==`, "and and" `&&`, "or or"
+  `||`, "arrow" `=>`, "plus equals" `+=`, and a name glues its call
+  (`console.log(`).
 - **Code registers read closer to code.** In `shell`, "dash dash rm"
   types `--rm`, `=` and `:` glue both sides (`FOO=bar`, `8080:80`), a dot
   knows a path from an extension (`cd ..`, `./run.sh`, `find . -name`,

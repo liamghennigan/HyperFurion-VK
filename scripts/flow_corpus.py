@@ -72,6 +72,7 @@ CASES = [
     ("correct a held word", "python", ["x equals key", "correct key to k"], {}),
     ("shell dot after a command and before an operator", "shell", ["source dot venv slash bin slash activate", "git add dot and and git commit", "cat style dot less", "echo quote done dot unquote"], {}),
     ("a held callable before an operator is a name", "python", ["type equals five", "if a not equal b colon"], {}),
+    ("javascript operators and arrows", "javascript", ["const add equals open paren a comma b close paren arrow a plus b semicolon", "if open paren x triple equals null and and y not equals z close paren open brace", "console dot log open paren quote hi unquote close paren", "return a or or b"], {}),
     ("a held dash is typed at the end", "shell", ["ls dash"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
     ("years read in pairs", "prose", ["born in nineteen eighty four, moved in nineteen oh five", "back in twenty twenty six with twenty twenty vision and nineteen people"], {}),

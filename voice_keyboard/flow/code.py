@@ -107,8 +107,36 @@ _NAME = re.compile(r"^[A-Za-z_][\w.]*$")
 _KEYWORDS = frozenset(keyword.kwlist) | frozenset(keyword.softkwlist) | {"_", "case", "match", "type"}
 
 
-def _is_name(text: str) -> bool:
-    return bool(_NAME.match(text)) and text not in _KEYWORDS
+def _is_name(text: str, keywords: frozenset = _KEYWORDS) -> bool:
+    return bool(_NAME.match(text)) and text not in keywords
+
+
+# JavaScript / TypeScript: "x triple equals y" -> "x === y", "arrow" -> "=>".
+_JS_WORD_GLYPHS = {
+    "dot": (".", "both"),
+    "equals": ("=", "none"),
+    "plus": ("+", "none"),
+    "minus": ("-", "none"),
+    "times": ("*", "none"),
+    "modulo": ("%", "none"),
+    "arrow": ("=>", "none"),
+}
+_JS_PAIRS = {
+    ("triple", "equals"): "===",
+    ("double", "equals"): "==",
+    ("not", "equals"): "!==",
+    ("not", "equal"): "!==",
+    ("less", "than"): "<",
+    ("greater", "than"): ">",
+    ("and", "and"): "&&",
+    ("or", "or"): "||",
+    ("fat", "arrow"): "=>",
+}
+_JS_KEYWORDS = frozenset(
+    "await break case catch class const continue debugger default delete do else export extends "
+    "finally for function if import in instanceof let new of return super switch this throw try "
+    "typeof var void while with yield async static get set".split()
+)
 
 
 def _compile(
@@ -123,6 +151,8 @@ def _compile(
     glued: dict | None = None,
     pairs: dict | None = None,
     dot_hold: bool = False,
+    keywords: frozenset = _KEYWORDS,
+    prefixes: frozenset = frozenset(),
 ) -> tuple[str, RenderState]:
     out: list[str] = []
     at_start = state.at_start
@@ -207,7 +237,7 @@ def _compile(
         if constants and core in constants:
             emit(constants[core], glue_left=False)
             return
-        emit(text, glue_left=False, name=glue_calls and _is_name(text))
+        emit(text, glue_left=False, name=glue_calls and _is_name(text, keywords))
 
     for item in items:
         if item.kind == "flush":
@@ -249,7 +279,7 @@ def _compile(
                 pending = "dash"
                 continue
             flush_dash()
-            if glue_calls and last_atom.casefold() in _STRING_PREFIXES and item.text == '"' and item.mode == "right":
+            if last_atom.casefold() in prefixes and item.text == '"' and item.mode == "right":
                 emit('"', glue_left=True)  # f"…", r"…"
                 glue_next = True
                 continue
@@ -303,7 +333,7 @@ def _compile(
                 operator = (pairs or {}).get((pending[5:].casefold(), core))
                 if operator is not None:
                     pending = ""
-                    emit(operator, glue_left=False, name=glue_calls and _is_name(operator))
+                    emit(operator, glue_left=False, name=glue_calls and _is_name(operator, keywords))
                     continue
                 held = pending[5:]
                 pending = ""
@@ -343,6 +373,22 @@ def compile_python(
         glue_calls=True,
         constants=_PYTHON_CONSTANTS,
         pairs=_PYTHON_PAIRS,
+        prefixes=_STRING_PREFIXES,
+    )
+
+
+def compile_javascript(
+    items: list[Item], state: RenderState, register: Register
+) -> tuple[str, RenderState]:
+    return _compile(
+        items,
+        state,
+        word_glyphs=_JS_WORD_GLYPHS,
+        callables=frozenset(),
+        dash_hold=False,
+        glue_calls=True,
+        pairs=_JS_PAIRS,
+        keywords=_JS_KEYWORDS,
     )
 
 
@@ -377,4 +423,5 @@ def flush_code(state: RenderState, register: Register) -> tuple[str, RenderState
 COMPILERS = {
     "python": compile_python,
     "shell": compile_shell,
+    "javascript": compile_javascript,
 }

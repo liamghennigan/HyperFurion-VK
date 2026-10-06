@@ -903,6 +903,43 @@
   ]
  },
  {
+  "name": "javascript operators and arrows",
+  "register": "javascript",
+  "segments": [
+   "const add equals open paren a comma b close paren arrow a plus b semicolon",
+   "if open paren x triple equals null and and y not equals z close paren open brace",
+   "console dot log open paren quote hi unquote close paren",
+   "return a or or b"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "const add = (a, b) => a + b;"
+   ],
+   [
+    "screen",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {"
+   ],
+   [
+    "screen",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {console.log(\"hi\")"
+   ],
+   [
+    "screen",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {console.log(\"hi\") return a || b"
+   ],
+   [
+    "final",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {console.log(\"hi\") return a || b",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a held dash is typed at the end",
   "register": "shell",
   "segments": [
