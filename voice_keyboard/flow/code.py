@@ -11,6 +11,8 @@ RenderState (the engine snapshots it for "scratch that" rewinds). A
 non-associative compiler would corrupt the molten commit/preview split.
 """
 
+import keyword
+import re
 from dataclasses import replace
 
 from voice_keyboard.flow.grammar import Item
@@ -46,6 +48,16 @@ _PYTHON_CALLABLES = {
 }
 
 
+# A name an opening paren or bracket glues to: "get_user (" -> get_user(.
+# Keywords keep their space ("if (", "in [").
+_NAME = re.compile(r"^[A-Za-z_][\w.]*$")
+_KEYWORDS = frozenset(keyword.kwlist) | frozenset(keyword.softkwlist)
+
+
+def _is_name(text: str) -> bool:
+    return bool(_NAME.match(text)) and text not in _KEYWORDS
+
+
 def _compile(
     items: list[Item],
     state: RenderState,
@@ -53,19 +65,22 @@ def _compile(
     word_glyphs: dict,
     callables: frozenset | set,
     dash_hold: bool,
+    glue_calls: bool = False,
 ) -> tuple[str, RenderState]:
     out: list[str] = []
     at_start = state.at_start
     glue_next = state.glue_next
     pending = state.pending
+    after_name = state.after_name
 
-    def emit(text: str, *, glue_left: bool) -> None:
-        nonlocal at_start, glue_next
+    def emit(text: str, *, glue_left: bool, name: bool = False) -> None:
+        nonlocal at_start, glue_next, after_name
         if not at_start and not glue_next and not glue_left:
             out.append(" ")
         out.append(text)
         at_start = False
         glue_next = False
+        after_name = name
 
     def emit_mode(glyph: str, mode: str) -> None:
         nonlocal glue_next
@@ -93,8 +108,12 @@ def _compile(
             out.append(item.text)
             at_start = False
             glue_next = True
+            after_name = False
         elif item.kind == "punct":
-            if pending == "call" and item.text == ":":
+            if pending == "call-open" and item.text == "(" and item.mode == "right":
+                pending = "call"  # "print open paren": the callable already opened it
+                continue
+            if pending in ("call", "call-open") and item.text == ":":
                 emit("):", glue_left=True)
                 pending = ""
                 continue
@@ -104,8 +123,14 @@ def _compile(
                 pending = "dash"
                 continue
             flush_dash()
-            if pending == "call" and item.text == ")":
+            if pending in ("call", "call-open") and item.text == ")":
                 pending = ""
+            elif pending == "call-open":
+                pending = "call"
+            if glue_calls and after_name and item.text in "([" and item.mode == "right":
+                emit(item.text, glue_left=True)  # a call or a subscript: f(, xs[
+                glue_next = True
+                continue
             emit_mode(item.text, item.mode)
         elif item.kind == "word":
             core = item.text.casefold()
@@ -113,6 +138,8 @@ def _compile(
                 emit("-" + item.text, glue_left=False)
                 pending = ""
                 continue
+            if pending == "call-open":
+                pending = "call"
             glyph = word_glyphs.get(core)
             if glyph is not None:
                 emit_mode(glyph[0], glyph[1])
@@ -120,9 +147,9 @@ def _compile(
             if core in callables and pending != "call":
                 emit(item.text + "(", glue_left=False)
                 glue_next = True
-                pending = "call"
+                pending = "call-open"  # an explicit "open paren" next is absorbed
                 continue
-            emit(item.text, glue_left=False)
+            emit(item.text, glue_left=False, name=glue_calls and _is_name(item.text))
         # scratch/instruction items render nothing; the engine acts on them.
 
     return "".join(out), replace(
@@ -131,6 +158,7 @@ def _compile(
         glue_next=glue_next,
         capitalize_next=False,
         pending=pending,
+        after_name=after_name,
     )
 
 
@@ -143,6 +171,7 @@ def compile_python(
         word_glyphs=_PYTHON_WORD_GLYPHS,
         callables=_PYTHON_CALLABLES,
         dash_hold=False,
+        glue_calls=True,
     )
 
 

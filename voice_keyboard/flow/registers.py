@@ -103,7 +103,8 @@ class RenderState:
     at_start: bool = True          # nothing rendered yet this session
     glue_next: bool = False        # suppress the space before the next atom
     capitalize_next: bool = True   # next word starts a sentence
-    pending: str = ""              # semantic-compiler hold (dash, open call)
+    pending: str = ""              # semantic-compiler hold (dash, call-open, call)
+    after_name: bool = False       # code: the last atom was a name ("f" before "(")
 
 
 def initial_state(register: Register) -> RenderState:

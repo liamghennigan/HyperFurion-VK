@@ -189,15 +189,20 @@ const SH_GLYPHS = { pipe: ["|", "none"], dot: [".", "both"], star: ["*", "right"
 const PY_CALLABLES = new Set(["range", "print", "len", "str", "int", "float", "input",
   "enumerate", "sorted", "reversed", "abs", "min", "max", "sum", "type", "repr"]);
 const COMPILERS = {
-  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false },
+  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true },
   shell:  { glyphs: SH_GLYPHS, callables: new Set(), dashHold: true },
 };
-function compileCode(items, state, { glyphs, callables, dashHold }) {
+// a name an opening paren or bracket glues to ("get_user (" -> get_user();
+// keywords keep their space ("if (", "in [")
+const PY_KEYWORDS = new Set(("False None True and as assert async await break class continue def del elif else except " +
+  "finally for from global if import in is lambda nonlocal not or pass raise return try while with yield _ case match type").split(" "));
+const isName = (t) => /^[A-Za-z_][\w.]*$/.test(t) && !PY_KEYWORDS.has(t);
+function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
   const out = [];
-  let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "";
-  const emit = (text, glueLeft) => {
+  let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "", afterName = !!state.afterName;
+  const emit = (text, glueLeft, name = false) => {
     if (!atStart && !glueNext && !glueLeft) out.push(" ");
-    out.push(text); atStart = false; glueNext = false;
+    out.push(text); atStart = false; glueNext = false; afterName = name;
   };
   const emitMode = (glyph, mode) => {
     if (mode === "left") emit(glyph, true);
@@ -206,24 +211,29 @@ function compileCode(items, state, { glyphs, callables, dashHold }) {
     else emit(glyph, false);
   };
   const flushDash = () => { if (pending === "dash") { emit("-", false); pending = ""; } };
+  const inCall = () => pending === "call" || pending === "call-open";
   for (const it of items) {
-    if (it.kind === "break") { flushDash(); pending = ""; out.push(it.text); atStart = false; glueNext = true; }
+    if (it.kind === "break") { flushDash(); pending = ""; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
-      if (pending === "call" && it.text === ":") { emit("):", true); pending = ""; continue; }
+      if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
+      if (inCall() && it.text === ":") { emit("):", true); pending = ""; continue; }
       if (dashHold && it.text === "-" && it.mode === "none") { flushDash(); pending = "dash"; continue; }
       flushDash();
-      if (pending === "call" && it.text === ")") pending = "";
+      if (inCall() && it.text === ")") pending = "";
+      else if (pending === "call-open") pending = "call";
+      if (glueCalls && afterName && "([".includes(it.text) && it.mode === "right") { emit(it.text, true); glueNext = true; continue; }
       emitMode(it.text, it.mode);
     } else if (it.kind === "word") {
       const c = it.text.toLowerCase();
       if (pending === "dash") { emit("-" + it.text, false); pending = ""; continue; }
+      if (pending === "call-open") pending = "call";
       const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
       if (g) { emitMode(g[0], g[1]); continue; }
-      if (callables.has(c) && pending !== "call") { emit(it.text + "(", false); glueNext = true; pending = "call"; continue; }
-      emit(it.text, false);
+      if (callables.has(c) && pending !== "call") { emit(it.text + "(", false); glueNext = true; pending = "call-open"; continue; }
+      emit(it.text, false, !!glueCalls && isName(it.text));
     }
   }
-  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending } };
+  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName } };
 }
 
 // ── parse: raw tokens -> items, with the frozen fence (grammar.py) ────────

@@ -34,6 +34,13 @@ proven to be the daemon's.
 
 ### Fixed
 
+- **Python register: calls read like Python.** An opening paren or
+  bracket right after a name glues to it — "def get user open paren"
+  types `def get_user(`, "items open bracket zero close bracket" types
+  `items[0]` — while keywords and operators keep their space (`x = (a +
+  b)`, `if (x)`). "print open paren x close paren" no longer types
+  `print((x)`: a spoken open paren right after a callable that already
+  opened one is absorbed.
 - **Flow: words committed one at a time never merge later.** "open" let
   go by the holdback timer, then "quote" committed on its own, read back
   as the phrase `"` on the next reparse — the fence only guarded the

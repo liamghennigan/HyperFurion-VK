@@ -137,6 +137,109 @@
   ]
  },
  {
+  "name": "a spoken open paren after a callable is absorbed",
+  "register": "python",
+  "segments": [
+   "print open paren x close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "print(x)"
+   ],
+   [
+    "final",
+    "print(x)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "calls and subscripts glue to the name",
+  "register": "python",
+  "segments": [
+   "def snake case get user open paren user close paren colon",
+   "items open bracket zero close bracket"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "def get_user(user):"
+   ],
+   [
+    "screen",
+    "def get_user(user): items[0]"
+   ],
+   [
+    "final",
+    "def get_user(user): items[0]",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "keywords and operators keep their space",
+  "register": "python",
+  "segments": [
+   "x equals open paren a plus b close paren",
+   "if open paren x close paren colon",
+   "return open paren a close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = (a + b)"
+   ],
+   [
+    "screen",
+    "x = (a + b) if (x):"
+   ],
+   [
+    "screen",
+    "x = (a + b) if (x): return (a)"
+   ],
+   [
+    "final",
+    "x = (a + b) if (x): return (a)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a method call",
+  "register": "python",
+  "segments": [
+   "foo dot bar open paren close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "foo.bar()"
+   ],
+   [
+    "final",
+    "foo.bar()",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "shell compiles flags",
   "register": "shell",
   "segments": [
