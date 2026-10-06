@@ -21,8 +21,9 @@ export const Hints = (() => {
       { text: "the proxy in front is engine-x", pause: 900 }, { text: "spell that n g i n x" }] },
     { kind: "select", say: "select previous word", play: [
       { text: "ship it on friday", pause: 900 }, { text: "select previous word", pause: 1100 }, { text: "monday period" }] },
-    { kind: "delete", say: "delete previous word", play: [
-      { text: "rerun the flaky tests", pause: 900 }, { text: "delete previous word", pause: 1100 }, { text: "suite" }] },
+    { kind: "correct", say: "correct monday to friday", play: [
+      { text: "the launch is on monday period", pause: 900 }, { text: "we ship at noon period", pause: 900 },
+      { text: "correct monday to friday" }] },
     { kind: "format", say: "twenty five percent by october sixth", play: [
       { text: "steps colon new number ship twenty five percent by october sixth new number celebrate emoji rocket" }] },
     { kind: "rewrite", say: settings.wakeWord.toUpperCase() + ", make that formal", play: [
