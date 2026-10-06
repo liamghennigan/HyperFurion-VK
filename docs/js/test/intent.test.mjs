@@ -24,3 +24,9 @@ test("an unknown request becomes a comment line, never a command", () => {
   assert.equal(r.known, false);
   assert.ok(r.command.startsWith("# deploy to production right now"));
 });
+test("a marker the recognizer wrote in words or with a hyphen is still the marker", () => {
+  for (const req of ["find every to do", "find every to do.", "find every To-Do in this repo", "find all to dos", "find every todos"])
+    assert.deepEqual(pageCommand(req), { command: "grep -rn TODO .", known: true }, req);
+  assert.deepEqual(pageCommand("find all fix me"), { command: "grep -rn FIXME .", known: true });
+  assert.deepEqual(pageCommand("find every to do list"), { command: 'grep -rn "to do list" .', known: true });
+});

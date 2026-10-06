@@ -34,7 +34,7 @@ export const LocalSTT = (() => {
   // (null once they are in, or when everything came from the cache)
   const S = { state: "idle", device: null, error: "", label: "Moonshine tiny", pct: null, fetched: 0,
               stats: { passes: 0, lastMs: 0, audioSec: 0 } };
-  let pipe = null, loadP = null, copies = 0, gpuBroken = false, fetched = 0, inflight = 0;
+  let pipe = null, loadP = null, copies = 0, gpuBroken = false, fetched = 0, inflight = 0;   // copies: runtime instances made
   const listeners = new Set();
 
   S.supported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
@@ -59,28 +59,32 @@ export const LocalSTT = (() => {
     for (const f of listeners) { try { f(S); } catch {} }
     bus.emit("stt:progress", { state: S.state, device: S.device, pct: S.pct });
   }
-  // every file transformers.js fetches passes through here, so the
-  // progress shown is bytes that really arrived (files read from Cache
-  // Storage never come through: nothing is downloaded for them)
-  async function countingFetch(input, init) {
-    const res = await fetch(input, init);
-    if (!res.body || res.status !== 200) return res;
-    let last = -1, open = true;
-    const done = () => { if (open) { open = false; inflight--; report(); } };
-    inflight++;
-    const counter = new TransformStream({
-      transform(chunk, ctl) {
-        fetched += chunk.byteLength;
-        const pct = Math.floor((100 * fetched) / (BYTES[S.device] || BYTES.wasm));
-        if (pct !== last) { last = pct; report(); }
-        ctl.enqueue(chunk);
-      },
-      flush: done,
-      cancel: done,
-    });
-    const out = new Response(res.body.pipeThrough(counter), { status: res.status, statusText: res.statusText, headers: res.headers });
-    try { Object.defineProperty(out, "url", { value: res.url }); } catch {}
-    return out;
+  // every file a runtime copy fetches passes through here, so the progress
+  // shown is bytes that really arrived for the model being loaded (files
+  // read from Cache Storage never come through: nothing is downloaded for
+  // them). A copy that failed has its downloads cancelled.
+  function fetcher(id, signal) {
+    return async (input, init) => {
+      const res = await fetch(input, { ...(init || {}), signal });
+      if (id !== copies || !res.body || res.status !== 200) return res;
+      let last = -1, open = true;
+      const done = () => { if (open && id === copies) { open = false; inflight--; report(); } };
+      inflight++;
+      const counter = new TransformStream({
+        transform(chunk, ctl) {
+          if (id === copies) {
+            fetched += chunk.byteLength;
+            const pct = Math.floor((100 * fetched) / (BYTES[S.device] || BYTES.wasm));
+            if (pct !== last) { last = pct; report(); }
+          }
+          ctl.enqueue(chunk);
+        },
+        flush: done,
+      });
+      const out = new Response(res.body.pipeThrough(counter), { status: res.status, statusText: res.statusText, headers: res.headers });
+      try { Object.defineProperty(out, "url", { value: res.url }); } catch {}
+      return out;
+    };
   }
 
   // WebGPU only with a real adapter: Chrome exposes navigator.gpu even
@@ -95,32 +99,35 @@ export const LocalSTT = (() => {
   async function open(device) {
     // a fresh module instance on every retry: the first copy's session
     // queue stays rejected after a failure
-    const tf = await import(/* webpackIgnore: true */ CDN + (copies++ ? "#copy" + copies : ""));
-    tf.env.allowLocalModels = false;
-    tf.env.fetch = countingFetch;
-    // 4-bit weights on the GPU (the quantization WebGPU kernels are built
-    // for), 8-bit on the CPU; neither needs shader-f16
-    const dtype = device === "webgpu"
-      ? { encoder_model: "q4", decoder_model_merged: "q4" }
-      : { encoder_model: "q8", decoder_model_merged: "q8" };
-    const p = await tf.pipeline("automatic-speech-recognition", MODEL, { device, dtype, revision: REVISION });
-    await p(new Float32Array(8000));      // a first pass: warms the kernels, and proves the device works
-    return p;
+    const id = ++copies, ac = new AbortController();
+    fetched = 0; inflight = 0; S.device = device; report();
+    try {
+      const tf = await import(/* webpackIgnore: true */ CDN + (id > 1 ? "#copy" + id : ""));
+      tf.env.allowLocalModels = false;
+      tf.env.fetch = fetcher(id, ac.signal);
+      // 4-bit weights on the GPU (the quantization WebGPU kernels are built
+      // for), 8-bit on the CPU; neither needs shader-f16
+      const dtype = device === "webgpu"
+        ? { encoder_model: "q4", decoder_model_merged: "q4" }
+        : { encoder_model: "q8", decoder_model_merged: "q8" };
+      const p = await tf.pipeline("automatic-speech-recognition", MODEL, { device, dtype, revision: REVISION });
+      await p(new Float32Array(8000));    // a first pass: warms the kernels, and proves the device works
+      return p;
+    } catch (e) { ac.abort(); throw e; }  // whatever this copy was still downloading is not needed now
   }
   function load(onProgress) {
     if (pipe) return Promise.resolve(pipe);
     if (onProgress) listeners.add(onProgress);
     if (loadP) return loadP;
     S.state = "loading"; S.error = ""; fetched = 0; inflight = 0;
+    report();
     bus.emit("relay:request", {});            // the footer counts what you asked for
     loadP = (async () => {
-      S.device = await pickDevice();
-      report();
-      try { pipe = await open(S.device); }
+      const device = await pickDevice();
+      try { pipe = await open(device); }
       catch (e) {
-        if (S.device !== "webgpu") throw e;
+        if (device !== "webgpu") throw e;
         gpuBroken = true;                     // the GPU refused: same model, on the CPU
-        S.device = "wasm"; report();
         pipe = await open("wasm");
       }
       S.state = "ready";

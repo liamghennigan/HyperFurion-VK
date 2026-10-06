@@ -138,7 +138,8 @@ export const Dictation = (() => {
     row.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;align-items:center";
     const btn = (cls, text, fn) => {
       const b = document.createElement("button");
-      b.type = "button"; b.className = cls; b.textContent = text; b.style.whiteSpace = "normal"; b.style.textAlign = "left";
+      b.type = "button"; b.className = cls; b.textContent = text;
+      b.style.cssText = "white-space:normal;text-align:left;line-height:1.4";
       b.addEventListener("click", fn);
       return b;
     };
@@ -446,9 +447,9 @@ export const Dictation = (() => {
     log("", "");
     Choice.show({
       text: (landed
-        ? "The speech model stopped working: " + LocalSTT.explain(err) + ". What it already typed stays; the rest wasn't transcribed."
-        : "The speech model couldn't start: " + LocalSTT.explain(err) + ". What you said wasn't transcribed.") +
-        " Your audio stayed in this tab.",
+        ? "The speech model stopped working: " + LocalSTT.explain(err) + ". What it typed stays; nothing after that was transcribed"
+        : "The speech model couldn't start: " + LocalSTT.explain(err) + ". Nothing was transcribed") +
+        ", and no audio left this tab.",
       detail, browser: true,
     });
   }
@@ -490,7 +491,13 @@ export const Dictation = (() => {
       if (restarts++ < 20) { try { r.start(); return; } catch {} }
       stop();
     };
-    try { r.start(); } catch (e) { browserFail(e && e.name ? e.name : "start"); }
+    try { r.start(); } catch (e) { browserFail(e && e.name ? e.name : "start"); return; }
+    // a service that never answers (a Chromium build without one, say)
+    // is a failure to report, not a "listening" to keep up
+    const mine = sigP;
+    Promise.resolve(mine).then(() => setTimeout(() => {
+      if (rec === r && D.recording && !listening) { try { r.abort(); } catch {} browserFail("timeout"); }
+    }, 8000));
   }
   function browserFail(code) {
     if (failed) return;
@@ -500,6 +507,7 @@ export const Dictation = (() => {
       : code === "not-allowed" || code === "service-not-allowed" ? "the browser didn't allow it (microphone or speech permission)"
       : code === "audio-capture" ? "no microphone was available to it"
       : code === "language-not-supported" ? "it doesn't support " + (settings.lang || "this language")
+      : code === "timeout" ? "it never started listening"
       : "it ended with an error";
     if (D.recording) halt();
     browserChosen = false;
