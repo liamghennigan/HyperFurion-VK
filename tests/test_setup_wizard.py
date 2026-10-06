@@ -148,7 +148,7 @@ def test_detected_llama_becomes_the_default_model(tmp_path):
         "",                 # hotkey
         "",                 # mode
         "",                 # language
-        "", "", "",         # Kai, history, navigation
+        "", "", "", "",     # Kai, history, navigation, self-corrections
         "",                 # save
     )
     wizard, out = _wizard(tmp_path, ask, secret=Script("xai-real-key"), server=server)
@@ -171,7 +171,7 @@ def test_detected_llama_becomes_the_default_model(tmp_path):
 
 def test_declining_llama_leaves_llm_alone(tmp_path):
     server = LlamaServer("http://127.0.0.1:8080/v1", ["qwen"])
-    ask = Script("n", "", "", "", "", "", "", "", "")
+    ask = Script("n", "", "", "", "", "", "", "", "", "")
     wizard, _ = _wizard(tmp_path, ask, server=server)
     assert wizard.run() == 0
     config = tomllib.loads((tmp_path / "config.toml").read_text())
@@ -180,7 +180,7 @@ def test_declining_llama_leaves_llm_alone(tmp_path):
 
 def test_router_mode_picks_one_of_several_models(tmp_path):
     server = LlamaServer("http://127.0.0.1:8080/v1", ["a.gguf", "b.gguf"])
-    ask = Script("2", "", "", "", "", "", "", "", "", "")
+    ask = Script("2", "", "", "", "", "", "", "", "", "", "")
     wizard, _ = _wizard(tmp_path, ask, server=server)
     assert wizard.run() == 0
     assert tomllib.loads((tmp_path / "config.toml").read_text())["llm"]["model"] == "b.gguf"
@@ -194,7 +194,7 @@ def test_llama_with_api_key(tmp_path):
         probed.append((url, api_key))
         return LlamaServer(url, ["qwen"])
 
-    ask = Script("", "", "", "", "", "", "", "", "")
+    ask = Script("", "", "", "", "", "", "", "", "", "")
     wizard, _ = _wizard(tmp_path, ask, secret=Script("sekrit"), server=server, probe=probe)
     assert wizard.run() == 0
     assert probed == [("http://127.0.0.1:8080/v1", "sekrit")]
@@ -212,7 +212,7 @@ def test_existing_config_is_edited_in_place(tmp_path):
         "3", "http://127.0.0.1:8081", "",  # local llm, model from the probe
         "super+h", "hold",  # hotkey
         "de",               # language
-        "n", "y", "y",      # Kai off, history on, navigation on
+        "n", "y", "y", "y", # Kai off, history on, navigation on, self-corrections on
         "",                 # save
     )
     wizard, out = _wizard(
@@ -230,20 +230,21 @@ def test_existing_config_is_edited_in_place(tmp_path):
     assert config["assistant"]["enabled"] is False
     assert config["flow"]["history"] is True
     assert config["nav"]["enabled"] is True
+    assert config["flow"]["corrections"] == "llm"
     assert config["llm"]["base_url"] == "http://127.0.0.1:8081/v1"
     assert config["llm"]["model"] == "phi.gguf"
     assert "Keep the current setup (xai)" in "\n".join(out)
 
 
 def test_invalid_hotkey_is_asked_again(tmp_path):
-    ask = Script("", "", "control+alt+notakey", "control+alt+b", "", "", "", "", "", "")
+    ask = Script("", "", "control+alt+notakey", "control+alt+b", "", "", "", "", "", "", "")
     wizard, out = _wizard(tmp_path, ask)
     assert wizard.run() == 0
     assert tomllib.loads((tmp_path / "config.toml").read_text())["hotkey"]["key"] == "control+alt+b"
 
 
 def test_groq_asks_for_a_voice_provider(tmp_path):
-    ask = Script("2", "groq", "elevenlabs", "", "", "", "", "", "", "", "")
+    ask = Script("2", "groq", "elevenlabs", "", "", "", "", "", "", "", "", "")
     wizard, _ = _wizard(tmp_path, ask, secret=Script("gsk", "el"))
     assert wizard.run() == 0
     config = tomllib.loads((tmp_path / "config.toml").read_text())
@@ -255,7 +256,7 @@ def test_groq_asks_for_a_voice_provider(tmp_path):
 
 def test_hosted_signs_in_after_saving(tmp_path):
     calls = []
-    ask = Script("1", "", "", "", "", "", "", "", "")
+    ask = Script("1", "", "", "", "", "", "", "", "", "")
     wizard, _ = _wizard(tmp_path, ask, login=lambda: calls.append((tmp_path / "config.toml").exists()) or True)
     assert wizard.run() == 0
     assert calls == [True]
@@ -270,14 +271,14 @@ def test_ctrl_c_changes_nothing(tmp_path):
 
 
 def test_declining_to_save_changes_nothing(tmp_path):
-    ask = Script("2", "xai", "", "", "", "", "", "", "", "n")
+    ask = Script("2", "xai", "", "", "", "", "", "", "", "", "n")
     wizard, _ = _wizard(tmp_path, ask, secret=Script("k"))
     assert wizard.run() == 1
     assert not (tmp_path / "config.toml").exists()
 
 
 def test_no_key_yet_says_so(tmp_path):
-    ask = Script("", "", "", "", "", "", "", "")
+    ask = Script("", "", "", "", "", "", "", "", "")
     wizard, out = _wizard(tmp_path, ask)
     assert wizard.run() == 0
     assert (tmp_path / "config.toml").exists()

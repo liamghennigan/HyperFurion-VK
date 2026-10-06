@@ -324,6 +324,25 @@ class LLMClient:
         )
         return _command_from_reply(reply)
 
+    def clean_corrections(self, text: str) -> str:
+        """`text` with its self-corrections deleted (see
+        flow/corrections.py); the caller checks the answer only deleted
+        words. Raises RuntimeError on failure."""
+        from voice_keyboard.flow.corrections import SYSTEM_PROMPT as CORRECTIONS_PROMPT
+
+        reply = self._chat(
+            CORRECTIONS_PROMPT,
+            f"text: {text}\ntidy:",
+            temperature=0.0,
+            max_tokens=max(32, len(text) // 2 + 16),
+            timeout=min(self._timeout, 6.0),
+        )
+        lines = [line for line in _strip_wrapping(reply).splitlines() if line.strip()]
+        cleaned = lines[0].strip() if lines else ""
+        if cleaned.casefold().startswith("tidy:"):
+            cleaned = cleaned[5:].strip()
+        return cleaned
+
     def review_pause(self, before: str, after: str) -> str:
         """The two words around a dictation pause, punctuated and capitalized
         as they should be (see PAUSE_REVIEW_SYSTEM_PROMPT); the caller

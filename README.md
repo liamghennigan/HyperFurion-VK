@@ -579,6 +579,7 @@ recognizer's periods.
 | `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |
 | "um", "uh" and the like | nothing — hesitation sounds the recognizer writes down are dropped, with the commas around them (`[flow] fillers`) |
+| "Tuesday, no wait, Wednesday" | "Wednesday" — with `[flow] corrections = "llm"`, a dictation with a correction cue is tidied by `[llm]` at stop; the answer may only delete words |
 
 Every phrase is remappable and removable in config (`[flow.commands]`,
 `[flow.punctuation]`), `[flow.vocabulary]` expands your own phrases

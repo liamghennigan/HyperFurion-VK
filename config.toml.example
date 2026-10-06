@@ -139,6 +139,14 @@ spelling = true
 # typed: "um, so we should, uh, ship it" -> "So we should, ship it".
 # Only sounds, never words that carry meaning. [] keeps them all.
 fillers = ["um", "umm", "uh", "uhh", "uhm", "erm"]
+# Self-corrections: "send it Tuesday, no wait, Wednesday" -> "Send it
+# Wednesday". "llm" sends a dictation that has a correction cue ("no
+# wait", "I mean", "sorry", "actually", a stuttered "the the") to [llm]
+# to delete the false start, and the screen repairs itself at stop. The
+# answer may only DELETE words — every word it keeps must be one you
+# said, in order — or it is ignored and your text stays as dictated.
+# Dictations without a cue are never sent. Prose fields only. "off".
+corrections = "off"
 # Stop, think, press the hotkey again: a recording that starts within 30
 # seconds of the last one, in the same app and the same prose register,
 # continues its text — a space before the first word, and a capital only

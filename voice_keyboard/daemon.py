@@ -15,6 +15,7 @@ from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
+from voice_keyboard.flow import corrections
 from voice_keyboard.flow.grammar import DEFAULT_FILLERS
 from voice_keyboard.focusprobe import MAX_SELECTION_CHARS
 from voice_keyboard.flow.registers import (
@@ -1564,6 +1565,8 @@ class Daemon:
             final = result.text
             self._last_scratches = result.scratches
             self._note_spellings(result.corrections)
+            if not result.instruction:
+                final = await self._self_corrected(final)
             if worker is not None:
                 final = await self._finish_live(worker, final, result.instruction)
             else:
@@ -1791,6 +1794,39 @@ class Daemon:
             text = await self._run_transform(instruction, worker=None)
             self._remember_typed(text)
             return text
+
+    async def _self_corrected(self, text: str) -> str:
+        """[flow] corrections = "llm": a dictation with a correction cue
+        ("no wait", "I mean", a stuttered "the the") goes to [llm] to have
+        the false start deleted. The answer is used only if it deleted
+        words and did nothing else (flow/corrections.py) — otherwise, or
+        on any failure, the text stays exactly as dictated. Prose only;
+        never a secret field, never after focus moved."""
+        mode = str(self._config.get("flow", {}).get("corrections", "off")).strip().lower()
+        if (
+            mode != "llm"
+            or self._session_secret
+            or self._focus_lost
+            or not self._session_register.smart_caps
+            or not corrections.needs_cleanup(text)
+            or not llm_ready(self._config)
+        ):
+            return text
+        llm_client = create_llm_client(self._config)
+        if llm_client is None:
+            return text
+        await self._show_hotkey_overlay("processing", detail="⌁ tidying a self-correction")
+        try:
+            cleaned = await asyncio.to_thread(llm_client.clean_corrections, text.strip())
+        except Exception as exc:
+            logger.info("Self-correction tidy-up failed; keeping the text: %s", exc)
+            return text
+        if not corrections.deletion_only(text, cleaned):
+            logger.info("Self-correction tidy-up changed more than it deleted; keeping the text")
+            return text
+        lead = text[: len(text) - len(text.lstrip())]
+        logger.info("Self-correction: %d → %d words", len(corrections.words(text)), len(corrections.words(cleaned)))
+        return lead + cleaned
 
     async def _focused_selection(self) -> str:
         """The text selected in the focused field — what typing would

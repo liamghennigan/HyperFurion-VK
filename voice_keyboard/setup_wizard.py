@@ -432,6 +432,14 @@ class Wizard:
         nav = self.confirm("Move the caret by voice?", nav_now)
         if nav != nav_now:
             self.set("nav", "enabled", nav, f"Hands-free navigation: {'on' if nav else 'off'}")
+        fix_now = str(current.get("flow", {}).get("corrections", "off")).lower() == "llm"
+        self.out('    Self-corrections: "send it Tuesday, no wait, Wednesday" becomes')
+        self.out('    "Send it Wednesday". Only dictations with a correction cue go to your')
+        self.out("    language model, and it may only delete words, never add or change one.")
+        fix = self.confirm("Tidy self-corrections with your language model?", fix_now)
+        if fix != fix_now:
+            self.set("flow", "corrections", "llm" if fix else "off",
+                     f"Self-corrections: {'tidied by the language model' if fix else 'kept as dictated'}")
 
     # --------------------------------------------------------------- save
 

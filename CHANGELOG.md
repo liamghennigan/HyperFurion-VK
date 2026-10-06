@@ -56,6 +56,17 @@ proven to be the daemon's.
 
 ### Added
 
+- **Self-corrections, tidied (`[flow] corrections = "llm"`).** "Send it
+  Tuesday, no wait, Wednesday" types "Send it Wednesday." A grammar
+  can't know what a correction replaces, so a dictation with a cue ("no
+  wait", "I mean", "sorry", "actually", "or rather", a stuttered "the
+  the") goes to `[llm]` at stop — under a rule the daemon checks: the
+  answer may only DELETE words. Every word it keeps must be one you said,
+  in order; an answer that adds, swaps or respells a word, or deletes
+  more than 60 % of the dictation, is thrown away and your text stays as
+  dictated. The screen repairs itself in place. Dictations without a cue
+  are never sent; prose fields only. Off by default; `voice-keyboard
+  setup` asks.
 - **Rewrite any selection, in any app.** Highlight text, say "VK, make
   this shorter" (or fix the grammar, translate, make it friendlier) and
   the answer from `[llm]` is typed over the selection; the app's undo

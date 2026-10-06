@@ -123,6 +123,10 @@ DEFAULT_CONFIG: dict = {
         "spelling": True,
         # Hesitation sounds dropped from what is typed. [] keeps them all.
         "fillers": ["um", "umm", "uh", "uhh", "uhm", "erm"],
+        # Self-corrections ("Tuesday, no wait, Wednesday"): "llm" asks
+        # [llm] to delete the false start when a dictation has a correction
+        # cue; the answer may only delete words, or it is ignored. "off".
+        "corrections": "off",
         # A recording that starts within 30 s of the last one, in the same
         # app and the same prose register, continues its text: a space
         # before the first word, a capital only after a sentence end.
@@ -765,6 +769,8 @@ def _validate_flow_config(config: dict) -> None:
         raise RuntimeError("flow.live_rest must be one of: auto, always, off")
     if str(flow_cfg.get("numbers", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.numbers must be one of: auto, always, off")
+    if str(flow_cfg.get("corrections", "off")).lower() not in {"llm", "off"}:
+        raise RuntimeError("flow.corrections must be one of: llm, off")
     if str(flow_cfg.get("pause_review", "auto")).lower() not in {"auto", "llm", "rules", "off"}:
         raise RuntimeError("flow.pause_review must be one of: auto, llm, rules, off")
     vocabulary = flow_cfg.get("vocabulary", {})
