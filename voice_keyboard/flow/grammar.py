@@ -35,7 +35,8 @@ class Item:
     kind: str  # word | punct | break | scratch | instruction | respell | key | filler
     text: str = ""               # word text, punct glyph, break chars, instruction
     mode: str = "none"           # punct spacing: left | right | both | none;
-    # respell: replace (the previous word) | insert
+    # respell: replace (the previous word) | insert; word: "verbatim" = never
+    # auto-capitalized (a spoken address)
     sentence_end: bool = False
     span: tuple[int, int] = (0, 0)  # [start, end) raw-token indices
     count: int = 1               # key: how many times (go left THREE words)
@@ -106,9 +107,23 @@ SPELL_WORD = "spell"
 # ("like", "so", "well", "hmm" in a chat).
 DEFAULT_FILLERS = ("um", "umm", "uh", "uhh", "uhm", "erm")
 _SENTENCE_STOPS = ".?!"
+
+# Spoken addresses: "docs dot python dot org" -> docs.python.org, "liam at
+# example dot com" -> liam@example.com. A run only becomes an address
+# when it ends in one of these, so "meet at the office" stays prose.
+TLDS = frozenset(
+    "com org net io dev ai app co edu gov uk de fr us ca me info biz xyz sh gg tv "
+    "eu nl se no es it jp in au nz ch at be ly so to cc".split()
+)
+_ADDRESS_GLUE = {"dot": ".", "at": "@"}
 # Spelled symbols that are also everyday words.
 _AMBIGUOUS = {"a", "i", "one", "two", "four", "eight"}
 _PENDING = "pending"
+
+
+def _address_part(core: str) -> bool:
+    """A spoken piece of a domain or a mailbox: letters, digits, hyphens."""
+    return bool(core) and core.replace("-", "").isalnum() and core.isascii()
 
 
 def _core(token: str) -> str:
@@ -134,8 +149,10 @@ class Grammar:
         spelling: bool = True,
         nav: bool = False,
         fillers=DEFAULT_FILLERS,
+        addresses: bool = True,
     ):
         self.enabled = enabled
+        self._address_on = addresses
         self._spelling = spelling
         self._fillers = frozenset(
             str(f).strip().casefold() for f in (fillers or ()) if str(f).strip()
@@ -186,6 +203,38 @@ class Grammar:
         ".": ("left", True), ",": ("left", False), "!": ("left", True),
         "?": ("left", True), ";": ("left", False), ":": ("left", False),
     }
+
+    def _address(self, cores: list[str], index: int, limit: int, *, decided: bool):
+        """A spoken domain or email starting at `index`, read no further
+        than `limit`: (text, end); _PENDING while an undecided tail could
+        still become one; None. Shape: part ("dot" part)* ["at" part
+        ("dot" part)*], ending in "dot" + a top-level domain — the longest
+        such run wins ("example dot co dot uk")."""
+        if not self._address_on or index + 1 >= limit:
+            return None  # a lone word at the tail is just a word, for now
+        first = cores[index]
+        if not _address_part(first) or first in _ADDRESS_GLUE or first in self._fillers:
+            return None
+        if cores[index + 1] not in _ADDRESS_GLUE:
+            return None
+        parts, seps = [first], []
+        cursor, best = index + 1, None
+        while True:
+            if cursor >= limit:
+                return best if decided else _PENDING  # the run touches an open tail
+            sep = cores[cursor]
+            if sep not in _ADDRESS_GLUE or (sep == "at" and "@" in seps):
+                return best
+            if cursor + 1 >= limit:
+                return best if decided else _PENDING
+            part = cores[cursor + 1]
+            if not _address_part(part):
+                return best
+            seps.append(_ADDRESS_GLUE[sep])
+            parts.append(part)
+            cursor += 2
+            if seps[-1] == "." and part in TLDS and (seps.count("@") == 0 or seps.index("@") < len(seps) - 1):
+                best = ("".join(p + q for p, q in zip(parts, seps + [""])), cursor)
 
     @staticmethod
     def _filler_stop(token: str, items: list[Item], span: tuple[int, int]) -> None:
@@ -435,8 +484,21 @@ class Grammar:
                 index += consumed
                 continue
 
+            limit = item_end(index) if index < frozen else len(tokens)
+            address = self._address(cores, index, limit, decided=index < settled or flush or limit < len(tokens))
+            if address == _PENDING:
+                pending_from = index  # "liam at" may still become an address
+                break
+            if address is not None:
+                text, end = address
+                # mode "verbatim": an address is never auto-capitalized
+                items.append(Item(kind="word", text=text, mode="verbatim", span=(index, end)))
+                items.extend(self._trailing_punct(tokens[end - 1], (index, end)))
+                index = end
+                continue
+
             token = tokens[index]
-            if self._fillers and token.endswith(",") and index + 1 < len(tokens) + 1:
+            if self._fillers and token.endswith(","):
                 # "we should, uh, ship it": the commas were the recognizer's
                 # brackets around the hesitation, and go with it. The word
                 # and the filler are one item, so they freeze together and

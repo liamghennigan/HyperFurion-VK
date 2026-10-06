@@ -135,6 +135,10 @@ personal_dictionary = true
 # swaps the last word for the spelled one; "spell ..." types it. Each
 # swap is offered as a `voice-keyboard learned` candidate.
 spelling = true
+# Spoken addresses: "liam at example dot com" types liam@example.com and
+# "docs dot python dot org" types docs.python.org. Only a run that ends in
+# a known top-level domain becomes one; "meet at the office" stays prose.
+addresses = true
 # Hesitation sounds the recognizer writes down are dropped from what is
 # typed: "um, so we should, uh, ship it" -> "So we should, ship it".
 # Only sounds, never words that carry meaning. [] keeps them all.

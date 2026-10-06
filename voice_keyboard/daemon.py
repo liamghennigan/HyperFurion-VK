@@ -942,6 +942,7 @@ class Daemon:
             numbers_min=register.numbers_min,
             spelling=bool(flow_cfg.get("spelling", True)),
             fillers=flow_cfg.get("fillers", DEFAULT_FILLERS),
+            addresses=bool(flow_cfg.get("addresses", True)),
             nav=self._nav_enabled(),
         )
 

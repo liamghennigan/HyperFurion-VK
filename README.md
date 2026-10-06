@@ -579,6 +579,7 @@ recognizer's periods.
 | `VK, make this shorter` with text **selected** (alone) | rewrites the selection in any app via `[llm]` and types the answer over it; your app's undo brings the original back |
 | `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |
+| `liam at example dot com`, `docs dot python dot org` | `liam@example.com`, `docs.python.org` — never auto-capitalized; only runs ending in a known top-level domain (`[flow] addresses`) |
 | "um", "uh" and the like | nothing — hesitation sounds the recognizer writes down are dropped, with the commas around them (`[flow] fillers`) |
 | "Tuesday, no wait, Wednesday" | "Wednesday" — with `[flow] corrections = "llm"`, a dictation with a correction cue is tidied by `[llm]` at stop; the answer may only delete words |
 

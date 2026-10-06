@@ -238,6 +238,37 @@ const SPELL_WORD = "spell";
 // hesitation sounds a streaming recognizer writes down: dropped ([flow] fillers)
 export const DEFAULT_FILLERS = ["um", "umm", "uh", "uhh", "uhm", "erm"];
 const SENTENCE_STOPS = ".?!";
+// spoken addresses: "docs dot python dot org" -> docs.python.org, "liam at
+// example dot com" -> liam@example.com; a run only becomes an address when
+// it ends in one of these, so "meet at the office" stays prose
+const TLDS = new Set(("com org net io dev ai app co edu gov uk de fr us ca me info biz xyz sh gg tv " +
+  "eu nl se no es it jp in au nz ch at be ly so to cc").split(" "));
+const ADDRESS_GLUE = { dot: ".", at: "@" };
+const isGlue = (c) => Object.hasOwn(ADDRESS_GLUE, c);
+const addressPart = (c) => !!c && /^[a-z0-9-]+$/.test(c) && /[a-z0-9]/.test(c);
+// a spoken domain or email at `index`, read no further than `limit`:
+// [text, end]; PENDING while an undecided tail could still become one; null
+function addressAt(cores, index, limit, decided, fillers) {
+  if (index + 1 >= limit) return null;  // a lone word at the tail is just a word, for now
+  const first = cores[index];
+  if (!addressPart(first) || isGlue(first) || fillers.has(first)) return null;
+  if (!isGlue(cores[index + 1])) return null;
+  const parts = [first], seps = [];
+  let cursor = index + 1, best = null;
+  for (;;) {
+    if (cursor >= limit) return decided ? best : PENDING;  // the run touches an open tail
+    const sep = cores[cursor];
+    if (!isGlue(sep) || (sep === "at" && seps.includes("@"))) return best;
+    if (cursor + 1 >= limit) return decided ? best : PENDING;
+    const part = cores[cursor + 1];
+    if (!addressPart(part)) return best;
+    seps.push(ADDRESS_GLUE[sep]); parts.push(part);
+    cursor += 2;
+    const at = seps.indexOf("@");
+    if (seps[seps.length - 1] === "." && TLDS.has(part) && (at === -1 || at < seps.length - 1))
+      best = [parts.map((p, k) => p + (seps[k] || "")).join(""), cursor];
+  }
+}
 // a sentence end the recognizer attached to a hesitation ("… so, um.")
 // still ends the sentence — after a word, and only once
 function fillerStop(token, items, s, e) {
@@ -259,6 +290,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   }
   const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
   const spelling = !cfg || cfg.spelling !== false;
+  const addressOn = !cfg || cfg.addresses !== false;
   const fillers = new Set(((cfg && cfg.fillers) || DEFAULT_FILLERS).map((f) => String(f).trim().toLowerCase()).filter(Boolean));
   const nav = !!(cfg && cfg.nav);
   const cores = tokens.map(core);
@@ -361,6 +393,19 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
         items.push({ kind: "break", text: payload, s: i, e: i + used });
       }
       i += used; continue;
+    }
+    {
+      const limit = i < frozen ? itemEnd(i) : tokens.length;
+      const address = addressOn ? addressAt(cores, i, limit, i < settled || flush || limit < tokens.length, fillers) : null;
+      if (address === PENDING) { pendingFrom = i; break; }  // "liam at" may still become an address
+      if (address) {
+        const [text, end] = address;
+        items.push({ kind: "word", text, mode: "verbatim", s: i, e: end });  // never auto-capitalized
+        const tail = (tokens[end - 1].match(PUNCT_STRIP) || [""])[0];
+        for (const ch of tail) if (".,!?;:".includes(ch))
+          items.push({ kind: "punct", text: ch, mode: "left", sentenceEnd: ".!?".includes(ch), s: i, e: end });
+        i = end; continue;
+      }
     }
     const token = tokens[i];
     if (fillers.size && token.endsWith(",")) {
@@ -486,7 +531,7 @@ export function render(items, register, state) {
       if (it.sentenceEnd && reg.smartCaps) st.capNext = true;
     } else if (it.kind === "word") {
       let t = it.text;
-      if (st.capNext && reg.smartCaps) t = capitalized(t);
+      if (st.capNext && reg.smartCaps && it.mode !== "verbatim") t = capitalized(t);
       emit(t, false);
       st.capNext = reg.smartCaps && ENDERS.test(t.trimEnd());
     }

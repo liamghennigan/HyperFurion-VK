@@ -114,6 +114,15 @@ CASES = [
     ("a filler after a pause lets the next word decide", "prose",
      ["I was thinking about the project.", "Um, and how it works."], {"pause_review": "rules"}),
     ("a comma word at a segment end keeps its comma", "prose", ["we should,", "uh, ship it"], {}),
+    # spoken addresses
+    ("an email", "prose", ["email liam at example dot com please"], {}),
+    ("an email starts a sentence in lowercase", "prose", ["liam at gmail dot com.", "next one"], {}),
+    ("a dotted mailbox", "prose", ["liam dot hennigan at gmail dot com"], {}),
+    ("a domain", "prose", ["see docs dot python dot org."], {}),
+    ("the longest domain wins", "prose", ["go to example dot co dot uk now"], {}),
+    ("prose with at and dot stays prose", "prose", ["meet at the office", "the dot product", "we are at dot com scale"], {}),
+    ("a domain in a terminal", "terminal", ["ping example dot com"], {}),
+    ("an address across segments is words", "prose", ["liam at example", "dot com"], {}),
     # [flow] rejoin: continuing text an earlier recording left at the caret
     ("rejoin after a sentence end", "prose", ["next sentence"], {"continues": "Hello world."}),
     ("rejoin mid-sentence", "prose", ["and more"], {"continues": "Hello world"}),
@@ -159,6 +168,11 @@ STREAMS = [
     ("a half phrase is held, then let go", "prose", [
         [0.0, "ready open", "interim"], [0.3, "ready open", "interim"], [0.6, "ready open", "interim"],
         [2.0, "tick"], [2.5, "tick"], [3.2, "tick"], [3.6, "ready open", "interim"], [4.0, "ready open quote", "final"]], {}),
+    ("an email waits until it can't grow", "prose", [
+        [0.0, "mail liam", "interim"], [0.3, "mail liam at", "interim"], [0.6, "mail liam at example", "interim"],
+        [0.9, "mail liam at example dot", "interim"], [1.2, "mail liam at example dot com", "interim"],
+        [1.5, "mail liam at example dot com", "interim"], [3.5, "tick"], [4.0, "mail liam at example dot com today", "interim"],
+        [6.5, "tick"], [7.0, "mail liam at example dot com today", "final"]], {}),
     ("a comma word waits for one more word, then merges with a filler", "prose", [
         [0.0, "we should,", "interim"], [0.3, "we should,", "interim"], [0.6, "we should, uh,", "interim"],
         [0.9, "we should, uh, ship", "interim"], [3.0, "tick"], [3.3, "we should, uh, ship it", "interim"],

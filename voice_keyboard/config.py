@@ -121,6 +121,10 @@ DEFAULT_CONFIG: dict = {
         # "spell that n g i n x" replaces the last word with the spelled
         # one ("spell ..." types it); each becomes a `learned` candidate.
         "spelling": True,
+        # "liam at example dot com" -> liam@example.com, "docs dot python
+        # dot org" -> docs.python.org (only runs that end in a known
+        # top-level domain; "meet at the office" stays prose).
+        "addresses": True,
         # Hesitation sounds dropped from what is typed. [] keeps them all.
         "fillers": ["um", "umm", "uh", "uhh", "uhm", "erm"],
         # Self-corrections ("Tuesday, no wait, Wednesday"): "llm" asks
@@ -316,6 +320,7 @@ _FLOW_BOOL_KEYS = (
     "latency_log",
     "personal_dictionary",
     "spelling",
+    "addresses",
     "rejoin",
     "rewrite_pending",
 )

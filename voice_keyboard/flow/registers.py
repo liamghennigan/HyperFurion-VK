@@ -189,7 +189,7 @@ def render_items(
                 capitalize_next = True
         elif item.kind == "word":
             text = item.text
-            if capitalize_next and register.smart_caps:
+            if capitalize_next and register.smart_caps and item.mode != "verbatim":
                 text = _capitalized(text)
             emit(text, glue_left=False)
             capitalize_next = register.smart_caps and text.rstrip().endswith(_SENTENCE_ENDERS)

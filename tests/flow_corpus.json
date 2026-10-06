@@ -1934,6 +1934,202 @@
   ]
  },
  {
+  "name": "an email",
+  "register": "prose",
+  "segments": [
+   "email liam at example dot com please"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Email liam@example.com please"
+   ],
+   [
+    "final",
+    "Email liam@example.com please",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an email starts a sentence in lowercase",
+  "register": "prose",
+  "segments": [
+   "liam at gmail dot com.",
+   "next one"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "liam@gmail.com."
+   ],
+   [
+    "screen",
+    "liam@gmail.com. Next one"
+   ],
+   [
+    "final",
+    "liam@gmail.com. Next one",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a dotted mailbox",
+  "register": "prose",
+  "segments": [
+   "liam dot hennigan at gmail dot com"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "liam.hennigan@gmail.com"
+   ],
+   [
+    "final",
+    "liam.hennigan@gmail.com",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a domain",
+  "register": "prose",
+  "segments": [
+   "see docs dot python dot org."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See docs.python.org."
+   ],
+   [
+    "final",
+    "See docs.python.org.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "the longest domain wins",
+  "register": "prose",
+  "segments": [
+   "go to example dot co dot uk now"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Go to example.co.uk now"
+   ],
+   [
+    "final",
+    "Go to example.co.uk now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose with at and dot stays prose",
+  "register": "prose",
+  "segments": [
+   "meet at the office",
+   "the dot product",
+   "we are at dot com scale"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at the office"
+   ],
+   [
+    "screen",
+    "Meet at the office the dot product"
+   ],
+   [
+    "screen",
+    "Meet at the office the dot product we are at dot com scale"
+   ],
+   [
+    "final",
+    "Meet at the office the dot product we are at dot com scale",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a domain in a terminal",
+  "register": "terminal",
+  "segments": [
+   "ping example dot com"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ping example.com"
+   ],
+   [
+    "final",
+    "ping example.com",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an address across segments is words",
+  "register": "prose",
+  "segments": [
+   "liam at example",
+   "dot com"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Liam at example"
+   ],
+   [
+    "screen",
+    "Liam at example dot com"
+   ],
+   [
+    "final",
+    "Liam at example dot com",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "rejoin after a sentence end",
   "register": "prose",
   "segments": [
@@ -2718,6 +2914,111 @@
    [
     "final",
     "Ready open quote",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an email waits until it can't grow",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "mail liam",
+    "interim"
+   ],
+   [
+    0.3,
+    "mail liam at",
+    "interim"
+   ],
+   [
+    0.6,
+    "mail liam at example",
+    "interim"
+   ],
+   [
+    0.9,
+    "mail liam at example dot",
+    "interim"
+   ],
+   [
+    1.2,
+    "mail liam at example dot com",
+    "interim"
+   ],
+   [
+    1.5,
+    "mail liam at example dot com",
+    "interim"
+   ],
+   [
+    3.5,
+    "tick"
+   ],
+   [
+    4.0,
+    "mail liam at example dot com today",
+    "interim"
+   ],
+   [
+    6.5,
+    "tick"
+   ],
+   [
+    7.0,
+    "mail liam at example dot com today",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Mail liam"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com today"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com today"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com today"
+   ],
+   [
+    "final",
+    "Mail liam@example.com today",
     "",
     "",
     0,

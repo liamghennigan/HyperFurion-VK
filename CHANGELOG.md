@@ -56,6 +56,15 @@ proven to be the daemon's.
 
 ### Added
 
+- **Say an email or a web address (`[flow] addresses`).** "liam at
+  example dot com" types `liam@example.com`; "docs dot python dot org"
+  types `docs.python.org`; "liam dot hennigan at gmail dot com" and
+  "example dot co dot uk" work too. Only a run that ends in a known
+  top-level domain becomes an address, so "meet at the office" and "the
+  dot product" stay prose; an address is never auto-capitalized at a
+  sentence start. While a run could still grow it waits at the live
+  tail; a lone word never does. Prose and terminal registers, both
+  engines, nine corpus cases (one streamed). On by default.
 - **"Scratch that" reaches back.** Stop, notice the mistake, press the
   hotkey and say "scratch that": the previous dictation is taken back.
   Only when the caret is surely still right after it — the same app and
