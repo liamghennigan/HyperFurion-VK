@@ -109,6 +109,38 @@ DEFAULT_PUNCTUATION: dict[str, tuple[str, str, bool]] = {
     "plus sign": ("+", "none", False),
 }
 
+# "emoji thumbs up" -> 👍. One code point each, so one Backspace removes
+# one; [flow.vocabulary] can remap or add more.
+DEFAULT_EMOJI: dict[str, str] = {
+    "emoji thumbs up": "👍",
+    "emoji thumbs down": "👎",
+    "emoji smile": "🙂",
+    "emoji grin": "😁",
+    "emoji laughing": "😂",
+    "emoji wink": "😉",
+    "emoji sad": "😢",
+    "emoji crying": "😭",
+    "emoji thinking": "🤔",
+    "emoji heart eyes": "😍",
+    "emoji fire": "🔥",
+    "emoji party": "🎉",
+    "emoji check mark": "✅",
+    "emoji cross mark": "❌",
+    "emoji eyes": "👀",
+    "emoji pray": "🙏",
+    "emoji rocket": "🚀",
+    "emoji clap": "👏",
+    "emoji hundred": "💯",
+    "emoji shrug": "🤷",
+    "emoji wave": "👋",
+    "emoji sparkles": "✨",
+    "emoji star": "⭐",
+    "emoji skull": "💀",
+    "emoji facepalm": "🤦",
+    "emoji ok hand": "👌",
+    "emoji muscle": "💪",
+}
+
 _BREAKS = {"new_line": "\n", "new_paragraph": "\n\n"}
 
 SPELL_WORD = "spell"
@@ -259,7 +291,7 @@ class Grammar:
         for action, phrases in merged_commands.items():
             for phrase in phrases:
                 self._phrases[_phrase_tokens(phrase)] = ("command", action)
-        for phrase, replacement in (vocabulary or {}).items():
+        for phrase, replacement in {**DEFAULT_EMOJI, **(vocabulary or {})}.items():
             tokens = _phrase_tokens(str(phrase))
             if tokens:
                 self._phrases[tokens] = ("vocab", str(replacement))

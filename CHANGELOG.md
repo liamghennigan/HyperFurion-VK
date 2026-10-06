@@ -9,6 +9,10 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **Spoken emoji.** "Ship it emoji rocket" types `Ship it 🚀`: 27 built in
+  (thumbs up, fire, party, check mark, laughing, eyes, …), each one code
+  point so a Backspace removes exactly one. `[flow.vocabulary]` remaps or
+  adds more; "emoji" alone and the bare names stay words.
 - **A lowercase recognizer's "i" is a capital in prose.** Streaming models
   that write everything lowercase typed "i think i'm"; prose now types
   "I think I'm" (also I'll, I'd, I've). Spelled words are left alone.

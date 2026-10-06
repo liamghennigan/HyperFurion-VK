@@ -573,6 +573,7 @@ recognizer's periods.
 | `new line` / `new paragraph` | `\n` / `\n\n` — nothing in a terminal or shell, where a line break is Enter and would run the line |
 | `new bullet` | `- ` on a new line (right there after a line break); nothing in a terminal or in code |
 | `new number` | `1. `, then `2. `, … on a new line; a new paragraph starts the count again; nothing in a terminal or in code |
+| `emoji rocket`, `emoji thumbs up`, `emoji fire`, … | 🚀 👍 🔥 — 27 built in (`DEFAULT_EMOJI` in `flow/grammar.py`); `[flow.vocabulary]` adds more |
 | `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |

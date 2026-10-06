@@ -558,6 +558,55 @@
   ]
  },
  {
+  "name": "emoji",
+  "register": "prose",
+  "segments": [
+   "ship it emoji rocket emoji thumbs up.",
+   "nice emoji fire"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Ship it 🚀 👍."
+   ],
+   [
+    "screen",
+    "Ship it 🚀 👍. Nice 🔥"
+   ],
+   [
+    "final",
+    "Ship it 🚀 👍. Nice 🔥",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "emoji names alone stay words",
+  "register": "prose",
+  "segments": [
+   "the emoji was a smile"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The emoji was a smile"
+   ],
+   [
+    "final",
+    "The emoji was a smile",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "dates",
   "register": "prose",
   "segments": [
