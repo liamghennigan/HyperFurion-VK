@@ -171,7 +171,7 @@ def check_llm(config: dict) -> Finding:
         wants.append("[polish.map]")
     if str(config.get("flow", {}).get("corrections", "off")).lower() == "llm":
         wants.append("self-corrections")
-    for section in ("intent", "ask", "recall"):
+    for section in ("intent", "ask"):  # recall searches by keyword without it
         if (config.get(section, {}) or {}).get("enabled"):
             wants.append(f"[{section}]")
     ready = llm_ready(config)
