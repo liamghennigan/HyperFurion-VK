@@ -601,7 +601,12 @@ English.
 | `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
-| `twenty five percent`, `five dollars`, `three thirty pm` (prose) | `25%`, `$5` (and "… and fifty cents" → `$5.50`; euros `€`, yen `¥`; `$100,000`), `3:30 PM`; `october sixth` → `October 6`; seven or ten digits read one by one → `555-1234`, `415-555-1212` — prose keeps other numbers as words; a unit right after makes the reading certain |
+| `twenty five percent`, `five dollars`, `three thirty pm` (prose) | `25%`, `$5` (and "… and fifty cents" → `$5.50`; euros `€`, yen `¥`; `$100,000`; "one point five dollars" → `$1.50`; "three point two billion dollars" → `$3.2 billion`; "a hundred and fifty dollars" → `$150`), `3:30 PM`; `october sixth` → `October 6`; seven or ten digits read one by one → `555-1234`, `415-555-1212` — prose keeps other numbers as words; a unit right after makes the reading certain |
+| `nineteen eighty four`, `june fifth nineteen ninety nine` (prose) | `1984`, `June 5, 1999` — a 20xx year needs all three words ("twenty twenty six" → `2026`; "twenty twenty vision" stays words), and a count noun after keeps it words ("nineteen forty people") |
+| `at three thirty`, `five o'clock` (prose) | `at 3:30`, `5 o'clock` — a bare hour stays a word ("at three") |
+| `room four oh two`, `page twenty five`, `version three point one point four`, `q three`, `two point five megabytes` (prose) | `room 402`, `page 25`, `version 3.1.4`, `Q3`, `2.5 MB` — a number after a noun that names (room, page, chapter, floor, gate, flight, step, version, …) |
+| `example dot com slash docs` | `example.com/docs` — a path only follows a whole domain |
+| "the the meeting", "I I think" (prose) | "The meeting", "I think" — a stutter on a word speakers restart on; never a repeat a sentence means ("had had", "told you you were") |
 | `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
 | `VK, my email` (alone, or at the end: "send it to VK, my email") | types the text saved under that name in `[snippets]` (or a macro you named via `voice-keyboard learned`), exactly, after your words; `{date}`, `{isodate}`, `{time}`, `{weekday}` in a snippet fill in when typed |
 | `VK, make this shorter` with text **selected** (alone) | rewrites the selection in any app via `[llm]` and types the answer over it; your app's undo brings the original back |
