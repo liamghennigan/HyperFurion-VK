@@ -6,13 +6,14 @@ lists, multi-line snippets, model rewrites that come back multi-line,
 per-app polish, caret commands."""
 
 import asyncio
+import os
 import random
 from unittest import mock
 
 import pytest
 from fakes import FakeStreamingSTT, RecordingInjector, _make_daemon
 
-SEEDS = range(48)
+SEEDS = range(int(os.environ.get("VK_SAFETY_SEEDS", "48")))  # widen locally to hunt
 PIECES = [
     "hello world", "new line", "new paragraph", "new heading groceries", "new number milk",
     "new checkbox eggs", "new bullet tea", "vk sig", "vk make that formal", "see you monday period",
