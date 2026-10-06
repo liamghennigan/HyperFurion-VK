@@ -85,6 +85,17 @@ PENDING_REWRITE_TTL_S = 120.0
 # Shorter dictations ("ok", "on my way") are left as said.
 POLISH_MIN_WORDS = 4
 
+
+def polish_plausible(original: str, polished: str) -> bool:
+    """An automatic polish replaces your words only when it still looks
+    like them: not empty, not a ramble twice their length, no fences or
+    a reply prefix ("Sure, here's …")."""
+    polished = polished.strip()
+    if not polished or len(polished) > 2 * len(original.strip()) + 40:
+        return False
+    lowered = polished.lower()
+    return not (polished.startswith("```") or lowered.startswith(("sure", "here is", "here's")))
+
 _PLACEHOLDER = re.compile(r"\{(date|isodate|time|weekday)\}")
 
 
@@ -1678,7 +1689,9 @@ class Daemon:
             final = await worker.drain(timeout=self._drain_timeout(target))
         elif not instruction and final and not worker.abandoned and (style := self._polish_style(final)):
             try:
-                final = await self._run_transform(f"polish this dictation: {style}", worker=worker)
+                final = await self._run_transform(
+                    f"polish this dictation: {style}", worker=worker, guard=polish_plausible
+                )
             except Exception as exc:
                 # The dictation stands as typed; polish is a nicety.
                 logger.info("Polish skipped: %s", exc)
@@ -1708,7 +1721,11 @@ class Daemon:
             if llm_client is not None:
                 await self._show_hotkey_overlay("processing", detail=f"⌁ polish: {style}")
                 try:
-                    final = await asyncio.to_thread(llm_client.rewrite, final, f"polish this dictation: {style}")
+                    polished = await asyncio.to_thread(llm_client.rewrite, final, f"polish this dictation: {style}")
+                    if polish_plausible(final, polished):
+                        final = polished
+                    else:
+                        logger.info("Polish skipped: the rewrite didn't look like the dictation")
                 except Exception as exc:
                     logger.info("Polish skipped: %s", exc)  # typed as dictated
         elif instruction and final:
@@ -2088,7 +2105,7 @@ class Daemon:
         return rewritten
 
     async def _run_transform(
-        self, instruction: str, *, worker: Optional[InjectionWorker]
+        self, instruction: str, *, worker: Optional[InjectionWorker], guard=None
     ) -> str:
         llm_client = create_llm_client(self._config)
         if llm_client is None:
@@ -2100,6 +2117,8 @@ class Daemon:
 
         await self._show_hotkey_overlay("processing", detail=f"⌁ {instruction}")
         rewritten = await asyncio.to_thread(llm_client.rewrite, target, instruction)
+        if guard is not None and not guard(target, rewritten):
+            raise RuntimeError("the rewrite didn't look like the dictation; kept as typed")
 
         if await self._focus_changed_since_session():
             clipboard.set_text(rewritten)

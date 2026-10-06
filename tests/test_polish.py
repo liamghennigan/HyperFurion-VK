@@ -72,3 +72,15 @@ def test_config_validation() -> None:
     config["polish"] = {"map": {"slack": ""}}
     with pytest.raises(RuntimeError, match="polish.map"):
         validate_config(config)
+
+
+def test_an_implausible_polish_keeps_the_dictation() -> None:
+    from voice_keyboard.daemon import polish_plausible
+
+    assert polish_plausible("hey can you send me the report", "Hey, could you send me the report?")
+    assert not polish_plausible("hey can you send me the report", "")
+    assert not polish_plausible("short one here ok", "Sure! Here's a friendlier version: ...")
+    assert not polish_plausible("short one here ok", "x" * 200)
+    final, screen, _ = _dictate("hey can you send me the report", app="slack", styles={"slack": "casual"},
+                                rewrite=lambda text, instruction: "Sure, here's a casual take: hey!")
+    assert screen == final == "Hey can you send me the report"
