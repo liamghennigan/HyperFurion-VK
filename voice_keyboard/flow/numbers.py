@@ -206,7 +206,7 @@ def _ascii_number(token: str) -> bool:
     return bool(whole) and all(c in "0123456789" for c in whole + frac)
 
 
-def fold_unit(words: list[str], unit: str) -> Optional[str]:
+def fold_unit(words: list[str], unit: str, *, scale: bool = False) -> Optional[str]:
     """A number run and the unit word after it as one token, or None.
 
     `words` are spoken-number words (or one digit token from the
@@ -230,6 +230,8 @@ def fold_unit(words: list[str], unit: str) -> Optional[str]:
     whole, dot, frac = amount.partition(".")
     if len(whole) > 3 and not whole.startswith("0"):
         whole = f"{int(whole):,}"  # "$1,500", "¥2,000"
+    if len(frac) == 1 and not scale and CURRENCY[unit] in "$€":
+        frac += "0"  # "$1.50", but "$3.2 billion"
     return CURRENCY[unit] + whole + dot + frac
 
 

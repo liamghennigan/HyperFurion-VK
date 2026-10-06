@@ -178,7 +178,7 @@ function clock(words) {
   if (minutes === null || minutes < 10 || minutes > 59 || words[1] === "and") return null;
   return hour + ":" + String(minutes).padStart(2, "0");
 }
-export function foldUnit(words, unit) {
+export function foldUnit(words, unit, scale = false) {
   words = words.map((w) => w.toLowerCase()); unit = unit.toLowerCase();
   if (unit in MERIDIEM) { const c = clock(words); return c ? c + " " + MERIDIEM[unit] : null; }
   let amount;
@@ -189,6 +189,7 @@ export function foldUnit(words, unit) {
   if (unit === "percent") return amount + "%";
   let [whole, frac] = amount.split(".");
   if (whole.length > 3 && !whole.startsWith("0")) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");  // "$1,500", "¥2,000"
+  if (frac !== undefined && frac.length === 1 && !scale && "$€".includes(CURRENCY[unit])) frac += "0";  // "$1.50", but "$3.2 billion"
   return CURRENCY[unit] + whole + (frac !== undefined ? "." + frac : "");
 }
 // "october sixth" -> "October 6": a month, then an ordinal day (numbers.py
@@ -295,7 +296,7 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
         return { items: out, pendingFrom: it.s };  // "two million" may yet be dollars
       const money = end + 1 < n && items[end + 1].kind === "word" ? items[end + 1] : null;
       if (money && Object.hasOwn(CURRENCY, core(money.text)) && inside(money) && !PUNCT_HEAD.test(money.text)) {
-        const folded = foldUnit(words, core(money.text));
+        const folded = foldUnit(words, core(money.text), true);
         if (folded !== null) {
           out.push({ kind: "word", text: folded + " " + core(scale.text) + (money.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: money.e });
           i = end + 2; continue;

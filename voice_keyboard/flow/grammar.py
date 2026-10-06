@@ -996,7 +996,7 @@ class Grammar:
                     money is not None and _core(money.text) in CURRENCY and inside(money)
                     and money.text.lstrip(_PUNCT_STRIP) == money.text
                 ):
-                    folded = fold_unit(words, _core(money.text))
+                    folded = fold_unit(words, _core(money.text), scale=True)
                     if folded is not None:
                         folded += " " + _core(scale.text) + money.text[len(money.text.rstrip(_PUNCT_STRIP)):]
                         result.append(Item(kind="word", text=folded, span=(item.span[0], money.span[1])))

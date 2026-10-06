@@ -360,6 +360,28 @@
   ]
  },
  {
+  "name": "a price shows its cents",
+  "register": "prose",
+  "segments": [
+   "it costs one point five dollars or two point two five euros"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It costs $1.50 or €2.25"
+   ],
+   [
+    "final",
+    "It costs $1.50 or €2.25",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a scale stays a word after the figure",
   "register": "prose",
   "segments": [

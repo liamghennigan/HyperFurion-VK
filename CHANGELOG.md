@@ -13,7 +13,8 @@ proven to be the daemon's.
 ### Added
 
 - **Big money reads like money.** "three point two billion dollars" types
-  `$3.2 billion`, and "two million euros" types `€2 million`.
+  `$3.2 billion`, "two million euros" types `€2 million`, and a price
+  shows its cents ("one point five dollars" → `$1.50`).
 - **Spoken links keep their path.** "example dot com slash docs slash
   intro dot html" types `example.com/docs/intro.html`. A path only follows
   a whole domain, never an email address.
