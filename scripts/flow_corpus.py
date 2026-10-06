@@ -56,6 +56,8 @@ CASES = [
     ("nested calls closed by hand", "python", ["print range ten close paren close paren", "x equals abs y close paren"], {}),
     ("a nested call across segments", "python", ["for i in range", "len xs colon"], {}),
     ("shell compiles flags", "shell", ["pipe grep dash i error"], {}),
+    ("shell long flags and glued pairs", "shell", ["docker run dash dash rm dash p eight zero eight zero colon eighty nginx", "export foo equals sign bar"], {}),
+    ("python constants and string prefixes", "python", ["if x is not none colon", "print open paren f quote hello unquote close paren", "x equals true"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
     ("years read in pairs", "prose", ["born in nineteen eighty four, moved in nineteen oh five", "back in twenty twenty six with twenty twenty vision and nineteen people"], {}),
     ("a stutter is dropped", "prose", ["the the meeting is", "tomorrow and i i think he had had enough of the the the plan"], {}),

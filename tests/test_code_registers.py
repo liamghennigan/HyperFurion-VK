@@ -34,7 +34,7 @@ class TestPythonRegister:
     def test_dot_and_underscore_and_equals(self) -> None:
         assert (
             _compile("self dot audio underscore thread equals true", PYTHON)
-            == "self.audio_thread = true"
+            == "self.audio_thread = True"
         )
 
     def test_callable_stays_honestly_open(self) -> None:

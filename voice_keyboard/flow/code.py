@@ -31,6 +31,11 @@ _PYTHON_WORD_GLYPHS = {
     "arrow": ("->", "none"),
 }
 
+# Python's constants, said in lowercase: "if x is not none" -> None.
+_PYTHON_CONSTANTS = {"none": "None", "true": "True", "false": "False"}
+# String prefixes a quote glues to: "f quote hi unquote" -> f"hi".
+_STRING_PREFIXES = frozenset({"f", "r", "b", "rb", "br", "fr", "rf", "u"})
+
 _SHELL_WORD_GLYPHS = {
     "pipe": ("|", "none"),
     "dot": (".", "both"),
@@ -38,6 +43,9 @@ _SHELL_WORD_GLYPHS = {
     "star": ("*", "right"),
     "slash": ("/", "both"),
 }
+
+# Shell glues these on both sides: "FOO=bar", "--name=value", "8080:80".
+_SHELL_GLUED = {"=": "both", ":": "both"}
 
 # Spoken callables: "range ten colon" -> "range(10):". The open paren is
 # emitted eagerly; a following colon closes it ("):"), otherwise the user
@@ -66,6 +74,8 @@ def _compile(
     callables: frozenset | set,
     dash_hold: bool,
     glue_calls: bool = False,
+    constants: dict | None = None,
+    glued: dict | None = None,
 ) -> tuple[str, RenderState]:
     out: list[str] = []
     at_start = state.at_start
@@ -74,15 +84,17 @@ def _compile(
     after_name = state.after_name
     open_calls = state.open_calls
     inner_parens = state.inner_parens
+    after_prefix = state.after_prefix
 
-    def emit(text: str, *, glue_left: bool, name: bool = False) -> None:
-        nonlocal at_start, glue_next, after_name
+    def emit(text: str, *, glue_left: bool, name: bool = False, prefix: bool = False) -> None:
+        nonlocal at_start, glue_next, after_name, after_prefix
         if not at_start and not glue_next and not glue_left:
             out.append(" ")
         out.append(text)
         at_start = False
         glue_next = False
         after_name = name
+        after_prefix = prefix
 
     def emit_mode(glyph: str, mode: str) -> None:
         nonlocal glue_next
@@ -99,8 +111,8 @@ def _compile(
 
     def flush_dash() -> None:
         nonlocal pending
-        if pending == "dash":
-            emit("-", glue_left=False)
+        if pending in ("dash", "dashes"):
+            emit("--" if pending == "dashes" else "-", glue_left=False)
             pending = ""
 
     for item in items:
@@ -126,11 +138,19 @@ def _compile(
                 open_calls = inner_parens = 0
                 continue
             if dash_hold and item.text == "-" and item.mode == "none":
-                # Hold the dash: the next word becomes a flag ("-i").
+                # Hold the dash: the next word becomes a flag ("-i", and
+                # "dash dash rm" -> "--rm").
+                if pending == "dash":
+                    pending = "dashes"
+                    continue
                 flush_dash()
                 pending = "dash"
                 continue
             flush_dash()
+            if after_prefix and item.text == '"' and item.mode == "right":
+                emit('"', glue_left=True)  # f"…", r"…"
+                glue_next = True
+                continue
             if pending == "call-open":
                 pending = "call" if open_calls else ""
             if item.text == ")" and inner_parens:
@@ -145,11 +165,11 @@ def _compile(
                 emit(item.text, glue_left=True)  # a call or a subscript: f(, xs[
                 glue_next = True
                 continue
-            emit_mode(item.text, item.mode)
+            emit_mode(item.text, (glued or {}).get(item.text, item.mode))
         elif item.kind == "word":
             core = item.text.casefold()
-            if pending == "dash":
-                emit("-" + item.text, glue_left=False)
+            if pending in ("dash", "dashes"):
+                emit(("--" if pending == "dashes" else "-") + item.text, glue_left=False)
                 pending = ""
                 continue
             if pending == "call-open":
@@ -165,7 +185,15 @@ def _compile(
                 pending = "call-open"  # an explicit "open paren" next is absorbed
                 open_calls += 1
                 continue
-            emit(item.text, glue_left=False, name=glue_calls and _is_name(item.text))
+            if constants and core in constants:
+                emit(constants[core], glue_left=False)
+                continue
+            emit(
+                item.text,
+                glue_left=False,
+                name=glue_calls and _is_name(item.text),
+                prefix=glue_calls and core in _STRING_PREFIXES,
+            )
         # scratch/instruction items render nothing; the engine acts on them.
 
     return "".join(out), replace(
@@ -177,6 +205,7 @@ def _compile(
         after_name=after_name,
         open_calls=open_calls,
         inner_parens=inner_parens,
+        after_prefix=after_prefix,
     )
 
 
@@ -190,6 +219,7 @@ def compile_python(
         callables=_PYTHON_CALLABLES,
         dash_hold=False,
         glue_calls=True,
+        constants=_PYTHON_CONSTANTS,
     )
 
 
@@ -202,6 +232,7 @@ def compile_shell(
         word_glyphs=_SHELL_WORD_GLYPHS,
         callables=frozenset(),
         dash_hold=True,
+        glued=_SHELL_GLUED,
     )
 
 

@@ -443,22 +443,27 @@ const PY_GLYPHS = { dot: [".", "both"], equals: ["=", "none"], plus: ["+", "none
 const SH_GLYPHS = { pipe: ["|", "none"], dot: [".", "both"], star: ["*", "right"], slash: ["/", "both"] };
 const PY_CALLABLES = new Set(["range", "print", "len", "str", "int", "float", "input",
   "enumerate", "sorted", "reversed", "abs", "min", "max", "sum", "type", "repr"]);
+// Python's constants said in lowercase ("is not none" -> None); string
+// prefixes a quote glues to (f"…"); shell glues = and : ("FOO=bar", "8080:80")
+const PY_CONSTANTS = { none: "None", true: "True", false: "False" };
+const STRING_PREFIXES = new Set(["f", "r", "b", "rb", "br", "fr", "rf", "u"]);
+const SH_GLUED = { "=": "both", ":": "both" };
 const COMPILERS = {
-  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true },
-  shell:  { glyphs: SH_GLYPHS, callables: new Set(), dashHold: true },
+  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS },
+  shell:  { glyphs: SH_GLYPHS, callables: new Set(), dashHold: true, glued: SH_GLUED },
 };
 // a name an opening paren or bracket glues to ("get_user (" -> get_user();
 // keywords keep their space ("if (", "in [")
 const PY_KEYWORDS = new Set(("False None True and as assert async await break class continue def del elif else except " +
   "finally for from global if import in is lambda nonlocal not or pass raise return try while with yield _ case match type").split(" "));
 const isName = (t) => /^[A-Za-z_][\w.]*$/.test(t) && !PY_KEYWORDS.has(t);
-function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
+function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, constants = null, glued = null }) {
   const out = [];
   let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "", afterName = !!state.afterName;
-  let openCalls = state.openCalls || 0, innerParens = state.innerParens || 0;
-  const emit = (text, glueLeft, name = false) => {
+  let openCalls = state.openCalls || 0, innerParens = state.innerParens || 0, afterPrefix = !!state.afterPrefix;
+  const emit = (text, glueLeft, name = false, prefix = false) => {
     if (!atStart && !glueNext && !glueLeft) out.push(" ");
-    out.push(text); atStart = false; glueNext = false; afterName = name;
+    out.push(text); atStart = false; glueNext = false; afterName = name; afterPrefix = prefix;
   };
   const emitMode = (glyph, mode) => {
     if (mode === "left") emit(glyph, true);
@@ -466,32 +471,37 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
     else if (mode === "both") { emit(glyph, true); glueNext = true; }
     else emit(glyph, false);
   };
-  const flushDash = () => { if (pending === "dash") { emit("-", false); pending = ""; } };
+  const flushDash = () => { if (pending === "dash" || pending === "dashes") { emit(pending === "dashes" ? "--" : "-", false); pending = ""; } };
   for (const it of items) {
     if (it.kind === "break" && (it.mode === "bullet" || it.mode === "number")) continue;  // a list item means nothing in code
     if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; innerParens = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
       if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
       if (openCalls && it.text === ":") { emit(")".repeat(innerParens + openCalls) + ":", true); pending = ""; openCalls = innerParens = 0; continue; }  // a colon closes every open call
-      if (dashHold && it.text === "-" && it.mode === "none") { flushDash(); pending = "dash"; continue; }
+      if (dashHold && it.text === "-" && it.mode === "none") {  // the next word becomes a flag: "-i", "--rm"
+        if (pending === "dash") { pending = "dashes"; continue; }
+        flushDash(); pending = "dash"; continue;
+      }
       flushDash();
+      if (afterPrefix && it.text === '"' && it.mode === "right") { emit('"', true); glueNext = true; continue; }  // f"…"
       if (pending === "call-open") pending = openCalls ? "call" : "";
       if (it.text === ")" && innerParens) innerParens -= 1;  // closes a paren said inside the call
       else if (openCalls && it.text === ")") { openCalls -= 1; if (!openCalls) pending = ""; }
       else if (openCalls && it.text === "(") innerParens += 1;
       if (glueCalls && afterName && "([".includes(it.text) && it.mode === "right") { emit(it.text, true); glueNext = true; continue; }
-      emitMode(it.text, it.mode);
+      emitMode(it.text, glued && Object.hasOwn(glued, it.text) ? glued[it.text] : it.mode);
     } else if (it.kind === "word") {
       const c = it.text.toLowerCase();
-      if (pending === "dash") { emit("-" + it.text, false); pending = ""; continue; }
+      if (pending === "dash" || pending === "dashes") { emit((pending === "dashes" ? "--" : "-") + it.text, false); pending = ""; continue; }
       if (pending === "call-open") pending = "call";
       const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
       if (g) { emitMode(g[0], g[1]); continue; }
       if (callables.has(c)) { emit(it.text + "(", false); glueNext = true; pending = "call-open"; openCalls += 1; continue; }  // calls nest
-      emit(it.text, false, !!glueCalls && isName(it.text));
+      if (constants && Object.hasOwn(constants, c)) { emit(constants[c], false); continue; }
+      emit(it.text, false, !!glueCalls && isName(it.text), !!glueCalls && STRING_PREFIXES.has(c));
     }
   }
-  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName, openCalls, innerParens } };
+  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName, openCalls, innerParens, afterPrefix } };
 }
 
 // ── parse: raw tokens -> items, with the frozen fence (grammar.py) ────────

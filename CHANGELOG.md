@@ -12,6 +12,10 @@ proven to be the daemon's.
 
 ### Added
 
+- **Code registers read closer to code.** In `shell`, "dash dash rm"
+  types `--rm`, and `=` and `:` glue both sides (`FOO=bar`, `8080:80`).
+  In `python`, "none", "true" and "false" type `None`, `True` and
+  `False`, and a quote glues to its string prefix (`f"hello"`).
 - **Stutters are dropped.** "the the meeting" types "The meeting", "I I
   think" types "I think" — only for words a speaker restarts on, never a
   repeat a sentence means ("had had", "that that"), and never in code.

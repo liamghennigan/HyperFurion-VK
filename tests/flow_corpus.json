@@ -338,6 +338,65 @@
   ]
  },
  {
+  "name": "shell long flags and glued pairs",
+  "register": "shell",
+  "segments": [
+   "docker run dash dash rm dash p eight zero eight zero colon eighty nginx",
+   "export foo equals sign bar"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "docker run --rm -p 8080:80 nginx"
+   ],
+   [
+    "screen",
+    "docker run --rm -p 8080:80 nginx export foo=bar"
+   ],
+   [
+    "final",
+    "docker run --rm -p 8080:80 nginx export foo=bar",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "python constants and string prefixes",
+  "register": "python",
+  "segments": [
+   "if x is not none colon",
+   "print open paren f quote hello unquote close paren",
+   "x equals true"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "if x is not None:"
+   ],
+   [
+    "screen",
+    "if x is not None: print(f\"hello\")"
+   ],
+   [
+    "screen",
+    "if x is not None: print(f\"hello\") x = True"
+   ],
+   [
+    "final",
+    "if x is not None: print(f\"hello\") x = True",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "shell path",
   "register": "shell",
   "segments": [

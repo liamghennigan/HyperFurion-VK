@@ -140,6 +140,7 @@ class RenderState:
     inner_parens: int = 0          # code: explicit parens opened inside those calls
     line_start: bool = False       # the caret is surely at the start of a line
     list_number: int = 0           # the last "new number" item typed (0 = none)
+    after_prefix: bool = False     # code: the last atom was a string prefix ("f" before a quote)
 
 
 def initial_state(register: Register) -> RenderState:
