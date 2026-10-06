@@ -8,6 +8,7 @@ transcript always renders with the previous render as a prefix — the
 property the molten repair engine depends on.
 """
 
+import re
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -69,6 +70,9 @@ TERMINAL_APPS = {
     "mintty", "hyper",
 }
 
+
+# A lowercase recognizer's "i", "i'm", "i'll": the pronoun is always a capital.
+_PRONOUN_I = re.compile(r"i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*")
 
 def resolve_register(name: str) -> Register:
     return REGISTERS.get(str(name).strip().lower(), PROSE)
@@ -212,7 +216,9 @@ def render_items(
                 capitalize_next = True
         elif item.kind == "word":
             text = item.text
-            if capitalize_next and register.smart_caps and item.mode != "verbatim":
+            if register.smart_caps and item.mode != "verbatim" and (
+                capitalize_next or _PRONOUN_I.fullmatch(text)
+            ):
                 text = _capitalized(text)
             emit(text, glue_left=False)
             capitalize_next = register.smart_caps and text.rstrip().endswith(_SENTENCE_ENDERS)

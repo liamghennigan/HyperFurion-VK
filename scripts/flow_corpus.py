@@ -60,6 +60,8 @@ CASES = [
     ("verbatim is words", "verbatim", ["scratch that period new line"], {}),
     ("new line and paragraph", "prose", ["first line new line second line new paragraph third"], {}),
     ("bullets", "prose", ["shopping list colon new bullet milk new bullet eggs"], {}),
+    ("a lowercase recognizer's i is a capital", "prose", ["i think i can and i'm sure i'll say i'd"], {}),
+    ("i inside a word stays", "prose", ["it is in it"], {}),
     ("prose percent", "prose", ["about twenty five percent of users"], {}),
     ("prose percent held while percent might grow", "prose", ["it went up one hundred percent"], {}),
     ("prose dollars", "prose", ["it costs twenty five dollars period"], {}),

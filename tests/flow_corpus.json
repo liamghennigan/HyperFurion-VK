@@ -426,6 +426,50 @@
   ]
  },
  {
+  "name": "a lowercase recognizer's i is a capital",
+  "register": "prose",
+  "segments": [
+   "i think i can and i'm sure i'll say i'd"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think I can and I'm sure I'll say I'd"
+   ],
+   [
+    "final",
+    "I think I can and I'm sure I'll say I'd",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "i inside a word stays",
+  "register": "prose",
+  "segments": [
+   "it is in it"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It is in it"
+   ],
+   [
+    "final",
+    "It is in it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "prose percent",
   "register": "prose",
   "segments": [
@@ -545,11 +589,11 @@
   "events": [
    [
     "screen",
-    "Which one am i"
+    "Which one am I"
    ],
    [
     "final",
-    "Which one am i",
+    "Which one am I",
     "",
     "",
     0,
