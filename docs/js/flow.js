@@ -165,7 +165,7 @@ function parseNumberRun(words) {
 // Prose keeps spoken numbers as words, except right before a unit that
 // makes the reading certain: "twenty five percent" -> "25%", "five dollars"
 // -> "$5", "three thirty pm" -> "3:30 PM" (numbers.py fold_unit).
-const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m"]);
+const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m", "o'clock", "o\u2019clock"]);
 const SCALE_WORDS = new Set(["million", "billion", "trillion"]);  // "$3.2 billion"
 const CURRENCY = { dollar: "$", dollars: "$", euro: "€", euros: "€", yen: "¥" };  // not "pounds" (weight)
 const MERIDIEM = { am: "AM", "a.m": "AM", pm: "PM", "p.m": "PM" };
@@ -181,6 +181,7 @@ function clock(words) {
 export function foldUnit(words, unit, scale = false) {
   words = words.map((w) => w.toLowerCase()); unit = unit.toLowerCase();
   if (unit in MERIDIEM) { const c = clock(words); return c ? c + " " + MERIDIEM[unit] : null; }
+  if (unit === "o'clock" || unit === "o\u2019clock") { const c = clock(words); return c && !c.includes(":") ? c + " " + unit : null; }  // "5 o'clock"
   let amount;
   if (words.length === 1 && /^\d+(\.\d+)?$/.test(words[0])) amount = words[0];
   else if (words.includes("point") || parseCardinal(words) !== null) amount = parseNumberRun(words);

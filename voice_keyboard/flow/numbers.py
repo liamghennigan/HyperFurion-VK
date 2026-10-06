@@ -174,6 +174,7 @@ def convert_numbers(tokens: list[str], *, min_value: int = 0) -> list[str]:
 # dollars" -> "$5", "three thirty pm" -> "3:30 PM".
 UNIT_WORDS = frozenset({
     "percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m",
+    "o'clock", "o\u2019clock",
 })
 # Currencies written before the amount. Not "pounds" (weight) or "francs".
 CURRENCY = {"dollar": "$", "dollars": "$", "euro": "€", "euros": "€", "yen": "¥"}
@@ -217,6 +218,9 @@ def fold_unit(words: list[str], unit: str, *, scale: bool = False) -> Optional[s
     if unit in _MERIDIEM:
         clock = _clock(words)
         return f"{clock} {_MERIDIEM[unit]}" if clock else None
+    if unit in ("o'clock", "o\u2019clock"):
+        clock = _clock(words)  # "five o'clock" -> "5 o'clock"; never "5:30 o'clock"
+        return f"{clock} {unit}" if clock and ":" not in clock else None
     if len(words) == 1 and _ascii_number(words[0]):
         amount = words[0]
     elif "point" in words or _parse_cardinal(words) is not None:

@@ -1202,6 +1202,28 @@
   ]
  },
  {
+  "name": "o'clock",
+  "register": "prose",
+  "segments": [
+   "meet at five o'clock, or six o’clock. it's ten o'clock"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 5 o'clock, or 6 o’clock. It's 10 o'clock"
+   ],
+   [
+    "final",
+    "Meet at 5 o'clock, or 6 o’clock. It's 10 o'clock",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a price shows its cents",
   "register": "prose",
   "segments": [
