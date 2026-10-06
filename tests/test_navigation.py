@@ -516,3 +516,25 @@ def test_select_that_presses_one_shift_left_per_character():
     assert chords_for("select:that", 0, editor) is None  # nothing said yet
     assert chords_for("select:that", MAX_SELECT_THAT + 1, editor) is None
     assert chords_for("select:that", 3, keymap(terminal=True, platform="linux")) is None
+
+
+def test_undo_and_paste_need_a_surely_known_non_terminal():
+    from voice_keyboard.daemon import _surely_not_a_terminal
+    from voice_keyboard.focusprobe import FocusInfo
+
+    assert not _surely_not_a_terminal(None)  # unknown focus
+    assert not _surely_not_a_terminal(FocusInfo(app=""))
+    assert not _surely_not_a_terminal(FocusInfo(app="gnome-terminal-server"))
+    assert not _surely_not_a_terminal(FocusInfo(app="WindowsTerminal.exe"))
+    assert not _surely_not_a_terminal(FocusInfo(app="code", role="terminal"))
+    assert _surely_not_a_terminal(FocusInfo(app="gedit", role="text"))
+
+
+def test_refusals_say_why():
+    from voice_keyboard.daemon import _nav_refusal
+    from voice_keyboard.flow.engine import NavAction
+
+    assert _nav_refusal(NavAction("select:that", 0)) == "Nothing to select yet"
+    assert _nav_refusal(NavAction("select:that", 9999)) == "Too long to select by voice"
+    assert _nav_refusal(NavAction("edit:paste", 1)) == "Can't paste here"
+    assert _nav_refusal(NavAction("select:all", 1)) == "Can't select that here"

@@ -25,6 +25,7 @@ from voice_keyboard.flow.registers import (
     Register,
     register_for_app,
     resolve_register,
+    TERMINAL,
 )
 from voice_keyboard.flow.vad import OnsetDetector, SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import common_prefix_len
@@ -76,6 +77,25 @@ CAPTION_MAX_CHARS = 46
 # A held rewrite that is neither kept nor discarded evaporates.
 PENDING_REWRITE_TTL_S = 120.0
 
+
+
+def _surely_not_a_terminal(focus) -> bool:
+    """Focus was identified, and it is neither a known terminal app nor a
+    terminal widget — whatever register [registers.map] gives it."""
+    if focus is None or not (focus.app or "").strip():
+        return False
+    return register_for_app(focus.app, focus.role) is not TERMINAL
+
+
+def _nav_refusal(action) -> str:
+    """What the overlay says when a caret command is refused."""
+    if action.action == "select:that" and action.count < 1:
+        return "Nothing to select yet"
+    if action.action == "select:that" and action.count > nav.MAX_SELECT_THAT:
+        return "Too long to select by voice"
+    if action.action.startswith("edit:"):
+        return f"Can't {action.action.split(':')[1]} here"
+    return f"Can't {action.action.split(':')[0]} that here"
 
 class Daemon:
     def __init__(
@@ -1049,6 +1069,12 @@ class Daemon:
             terminal=register.terminal,
             overrides=(self._config.get("nav", {}).get("keys", {}) or {}).get(kind),
         )
+        if not register.terminal and not _surely_not_a_terminal(focus):
+            # A terminal mapped to another register, or focus we couldn't
+            # identify: ctrl+z suspends the job there, ctrl+v can paste a
+            # line break that runs. Undo, redo and paste need certainty.
+            for action in ("edit:undo", "edit:redo", "edit:paste"):
+                self._nav_keys[action] = None
         if hasattr(self._injector, "paste_chord_shift"):
             self._injector.paste_chord_shift = register.paste_chord_shift
         # In a terminal a line break IS Enter, and Enter runs the line. The
@@ -1214,12 +1240,10 @@ class Daemon:
         if chords is None:
             logger.info("nav: %s has no binding in this app", action.action)
             await self._show_hotkey_overlay(
-                "error",
-                detail=f"Can't {action.action.split(':')[0]} that here",
-                timeout_ms=1800,
+                "error", detail=_nav_refusal(action), timeout_ms=1800
             )
             return False
-        label = action.action.replace(":", " ").replace("move ", "")
+        label = action.action.replace(":", " ").replace("move ", "").replace("edit ", "")
         if action.count > 1:
             label += f" ×{action.count}"
         # Show what fired — without holding the keys back for the overlay.
@@ -1228,6 +1252,11 @@ class Daemon:
         )
         try:
             for chord in chords:
+                if self._hotkey_combo_held() and not await self._wait_hotkey_released():
+                    # a held hold-to-talk modifier would join the chord
+                    # (shift+left becomes ctrl+shift+left): stop here
+                    logger.info("nav: stopped %s — the hotkey is held", action.action)
+                    return False
                 await asyncio.to_thread(self._injector.press_combo, chord)
         except Exception as exc:
             logger.warning("nav: pressing %s failed: %s", action.action, exc)

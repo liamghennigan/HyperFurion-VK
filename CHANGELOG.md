@@ -7,6 +7,19 @@ on `main` cuts the GitHub release automatically.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Caret and recase commands, from review.** Words after "select that"
+  continue from before the selected utterance (its capital, spacing and list
+  number), and the selection now includes its leading space or line break.
+  Recasing that would change the length ("straße" → "STRASSE") is refused
+  instead of skewing "scratch that". Undo, redo and paste need focus that is
+  surely not a terminal, whatever `[registers.map]` says. A recognizer's
+  period on a command ("Undo that.") no longer holds it until the next
+  words. "Select that" stops if the hold-to-talk keys go down mid-way; the
+  overlay says why a command was refused; and the page and the daemon agree
+  on which characters are unsafe to backspace over (any combining mark).
+
 ### Added
 
 - **`voice-keyboard commands [filter]`**: everything you can say — commands,

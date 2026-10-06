@@ -276,7 +276,9 @@ export function chordsFor(action, count, table) {
   if (sequence.some(forbidden)) return null;
   if (action === "select:that") {  // one press per character; nothing, or too much, is refused
     if (count < 1 || count > MAX_SELECT_THAT) return null;
-    return Array.from({ length: count }, () => [...sequence[0]]);
+    const out = [];
+    for (let i = 0; i < count; i++) for (const c of sequence) out.push([...c]);
+    return out;
   }
   const repeat = action === "select:all" || action.endsWith(":here") ? 1 : count;
   const out = [];

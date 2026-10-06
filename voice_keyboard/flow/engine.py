@@ -151,7 +151,7 @@ def risky_backspace(text: str) -> bool:
     focused app groups grapheme clusters (astral plane, combining marks,
     ZWJ sequences)."""
     return any(
-        ord(ch) > 0xFFFF or unicodedata.combining(ch) or ch in "‍️︎"
+        ord(ch) > 0xFFFF or unicodedata.category(ch).startswith("M") or ch in "‍️︎"
         for ch in text
     )
 
@@ -198,6 +198,9 @@ class FlowEngine:
         self._segment_bounds: set[int] = {0}
         self._barrier: Optional[NavAction] = None
         self._last_action: Optional[NavAction] = None  # last command pressed
+        # The fold state before the utterance "select that" covers: the
+        # words that replace it continue from there.
+        self._select_state: Optional[RenderState] = None
         self._typed_before = ""
         self._finalizing = False
         self._rev_depth = 0.0  # adaptive: observed ASR revision depth, decaying
@@ -320,6 +323,10 @@ class FlowEngine:
         if action.action in FRESH_FIELD:
             # Tab / Escape / a page away: likely a different field.
             state = _fresh_state(self._register)
+        elif action.action == "select:that" and self._select_state is not None:
+            # The selection is the whole utterance, its leading space or
+            # line break included: what replaces it picks up from before.
+            state = self._select_state
         elif action.action.startswith(GLUED) or action.action.endswith(":start"):
             # The next word fills a selection or a gap, or starts a line:
             # no leading space.
@@ -546,6 +553,12 @@ class FlowEngine:
             logger.warning("flow: committed items changed under reparse")
         self._items = result.items
         self._pending_from = result.pending_from
+        # "Undo that." / "Cap that." / "Scratch that.": a recognizer's period
+        # on a command is not a sentence pause to review — never hold it.
+        for index in [i for i, pause in self._pauses.items() if pause.decision is None]:
+            item = self._item_at(index - 1)
+            if item is not None and item.kind in ("key", "recase", "scratch"):
+                del self._pauses[index]
 
     def _effective_required_stability(self) -> int:
         if not self._cfg.adaptive:
@@ -695,10 +708,13 @@ class FlowEngine:
             logger.info("flow: nothing to recase")
             return
         said = self._committed_render[target.render_len:]
-        if risky_backspace(said):
-            logger.warning("flow: refusing to recase across complex Unicode")
+        recased = recase(said, item.mode)
+        if risky_backspace(said) or len(recased) != len(said):
+            # ("straße" -> "STRASSE" would leave the segment snapshots
+            # pointing into the middle of a word.)
+            logger.info("flow: not recasing: complex Unicode or a change of length")
             return
-        self._committed_render = self._committed_render[:target.render_len] + recase(said, item.mode)
+        self._committed_render = self._committed_render[:target.render_len] + recased
 
     def _last_utterance_length(self) -> int:
         """Characters "select that" must cover: the last segment typed in
@@ -711,8 +727,11 @@ class FlowEngine:
                 break
         if target is None:
             return 0
-        said = self._committed_render[target.render_len:].lstrip(" ")
-        return 0 if risky_backspace(said) else len(said)
+        said = self._committed_render[target.render_len:]
+        if risky_backspace(said):
+            return 0
+        self._select_state = target.render_state
+        return len(said)
 
     def _apply_respell(self, spelled: str) -> None:
         """"spell that ...": swap the last committed word for the spelled

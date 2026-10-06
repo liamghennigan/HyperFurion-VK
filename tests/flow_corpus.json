@@ -1736,6 +1736,43 @@
   ]
  },
  {
+  "name": "recase refuses a change of length",
+  "register": "prose",
+  "segments": [
+   "one",
+   "straße",
+   "uppercase that",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One straße"
+   ],
+   [
+    "screen",
+    "One straße"
+   ],
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "final",
+    "One",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
   "name": "cap that inside a sentence stays words",
   "register": "prose",
   "segments": [
@@ -2513,7 +2550,7 @@
    [
     "action",
     "select:that",
-    9,
+    10,
     "One two three"
    ],
    [
@@ -2522,11 +2559,11 @@
    ],
    [
     "screen",
-    "four"
+    " four"
    ],
    [
     "final",
-    "four",
+    " four",
     "One two three",
     "",
     0,
@@ -2558,6 +2595,222 @@
     "final",
     "",
     "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "words after select that start where the utterance started",
+  "register": "prose",
+  "segments": [
+   "see you",
+   "on monday period",
+   "select that",
+   "tomorrow"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "See you"
+   ],
+   [
+    "screen",
+    "See you on Monday."
+   ],
+   [
+    "action",
+    "select:that",
+    11,
+    "See you on Monday."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " tomorrow"
+   ],
+   [
+    "final",
+    " tomorrow",
+    "See you on Monday.",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that over a sentence start keeps its capital",
+  "register": "prose",
+  "segments": [
+   "Done period",
+   "next we go",
+   "select that",
+   "then we stop"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Done."
+   ],
+   [
+    "screen",
+    "Done. Next we go"
+   ],
+   [
+    "action",
+    "select:that",
+    11,
+    "Done. Next we go"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " Then we stop"
+   ],
+   [
+    "final",
+    " Then we stop",
+    "Done. Next we go",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that over a numbered item",
+  "register": "prose",
+  "segments": [
+   "steps",
+   "new number build",
+   "select that",
+   "test"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Steps"
+   ],
+   [
+    "screen",
+    "Steps\n1. Build"
+   ],
+   [
+    "action",
+    "select:that",
+    9,
+    "Steps\n1. Build"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " test"
+   ],
+   [
+    "final",
+    " test",
+    "Steps\n1. Build",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that refuses combining marks",
+  "register": "prose",
+  "segments": [
+   "one",
+   "नमस्ते",
+   "select that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One नमस्ते"
+   ],
+   [
+    "action",
+    "select:that",
+    0,
+    "One नमस्ते"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "One नमस्ते",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a command's own period never waits",
+  "register": "prose",
+  "segments": [
+   "Hello world.",
+   "Undo that.",
+   "x"
+  ],
+  "options": {
+   "nav": true,
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "Hello world."
+   ],
+   [
+    "action",
+    "edit:undo",
+    1,
+    "Hello world."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " X"
+   ],
+   [
+    "final",
+    " X",
+    "Hello world.",
     "",
     0,
     []

@@ -814,7 +814,7 @@ export function recase(text, mode) {
   return text.replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase());
 }
 export function riskyBackspace(text) {
-  return /[\u{10000}-\u{10FFFF}̀-ͯ‍️︎]/u.test(text);
+  return /[\u{10000}-\u{10FFFF}\p{M}‍️︎]/u.test(text);  // as engine.py: astral, any mark, joiners
 }
 
 // ═══ THE MOLTEN ENGINE — one dictation, from first sound to the stop ═════
@@ -865,6 +865,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   let segmentMarks = [], segmentBounds = new Set([0]);
   let instruction = "", scratches = 0, corrections = [];
   let barrier = null, lastAction = null, typedBefore = "", finalizing = false;
+  let selectState = null;  // the fold state before the utterance "select that" covers
   let lastRepair = false;
   // punctuation where the speaker paused (pauses.js): "off" keeps the
   // recognizer's periods; "rules" settles the clear cases and keeps the
@@ -947,6 +948,7 @@ export function moltenLine({ register, cfg, state } = {}) {
     committedRender = "";
     let st = renderState;
     if (FRESH_FIELD.has(action.action)) st = initialState(reg);  // tab / escape / a page away: likely another field
+    else if (action.action === "select:that" && selectState) st = selectState;  // the whole utterance is selected: pick up from before it
     else if (GLUED.some((g) => action.action.startsWith(g)) || action.action.endsWith(":start"))
       st = { ...st, glueNext: true };  // the next word fills a selection or a gap, or starts a line
     renderState = st;
@@ -1072,6 +1074,11 @@ export function moltenLine({ register, cfg, state } = {}) {
                               bounds: [...segmentBounds].sort((a, b) => a - b),
                               commits: items.slice(0, committedItems).map((it) => it.e), register: reg, cfg });
     items = r.items; pendingFrom = r.pendingFrom;
+    // a recognizer's period on a command ("Undo that.") is not a pause to review: never hold it
+    for (const [index, pause] of [...pauseMap]) {
+      const it = pause.decision === null ? itemAt(index - 1) : null;
+      if (it && (it.kind === "key" || it.kind === "recase" || it.kind === "scratch")) pauseMap.delete(index);
+    }
   }
   function commitReady(now) {
     const horizon = stabMs();
@@ -1125,8 +1132,10 @@ export function moltenLine({ register, cfg, state } = {}) {
     let target = null;
     for (let i = snapshots.length - 1; i >= 0; i--) if (snapshots[i].len < committedRender.length) { target = snapshots[i]; break; }
     if (!target) return 0;
-    const said = committedRender.slice(target.len).replace(/^ +/, "");
-    return riskyBackspace(said) ? 0 : said.length;
+    const said = committedRender.slice(target.len);
+    if (riskyBackspace(said)) return 0;
+    selectState = target.st;
+    return said.length;
   }
   // "cap that" / "uppercase that" / "lowercase that" as a whole segment
   // recases the last utterance in place; mid-sentence it types as words
@@ -1138,9 +1147,9 @@ export function moltenLine({ register, cfg, state } = {}) {
     let target = null;
     for (let i = snapshots.length - 1; i >= 0; i--) if (snapshots[i].len < committedRender.length) { target = snapshots[i]; break; }
     if (!target) return;
-    const said = committedRender.slice(target.len);
-    if (riskyBackspace(said)) return;
-    committedRender = committedRender.slice(0, target.len) + recase(said, it.mode);
+    const said = committedRender.slice(target.len), recased = recase(said, it.mode);
+    if (riskyBackspace(said) || recased.length !== said.length) return;  // "straße" -> "STRASSE" would skew the snapshots
+    committedRender = committedRender.slice(0, target.len) + recased;
   }
   function applyScratch() {
     let target = null;
