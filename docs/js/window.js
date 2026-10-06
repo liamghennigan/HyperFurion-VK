@@ -1,7 +1,8 @@
 // ═══ WINDOW — the focused app, above the board ════════════════════════════
-// One window, four registers, picked the way the daemon's focus probe picks
+// One window, five registers, picked the way the daemon's focus probe picks
 // them: the editor renders prose (smart caps, spoken punctuation), the
-// terminal renders digits and no caps, python and shell compile speech.
+// terminal renders digits and no caps, python, shell and javascript compile
+// speech.
 // Each register is its own app with its own document (buffer.js): a text
 // field with a caret and a selection, which the Typist types into and
 // navigation commands move around in. The window never changes height:
@@ -16,7 +17,7 @@ import { createBuffer } from "./buffer.js";
 export const Window = (() => {
   const TITLES = {
     prose: ["notes.md", "editor"], terminal: ["~", "bash"],
-    python: ["main.py", "editor"], shell: ["~", "zsh"],
+    python: ["main.py", "editor"], shell: ["~", "zsh"], javascript: ["app.ts", "editor"],
   };
   const el = {
     title: $("fwin-title"), app: $("fwin-app"), doc: $("fwin-doc"), prompt: $("fwin-prompt"),
