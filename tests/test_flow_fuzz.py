@@ -22,7 +22,7 @@ VOCAB = (
     "percent dollars and fifty cents pm am i quote unquote end said period comma new line "
     "bullet number heading scratch that spell n g x correct to cap uppercase select undo "
     "go left word emoji rocket point hundred thousand euros june first second graders "
-    "literal snake case user id dot com at example slash million dollars people double equals not less than value error type um "
+    "literal snake case user id dot com at example slash million dollars people double equals not less than value error type and greater than um "
     # language-pack words, used when a seed picks es / fr / de
     "punto coma de en a y final point virgule à la ligne vue punkt komma neue zeile um"
 ).split()

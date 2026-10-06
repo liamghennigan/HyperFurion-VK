@@ -42,7 +42,18 @@ _SHELL_WORD_GLYPHS = {
     # A glob star starts a token: spaced from the command, glued rightward.
     "star": ("*", "right"),
     "slash": ("/", "both"),
+    "plus": ("+", "right"),  # "chmod plus x" -> +x
 }
+_SHELL_PAIRS = {
+    ("greater", "than"): ">",
+    ("less", "than"): "<",
+    ("and", "and"): "&&",
+}
+# A path after one of these starts a new argument: "cd slash etc" -> "cd /etc".
+_SHELL_COMMANDS = frozenset(
+    "cd ls cat tail head less more vim vi nano code rm cp mv mkdir rmdir touch chmod chown "
+    "find grep source open sudo echo tree du df stat file ln tar unzip zip scp rsync".split()
+)
 
 # Two spoken words, one operator: "double equals" -> "==". The first word
 # is held until the next says whether it was half an operator ("if not x"
@@ -108,6 +119,7 @@ def _compile(
     constants: dict | None = None,
     glued: dict | None = None,
     pairs: dict | None = None,
+    dot_hold: bool = False,
 ) -> tuple[str, RenderState]:
     out: list[str] = []
     at_start = state.at_start
@@ -152,6 +164,9 @@ def _compile(
         elif pending.startswith("hold:"):
             held, pending = pending[5:], ""
             word(held)
+        elif pending == "dot":
+            pending = ""
+            emit(".", glue_left=False)  # "find dot dash name": the dot is a path
 
     def word(text: str) -> None:
         nonlocal pending, glue_next, open_calls
@@ -160,6 +175,10 @@ def _compile(
             pending = "call"
         glyph = word_glyphs.get(core)
         if glyph is not None:
+            if dot_hold and glyph[0] == "/" and (last_atom in _SHELL_COMMANDS or last_atom[:1] == "-"):
+                emit("/", glue_left=False)  # "cd slash etc", "tail dash f slash var"
+                glue_next = True
+                return
             emit_mode(glyph[0], glyph[1])
             return
         if core in callables and last_atom != "->":
@@ -191,7 +210,7 @@ def _compile(
             glue_next = True
             after_name = False
         elif item.kind == "punct":
-            if pending.startswith("hold:"):
+            if pending.startswith("hold:") or pending == "dot":
                 flush_dash()  # the held word was a word ("type (" opens its call)
             if pending == "call-open" and item.text == "(" and item.mode == "right":
                 pending = "call"  # "print open paren": the callable already opened it
@@ -233,6 +252,21 @@ def _compile(
             emit_mode(item.text, (glued or {}).get(item.text, item.mode))
         elif item.kind == "word":
             core = item.text.casefold()
+            if dot_hold and core == "dot":
+                # Held: "file dot txt" glues, "cd dot dot" is "..", a dot
+                # before a flag or the end is a path of its own.
+                if pending == "dot":
+                    pending = ""
+                    emit("..", glue_left=False)
+                    continue
+                flush_dash()
+                pending = "dot"
+                continue
+            if pending == "dot":
+                pending = ""
+                # "file dot txt" glues; "dot slash run" starts a path
+                emit(".", glue_left=word_glyphs.get(core, ("",))[0] != "/")
+                glue_next = True
             if pending in ("dash", "dashes"):
                 emit(("--" if pending == "dashes" else "-") + item.text, glue_left=False)
                 pending = ""
@@ -290,13 +324,17 @@ def compile_shell(
         callables=frozenset(),
         dash_hold=True,
         glued=_SHELL_GLUED,
+        pairs=_SHELL_PAIRS,
+        dot_hold=True,
     )
 
 
 def flush_code(state: RenderState, register: Register) -> tuple[str, RenderState]:
     """At the end of a dictation: what a compiler still holds (a dash, the
     first word of a two-word operator) is typed as said."""
-    if not register.compiler or not (state.pending in ("dash", "dashes") or state.pending.startswith("hold:")):
+    if not register.compiler or not (
+        state.pending in ("dash", "dashes", "dot") or state.pending.startswith("hold:")
+    ):
         return "", state
     compiler = COMPILERS[register.compiler]
     # an empty item list only flushes: a break would reset more than the hold

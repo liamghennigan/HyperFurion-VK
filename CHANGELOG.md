@@ -13,7 +13,11 @@ proven to be the daemon's.
 ### Added
 
 - **Code registers read closer to code.** In `shell`, "dash dash rm"
-  types `--rm`, and `=` and `:` glue both sides (`FOO=bar`, `8080:80`).
+  types `--rm`, `=` and `:` glue both sides (`FOO=bar`, `8080:80`), a dot
+  knows a path from an extension (`cd ..`, `./run.sh`, `find . -name`,
+  `file.txt`), a path after a command or a flag is its own argument
+  (`tail -f /var/log`), and "plus x", "greater than", "and and" type
+  `+x`, `>`, `&&`.
   In `python`, "none", "true" and "false" type `None`, `True` and
   `False`, a quote glues to its string prefix (`f"hello"`), two-word
   operators fold ("double equals" `==`, "not equals" `!=`, "less than"

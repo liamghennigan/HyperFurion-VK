@@ -476,6 +476,48 @@
   ]
  },
  {
+  "name": "shell dots, paths and redirects",
+  "register": "shell",
+  "segments": [
+   "cd dot dot slash src and and ls dot dash a",
+   "find dot dash name star dot py",
+   "tail dash f slash var slash log",
+   "chmod plus x dot slash run dot sh",
+   "echo hi greater than out dot txt"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "cd ../src && ls . -a"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log chmod +x ./run.sh"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log chmod +x ./run.sh echo hi > out.txt"
+   ],
+   [
+    "final",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log chmod +x ./run.sh echo hi > out.txt",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a held dash is typed at the end",
   "register": "shell",
   "segments": [
