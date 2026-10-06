@@ -888,7 +888,8 @@ class TestFocusSafety:
         assert self._unsafe({"map": {"tabby": "terminal"}})
         assert self._unsafe({"map": {"tabby.exe": "shell"}})
         focus("cmd.exe")
-        assert not self._unsafe({"map": {"cmd": "prose"}})
+        # A terminal mapped to prose is still a terminal: ctrl+c is SIGINT there.
+        assert self._unsafe({"map": {"cmd": "prose"}})
         focus("notepad.exe")
         assert self._unsafe({"default": "terminal"})
 

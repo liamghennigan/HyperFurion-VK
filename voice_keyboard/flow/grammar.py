@@ -319,6 +319,10 @@ class Grammar:
             merged_commands[action] = tuple(str(p) for p in phrases if str(p).strip())
 
         merged_punct = {**DEFAULT_PUNCTUATION, **pack["punctuation"]}
+        if code:
+            # Terminals and code get keyable marks only: a character with no
+            # key is pasted, and a terminal must never be sent a paste.
+            merged_punct = {k: (g.replace("\u202f", ""), m, e) for k, (g, m, e) in merged_punct.items()}
         for phrase, glyph in (punctuation or {}).items():
             phrase_key = str(phrase).strip().casefold()
             glyph = str(glyph)
@@ -337,7 +341,8 @@ class Grammar:
         for action, phrases in merged_commands.items():
             for phrase in phrases:
                 self._phrases[_phrase_tokens(phrase)] = ("command", action)
-        for phrase, replacement in {**DEFAULT_EMOJI, **(vocabulary or {})}.items():
+        emoji = {} if code else DEFAULT_EMOJI  # no paste into a terminal, as above
+        for phrase, replacement in {**emoji, **(vocabulary or {})}.items():
             tokens = _phrase_tokens(str(phrase))
             if tokens:
                 self._phrases[tokens] = ("vocab", str(replacement))

@@ -93,6 +93,8 @@ def polish_plausible(original: str, polished: str) -> bool:
     polished = polished.strip()
     if not polished or len(polished) > 2 * len(original.strip()) + 40:
         return False
+    if "\n" in polished and "\n" not in original:
+        return False  # a polish adds no line breaks (in a chat, one sends)
     lowered = polished.lower()
     return not (polished.startswith("```") or lowered.startswith(("sure", "here is", "here's")))
 
@@ -1099,9 +1101,11 @@ class Daemon:
             self._injector.paste_chord_shift = register.paste_chord_shift
         # In a terminal a line break IS Enter, and Enter runs the line. The
         # grammar already drops a spoken "new line" there; the injector
-        # refuses Enter for the whole session as well, on every path.
+        # refuses Enter for the whole session as well, on every path — and
+        # so it does wherever a terminal can't be ruled out: focus we could
+        # not identify, or a terminal app mapped to another register.
         if hasattr(self._injector, "suppress_enter"):
-            self._injector.suppress_enter = bool(register.terminal)
+            self._injector.suppress_enter = bool(register.terminal) or not _surely_not_a_terminal(focus)
 
         # A secret widget gets maximum protection: verbatim register (set
         # above via the role), no ledger entry, no vocabulary bias.
@@ -1843,8 +1847,8 @@ class Daemon:
         if not bool(self._config.get("flow", {}).get("rejoin", True)):
             return None
         identity = focus.identity if focus is not None else ""
-        if identity != landing["identity"] or register.name != landing["register"]:
-            return None
+        if not identity or identity != landing["identity"] or register.name != landing["register"]:
+            return None  # unknown focus could be anything, even a terminal
         if time.monotonic() - landing["when"] > REJOIN_WINDOW_S:
             return None
         state = continuation_state(landing["tail"], register)
@@ -2131,6 +2135,9 @@ class Daemon:
                 "text": rewritten,
                 "target": target,
                 "expires": time.monotonic() + PENDING_REWRITE_TTL_S,
+                # where it belongs: "keep it" anywhere else would erase
+                # someone else's text
+                "identity": self._session_focus.identity if self._session_focus else "",
             }
             preview = rewritten if len(rewritten) <= 90 else rewritten[:87] + "…"
             await self._show_hotkey_overlay(
@@ -2147,16 +2154,19 @@ class Daemon:
                 raise RuntimeError(
                     "can't repair across pasted text — the rewrite is on the clipboard"
                 )
-            worker.set_target(rewritten)
-            return await worker.drain(timeout=self._drain_timeout(rewritten))
+            # A model's line break is never an Enter: in a chat it sends.
+            with self._enter_refused():
+                worker.set_target(rewritten)
+                return await worker.drain(timeout=self._drain_timeout(rewritten))
 
         if risky_backspace(target):
             clipboard.set_text(rewritten)
             raise RuntimeError(
                 "can't repair across pasted text — the rewrite is on the clipboard"
             )
-        await asyncio.to_thread(self._injector.delete_chars, len(target))
-        await asyncio.to_thread(self._injector.type_text, rewritten)
+        with self._enter_refused():
+            await asyncio.to_thread(self._injector.delete_chars, len(target))
+            await asyncio.to_thread(self._injector.type_text, rewritten)
         return rewritten
 
     # ----------------------------------------------------------- intents
@@ -2467,6 +2477,10 @@ class Daemon:
             raise RuntimeError("no pending rewrite")
         target = str(pending["target"])
         rewritten = str(pending["text"])
+        here = await asyncio.to_thread(probe_focus)
+        if not pending.get("identity") or here is None or here.identity != pending["identity"]:
+            clipboard.set_text(rewritten)
+            raise RuntimeError("the rewrite belongs to another app — it is on the clipboard")
         if await self._focus_changed_since_session():
             clipboard.set_text(rewritten)
             raise RuntimeError("focus changed — the rewrite is on the clipboard")
@@ -2475,8 +2489,9 @@ class Daemon:
             raise RuntimeError(
                 "can't repair across pasted text — the rewrite is on the clipboard"
             )
-        await asyncio.to_thread(self._injector.delete_chars, len(target))
-        await asyncio.to_thread(self._injector.type_text, rewritten)
+        with self._enter_refused():
+            await asyncio.to_thread(self._injector.delete_chars, len(target))
+            await asyncio.to_thread(self._injector.type_text, rewritten)
         self._remember_typed(rewritten)
         await self._show_hotkey_overlay("inserted", detail="⌁ kept", timeout_ms=1500)
         return rewritten

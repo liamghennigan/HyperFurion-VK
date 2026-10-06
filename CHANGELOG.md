@@ -267,6 +267,17 @@ proven to be the daemon's.
 
 ### Fixed
 
+- **Safety: Enter is refused wherever a terminal can't be ruled out.** A
+  session whose focus could not be identified, or a terminal app mapped to
+  another register in `[registers.map]`, now refuses Enter on every path
+  (a spoken "new line", a heading, a snippet's line break) as terminals
+  always did. Every model rewrite — "VK, make that …", a held rewrite, a
+  per-app polish — is typed with Enter refused (in a chat a line break
+  sends), and a polish that adds line breaks is rejected. "Keep it" applies
+  a held rewrite only in the app it was made for. Terminals and code never
+  get emoji or narrow no-break spaces (they would be pasted). On Windows a
+  terminal mapped to another register is never sent the copy key (SIGINT).
+  Rejoining needs an identified app.
 - **Caret and recase commands, from review.** Words after "select that"
   continue from before the selected utterance (its capital, spacing and list
   number), and the selection now includes its leading space or line break.

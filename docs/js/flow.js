@@ -75,22 +75,25 @@ for (const [p, act] of Object.entries(COMMANDS)) PHRASES.set(p, ["cmd", act]);
 PHRASES.set("literal", ["cmd", "literal"]);
 // "emoji thumbs up" -> 👍 (grammar.py DEFAULT_EMOJI): one code point each
 const EMOJI = { "emoji thumbs up": "👍", "emoji thumbs down": "👎", "emoji smile": "🙂", "emoji grin": "😁", "emoji laughing": "😂", "emoji wink": "😉", "emoji sad": "😢", "emoji crying": "😭", "emoji thinking": "🤔", "emoji heart eyes": "😍", "emoji fire": "🔥", "emoji party": "🎉", "emoji check mark": "✅", "emoji cross mark": "❌", "emoji eyes": "👀", "emoji pray": "🙏", "emoji rocket": "🚀", "emoji clap": "👏", "emoji hundred": "💯", "emoji shrug": "🤷", "emoji wave": "👋", "emoji sparkles": "✨", "emoji star": "⭐", "emoji skull": "💀", "emoji facepalm": "🤦", "emoji ok hand": "👌", "emoji muscle": "💪" };
-for (const [p, r] of Object.entries({ ...EMOJI, ...VOCAB })) PHRASES.set(p, ["vocab", r]);
+for (const [p, r] of Object.entries(EMOJI)) PHRASES.set(p, ["vocab", r, "emoji"]);
+for (const [p, r] of Object.entries(VOCAB)) PHRASES.set(p, ["vocab", r]);
 const MAX_PHRASE = 3;
 
-function matchPhrase(cores, i, maxLen) {
+// code: terminals and code registers get no emoji (grammar.py: a character
+// with no key is pasted, and a terminal must never be sent a paste)
+function matchPhrase(cores, i, maxLen, code = false) {
   const limit = Math.min(MAX_PHRASE, cores.length - i, maxLen);
   for (let len = limit; len >= 1; len--) {
     const entry = PHRASES.get(cores.slice(i, i + len).join(" "));
-    if (entry) return [entry, len];
+    if (entry && !(code && entry[2] === "emoji")) return [entry, len];
   }
   return [null, 0];
 }
-function couldExtend(cores, i) {
+function couldExtend(cores, i, code = false) {
   const tail = cores.slice(i).join(" ");
   if (!tail || cores.length - i >= MAX_PHRASE) return false;
-  for (const p of PHRASES.keys())
-    if (p.length > tail.length && p.startsWith(tail + " ")) return true;
+  for (const [p, entry] of PHRASES)
+    if (p.length > tail.length && p.startsWith(tail + " ") && !(code && entry[2] === "emoji")) return true;
   return false;
 }
 
@@ -506,6 +509,7 @@ const AMBIGUOUS = new Set(["a", "i", "one", "two", "four", "eight"]);  // letter
 const PENDING = "pending";
 
 export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds = [], commits = [], register, cfg }) {
+  const codeReg = !!(register && (register.compiler || register.terminal));
   const reg = register || REGISTERS.prose;
   if (!reg.grammar) {
     return { items: tokens.map((t, i) => ({ kind: "word", text: t, s: i, e: i + 1 })),
@@ -532,7 +536,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       if (!c || wakeAt(cores, cursor, wake) || fillers.has(c) || (words.length && stops.has(c))) break;
       if (FORMATTERS.has(c + " " + (cores[cursor + 1] || ""))) break;  // the next formatter starts
       if (c === "unquote" || (c === "end" && cores[cursor + 1] === "quote")) break;  // a quote closes
-      if (matchPhrase(cores, cursor, limit - cursor)[0]) break;
+      if (matchPhrase(cores, cursor, limit - cursor, codeReg)[0]) break;
       words.push(c);
       stop = (tokens[cursor].match(PUNCT_STRIP) || [""])[0];
       cursor += 1;
@@ -672,8 +676,8 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
         i = end; continue;
       }
     }
-    const [entry, used] = matchPhrase(cores, i, fence);
-    if (!entry && !flush && i >= frozen && couldExtend(cores, i)) { pendingFrom = i; break; }
+    const [entry, used] = matchPhrase(cores, i, fence, codeReg);
+    if (!entry && !flush && i >= frozen && couldExtend(cores, i, codeReg)) { pendingFrom = i; break; }
     if (entry) {
       const [kind, payload] = entry;
       if (kind === "punct") {

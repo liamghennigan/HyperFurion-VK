@@ -148,7 +148,8 @@ def check_focus_probe() -> Finding:
     except Exception as exc:
         return Finding(WARN, "focus", f"probe failed to start ({exc})", "")
     if probe.returncode != 0:
-        return Finding(WARN, "focus", "AT-SPI bindings missing: every app is treated as prose",
+        return Finding(WARN, "focus", "AT-SPI bindings missing: apps can't be told apart, so line breaks"
+                       " are refused everywhere (any app could be a terminal)",
                        "install python3-gi and gir1.2-atspi-2.0")
     return Finding(OK, "focus", "AT-SPI available")
 
