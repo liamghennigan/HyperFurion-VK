@@ -103,7 +103,7 @@ export const Window = (() => {
     el.instr.textContent = text ? "“" + settings.wakeWord + ", " + text + "” — listening for the instruction" : "";
     el.instr.hidden = !text;
   }
-  function clearDoc() { buffer().clear(); paintArgs = { moltenLen: 0, heat: "molten", moved: false }; paintDoc(); }
+  function clearDoc() { buffer().clear(); paintArgs = { moltenLen: 0, heat: "molten", moved: false }; paintDoc(); bus.emit("doc:cleared", {}); }
 
   // ── status: one line ────────────────────────────────────────────────────
   function paintStatus() {

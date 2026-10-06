@@ -213,6 +213,16 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
   .sbtn { padding: 8px 10px; font-size: 11px; }
 }
 
+/* ─── hints: what to say ───────────────────────────────────────────────── */
+.hints { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 0; }
+.hints-lead { font: 500 11px/1 var(--mono); letter-spacing: .12em; color: var(--sand-500); margin-right: 4px; }
+.chip { font: 500 12px/1 var(--mono); color: var(--sand-300); background: var(--glass); border: 1px solid var(--glass-line); border-radius: var(--r-pill); padding: 7px 11px; cursor: pointer;
+  transition: color var(--d-2), border-color var(--d-2), background var(--d-2), box-shadow var(--d-3) var(--ease-out); }
+.chip:hover { color: var(--sand-50); border-color: var(--glass-line-2); }
+.hints.live .chip { cursor: default; }
+.chip.lit { color: #1a0d05; background: linear-gradient(180deg, var(--saffron), var(--amber)); border-color: var(--saffron); box-shadow: 0 0 0 4px var(--spice-glow); }
+@media (max-width: 640px) { .chip { font-size: 11px; padding: 6px 9px; } }
+
 /* ─── rows: copy beside a figure ───────────────────────────────────────── */
 .section { padding: 64px 0; }
 .section + .section { border-top: 1px solid var(--glass-line); }

@@ -586,6 +586,12 @@ correction (and hotword) candidate. It is never applied on its own: one
 spelled word is not a rule ("their" → "there"). `spelling = false` under
 `[flow]` turns spelling off.
 
+**Stop, think, go again.** A recording that starts within 30 seconds of
+the last one, in the same app and the same prose register, continues its
+text — a space before the first word, a capital only after a sentence
+end — instead of gluing itself to it. Terminals and code registers never
+get a leading space. `[flow] rejoin = false` turns it off.
+
 ### Hands-free navigation
 
 Off by default: `enabled = true` under `[nav]`. Say a command as an
@@ -1302,11 +1308,12 @@ node --test docs/js/test/*.test.mjs   # the landing page's engine port
 
 The landing page under `docs/` runs a JavaScript port of
 `voice_keyboard/flow/` (`docs/js/flow.js`, `nav.js`, `spelling.js`).
-`scripts/flow_corpus.py` runs 50-odd dictations through the Python
-`FlowEngine` and writes `tests/flow_corpus.json`; the Node tests replay
-the file through the port and expect the same screens, actions and final
-text. Change the engine, rerun the script, and the diff shows what changed
-— in both languages.
+`scripts/flow_corpus.py` runs 60-odd dictations — finals, and timed
+streams of interims and ticks — through the Python `FlowEngine` and
+writes `tests/flow_corpus.json`; the Node tests replay the file through
+the port and expect the same screens after every step, the same actions
+and the same final text. Change the engine, rerun the script, and the
+diff shows what changed — in both languages.
 
 CI runs the suite on Linux (Python 3.11–3.13) and on Windows — where
 `tests/test_windows_live.py` types into a real edit box and drives the

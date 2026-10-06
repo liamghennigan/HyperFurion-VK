@@ -44,9 +44,9 @@ from voice_keyboard.flow.nav import FRESH_FIELD, GLUED
 from voice_keyboard.flow.registers import (
     Register,
     RenderState,
-    initial_state,
     render_items,
 )
+from voice_keyboard.flow.registers import initial_state as _fresh_state
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +150,8 @@ class FlowEngine:
         config: FlowConfig,
         grammar: Grammar,
         register: Register,
+        *,
+        initial_state: Optional[RenderState] = None,
     ):
         self._cfg = config
         self._grammar = grammar
@@ -164,7 +166,9 @@ class FlowEngine:
         self._committed_tokens = 0
         self._committed_items = 0
         self._committed_render = ""
-        self._render_state: RenderState = initial_state(register)
+        # A recording that continues text already at the caret starts with
+        # that text's spacing and capitalization carried in.
+        self._render_state: RenderState = initial_state or _fresh_state(register)
         self._final_tokens = 0
         self._snapshots: list[_Snapshot] = [
             _Snapshot(render_len=0, render_state=self._render_state)
@@ -301,7 +305,7 @@ class FlowEngine:
         state = self._render_state
         if action.action in FRESH_FIELD:
             # Tab / Escape / a page away: likely a different field.
-            state = initial_state(self._register)
+            state = _fresh_state(self._register)
         elif action.action.startswith(GLUED) or action.action.endswith(":start"):
             # The next word fills a selection or a gap, or starts a line:
             # no leading space.
@@ -509,6 +513,7 @@ class FlowEngine:
             frozen=self._committed_tokens,
             settled=self._final_tokens,
             bounds=tuple(sorted(self._segment_bounds)),
+            commits=tuple(item.span[1] for item in self._items[:self._committed_items]),
         )
         if result.items[:self._committed_items] != self._items[:self._committed_items]:
             # Deterministic parsing plus the frozen fence should make this

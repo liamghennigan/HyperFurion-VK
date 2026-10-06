@@ -13,7 +13,12 @@ Each case feeds its segments as final transcripts (one engine, the
 segments appended the way streaming finals accumulate), walks every
 navigation barrier as if the keys were pressed, and records what the
 engine wanted on screen after each segment, each action it raised, and
-the finalize result.
+the finalize result. A streaming case instead feeds timed steps —
+interim transcripts, finals, and bare ticks on a clock in seconds — and
+records the screen after every step: the stability window, the adaptive
+horizon, the holdback expiry and the non-ASCII eager commit all run on
+that clock in both engines. A case may `continue` text left at the
+caret by an earlier recording ([flow] rejoin).
 
     python scripts/flow_corpus.py          # rewrite tests/flow_corpus.json
     python scripts/flow_corpus.py --check  # exit 1 if the file is stale
@@ -28,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 
 from voice_keyboard.flow.engine import FlowConfig, FlowEngine  # noqa: E402
 from voice_keyboard.flow.grammar import Grammar  # noqa: E402
-from voice_keyboard.flow.registers import REGISTERS  # noqa: E402
+from voice_keyboard.flow.registers import REGISTERS, continuation_state  # noqa: E402
 
 CORPUS = ROOT / "tests" / "flow_corpus.json"
 
@@ -93,11 +98,61 @@ CASES = [
     ("digit pairs and attached punctuation", "terminal", ["version one two period then four. five six"], {}),
     ("twenty hundred and zero", "terminal", ["twenty hundred then zero then zero zero"], {}),
     ("numbers off", "terminal", ["twenty three"], {"numbers": "off"}),
+    # [flow] rejoin: continuing text an earlier recording left at the caret
+    ("rejoin after a sentence end", "prose", ["next sentence"], {"continues": "Hello world."}),
+    ("rejoin mid-sentence", "prose", ["and more"], {"continues": "Hello world"}),
+    ("rejoin then scratch rewinds to the join", "prose", ["oops", "scratch that better"], {"continues": "Hello world"}),
+    ("rejoin in a terminal glues", "terminal", ["tmp"], {"continues": "cd"}),
+]
+
+# streaming cases: (name, register, steps, options); a step is
+# [t, text, "interim" | "final"] or [t, "tick"]
+STREAMS = [
+    ("words land and freeze on the window", "prose", [
+        [0.0, "fixed the", "interim"], [0.3, "fixed the race", "interim"], [0.6, "fixed the race condition", "interim"],
+        [0.9, "fixed the race condition", "interim"], [1.2, "tick"], [2.2, "tick"], [2.5, "fixed the race condition in", "interim"],
+        [4.0, "tick"], [4.5, "fixed the race condition in the audio thread", "final"]], {}),
+    ("a revision repairs the molten tail", "prose", [
+        [0.0, "fixed the race addition", "interim"], [0.3, "fixed the race addition in", "interim"],
+        [0.6, "fixed the race condition in the", "interim"], [0.9, "fixed the race condition in the audio", "interim"],
+        [2.0, "tick"], [2.6, "tick"], [3.0, "fixed the race condition in the audio thread", "final"]], {}),
+    ("a deep revision widens the horizon", "prose", [
+        [0.0, "we need to ship the thing today", "interim"], [0.2, "we need to shift the ring to bay", "interim"],
+        [0.4, "we need to ship the thing today", "interim"], [0.6, "we need to ship the thing today", "interim"],
+        [2.2, "tick"], [2.4, "we need to ship the thing today", "interim"], [2.6, "we need to ship the thing today", "interim"],
+        [2.8, "we need to ship the thing today", "interim"], [4.5, "tick"], [6.0, "we need to ship the thing today", "final"]], {}),
+    ("a half phrase is held, then let go", "prose", [
+        [0.0, "ready open", "interim"], [0.3, "ready open", "interim"], [0.6, "ready open", "interim"],
+        [2.0, "tick"], [2.5, "tick"], [3.2, "tick"], [3.6, "ready open", "interim"], [4.0, "ready open quote", "final"]], {}),
+    ("a held number is let go, then a bigger number follows", "terminal", [
+        [0.0, "one", "interim"], [0.3, "one", "interim"], [0.6, "one", "interim"], [3.2, "tick"], [3.4, "tick"],
+        [3.6, "one hundred", "interim"], [3.9, "one hundred", "interim"], [4.2, "one hundred", "interim"], [7.0, "tick"],
+        [7.5, "one hundred five", "final"]], {}),
+    ("words committed one at a time never merge", "prose", [
+        [0.0, "say open", "interim"], [0.3, "say open", "interim"], [0.6, "say open", "interim"], [3.2, "tick"],
+        [3.5, "say open quote", "interim"], [3.8, "say open quote", "interim"], [4.1, "say open quote", "interim"], [6.5, "tick"],
+        [7.0, "say open quote hi close quote", "final"]], {}),
+    ("a non ascii word commits early", "prose", [
+        [0.0, "café au lait", "interim"], [0.2, "café au lait", "interim"], [0.4, "café au lait", "interim"],
+        [0.6, "tick"], [3.0, "café au lait", "final"]], {}),
+    ("a scratch mid-stream", "prose", [
+        [0.0, "send it to bob", "interim"], [0.3, "send it to bob", "interim"], [2.0, "tick"],
+        [2.2, "send it to bob scratch that", "interim"], [2.5, "send it to bob scratch that send it to alice", "interim"],
+        [4.5, "tick"], [5.0, "send it to bob scratch that send it to alice", "final"]], {}),
+    ("a long molten tail is forced to commit", "prose", [
+        [0.0, " ".join(["word"] * 40), "interim"], [0.1, " ".join(["word"] * 45), "interim"], [0.2, "tick"],
+        [1.0, " ".join(["word"] * 45), "final"]], {}),
+    ("a command waits at a barrier while words keep coming", "prose", [
+        [0.0, "hello world", "final"], [1.0, "hello world select previous word", "final"],
+        [1.2, "hello world select previous word pla", "interim"], [1.4, "hello world select previous word planet", "interim"],
+        [1.6, "press"], [1.8, "hello world select previous word planet", "interim"], [3.5, "tick"],
+        [4.0, "hello world select previous word planet", "final"]], {"nav": True}),
 ]
 
 
 def make_engine(register_name: str, opts: dict) -> FlowEngine:
     register = REGISTERS[register_name]
+    initial = continuation_state(opts["continues"], register) if opts.get("continues") else None
     grammar = Grammar(
         enabled=register.grammar_enabled,
         # [flow.vocabulary]'s documented example, which the page ships live
@@ -109,7 +164,7 @@ def make_engine(register_name: str, opts: dict) -> FlowEngine:
         spelling=opts.get("spelling", True),
         nav=opts.get("nav", False),
     )
-    return FlowEngine(FlowConfig(adaptive=False), grammar, register)
+    return FlowEngine(FlowConfig(), grammar, register, initial_state=initial)
 
 
 def run_case(register_name: str, segments: list[str], opts: dict) -> list:
@@ -137,12 +192,39 @@ def run_case(register_name: str, segments: list[str], opts: dict) -> list:
     return events
 
 
+def run_stream(register_name: str, steps: list, opts: dict) -> list:
+    engine = make_engine(register_name, opts)
+    events: list = []
+    last = ""
+    for step in steps:
+        now = float(step[0])
+        if step[1] == "tick":
+            engine.on_tick(now=now)
+        elif step[1] == "press":
+            action = engine.pending_action()
+            events.append(["action", action.action if action else None, action.count if action else 0, engine.desired_text()])
+            engine.complete_action(now, pressed=True)
+        else:
+            last = step[1]
+            engine.on_transcript(last, is_final=step[2] == "final", now=now)
+        events.append(["screen", engine.desired_text()])
+    result = engine.finalize(last, now=float(steps[-1][0]) + 1.0)
+    events.append(["final", result.text, result.typed_before, result.instruction, result.scratches,
+                   [list(pair) for pair in result.corrections]])
+    return events
+
+
 def build() -> list[dict]:
     out = []
     for name, register, segments, opts in CASES:
         out.append({
             "name": name, "register": register, "segments": segments, "options": opts,
             "events": run_case(register, segments, opts),
+        })
+    for name, register, steps, opts in STREAMS:
+        out.append({
+            "name": name, "register": register, "steps": steps, "options": opts,
+            "events": run_stream(register, steps, opts),
         })
     return out
 

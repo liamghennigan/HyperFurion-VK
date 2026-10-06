@@ -34,6 +34,13 @@ proven to be the daemon's.
 
 ### Fixed
 
+- **Flow: words committed one at a time never merge later.** "open" let
+  go by the holdback timer, then "quote" committed on its own, read back
+  as the phrase `"` on the next reparse — the fence only guarded the
+  latest commit. The grammar now parses everything behind the fence item
+  by item (the engine hands it each committed item's end), so no phrase,
+  number run, or spelled run can cross a commit boundary; the two fixes
+  below are special cases of this rule.
 - **Flow: a word duplicated at stop.** When a dictation contained a spoken
   number that was folded to digits ("twenty three" → `23`) or a `literal`
   phrase, finalizing re-committed the last word: a terminal got
@@ -49,6 +56,21 @@ proven to be the daemon's.
 
 ### Added
 
+- **`[flow] rejoin` — stop, think, press the hotkey again.** A recording
+  that starts within 30 seconds of the last one, in the same app and the
+  same prose register, continues its text: a space before the first word,
+  and a capital only if the last one ended a sentence. Until now the
+  second recording was glued to the first ("Hello world.Next"). Terminals
+  and code registers never get a leading space (a shell may read one as
+  "keep out of history"); a focus change or a nav command resets it. On
+  by default; `rejoin = false` restores a fresh caret every time. The
+  landing page mirrors it.
+- **"Try saying" on the landing page.** Five chips under the mic name what
+  to say ("scratch that", "spell that n g i n x", "select previous word",
+  "delete previous word", "VK, make that formal"); while you dictate, the
+  one you just said lights the moment the engine acts on it, and while
+  nothing is recording a tap plays that one thing as a short scripted
+  session.
 - **The landing page types into a real text field.** The focused window is
   a document with a caret and a selection (per register: the editor's and
   the shell's), and every keystroke the 3D board presses lands in it — so
@@ -66,11 +88,15 @@ proven to be the daemon's.
   window, the fence, and navigation barriers behave identically. The
   scripted demo is now one continuous recording per register.
 - **A parity corpus** (`scripts/flow_corpus.py` → `tests/flow_corpus.json`):
-  53 dictations run through the Python `FlowEngine`, recorded, and
+  67 dictations run through the Python `FlowEngine`, recorded, and
   replayed through the page's port under `node --test docs/js/test` — same
   screens after every segment, same navigation actions, same final text,
-  corrections and scratch counts. A new `landing` CI job runs it;
-  `tests/test_flow_corpus.py` keeps the file current on the Python side.
+  corrections and scratch counts. Ten of them stream: timed interims,
+  finals and ticks on a clock, so the stability window, the adaptive
+  horizon (now ported too), the holdback expiry and the non-ASCII eager
+  commit agree over time, not just at stop. A new `landing` CI job runs
+  it; `tests/test_flow_corpus.py` keeps the file current on the Python
+  side and fails on any "committed items changed under reparse".
 
 ## [2.3.0] — 2026-10
 

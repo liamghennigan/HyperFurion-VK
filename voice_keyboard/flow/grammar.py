@@ -223,6 +223,7 @@ class Grammar:
         frozen: int = 0,
         settled: int = 0,
         bounds: tuple[int, ...] = (),
+        commits: tuple[int, ...] = (),
     ) -> ParseResult:
         """Parse raw tokens into items.
 
@@ -233,8 +234,11 @@ class Grammar:
 
         `frozen` is the engine's committed-token fence: no phrase may span
         it. Tokens before it were already committed under some parse, and
-        fencing guarantees this parse reproduces those items exactly even
-        if later tokens would retroactively complete a longer phrase.
+        `commits` — the end of each committed item, ascending — lets this
+        parse reproduce those items exactly: below the fence every item is
+        parsed within its own span, so two words committed one at a time
+        never merge into the phrase they would have formed together, and
+        later tokens never retroactively complete a longer phrase.
 
         `settled` is how many tokens the provider has finalized. A spelled
         run or a navigation command starting inside them is decided there:
@@ -256,9 +260,16 @@ class Grammar:
         pending_from: Optional[int] = None
         index = 0
 
+        def item_end(at: int) -> int:
+            """Where the committed item holding token `at` ends."""
+            for end in commits:
+                if end > at:
+                    return min(end, frozen) if frozen > at else end
+            return frozen
+
         while index < len(tokens):
             core = cores[index]
-            fence = frozen - index if index < frozen else len(tokens)
+            fence = item_end(index) - index if index < frozen else len(tokens)
 
             # Wake word: everything after it is an instruction, never
             # typed. It resolves only at finalize; until then it holds the
@@ -280,13 +291,15 @@ class Grammar:
 
             if self._spelling and core == SPELL_WORD:
                 limit, decided = self._limit(index, len(tokens), frozen, settled, flush, bounds)
+                if index < frozen:
+                    limit = min(limit, item_end(index))
                 head = index + (2 if cores[index + 1:index + 2] == ["that"] else 1)
                 if head >= limit:
                     # "spell that" ended its segment: the letters may come
                     # after a pause, in the next one. Behind the fence the
                     # run reads back exactly as it was committed.
                     if index < frozen:
-                        limit, decided = frozen, True
+                        limit, decided = item_end(index), True
                     elif settled > head:
                         limit, decided = settled, True
                     else:
@@ -304,6 +317,8 @@ class Grammar:
 
             if self._nav and core in NAV_VERBS:
                 limit, decided = self._limit(index, len(tokens), frozen, settled, flush, bounds)
+                if index < frozen:
+                    limit = min(limit, item_end(index))
                 command = parse_nav(cores[:limit], index, decided=decided)
                 if command == NAV_PENDING:
                     pending_from = index
@@ -391,6 +406,7 @@ class Grammar:
                 items,
                 flush=flush or pending_from is not None,
                 frozen=frozen,
+                item_end=item_end,
             )
             if number_pending is not None and pending_from is None:
                 pending_from = number_pending
@@ -474,14 +490,19 @@ class Grammar:
         *,
         flush: bool,
         frozen: int,
+        item_end=None,
     ) -> tuple[list[Item], Optional[int]]:
         """Convert runs of consecutive number-word items into digit items.
 
         A number run still touching the molten tail is held back (it might
-        keep growing) unless flushing. No run crosses the frozen fence: a
-        run committed as "23" folds to "23" again on every reparse, and a
-        number word after the fence can never reach back and change it.
+        keep growing) unless flushing. No run crosses the frozen fence or a
+        committed item's end: a run committed as "23" folds to "23" again
+        on every reparse, and a number word after it can never reach back
+        and change it.
         """
+        if item_end is None:
+            def item_end(at: int) -> int:
+                return frozen
         result: list[Item] = []
         run: list[Item] = []
         pending_from: Optional[int] = None
@@ -506,7 +527,7 @@ class Grammar:
 
         for item in items:
             if item.kind == "word" and _core(item.text) in NUMBER_WORDS:
-                if run and run[0].span[0] < frozen <= item.span[0]:
+                if run and run[0].span[0] < frozen and item.span[0] >= item_end(run[0].span[0]):
                     close_run(at_tail=False)  # the committed part folds alone
                 run.append(item)
             else:

@@ -34,6 +34,7 @@ import "./js/tts.js";
 import "./js/hotkeys.js";
 import { Autopilot } from "./js/autopilot.js";
 import { LocalSTT } from "./js/stt-local.js";
+import "./js/hints.js";
 import "./js/demo-ui.js";
 import "./js/install.js";
 import "./js/measure.js";

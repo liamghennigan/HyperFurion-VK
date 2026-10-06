@@ -135,6 +135,12 @@ personal_dictionary = true
 # swaps the last word for the spelled one; "spell ..." types it. Each
 # swap is offered as a `voice-keyboard learned` candidate.
 spelling = true
+# Stop, think, press the hotkey again: a recording that starts within 30
+# seconds of the last one, in the same app and the same prose register,
+# continues its text — a space before the first word, and a capital only
+# if the last one ended a sentence. Terminals and code registers never
+# get a leading space. false = every recording starts at a fresh caret.
+rejoin = true
 # Punctuation where you paused. Streaming recognizers (xai, hyperfurion)
 # end a sentence at every pause — "I think. We should wait." — so a
 # period you paused after stays revisable until the next words decide it.

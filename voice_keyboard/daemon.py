@@ -16,6 +16,8 @@ from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
 from voice_keyboard.flow.registers import (
+    RenderState,
+    continuation_state,
     Register,
     register_for_app,
     resolve_register,
@@ -52,6 +54,9 @@ FLOW_TICK_S = 0.25
 # At stop, how long a navigation command waits for the hotkey's modifiers
 # to be released before it is refused.
 NAV_RELEASE_WAIT_S = 1.5
+# A recording that starts this soon after the last one, in the same app
+# and prose register, continues the text that one left at the caret.
+REJOIN_WINDOW_S = 30.0
 # Pause reviews ([flow] pause_review): one call's limit, and how long the
 # stop path waits for the last ones before the rules decide.
 PAUSE_REVIEW_CALL_S = 5.0
@@ -150,6 +155,10 @@ class Daemon:
         self._session_remote_audio = False
         self._last_caption = ""
         self._last_typed = ""
+        # Where the last dictation left the caret: the app, the register,
+        # and the last character typed — so the next recording can continue
+        # the sentence instead of gluing itself to it ([flow] rejoin).
+        self._landing: Optional[dict] = None
         self._last_error = ""
         # Molten diffs: a rewrite held for approval ([flow] rewrite_pending).
         self._pending_rewrite: Optional[dict] = None
@@ -1067,6 +1076,7 @@ class Daemon:
             self._flow_config_obj(self._pause_review_mode()),
             self._build_grammar(register),
             register,
+            initial_state=self._rejoin_state(focus, register),
         )
 
         auto_stop_ms = flow_cfg.get("auto_stop_ms", 0)
@@ -1718,6 +1728,27 @@ class Daemon:
             register=self._session_register.name,
         )
 
+    def _rejoin_state(self, focus, register) -> Optional[RenderState]:
+        """The render state a recording starts in when it continues the
+        text the last one left at the caret: same app, same prose
+        register, within REJOIN_WINDOW_S, and that text did not end in
+        whitespace. Terminals and code registers never get a leading
+        space (a shell may treat one as "keep out of history")."""
+        landing = self._landing
+        if landing is None or not register.smart_caps:
+            return None
+        if not bool(self._config.get("flow", {}).get("rejoin", True)):
+            return None
+        identity = focus.identity if focus is not None else ""
+        if identity != landing["identity"] or register.name != landing["register"]:
+            return None
+        if time.monotonic() - landing["when"] > REJOIN_WINDOW_S:
+            return None
+        state = continuation_state(landing["tail"], register)
+        if state is not None:
+            logger.info("Rejoining the last dictation in %r", identity or "the focused app")
+        return state
+
     def _remember_typed(self, final: str, *, register: str = "") -> None:
         if not final:
             return
@@ -1726,6 +1757,12 @@ class Daemon:
             return
         self._last_typed = final
         self._last_error = ""
+        self._landing = None if self._focus_lost else {
+            "identity": self._session_focus.identity if self._session_focus else "",
+            "register": register or self._session_register.name,
+            "tail": final[-1:],
+            "when": time.monotonic(),
+        }
         if self._config.get("flow", {}).get("history", False):
             history.append_entry(
                 final,

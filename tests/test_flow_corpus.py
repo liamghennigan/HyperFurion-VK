@@ -32,6 +32,10 @@ def test_every_case_keeps_the_reparse_invariant(caplog: pytest.LogCaptureFixture
             caplog.clear()
             flow_corpus.run_case(register, segments, opts)
             assert not caplog.records, name
+        for name, register, steps, opts in flow_corpus.STREAMS:
+            caplog.clear()
+            flow_corpus.run_stream(register, steps, opts)
+            assert not caplog.records, name
 
 
 class TestReparseBelowTheFence:

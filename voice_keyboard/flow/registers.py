@@ -110,6 +110,21 @@ def initial_state(register: Register) -> RenderState:
     return RenderState(capitalize_next=register.smart_caps)
 
 
+def continuation_state(previous_tail: str, register: Register) -> Optional[RenderState]:
+    """The state a recording starts in when it continues text the previous
+    one left at the caret: a space before its first word, and a capital
+    only if that text ended a sentence. None when there is nothing to
+    continue (no text, or it ended in whitespace or a line break)."""
+    tail = previous_tail[-1:] if previous_tail else ""
+    if not tail or tail.isspace():
+        return None
+    return RenderState(
+        at_start=False,
+        glue_next=False,
+        capitalize_next=register.smart_caps and tail in _SENTENCE_ENDERS,
+    )
+
+
 _SENTENCE_ENDERS = (".", "!", "?")
 
 

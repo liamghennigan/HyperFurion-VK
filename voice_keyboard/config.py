@@ -121,6 +121,10 @@ DEFAULT_CONFIG: dict = {
         # "spell that n g i n x" replaces the last word with the spelled
         # one ("spell ..." types it); each becomes a `learned` candidate.
         "spelling": True,
+        # A recording that starts within 30 s of the last one, in the same
+        # app and the same prose register, continues its text: a space
+        # before the first word, a capital only after a sentence end.
+        "rejoin": True,
         # Punctuation where you paused: streaming recognizers end a sentence
         # at every pause. auto = rules, plus an [llm] review of the unclear
         # pauses when [llm] is usable; llm / rules / off (keep the
@@ -302,6 +306,7 @@ _FLOW_BOOL_KEYS = (
     "latency_log",
     "personal_dictionary",
     "spelling",
+    "rejoin",
     "rewrite_pending",
 )
 _FLOW_INT_KEYS = (

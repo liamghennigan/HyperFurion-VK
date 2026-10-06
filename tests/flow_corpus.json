@@ -1550,5 +1550,956 @@
     []
    ]
   ]
+ },
+ {
+  "name": "rejoin after a sentence end",
+  "register": "prose",
+  "segments": [
+   "next sentence"
+  ],
+  "options": {
+   "continues": "Hello world."
+  },
+  "events": [
+   [
+    "screen",
+    " Next sentence"
+   ],
+   [
+    "final",
+    " Next sentence",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "rejoin mid-sentence",
+  "register": "prose",
+  "segments": [
+   "and more"
+  ],
+  "options": {
+   "continues": "Hello world"
+  },
+  "events": [
+   [
+    "screen",
+    " and more"
+   ],
+   [
+    "final",
+    " and more",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "rejoin then scratch rewinds to the join",
+  "register": "prose",
+  "segments": [
+   "oops",
+   "scratch that better"
+  ],
+  "options": {
+   "continues": "Hello world"
+  },
+  "events": [
+   [
+    "screen",
+    " oops"
+   ],
+   [
+    "screen",
+    " better"
+   ],
+   [
+    "final",
+    " better",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "rejoin in a terminal glues",
+  "register": "terminal",
+  "segments": [
+   "tmp"
+  ],
+  "options": {
+   "continues": "cd"
+  },
+  "events": [
+   [
+    "screen",
+    " tmp"
+   ],
+   [
+    "final",
+    " tmp",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "words land and freeze on the window",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "fixed the",
+    "interim"
+   ],
+   [
+    0.3,
+    "fixed the race",
+    "interim"
+   ],
+   [
+    0.6,
+    "fixed the race condition",
+    "interim"
+   ],
+   [
+    0.9,
+    "fixed the race condition",
+    "interim"
+   ],
+   [
+    1.2,
+    "tick"
+   ],
+   [
+    2.2,
+    "tick"
+   ],
+   [
+    2.5,
+    "fixed the race condition in",
+    "interim"
+   ],
+   [
+    4.0,
+    "tick"
+   ],
+   [
+    4.5,
+    "fixed the race condition in the audio thread",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Fixed the"
+   ],
+   [
+    "screen",
+    "Fixed the race"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio thread"
+   ],
+   [
+    "final",
+    "Fixed the race condition in the audio thread",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a revision repairs the molten tail",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "fixed the race addition",
+    "interim"
+   ],
+   [
+    0.3,
+    "fixed the race addition in",
+    "interim"
+   ],
+   [
+    0.6,
+    "fixed the race condition in the",
+    "interim"
+   ],
+   [
+    0.9,
+    "fixed the race condition in the audio",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.6,
+    "tick"
+   ],
+   [
+    3.0,
+    "fixed the race condition in the audio thread",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Fixed the race addition"
+   ],
+   [
+    "screen",
+    "Fixed the race addition in"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio thread"
+   ],
+   [
+    "final",
+    "Fixed the race condition in the audio thread",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a deep revision widens the horizon",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    0.2,
+    "we need to shift the ring to bay",
+    "interim"
+   ],
+   [
+    0.4,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    0.6,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    2.2,
+    "tick"
+   ],
+   [
+    2.4,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    2.6,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    2.8,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    6.0,
+    "we need to ship the thing today",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to shift the ring to bay"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "final",
+    "We need to ship the thing today",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a half phrase is held, then let go",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "ready open",
+    "interim"
+   ],
+   [
+    0.3,
+    "ready open",
+    "interim"
+   ],
+   [
+    0.6,
+    "ready open",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    3.2,
+    "tick"
+   ],
+   [
+    3.6,
+    "ready open",
+    "interim"
+   ],
+   [
+    4.0,
+    "ready open quote",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready open"
+   ],
+   [
+    "screen",
+    "Ready open"
+   ],
+   [
+    "screen",
+    "Ready open quote"
+   ],
+   [
+    "final",
+    "Ready open quote",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held number is let go, then a bigger number follows",
+  "register": "terminal",
+  "steps": [
+   [
+    0.0,
+    "one",
+    "interim"
+   ],
+   [
+    0.3,
+    "one",
+    "interim"
+   ],
+   [
+    0.6,
+    "one",
+    "interim"
+   ],
+   [
+    3.2,
+    "tick"
+   ],
+   [
+    3.4,
+    "tick"
+   ],
+   [
+    3.6,
+    "one hundred",
+    "interim"
+   ],
+   [
+    3.9,
+    "one hundred",
+    "interim"
+   ],
+   [
+    4.2,
+    "one hundred",
+    "interim"
+   ],
+   [
+    7.0,
+    "tick"
+   ],
+   [
+    7.5,
+    "one hundred five",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1 hundred"
+   ],
+   [
+    "screen",
+    "1 hundred"
+   ],
+   [
+    "final",
+    "1 hundred 5",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "words committed one at a time never merge",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "say open",
+    "interim"
+   ],
+   [
+    0.3,
+    "say open",
+    "interim"
+   ],
+   [
+    0.6,
+    "say open",
+    "interim"
+   ],
+   [
+    3.2,
+    "tick"
+   ],
+   [
+    3.5,
+    "say open quote",
+    "interim"
+   ],
+   [
+    3.8,
+    "say open quote",
+    "interim"
+   ],
+   [
+    4.1,
+    "say open quote",
+    "interim"
+   ],
+   [
+    6.5,
+    "tick"
+   ],
+   [
+    7.0,
+    "say open quote hi close quote",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say open"
+   ],
+   [
+    "screen",
+    "Say open quote"
+   ],
+   [
+    "screen",
+    "Say open quote"
+   ],
+   [
+    "screen",
+    "Say open quote"
+   ],
+   [
+    "screen",
+    "Say open quote"
+   ],
+   [
+    "screen",
+    "Say open quote hi\""
+   ],
+   [
+    "final",
+    "Say open quote hi\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a non ascii word commits early",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "café au lait",
+    "interim"
+   ],
+   [
+    0.2,
+    "café au lait",
+    "interim"
+   ],
+   [
+    0.4,
+    "café au lait",
+    "interim"
+   ],
+   [
+    0.6,
+    "tick"
+   ],
+   [
+    3.0,
+    "café au lait",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "final",
+    "Café au lait",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a scratch mid-stream",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "send it to bob",
+    "interim"
+   ],
+   [
+    0.3,
+    "send it to bob",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.2,
+    "send it to bob scratch that",
+    "interim"
+   ],
+   [
+    2.5,
+    "send it to bob scratch that send it to alice",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    5.0,
+    "send it to bob scratch that send it to alice",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob send it to alice"
+   ],
+   [
+    "screen",
+    "Send it to bob send it to alice"
+   ],
+   [
+    "screen",
+    "Send it to alice"
+   ],
+   [
+    "final",
+    "Send it to alice",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a long molten tail is forced to commit",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "interim"
+   ],
+   [
+    0.1,
+    "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "interim"
+   ],
+   [
+    0.2,
+    "tick"
+   ],
+   [
+    1.0,
+    "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "final",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a command waits at a barrier while words keep coming",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "hello world",
+    "final"
+   ],
+   [
+    1.0,
+    "hello world select previous word",
+    "final"
+   ],
+   [
+    1.2,
+    "hello world select previous word pla",
+    "interim"
+   ],
+   [
+    1.4,
+    "hello world select previous word planet",
+    "interim"
+   ],
+   [
+    1.6,
+    "press"
+   ],
+   [
+    1.8,
+    "hello world select previous word planet",
+    "interim"
+   ],
+   [
+    3.5,
+    "tick"
+   ],
+   [
+    4.0,
+    "hello world select previous word planet",
+    "final"
+   ]
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "action",
+    "select:word:left",
+    1,
+    "Hello world"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "final",
+    "planet",
+    "Hello world",
+    "",
+    0,
+    []
+   ]
+  ]
  }
 ]

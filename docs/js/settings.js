@@ -11,6 +11,8 @@ export const settings = {
   // [flow] spelling = true; [nav] enabled — off by default in the daemon,
   // on here so the page can show it
   spelling: true, nav: true,
+  // [flow] rejoin = true: a recording started within 30 s continues the last
+  rejoin: true, adaptive: true,
   lang: (navigator.language || "en-US"),
   // [tts]
   tts: { rate: 1, pitch: 1, voice: null },

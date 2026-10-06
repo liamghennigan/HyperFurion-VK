@@ -20,7 +20,7 @@ import { LocalSTT } from "./stt-local.js";
 import { Window } from "./window.js";
 import { Typist } from "./typist.js";
 import { Keyboard } from "./keyboard.js";
-import { moltenLine, compileScript, pageRewrite } from "./flow.js";
+import { moltenLine, compileScript, pageRewrite, continuationState } from "./flow.js";
 import { keymap, chordsFor, label as navLabel } from "./nav.js";
 
 export const Dictation = (() => {
@@ -41,6 +41,12 @@ export const Dictation = (() => {
   let script = null;          // the scripted session in progress {cancel}
   let scripted = false;
   let sessionCommits = 0;      // utterances closed since the mic was tapped
+  // where the last recording left the caret — [flow] rejoin: a recording
+  // that starts within 30 s, in the same app and the same prose register,
+  // continues that text (a space, a capital only after a sentence end)
+  let landing = null;         // { register, tail, when }
+  const REJOIN_MS = 30000;
+  let seen = { scratches: 0, corrections: 0 };  // for the hints strip
   Object.defineProperty(D, "engine", { get: () => engine });
 
   const liveFlow = () => settings.flowLive && settings.interim;
@@ -76,10 +82,25 @@ export const Dictation = (() => {
   // molten until the utterance closes (a pause) and freeze then — never on
   // a clock that a slow pass could satisfy by accident. The scripted demo
   // keeps the daemon's 1.5 s window so its molten→frozen beat shows.
+  function rejoinState() {
+    const reg = Window.register();
+    if (!landing || !settings.rejoin || !reg.smartCaps) return null;
+    if (landing.register !== Window.focusedName() || Date.now() - landing.when > REJOIN_MS) return null;
+    return continuationState(landing.tail, reg);
+  }
   function newEngine(live = false) {
-    line = moltenLine({ register: Window.register(), cfg: live ? { ...settings, stabilityMs: Infinity } : settings });
+    const state0 = rejoinState();
+    line = moltenLine({ register: Window.register(), cfg: live ? { ...settings, stabilityMs: Infinity } : settings, state: state0 });
     rawFinal = ""; rawInterim = ""; guard = false; busy = false;
+    seen = { scratches: 0, corrections: 0 };
     state.lastError = "";
+    if (state0) log("continuing the last dictation · a space first" + (state0.capNext ? ", then a capital" : ""), "dim");
+  }
+  // the hints strip lights the command that just worked
+  function noticed(r) {
+    if (!r) return;
+    if (r.scratches > seen.scratches) { seen.scratches = r.scratches; bus.emit("flow:did", { kind: "scratch" }); }
+    if (r.corrections && r.corrections.length > seen.corrections) { seen.corrections = r.corrections.length; bus.emit("flow:did", { kind: "spell" }); }
   }
   const raw = () => (rawFinal + " " + rawInterim).trim();
   function paint(r) {
@@ -107,8 +128,9 @@ export const Dictation = (() => {
     state.lastRaw = (text || "").trim() || state.lastRaw;
     if (!liveFlow()) { pump(); return; }
     paint(line.update(raw(), performance.now(), { final: true }));
+    noticed(line.result());
     const instr = line.takeInstruction();
-    if (instr) rewriteInPlace(instr);
+    if (instr) { bus.emit("flow:did", { kind: "rewrite" }); rewriteInPlace(instr); }
     Window.panes();
   }
   function armAutoStop() {
@@ -138,6 +160,7 @@ export const Dictation = (() => {
       Window.moved();
     }
     log("⌁ " + navLabel(action.action, action.count) + " · " + chords.map((c) => c.join("+")).join(" "), "nav");
+    bus.emit("flow:did", { kind: action.action.split(":")[0] === "press" ? "nav" : action.action.split(":")[0] });
     return true;
   }
   async function act(action) {
@@ -405,6 +428,7 @@ export const Dictation = (() => {
     }
     while (busy) await wait(50);               // a chord or rewrite mid-flight finishes first
     let r = l.finalize(raw(), performance.now());
+    noticed(r);
     if (guard) { const t = (r.typedBefore + " " + r.text).trim(); return clipboardLanding(t); }
     while (r.action) {
       Typist.setTarget({ frozen: r.text, molten: "" });
@@ -518,8 +542,10 @@ export const Dictation = (() => {
   function done(text) {
     state.ledger.push({ text, app: Window.focusedName(), when: Date.now() });
     if (state.ledger.length > 20) state.ledger.shift();
+    landing = guard ? null : { register: Window.focusedName(), tail: text.slice(-1), when: Date.now() };
     bus.emit("type:text", { text });
   }
+  bus.on("doc:cleared", () => { landing = null; });
 
   D.start = start; D.stop = stop;
   D.toggle = () => (D.recording ? stop() : start());

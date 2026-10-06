@@ -237,7 +237,7 @@ const SPELL_WORD = "spell";
 const AMBIGUOUS = new Set(["a", "i", "one", "two", "four", "eight"]);  // letters that are also words
 const PENDING = "pending";
 
-export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds = [], register, cfg }) {
+export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds = [], commits = [], register, cfg }) {
   const reg = register || REGISTERS.prose;
   if (!reg.grammar) {
     return { items: tokens.map((t, i) => ({ kind: "word", text: t, s: i, e: i + 1 })),
@@ -253,15 +253,19 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   // decided: inside the final segments it may not cross the end of the
   // segment it started in (nor the committed fence) and never waits; in
   // the molten tail it reads to the end and waits unless flushing
+  // where the committed item holding token `at` ends: below the fence
+  // every item is parsed within its own span, so it reads back exactly
+  // as it was committed
+  const itemEnd = (at) => { for (const e of commits) if (e > at) return frozen > at ? Math.min(e, frozen) : e; return frozen; };
   const limitAt = (i) => {
     if (i >= settled && i >= frozen) return [tokens.length, flush];
     let limit = Math.max(settled, frozen);
     for (const b of bounds) if (b > i) { limit = Math.min(limit, b); break; }
-    if (i < frozen) limit = Math.min(limit, frozen);
+    if (i < frozen) limit = Math.min(limit, itemEnd(i));
     return [limit, true];
   };
   while (i < tokens.length) {
-    const fence = i < frozen ? frozen - i : tokens.length;
+    const fence = i < frozen ? itemEnd(i) - i : tokens.length;
     // wake word: everything after it is an instruction, never typed —
     // it resolves only at finalize; until then it holds the tail back
     const wk = wakeAt(cores, i, wake);
@@ -269,8 +273,9 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       // the page takes an instruction when its utterance closes (the
       // daemon waits for the stop); below the fence it reads back as the
       // instruction it was committed as
-      items.push({ kind: "instruction", text: tokens.slice(i + wk, frozen).join(" "), s: i, e: frozen });
-      i = frozen; continue;
+      const end = itemEnd(i);
+      items.push({ kind: "instruction", text: tokens.slice(i + wk, end).join(" "), s: i, e: end });
+      i = end; continue;
     }
     if (wk) {
       if (!flush) { pendingFrom = i; break; }
@@ -285,7 +290,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       // pause, in the next one. Behind the fence the run reads back
       // exactly as it was committed.
       if (head >= limit) {
-        if (i < frozen) { limit = frozen; decided = true; }
+        if (i < frozen) { limit = itemEnd(i); decided = true; }
         else if (settled > head) { limit = settled; decided = true; }
         else { limit = tokens.length; decided = flush; }
       }
@@ -357,7 +362,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
     };
     for (const it of items) {
       if (it.kind === "word" && NUMBER_WORDS.has(core(it.text))) {
-        if (run.length && run[0].s < frozen && frozen <= it.s) close(false);  // the committed part folds alone
+        if (run.length && run[0].s < frozen && it.s >= itemEnd(run[0].s)) close(false);  // the committed part folds alone
         run.push(it);
       } else { close(false); out.push(it); }
     }
@@ -414,6 +419,15 @@ function capitalized(t) {
 }
 export function initialState(register) {
   return { atStart: true, glueNext: false, capNext: (register || REGISTERS.prose).smartCaps, pending: "" };
+}
+// the state a recording starts in when it continues text the previous one
+// left at the caret ([flow] rejoin): a space before its first word, and a
+// capital only if that text ended a sentence; null when there is nothing
+// to continue (no text, or it ended in whitespace or a line break)
+export function continuationState(previousTail, register) {
+  const tail = previousTail ? previousTail.slice(-1) : "";
+  if (!tail || /\s/.test(tail)) return null;
+  return { atStart: false, glueNext: false, capNext: !!(register || REGISTERS.prose).smartCaps && ".!?".includes(tail), pending: "" };
 }
 export function render(items, register, state) {
   const reg = register || REGISTERS.prose;
@@ -480,8 +494,12 @@ const FINAL_ONLY = new Set(["respell", "key"]);  // rewrite committed text: neve
 export function moltenLine({ register, cfg, state } = {}) {
   const reg = register || REGISTERS.prose;
   const stabMs = () => (cfg && cfg.stabilityMs === Infinity) ? Infinity : Math.max(200, (cfg && cfg.stabilityMs) || 1500);
-  const required = Math.max(1, (cfg && cfg.stabilityUpdates) || 2);
+  const stabilityUpdates = Math.max(1, (cfg && cfg.stabilityUpdates) || 2);
+  const adaptive = !cfg || cfg.adaptive !== false;
   const maxMolten = (cfg && cfg.maxMoltenChars) || 160;
+  let revDepth = 0;  // adaptive: observed provider revision depth, decaying
+  // widen the horizon automatically when the provider revises deeply
+  const required = () => (adaptive ? Math.max(stabilityUpdates, Math.min(6, Math.ceil(revDepth))) : stabilityUpdates);
   let tokens = [], meta = [];          // meta[i]: {since, stable}
   let items = [], pendingFrom = null, flushPending = false;
   let committedTokens = 0, committedItems = 0;
@@ -502,6 +520,7 @@ export function moltenLine({ register, cfg, state } = {}) {
     while (prefix < oldMolten.length && prefix < newMolten.length &&
            oldMolten[prefix].toLowerCase() === newMolten[prefix].toLowerCase()) prefix++;
     lastRepair = oldMolten.length > prefix;  // a revision landed, or the tail shrank
+    if (oldMolten.length > prefix) revDepth = Math.max(revDepth, oldMolten.length - prefix);
     flushPending = false;
     const merged = newMolten.map((t, i) => {
       if (i < prefix) { const m = meta[committedTokens + i]; m.stable++; return m; }
@@ -510,6 +529,7 @@ export function moltenLine({ register, cfg, state } = {}) {
     tokens = tokens.slice(0, committedTokens).concat(newMolten);
     meta = meta.slice(0, committedTokens).concat(merged);
     if (final) { finalTokens = Math.max(finalTokens, tokens.length); segmentBounds.add(tokens.length); }
+    revDepth *= 0.98;
     reparse();
     commitReady(now);
     if (final) markSegmentBoundary();
@@ -521,6 +541,7 @@ export function moltenLine({ register, cfg, state } = {}) {
     if (pendingFrom !== null && !pendingIsInstruction()) {
       if (now - meta[pendingFrom].since >= 2 * stabMs()) { flushPending = true; reparse(); }
     }
+    revDepth *= 0.995;
     commitReady(now);
     return view();
   }
@@ -605,7 +626,8 @@ export function moltenLine({ register, cfg, state } = {}) {
   }
   function reparse() {
     const r = parse(tokens, { flush: flushPending, frozen: committedTokens, settled: finalTokens,
-                              bounds: [...segmentBounds].sort((a, b) => a - b), register: reg, cfg });
+                              bounds: [...segmentBounds].sort((a, b) => a - b),
+                              commits: items.slice(0, committedItems).map((it) => it.e), register: reg, cfg });
     items = r.items; pendingFrom = r.pendingFrom;
   }
   function commitReady(now) {
@@ -617,7 +639,8 @@ export function moltenLine({ register, cfg, state } = {}) {
       if (!committable && FINAL_ONLY.has(it.kind)) break;
       if (!committable) {
         const metas = meta.slice(it.s, it.e);
-        committable = metas.every((m) => m.stable >= required && now - m.since >= horizon);
+        const need = required();
+        committable = metas.every((m) => m.stable >= need && now - m.since >= horizon);
         if (!committable && it.kind === "word" && /[^\x00-\x7F]/.test(it.text))
           committable = metas.every((m) => m.stable >= 1);  // never repair across a pasted run
       }
@@ -697,7 +720,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   }
 
   return {
-    update, tick, finalize, completeAction, takeInstruction, rewrite,
+    update, tick, finalize, completeAction, takeInstruction, rewrite, result,
     flush: (now = 0) => finalize(tokens.join(" "), now),
     peek: view,
     pendingAction: () => barrier,
