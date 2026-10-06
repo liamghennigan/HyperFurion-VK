@@ -426,6 +426,87 @@
   ]
  },
  {
+  "name": "numbered lists count",
+  "register": "prose",
+  "segments": [
+   "steps colon new number build new number test new number ship"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Steps:\n1. Build\n2. Test\n3. Ship"
+   ],
+   [
+    "final",
+    "Steps:\n1. Build\n2. Test\n3. Ship",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a new paragraph starts a new list",
+  "register": "prose",
+  "segments": [
+   "new number a new number b new paragraph new number c"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n1. A\n2. B\n\n1. C"
+   ],
+   [
+    "final",
+    "\n1. A\n2. B\n\n1. C",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratching a numbered item gives its number back",
+  "register": "prose",
+  "segments": [
+   "new number a",
+   "new number b",
+   "scratch that",
+   "new number c"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n1. A"
+   ],
+   [
+    "screen",
+    "\n1. A\n2. B"
+   ],
+   [
+    "screen",
+    "\n1. A"
+   ],
+   [
+    "screen",
+    "\n1. A\n2. C"
+   ],
+   [
+    "final",
+    "\n1. A\n2. C",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a bullet after a line break needs no other",
   "register": "prose",
   "segments": [

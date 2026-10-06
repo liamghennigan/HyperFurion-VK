@@ -59,6 +59,7 @@ DEFAULT_COMMANDS: dict[str, tuple[str, ...]] = {
     "new_line": ("new line",),
     "new_paragraph": ("new paragraph",),
     "bullet": ("new bullet",),  # not "bullet point": that is a noun phrase
+    "number": ("new number",),  # "1. ", "2. ", … a numbered list
     "literal": ("literal",),
 }
 
@@ -593,6 +594,9 @@ class Grammar:
                     # "- " on a line of its own: the renderer adds the line
                     # break unless the caret is already at a line start.
                     items.append(Item(kind="break", text="- ", mode="bullet", span=span))
+                elif payload == "number":
+                    # "1. ", then "2. ": the renderer counts.
+                    items.append(Item(kind="break", text="", mode="number", span=span))
                 elif payload == "scratch_that":
                     items.append(Item(kind="scratch", span=span))
                 else:  # a command with no stream effect (future actions)

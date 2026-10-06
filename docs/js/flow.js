@@ -20,7 +20,7 @@ const COMMANDS = {
   // "undo that", "strike that" are everyday words ("I can't undo that
   // decision"); "scratched that" is how recognizers write the command
   "scratch that": "scratch", "scratched that": "scratch", "delete that": "scratch",
-  "new line": "\n", "new paragraph": "\n\n", "new bullet": "bullet",
+  "new line": "\n", "new paragraph": "\n\n", "new bullet": "bullet", "new number": "number",
 };
 // the wake word as a speech model is likely to write it
 const WAKE_ALIASES = ["vk", "v.k.", "vk.", "vicky", "vikki", "veekay", "veek"];
@@ -214,7 +214,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
   };
   const flushDash = () => { if (pending === "dash") { emit("-", false); pending = ""; } };
   for (const it of items) {
-    if (it.kind === "break" && it.mode === "bullet") continue;  // a list bullet means nothing in code
+    if (it.kind === "break" && (it.mode === "bullet" || it.mode === "number")) continue;  // a list item means nothing in code
     if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; innerParens = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
       if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
@@ -472,6 +472,8 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
         // "- " on a line of its own: the renderer adds the line break
         // unless the caret is already at a line start
         items.push({ kind: "break", text: "- ", mode: "bullet", s: i, e: i + used });
+      } else if (payload === "number") {
+        items.push({ kind: "break", text: "", mode: "number", s: i, e: i + used });  // "1. ", "2. ": the renderer counts
       } else {  // "\n" | "\n\n"
         items.push({ kind: "break", text: payload, s: i, e: i + used });
       }
@@ -610,8 +612,10 @@ export function render(items, register, state) {
   };
   for (const it of items) {
     if (it.kind === "break") {
-      out.push(it.mode === "bullet" ? (st.lineStart ? "" : "\n") + it.text : it.text);
-      st.lineStart = it.mode !== "bullet";
+      if (it.mode === "number") { st.listNumber = (st.listNumber || 0) + 1; out.push((st.lineStart ? "" : "\n") + st.listNumber + ". "); }
+      else if (it.mode === "bullet") out.push((st.lineStart ? "" : "\n") + it.text);
+      else { out.push(it.text); if (it.text.includes("\n\n")) st.listNumber = 0; }  // a new paragraph starts a new list
+      st.lineStart = it.mode !== "bullet" && it.mode !== "number";
       st.atStart = false; st.glueNext = true; st.capNext = reg.smartCaps;
     }
     else if (it.kind === "punct") {

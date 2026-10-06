@@ -104,8 +104,8 @@ def _compile(
             pending = ""
 
     for item in items:
-        if item.kind == "break" and item.mode == "bullet":
-            continue  # a list bullet means nothing in code
+        if item.kind == "break" and item.mode in ("bullet", "number"):
+            continue  # a list item means nothing in code
         if item.kind == "break":
             flush_dash()
             pending = ""

@@ -108,6 +108,7 @@ class RenderState:
     open_calls: int = 0            # code: calls a spoken callable opened, not yet closed
     inner_parens: int = 0          # code: explicit parens opened inside those calls
     line_start: bool = False       # the caret is surely at the start of a line
+    list_number: int = 0           # the last "new number" item typed (0 = none)
 
 
 def initial_state(register: Register) -> RenderState:
@@ -169,6 +170,7 @@ def render_items(
     glue_next = state.glue_next
     capitalize_next = state.capitalize_next
     line_start = state.line_start
+    list_number = state.list_number
 
     def emit(text: str, *, glue_left: bool) -> None:
         nonlocal at_start, glue_next, line_start
@@ -181,11 +183,16 @@ def render_items(
 
     for item in items:
         if item.kind == "break":
-            if item.mode == "bullet":
+            if item.mode == "number":
+                list_number += 1
+                out.append(("" if line_start else "\n") + f"{list_number}. ")
+            elif item.mode == "bullet":
                 out.append(("" if line_start else "\n") + item.text)
             else:
                 out.append(item.text)
-            line_start = item.mode != "bullet"
+                if "\n\n" in item.text:
+                    list_number = 0  # a new paragraph starts a new list
+            line_start = item.mode not in ("bullet", "number")
             at_start = False
             glue_next = True
             capitalize_next = register.smart_caps
@@ -217,4 +224,5 @@ def render_items(
         glue_next=glue_next,
         capitalize_next=capitalize_next,
         line_start=line_start,
+        list_number=list_number,
     )

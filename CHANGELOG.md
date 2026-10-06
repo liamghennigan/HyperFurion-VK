@@ -9,6 +9,9 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **Spoken numbered lists.** "Steps colon new number build new number test"
+  types `Steps:` / `1. Build` / `2. Test`. The count survives a scratch
+  (scratching item 2 gives its number back) and restarts at a new paragraph.
 - **`voice-keyboard stats`**: per-dictation latency, from speech onset to
   first transcript, first keystroke and settled screen. It reports p50/p95
   over the last 200 dictations. `[flow] latency_log` also writes a
