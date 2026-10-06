@@ -348,6 +348,15 @@ def _package_version() -> str:
         return "unknown"
 
 
+class _LazyVersion(argparse.Action):
+    """--version, looked up only when asked: importlib.metadata costs every
+    other invocation (each hotkey press on GNOME) ~20 ms."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(f"{parser.prog} {_package_version()}")
+        parser.exit()
+
+
 def _list_input_devices() -> list[dict]:
     """Audio inputs as PyAudio sees them: [{name, channels, rate, default}]."""
     import pyaudio
@@ -888,8 +897,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--version",
-        action="version",
-        version=f"%(prog)s {_package_version()}",
+        action=_LazyVersion,
+        nargs=0,
+        help="show the version and exit",
     )
     parser.add_argument(
         "--socket",
