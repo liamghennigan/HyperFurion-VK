@@ -7,8 +7,11 @@
 `parse_nav` reads one command at a token index (pure, deterministic — the
 grammar's prefix property holds). `chords_for` turns a command into the
 key chords for the platform and the kind of app: editors and prose fields
-share one map on Linux and Windows; terminals differ (readline on Linux:
-alt+b / ctrl+a / ctrl+w; Windows Terminal, conhost and PSReadLine take
+share one map on Linux and Windows, and macOS has its own (option+arrows
+by word, command+arrows to the ends of a line or the document); terminals
+differ (readline on Linux: alt+b / ctrl+a / ctrl+w; on macOS the word
+motions go as Esc b / Esc f, which readline reads as Meta whether or not
+Option is set to send it; Windows Terminal, conhost and PSReadLine take
 ctrl+left / home / ctrl+backspace, and ctrl+a would select all there).
 Selection is refused in terminals — there is no text selection to extend.
 
@@ -71,7 +74,7 @@ _FORBIDDEN_CHORDS = ({"ctrl", "j"}, {"ctrl", "m"}, {"ctrl", "o"})
 # Key names every backend's press_combo knows (Linux uinput and Windows
 # SendInput); single characters resolve on both too.
 KNOWN_KEYS = {
-    "ctrl", "control", "shift", "alt", "super", "meta", "win", "cmd",
+    "ctrl", "control", "shift", "alt", "option", "super", "meta", "win", "cmd", "command",
     "tab", "esc", "escape", "space", "backspace", "delete", "del", "insert",
     "up", "down", "left", "right", "home", "end", "pageup", "pagedown",
     *(f"f{n}" for n in range(1, 13)),
@@ -278,6 +281,34 @@ WINDOWS_TERMINAL: dict[str, Optional[list[list[str]]]] = {
     "delete:line:here": None,
 }
 
+# macOS editors and text fields: words by option+arrow, line ends by
+# command+arrow, the document by command+up/down; shift extends.
+_MAC_MOVES = {
+    "char:left": ["left"], "char:right": ["right"],
+    "word:left": ["alt", "left"], "word:right": ["alt", "right"],
+    "line:up": ["up"], "line:down": ["down"],
+    "line:start": ["cmd", "left"], "line:end": ["cmd", "right"],
+    "doc:start": ["cmd", "up"], "doc:end": ["cmd", "down"],
+}
+MAC_EDITOR: dict[str, Optional[list[list[str]]]] = {
+    **{f"move:{key}": [chord] for key, chord in _MAC_MOVES.items()},
+    **{f"select:{key}": [["shift", *chord]] for key, chord in _MAC_MOVES.items()},
+    "select:all": [["cmd", "a"]],
+    "select:line:here": [["cmd", "left"], ["shift", "cmd", "right"]],
+    "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
+    "delete:word:left": [["alt", "backspace"]], "delete:word:right": [["alt", "delete"]],
+    "delete:line:here": [["cmd", "left"], ["shift", "cmd", "right"], ["backspace"]],
+}
+
+# Terminal.app, iTerm2, Ghostty, Warp: readline as on Linux, except that
+# the Meta chords go as an Escape prefix — readline reads "Esc b" as
+# backward-word whether or not Option is set to send Meta.
+MAC_TERMINAL: dict[str, Optional[list[list[str]]]] = {
+    **LINUX_TERMINAL,
+    "move:word:left": [["escape"], ["b"]], "move:word:right": [["escape"], ["f"]],
+    "delete:word:right": [["escape"], ["d"]],
+}
+
 # Commands that leave a selection or a gap: the next dictated word replaces
 # or fills it, so it starts glued (no leading space) — see FlowEngine.
 # Moves to a line/document start glue too.
@@ -316,9 +347,13 @@ def keymap(*, terminal: bool, platform: str = sys.platform, overrides: Optional[
     are refused. `overrides` is the [nav.keys.terminal] or
     [nav.keys.editor] table."""
     if terminal:
-        table = dict(WINDOWS_TERMINAL if platform == "win32" else LINUX_TERMINAL)
+        table = dict(
+            WINDOWS_TERMINAL if platform == "win32"
+            else MAC_TERMINAL if platform == "darwin"
+            else LINUX_TERMINAL
+        )
     else:
-        table = dict(EDITOR)
+        table = dict(MAC_EDITOR if platform == "darwin" else EDITOR)
     for action, value in (overrides or {}).items():
         try:
             table[str(action)] = parse_override(value)

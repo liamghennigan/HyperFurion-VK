@@ -51,6 +51,7 @@ export const lineEnd = (text, i) => { const k = text.indexOf("\n", i); return k 
 
 export function createBuffer({ terminal = false, max = 1600 } = {}) {
   let text = "", caret = 0, anchor = 0;
+  let meta = false;  // a terminal's Escape prefix, pending for the next key
   const B = {};
   Object.defineProperties(B, {
     text: { get: () => text }, caret: { get: () => caret }, anchor: { get: () => anchor },
@@ -103,17 +104,21 @@ export function createBuffer({ terminal = false, max = 1600 } = {}) {
   // returns true when the app did something with it
   B.press = (names) => {
     const set = new Set(names.map((n) => String(n).toLowerCase()));
-    const ctrl = set.has("ctrl") || set.has("control"), shift = set.has("shift"), alt = set.has("alt");
+    const ctrl = set.has("ctrl") || set.has("control"), shift = set.has("shift");
+    const alt = set.has("alt") || set.has("option"), cmd = set.has("cmd") || set.has("command") || set.has("super") || set.has("meta");
     const key = names.map((n) => String(n).toLowerCase())
-      .find((n) => !["ctrl", "control", "shift", "alt", "super", "meta"].includes(n));
+      .find((n) => !["ctrl", "control", "shift", "alt", "option", "super", "meta", "cmd", "command"].includes(n));
     if (!key || key === "enter" || key === "return") return false;
     const move = (to) => { B.setCaret(to, { extend: shift && !terminal }); return true; };
     const kill = (a, b) => { if (a < b) splice(a, b, ""); return true; };
     if (terminal) {
-      // readline / zsh emacs keys — no selection to extend
-      if (alt && key === "b") return move(rlWordLeft(text, caret));
-      if (alt && key === "f") return move(rlWordRight(text, caret));
-      if (alt && key === "d") return kill(caret, rlWordRight(text, caret));
+      // readline / zsh emacs keys — no selection to extend; an Escape
+      // prefix is Meta for the key that follows it
+      if (key === "escape") { meta = true; return true; }
+      const wasMeta = meta; meta = false;
+      if ((alt || wasMeta) && key === "b") return move(rlWordLeft(text, caret));
+      if ((alt || wasMeta) && key === "f") return move(rlWordRight(text, caret));
+      if ((alt || wasMeta) && key === "d") return kill(caret, rlWordRight(text, caret));
       if (ctrl && key === "a") return move(lineStart(text, caret));
       if (ctrl && key === "e") return move(lineEnd(text, caret));
       if (ctrl && key === "w") return kill(rlRubout(text, caret), caret);
@@ -127,10 +132,12 @@ export function createBuffer({ terminal = false, max = 1600 } = {}) {
       if (key === "delete") return kill(caret, ctrl ? rlWordRight(text, caret) : caret + 1);
       return false;  // tab (completion), escape, history keys: nothing to show
     }
-    // an editor
-    if (ctrl && key === "a") { anchor = 0; caret = text.length; return true; }
-    if (key === "left") return move(ctrl ? wordLeft(text, caret) : sel() && !shift ? sel()[0] : caret - 1);
-    if (key === "right") return move(ctrl ? wordRight(text, caret) : sel() && !shift ? sel()[1] : caret + 1);
+    // an editor — on a Mac, option moves by word and command to the ends
+    if ((ctrl || cmd) && key === "a") { anchor = 0; caret = text.length; return true; }
+    if (cmd && key === "up") return move(0);
+    if (cmd && key === "down") return move(text.length);
+    if (key === "left") return move(cmd ? lineStart(text, caret) : ctrl || alt ? wordLeft(text, caret) : sel() && !shift ? sel()[0] : caret - 1);
+    if (key === "right") return move(cmd ? lineEnd(text, caret) : ctrl || alt ? wordRight(text, caret) : sel() && !shift ? sel()[1] : caret + 1);
     if (key === "home") return move(ctrl ? 0 : lineStart(text, caret));
     if (key === "end") return move(ctrl ? text.length : lineEnd(text, caret));
     if (key === "pageup") return move(0);
@@ -146,8 +153,8 @@ export function createBuffer({ terminal = false, max = 1600 } = {}) {
       if (le >= text.length) return move(text.length);
       return move(Math.min(le + 1 + col, lineEnd(text, le + 1)));
     }
-    if (key === "backspace") { if (deleteSelection()) return true; return kill(ctrl ? wordLeft(text, caret) : caret - 1, caret); }
-    if (key === "delete") { if (deleteSelection()) return true; return kill(caret, ctrl ? wordRight(text, caret) : caret + 1); }
+    if (key === "backspace") { if (deleteSelection()) return true; return kill(ctrl || alt ? wordLeft(text, caret) : caret - 1, caret); }
+    if (key === "delete") { if (deleteSelection()) return true; return kill(caret, ctrl || alt ? wordRight(text, caret) : caret + 1); }
     if (key === "tab") { B.insert("\t"); return true; }
     if (key === "escape") { anchor = caret; return true; }
     if (key === "space") { B.insert(" "); return true; }

@@ -341,8 +341,10 @@ verbs = ["run", "command", "execute"]
 #   press tab · press escape twice · press page down
 # A command fires only when it is a whole utterance of its own (a pause
 # before and after); mid-sentence, "delete the previous word" is just
-# words. Terminals get readline keys on Linux (alt+b, ctrl+a, ctrl+w) and
-# Windows Terminal/PSReadLine keys on Windows; selection is refused there.
+# words. Terminals get readline keys on Linux and macOS (alt+b or Esc b,
+# ctrl+a, ctrl+w) and Windows Terminal/PSReadLine keys on Windows;
+# selection is refused there. macOS editors get option+arrows for words
+# and command+arrows for line and document ends.
 # Enter is never pressed. With hold-to-talk, keys fire after you release.
 enabled = false
 

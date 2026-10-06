@@ -38,6 +38,22 @@ test("a terminal: readline keys, no selection", () => {
   b.press(["ctrl", "e"]); b.press(["ctrl", "u"]); assert.equal(b.text, "");
   assert.equal(b.press(["tab"]), false);
 });
+test("a Mac editor: option words, command ends", () => {
+  const b = createBuffer();
+  type(b, "one two three");
+  b.press(["shift", "alt", "left"]); assert.equal(b.selected(), "three");
+  b.press(["cmd", "left"]); assert.equal(b.caret, 0);
+  b.press(["cmd", "right"]); assert.equal(b.caret, b.text.length);
+  b.press(["alt", "backspace"]); assert.equal(b.text, "one two ");
+  b.press(["cmd", "a"]); assert.equal(b.selected(), "one two ");
+});
+test("a Mac terminal: Esc b is Meta-b", () => {
+  const b = createBuffer({ terminal: true });
+  type(b, "git commit -m");
+  b.press(["escape"]); b.press(["b"]); assert.equal(b.caret, "git commit -".length);
+  b.press(["escape"]); b.press(["d"]); assert.equal(b.text, "git commit -");
+  type(b, "x"); assert.equal(b.text, "git commit -x");
+});
 test("Enter is never a key the buffer takes", () => {
   const b = createBuffer();
   type(b, "draft");

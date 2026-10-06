@@ -100,7 +100,29 @@ class TestKeymaps:
         table = nav.keymap(terminal=True, platform=platform)
         assert nav.chords_for(action, 1, table) == expected
 
-    @pytest.mark.parametrize("platform", ["linux", "win32"])
+    @pytest.mark.parametrize(
+        "action, expected",
+        [
+            ("move:word:left", [["alt", "left"]]),
+            ("select:word:left", [["shift", "alt", "left"]]),
+            ("move:line:end", [["cmd", "right"]]),
+            ("move:doc:start", [["cmd", "up"]]),
+            ("select:all", [["cmd", "a"]]),
+            ("delete:word:left", [["alt", "backspace"]]),
+            ("delete:line:here", [["cmd", "left"], ["shift", "cmd", "right"], ["backspace"]]),
+        ],
+    )
+    def test_mac_editor_keys(self, action, expected) -> None:
+        assert nav.chords_for(action, 1, nav.keymap(terminal=False, platform="darwin")) == expected
+
+    def test_mac_terminal_sends_meta_as_escape(self) -> None:
+        table = nav.keymap(terminal=True, platform="darwin")
+        assert nav.chords_for("move:word:left", 2, table) == [["escape"], ["b"], ["escape"], ["b"]]
+        assert nav.chords_for("delete:word:right", 1, table) == [["escape"], ["d"]]
+        assert nav.chords_for("move:line:start", 1, table) == [["ctrl", "a"]]
+        assert nav.chords_for("delete:word:left", 1, table) == [["ctrl", "w"]]
+
+    @pytest.mark.parametrize("platform", ["linux", "win32", "darwin"])
     def test_terminals_refuse_selection(self, platform) -> None:
         table = nav.keymap(terminal=True, platform=platform)
         assert nav.chords_for("select:word:left", 1, table) is None
@@ -119,7 +141,7 @@ class TestKeymaps:
         tables = [
             nav.keymap(terminal=terminal, platform=platform)
             for terminal in (False, True)
-            for platform in ("linux", "win32")
+            for platform in ("linux", "win32", "darwin")
         ]
         actions = {action for table in tables for action in table}
         actions |= {f"press:{key}" for key in nav.PRESS_KEYS.values()}
@@ -130,14 +152,15 @@ class TestKeymaps:
                     assert not names & {"enter", "return", "kpenter"}, (action, chord)
                     assert not {"ctrl", "j"} <= names and not {"ctrl", "m"} <= names
 
-    def test_every_key_name_resolves_on_both_backends(self) -> None:
+    def test_every_key_name_resolves_on_every_backend(self) -> None:
         from voice_keyboard import injector as linux_injector
+        from voice_keyboard.macos import injector as mac_injector
         from voice_keyboard.windows import injector as windows_injector
 
         tables = [
             nav.keymap(terminal=terminal, platform=platform)
             for terminal in (False, True)
-            for platform in ("linux", "win32")
+            for platform in ("linux", "win32", "darwin")
         ]
         names = {
             name
@@ -149,6 +172,7 @@ class TestKeymaps:
         for name in names:
             assert name in windows_injector.KEY_NAMES or len(name) == 1, name
             assert name in linux_injector.KEY_NAMES or len(name) == 1, name
+            mac_injector.resolve_key(name)  # raises for an unknown key
 
     def test_overrides(self) -> None:
         table = nav.keymap(

@@ -52,8 +52,8 @@ export const codeFor = (ch) => { const m = CHAR_MAP.get(ch); return m ? m.code :
 
 // the daemon's key names (nav.py / injector KEY_NAMES) -> KeyboardEvent.code
 export const KEY_CODES = {
-  ctrl: "ControlLeft", control: "ControlLeft", shift: "ShiftLeft", alt: "AltLeft",
-  super: "MetaLeft", meta: "MetaLeft", win: "MetaLeft", cmd: "MetaLeft",
+  ctrl: "ControlLeft", control: "ControlLeft", shift: "ShiftLeft", alt: "AltLeft", option: "AltLeft",
+  super: "MetaLeft", meta: "MetaLeft", win: "MetaLeft", cmd: "MetaLeft", command: "MetaLeft",
   tab: "Tab", esc: "Escape", escape: "Escape", space: "Space", backspace: "Backspace",
   delete: "Delete", del: "Delete", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft",
   right: "ArrowRight", home: "Home", end: "End", pageup: "PageUp", pagedown: "PageDown",
@@ -66,7 +66,7 @@ export function codeForKeyName(name) {
   if (n.length === 1) return codeFor(n);
   return null;
 }
-export const MODIFIER_NAMES = new Set(["ctrl", "control", "shift", "alt", "super", "meta", "win", "cmd"]);
+export const MODIFIER_NAMES = new Set(["ctrl", "control", "shift", "alt", "option", "super", "meta", "win", "cmd", "command"]);
 
 // ops: [{kind:"bs"} | {kind:"ch", ch}] -> presses the board can drain.
 // A press: { code, kind: ch|bs|hold|release|key, ch, heat, ghost }

@@ -190,6 +190,42 @@ export const LINUX_TERMINAL = {
   "delete:line:here": [["ctrl", "e"], ["ctrl", "u"]],
 };
 
+// Windows Terminal / conhost / PSReadLine (and WSL shells inside them)
+export const WINDOWS_TERMINAL = {
+  ...Object.fromEntries(Object.entries(EDITOR).filter(([k]) => k.startsWith("move:"))),
+  ...NO_SELECTION,
+  "move:doc:start": null, "move:doc:end": null,
+  "move:line:up": null, "move:line:down": null,
+  "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
+  "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
+  "delete:line:here": null,
+};
+// macOS editors: words by option+arrow, line ends by command+arrow, the
+// document by command+up/down; shift extends
+const MAC_MOVES = {
+  "char:left": ["left"], "char:right": ["right"],
+  "word:left": ["alt", "left"], "word:right": ["alt", "right"],
+  "line:up": ["up"], "line:down": ["down"],
+  "line:start": ["cmd", "left"], "line:end": ["cmd", "right"],
+  "doc:start": ["cmd", "up"], "doc:end": ["cmd", "down"],
+};
+export const MAC_EDITOR = {
+  ...Object.fromEntries(Object.entries(MAC_MOVES).map(([k, c]) => ["move:" + k, [c]])),
+  ...Object.fromEntries(Object.entries(MAC_MOVES).map(([k, c]) => ["select:" + k, [["shift", ...c]]])),
+  "select:all": [["cmd", "a"]],
+  "select:line:here": [["cmd", "left"], ["shift", "cmd", "right"]],
+  "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
+  "delete:word:left": [["alt", "backspace"]], "delete:word:right": [["alt", "delete"]],
+  "delete:line:here": [["cmd", "left"], ["shift", "cmd", "right"], ["backspace"]],
+};
+// Terminal.app, iTerm2, Ghostty: readline as on Linux, the Meta chords as
+// an Escape prefix (readline reads "Esc b" as Meta-b whatever Option does)
+export const MAC_TERMINAL = {
+  ...LINUX_TERMINAL,
+  "move:word:left": [["escape"], ["b"]], "move:word:right": [["escape"], ["f"]],
+  "delete:word:right": [["escape"], ["d"]],
+};
+
 // commands that leave a selection or a gap: the next dictated word
 // replaces or fills it, so it starts glued (no leading space); moves to a
 // line/document start glue too. Keys that likely land in another field:
@@ -202,7 +238,12 @@ function forbidden(chord) {
   if ([...names].some((n) => FORBIDDEN_KEYS.has(n))) return true;
   return FORBIDDEN_CHORDS.some((bad) => bad.every((n) => names.has(n)));
 }
-export const keymap = ({ terminal }) => ({ ...(terminal ? LINUX_TERMINAL : EDITOR) });
+// the table for this kind of app on a platform: "linux" (the default),
+// "windows", or "mac" — the page picks the visitor's
+export function keymap({ terminal, platform = "linux" }) {
+  if (terminal) return { ...(platform === "windows" ? WINDOWS_TERMINAL : platform === "mac" ? MAC_TERMINAL : LINUX_TERMINAL) };
+  return { ...(platform === "mac" ? MAC_EDITOR : EDITOR) };
+}
 
 // The full chord sequence for a command (repeated `count` times), or null
 // when this kind of app has no binding for it. Presses are capped and

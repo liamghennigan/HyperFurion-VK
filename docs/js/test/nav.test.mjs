@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseNav, chordsFor, keymap, EDITOR, LINUX_TERMINAL, PENDING, PRESS_KEYS, label } from "../nav.js";
+import { parseNav, chordsFor, keymap, EDITOR, LINUX_TERMINAL, MAC_EDITOR, MAC_TERMINAL, WINDOWS_TERMINAL, PENDING, PRESS_KEYS, label } from "../nav.js";
 
 const parse = (s, decided = true) =>
   parseNav(s.toLowerCase().split(/\s+/).map((t) => t.replace(/^[.,!?;:]+|[.,!?;:]+$/g, "")), 0, { decided });
@@ -36,9 +36,18 @@ test("chords: editors, readline terminals, repeats, refusals", () => {
   assert.equal(chordsFor("move:line:up", 1, LINUX_TERMINAL), null);
   assert.deepEqual(keymap({ terminal: true }), LINUX_TERMINAL);
 });
+test("the visitor's platform picks the keys", () => {
+  assert.deepEqual(chordsFor("move:word:left", 1, keymap({ terminal: false, platform: "mac" })), [["alt", "left"]]);
+  assert.deepEqual(chordsFor("move:line:end", 1, keymap({ terminal: false, platform: "mac" })), [["cmd", "right"]]);
+  assert.deepEqual(chordsFor("move:word:left", 1, keymap({ terminal: true, platform: "mac" })), [["escape"], ["b"]]);
+  assert.deepEqual(chordsFor("move:word:left", 1, keymap({ terminal: true, platform: "windows" })), [["ctrl", "left"]]);
+  assert.equal(chordsFor("delete:line:here", 1, keymap({ terminal: true, platform: "windows" })), null);
+  assert.deepEqual(keymap({ terminal: false, platform: "windows" }), EDITOR);
+});
 test("no table ever presses Enter", () => {
-  const actions = new Set([...Object.keys(EDITOR), ...Object.keys(LINUX_TERMINAL), ...[...PRESS_KEYS.values()].map((k) => "press:" + k)]);
-  for (const table of [EDITOR, LINUX_TERMINAL]) for (const a of actions) for (const chord of chordsFor(a, 1, table) || []) {
+  const tables = [EDITOR, LINUX_TERMINAL, MAC_EDITOR, MAC_TERMINAL, WINDOWS_TERMINAL];
+  const actions = new Set([...tables.flatMap((t) => Object.keys(t)), ...[...PRESS_KEYS.values()].map((k) => "press:" + k)]);
+  for (const table of tables) for (const a of actions) for (const chord of chordsFor(a, 1, table) || []) {
     assert.ok(!chord.some((n) => ["enter", "return", "kpenter"].includes(n)), a);
     assert.ok(!(chord.includes("ctrl") && (chord.includes("j") || chord.includes("m"))), a);
   }

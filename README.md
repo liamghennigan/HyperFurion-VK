@@ -598,14 +598,14 @@ Off by default: `enabled = true` under `[nav]`. Say a command as an
 utterance of its own, with a pause before and after. In the middle of a
 sentence, "delete the previous word" is just typed as words.
 
-| You say | Editors (Linux and Windows) | Terminals: Linux / Windows |
+| You say | Editors: Linux and Windows / macOS | Terminals: Linux / macOS / Windows |
 | --- | --- | --- |
-| `go left` / `go right [N] [words]` | arrows, `ctrl+←/→` | arrows, `alt+b/f` / `ctrl+←/→` |
+| `go left` / `go right [N] [words]` | arrows, `ctrl+←/→` / `option+←/→` | arrows, `alt+b/f` / `Esc b`, `Esc f` / `ctrl+←/→` |
 | `go up` / `go down [N] lines` | arrows | refused (that's shell history: say `press up`) |
-| `go to start` / `end of line` | `home` / `end` | `ctrl+a` / `ctrl+e`, or `home` / `end` |
-| `go to start` / `end of document` | `ctrl+home` / `ctrl+end` | — |
-| `select previous` / `next [N] words`, `select all`, `select line` | `shift` + the motion, `ctrl+a` | refused: a terminal has no selection to extend |
-| `delete previous` / `next [N] words`, `delete line` | `ctrl+backspace` / `ctrl+delete` | `ctrl+w` / `alt+d`, or `ctrl+backspace` / `ctrl+delete` |
+| `go to start` / `end of line` | `home` / `end`, or `cmd+←/→` | `ctrl+a` / `ctrl+e`, or `home` / `end` on Windows |
+| `go to start` / `end of document` | `ctrl+home` / `ctrl+end`, or `cmd+↑/↓` | — |
+| `select previous` / `next [N] words`, `select all`, `select line` | `shift` + the motion, `ctrl+a` / `cmd+a` | refused: a terminal has no selection to extend |
+| `delete previous` / `next [N] words`, `delete line` | `ctrl+backspace` / `ctrl+delete`, or `option+backspace` / `option+delete` | `ctrl+w` / `alt+d` (`Esc d` on macOS), or `ctrl+backspace` / `ctrl+delete` on Windows |
 | `press tab`, `press escape twice`, `press page down` | that key | that key |
 
 - Text you dictated before the command is on screen before the keys are
@@ -623,8 +623,10 @@ sentence, "delete the previous word" is just typed as words.
   rejected, as is an unknown key name.
 - Remap or disable a command per kind of app with `[nav.keys.editor]` and
   `[nav.keys.terminal]`, for example `"move:word:left" = "ctrl+left"`.
-- Not on macOS yet: there are no key chords on that backend, so commands
-  stay words.
+- On macOS the chords go through Quartz like typed text does; in a
+  terminal the readline word motions are sent as `Esc b` / `Esc f` so
+  they work whether or not Option is set to send Meta. Accessibility
+  permission covers it (the same one typing needs).
 
 ### Context registers
 

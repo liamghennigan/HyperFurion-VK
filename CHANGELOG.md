@@ -65,6 +65,15 @@ proven to be the daemon's.
   "keep out of history"); a focus change or a nav command resets it. On
   by default; `rejoin = false` restores a fresh caret every time. The
   landing page mirrors it.
+- **Hands-free navigation on macOS.** The Quartz injector can press
+  chords now (modifier keys down, the key posted with their flags, release
+  in reverse), so `[nav]` works there: option+arrows by word, command+
+  arrows to the ends of a line or the document, `cmd+a`, `option+
+  backspace`; in Terminal.app, iTerm2 and Ghostty the readline word
+  motions go as `Esc b` / `Esc f` / `Esc d`, which readline takes as Meta
+  whether or not Option is set to send it. The landing page presses the
+  visitor's own platform's keys — a Mac sees `option+←`, Windows Terminal
+  `ctrl+←`.
 - **`voice-keyboard setup` asks about hands-free navigation** (off by
   default), after Kai and the history question, and says what it does and
   that Enter is never pressed.

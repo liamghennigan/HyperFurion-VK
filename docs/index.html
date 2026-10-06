@@ -135,7 +135,7 @@
         <div>
           <span class="eyebrow">02 · registers</span>
           <h2 id="registers-title">The same words, typed the way the app wants.</h2>
-          <p>It probes the focused app and picks a register: prose gets capitals and punctuation, a terminal gets digits and no caps, python and shell compile speech into code. The same probe picks the keys: an editor gets <kbd>ctrl</kbd><kbd>←</kbd> for “go back a word”, a shell gets readline's <kbd>alt</kbd><kbd>b</kbd>. The panes show your last dictation through each.</p>
+          <p>It probes the focused app and picks a register: prose gets capitals and punctuation, a terminal gets digits and no caps, python and shell compile speech into code. The same probe picks the keys: an editor gets <kbd>ctrl</kbd><kbd>←</kbd> for “go back a word” (<kbd>option</kbd><kbd>←</kbd> on a Mac), a shell gets readline's <kbd>alt</kbd><kbd>b</kbd>. The panes show your last dictation through each.</p>
         </div>
         <figure class="fig" id="register-panes">
           <div class="pane" data-register="prose"><span class="pane-title">notes.md · prose</span><span class="pane-text"></span></div>
@@ -267,7 +267,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
           <li>Linux and Windows are first-class. macOS is in beta, installed from a checkout. iOS cannot host a system-wide keyboard like this.</li>
           <li>Live, molten typing needs a streaming speech provider. Non-streaming providers type when you stop talking.</li>
           <li>Repairs assume nothing else edits the field while you dictate. Click elsewhere mid-sentence and the text lands on your clipboard instead.</li>
-          <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend, and macOS has no key chords yet. Hands-free navigation is off by default in the daemon (<code>[nav] enabled = true</code>); this page has it on.</li>
+          <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend. Hands-free navigation is off by default in the daemon (<code>[nav] enabled = true</code>, or say yes in <code>voice-keyboard setup</code>); this page has it on, with your own platform's keys.</li>
           <li>A spoken “new line” in prose types a line break. The Enter refusal applies where it matters: command drafting and Kai. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
         </ul>
       </div>

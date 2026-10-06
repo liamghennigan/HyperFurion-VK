@@ -9,7 +9,7 @@
 // text field. "spell that …" swaps a word on screen; a navigation command
 // said on its own waits for the text to land, then presses its chord on
 // the board and moves the caret, exactly in the daemon's order.
-import { mic, micCap, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC } from "./env.js";
+import { mic, micCap, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC, os } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
 import { Ticker } from "./ticker.js";
@@ -148,7 +148,9 @@ export const Dictation = (() => {
     const reg = Window.register();
     await Typist.settled();
     if (guard) { log("focus moved · " + navLabel(action.action, action.count) + " not pressed", "dim"); return false; }
-    const chords = chordsFor(action.action, action.count, keymap({ terminal: !!reg.terminal }));
+    // the visitor's own platform's keys: the daemon on a Mac presses
+    // option+arrows and command+arrows, the Linux daemon ctrl+arrows
+    const chords = chordsFor(action.action, action.count, keymap({ terminal: !!reg.terminal, platform: os }));
     if (!chords) {
       log("can't " + action.action.split(":")[0] + " that here · " + (reg.terminal ? "a terminal has no selection" : "no binding in this app"), "err");
       return false;
