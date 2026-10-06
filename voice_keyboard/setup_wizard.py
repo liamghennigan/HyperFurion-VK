@@ -488,6 +488,8 @@ class Wizard:
         self.out("")
         if is_usable(self.path):
             self.out("Setup complete.")
+            self.out("Say \"scratch that\", \"new line\" or \"correct monday to friday\" while you dictate;")
+            self.out("`voice-keyboard commands` lists everything you can say.")
         else:
             self.out("Saved, but HyperFurion VK can't start yet: it still needs a speech provider.")
             self.out("Run `voice-keyboard setup` again, or `voice-keyboard login` for the hosted service.")
