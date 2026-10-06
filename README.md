@@ -74,6 +74,11 @@ for you if you don't have it. Press **Ctrl+Alt+V** in any app. See
   **Enter is always yours.** Nothing is captured until you press to talk.
 - **Private by default.** Run it 100% offline with a local model; zero
   analytics; your keys stay on your machine.
+- **An editor you can talk to.** "Correct monday to friday", "select that",
+  "cap that", "undo that", quotes, lists, headings and to-dos — and prose
+  that writes 25%, $5.50, 3:30 PM and October 6 the way you would. Commands
+  in English, Spanish, French and German; `voice-keyboard commands` lists
+  them all, `voice-keyboard try` shows what any phrase would type.
 - **A voice assistant in the keyboard** — "Kai" (hold Right Ctrl, click the
   orb, or the opt-in wake word), model-agnostic and local-first.
 
@@ -113,6 +118,7 @@ routes the just-typed text through an LLM and repairs it on screen.
 
 - **Start or stop dictation:** press `Ctrl+Alt+V`, or run `voice-keyboard`
   / `voice-keyboard toggle`.
+- **Not working?** `voice-keyboard doctor` checks everything and names the fix.
 - **Hold-to-talk:** hold `Ctrl+Alt+V`; release it to stop.
 - **Watch words appear as you speak:** on by default with a streaming
   provider — see [Flow](#flow--molten-dictation). Say "scratch that",
