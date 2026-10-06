@@ -868,7 +868,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login", "quit", "devices", "setup", "stats", "commands",
+            "login", "quit", "devices", "setup", "stats", "commands", "doctor",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -905,6 +905,19 @@ def main() -> None:
         for stream in (sys.stdout, sys.stderr):
             if stream is not None and hasattr(stream, "reconfigure"):
                 stream.reconfigure(errors="replace")
+
+    if args.command == "doctor":
+        # Before the config loads: a broken config is one of its findings.
+        from voice_keyboard import doctor, paths
+
+        path = paths.config_dir() / "config.toml"
+        try:
+            loaded = load_config(path)
+        except Exception:
+            loaded = None
+        findings = doctor.run(path, loaded)
+        print(doctor.render(findings), end="")
+        sys.exit(1 if any(f.status == doctor.FAIL for f in findings) else 0)
 
     if args.command == "setup":
         # The settings walkthrough; it must run before the config is

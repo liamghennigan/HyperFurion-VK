@@ -12,6 +12,10 @@ proven to be the daemon's.
 
 ### Added
 
+- **`voice-keyboard doctor`.** Checks what stands between you and dictation —
+  config, microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
+  access, the clipboard tool that types accents and emoji, the AT-SPI focus
+  probe — and prints the fix for each problem. Exits non-zero on a failure.
 - **Spoken commands in Spanish, French and German.** `[flow] language =
   "es" | "fr" | "de"` adds that language's punctuation and layout
   commands to the English set — "punto", "coma", "abre interrogación"

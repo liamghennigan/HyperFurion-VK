@@ -129,6 +129,9 @@ routes the just-typed text through an LLM and repairs it on screen.
   written form also becomes a hotword the recognizer leans toward).
 - **Hold rewrites for approval:** `[flow] rewrite_pending = true`, then
   "keep it" / "scratch that" (or `voice-keyboard keep` / `discard`).
+- **Something not working?** `voice-keyboard doctor` checks the config,
+  microphone, daemon, typing permissions, clipboard tool and focus probe,
+  and prints the fix for each problem it finds.
 - **Check whether the daemon is recording:** `voice-keyboard status`.
 - **Check whether the daemon is running:**
   `systemctl --user status voice-keyboard-daemon`.
