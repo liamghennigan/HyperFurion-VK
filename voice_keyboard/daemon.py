@@ -974,8 +974,8 @@ class Daemon:
         )
 
     def _nav_enabled(self) -> bool:
-        """[nav] is on and this platform's injector can press chords
-        (macOS's cannot yet: the commands stay words there)."""
+        """[nav] is on and this platform's injector can press chords (all
+        three do; an injector without press_combo keeps the commands words)."""
         if not bool(self._config.get("nav", {}).get("enabled", False)):
             return False
         return callable(getattr(self._injector, "press_combo", None))
