@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from voice_keyboard.flow.nav import PENDING as NAV_PENDING
+from voice_keyboard.flow.languages import LANGUAGE_PACKS
 from voice_keyboard.flow.nav import VERBS as NAV_VERBS
 from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import (
@@ -280,6 +281,7 @@ class Grammar:
         addresses: bool = True,
         formatters="code",
         code: bool = False,
+        language: str = "en",
     ):
         self.enabled = enabled
         self._address_on = addresses
@@ -300,7 +302,10 @@ class Grammar:
         # Prose: only "twenty five percent", "five dollars", "three pm".
         self._units_on = numbers == "auto" and not self._numbers_on and not code
 
+        pack = LANGUAGE_PACKS.get(str(language or "en").lower(), LANGUAGE_PACKS["en"])
         merged_commands = dict(DEFAULT_COMMANDS)
+        for action, phrases in pack["commands"].items():
+            merged_commands[action] = merged_commands.get(action, ()) + tuple(phrases)
         for action, phrases in (commands or {}).items():
             if action not in DEFAULT_COMMANDS:
                 continue
@@ -308,7 +313,7 @@ class Grammar:
                 phrases = [phrases]
             merged_commands[action] = tuple(str(p) for p in phrases if str(p).strip())
 
-        merged_punct = dict(DEFAULT_PUNCTUATION)
+        merged_punct = {**DEFAULT_PUNCTUATION, **pack["punctuation"]}
         for phrase, glyph in (punctuation or {}).items():
             phrase_key = str(phrase).strip().casefold()
             glyph = str(glyph)

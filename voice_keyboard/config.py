@@ -109,6 +109,9 @@ DEFAULT_CONFIG: dict = {
         "auto_stop_ms": 0,
         # Spoken cardinals -> digits: auto = terminal register only.
         "numbers": "auto",
+        # Spoken commands and punctuation in another language too: "es",
+        # "fr" or "de" add "punto"/"virgule"/"neue Zeile"… to the English set.
+        "language": "en",
         # Opt-in local dictation ledger (history/recall).
         "history": False,
         # Also append per-dictation latency numbers (no text) to
@@ -787,6 +790,10 @@ def _validate_flow_config(config: dict) -> None:
         raise RuntimeError("flow.auto_stop_ms must be a non-negative integer (0 = off)")
     if str(flow_cfg.get("live_rest", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.live_rest must be one of: auto, always, off")
+    from voice_keyboard.flow.languages import LANGUAGES
+
+    if str(flow_cfg.get("language", "en")).lower() not in LANGUAGES:
+        raise RuntimeError("flow.language must be one of: " + ", ".join(LANGUAGES))
     if str(flow_cfg.get("numbers", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.numbers must be one of: auto, always, off")
     if str(flow_cfg.get("formatters", "code")).lower() not in {"code", "everywhere", "off"}:

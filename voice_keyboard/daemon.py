@@ -971,6 +971,7 @@ class Daemon:
             formatters=str(flow_cfg.get("formatters", "code")).lower(),
             code=bool(register.compiler) or register.terminal,
             nav=self._nav_enabled(),
+            language=str(flow_cfg.get("language", "en")).lower(),
         )
 
     def _nav_enabled(self) -> bool:

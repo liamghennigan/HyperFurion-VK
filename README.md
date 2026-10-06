@@ -569,6 +569,12 @@ recognizer's periods.
 
 ### The spoken grammar
 
+Commands and punctuation are English by default; `[flow] language = "es"`,
+`"fr"` or `"de"` adds that language's set on top ("punto", "abre
+interrogación" → `¿`, "virgule", "à la ligne", "Komma", "neue Zeile",
+"borra eso" / "efface ça" / "streich das"). Numbers, dates and units stay
+English.
+
 | You say | You get |
 | --- | --- |
 | `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |

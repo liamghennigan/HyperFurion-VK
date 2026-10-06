@@ -121,6 +121,11 @@ auto_stop_ms = 0
 # Spoken cardinals -> digits ("twenty three" -> 23).
 # "auto" = terminal register only, "always", or "off".
 numbers = "auto"
+# Spoken commands and punctuation in another language too, on top of the
+# English set: "es" (punto, coma, nueva línea, borra eso, ¿ ¡), "fr"
+# (point, virgule, à la ligne, efface ça) or "de" (Punkt, Komma, neue
+# Zeile, streich das). Numbers, dates and units stay English.
+language = "en"
 # Opt-in local dictation ledger for `voice-keyboard history` / `recall`.
 # Entries: ~/.local/state/voice-keyboard/history.jsonl (mode 600).
 history = false

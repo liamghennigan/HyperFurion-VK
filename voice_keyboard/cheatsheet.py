@@ -54,6 +54,7 @@ def _grammar(config: dict) -> Grammar:
         punctuation=flow.get("punctuation") or {},
         vocabulary=flow.get("vocabulary") or {},
         wake_word=str(flow.get("wake_word", "vk")),
+        language=str(flow.get("language", "en")).lower(),
     )
 
 
