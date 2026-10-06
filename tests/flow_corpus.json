@@ -1332,6 +1332,28 @@
   ]
  },
  {
+  "name": "a hundred before a unit",
+  "register": "prose",
+  "segments": [
+   "about a hundred and fifty dollars, a hundred percent, a thousand euros and a hundred people"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "About $150, 100%, €1,000 and a hundred people"
+   ],
+   [
+    "final",
+    "About $150, 100%, €1,000 and a hundred people",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "o'clock",
   "register": "prose",
   "segments": [

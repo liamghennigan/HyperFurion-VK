@@ -976,11 +976,12 @@ class Grammar:
         while index < size:
             item = items[index]
             # Fast path: most words can start no fold at all.
+            lowered = item.text.casefold().strip(_PUNCT_STRIP)
             if item.kind != "word" or not (
                 item.text[:1] in "0123456789"
-                or (lowered := item.text.casefold().strip(_PUNCT_STRIP)) in NUMBER_WORDS
+                or lowered in NUMBER_WORDS
                 or lowered in DATE_MONTHS_SET
-                or lowered == "q"
+                or lowered in ("q", "a")
             ):
                 result.append(item)
                 index += 1
@@ -1025,7 +1026,13 @@ class Grammar:
             # The run: number words with nothing attached ("five," ends a
             # thought), never starting on glue ("and", "oh"), never ending
             # on it ("five and percent"), never crossing the fence.
-            end = index
+            # "a hundred and fifty dollars": "a" reads as "one" before a scale
+            lead_a = (
+                lowered == "a" and _clean(item.text) and index + 1 < size and items[index + 1].kind == "word"
+                and _clean(items[index + 1].text) and _core(items[index + 1].text) in ("hundred", "thousand")
+                and inside(items[index + 1])
+            )
+            end = index + 1 if lead_a else index
             while (
                 end < size and items[end].kind == "word" and _clean(items[end].text)
                 and inside(items[end])
@@ -1051,6 +1058,8 @@ class Grammar:
                 index = end
                 continue
             words = [_core(it.text) for it in items[index:end]]
+            if lead_a:
+                words[0] = "one"
 
             scale = items[end] if end < size and items[end].kind == "word" else None
             if scale is not None and _clean(scale.text) and _core(scale.text) in SCALE_WORDS and inside(scale):

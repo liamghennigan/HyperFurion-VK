@@ -343,7 +343,10 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       i = date[1] + 1; afterDate = clean(items[date[1]].text) ? i : -1; continue;
     }
     // the run: clean number words, never starting on "and"/"oh", never ending on glue, never crossing the fence
-    let end = i;
+    // "a hundred and fifty dollars": "a" reads as "one" before a scale
+    const leadA = it.kind === "word" && core(it.text) === "a" && clean(it.text) && i + 1 < n && items[i + 1].kind === "word" &&
+      clean(items[i + 1].text) && (core(items[i + 1].text) === "hundred" || core(items[i + 1].text) === "thousand") && inside(items[i + 1]);
+    let end = leadA ? i + 1 : i;
     while (end < n && items[end].kind === "word" && clean(items[end].text) && inside(items[end]) &&
            (NUMBER_WORDS.has(core(items[end].text)) || (end > i && core(items[end].text) === "oh"))) end += 1;
     if (end > i && core(it.text) === "and") end = i;
@@ -355,6 +358,7 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       out.push(...items.slice(i, end)); i = end; continue;  // the rest of a number with something attached: half a number never folds
     }
     const words = items.slice(i, end).map((x) => core(x.text));
+    if (leadA) words[0] = "one";
     const scale = end < n && items[end].kind === "word" ? items[end] : null;
     if (scale && clean(scale.text) && SCALE_WORDS.has(core(scale.text)) && inside(scale)) {
       if (end + 1 === n && !committed && (molten(scale.s) || (pendingFrom !== null && scale.e === pendingFrom)))
