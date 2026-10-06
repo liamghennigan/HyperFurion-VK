@@ -9,6 +9,9 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **"Cap that", "uppercase that", "lowercase that".** Said on their own,
+  they recase the last utterance in place — no model, no selection.
+  Mid-sentence ("let's cap that at ten") they stay words.
 - **"Select that".** Selects what you just said — one `shift+left` per
   character of the last utterance — so the next words replace it, or a
   rewrite ("VK, make that formal") works on it. Refused when nothing was

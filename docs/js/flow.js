@@ -28,6 +28,9 @@ const COMMANDS = {
   // decision"); "scratched that" is how recognizers write the command
   "scratch that": "scratch", "scratched that": "scratch", "delete that": "scratch",
   "new line": "\n", "new paragraph": "\n\n", "new bullet": "bullet", "new number": "number",
+  // recase the last utterance, said on its own (grammar.py _RECASE)
+  "cap that": "recase:title", "capitalize that": "recase:title",
+  "uppercase that": "recase:upper", "lowercase that": "recase:lower",
 };
 // the wake word as a speech model is likely to write it
 const WAKE_ALIASES = ["vk", "v.k.", "vk.", "vicky", "vikki", "veekay", "veek"];
@@ -629,6 +632,8 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
         i = target + 1; continue;
       } else if (payload === "scratch") {
         items.push({ kind: "scratch", s: i, e: i + used });
+      } else if (payload.startsWith("recase:")) {
+        items.push({ kind: "recase", text: tokens.slice(i, i + used).join(" "), mode: payload.slice(7), s: i, e: i + used });
       } else if (payload === "bullet") {
         // "- " on a line of its own: the renderer adds the line break
         // unless the caret is already at a line start
@@ -802,6 +807,12 @@ export function render(items, register, state) {
 
 // char-counted backspacing over `text` may not match how the focused app
 // groups grapheme clusters (astral plane, combining marks, ZWJ sequences)
+// "title": each word's first character a capital; "upper"; "lower" (engine.py recase)
+export function recase(text, mode) {
+  if (mode === "upper") return text.toUpperCase();
+  if (mode === "lower") return text.toLowerCase();
+  return text.replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase());
+}
 export function riskyBackspace(text) {
   return /[\u{10000}-\u{10FFFF}̀-ͯ‍️︎]/u.test(text);
 }
@@ -832,7 +843,7 @@ export function riskyBackspace(text) {
 // and calls completeAction(), which starts a fresh segment: the caret has
 // moved, so nothing before the command can be repaired or scratched.
 const LAST_WORD = /(\S+?)([.,!?;:)\]}"'»”’]*)(\s*)$/;
-const FINAL_ONLY = new Set(["respell", "key"]);  // rewrite committed text: never on a stability guess
+const FINAL_ONLY = new Set(["respell", "key", "recase"]);  // rewrite committed text: never on a stability guess
 // a pause's next word counts as settled after surviving an update or this long
 const PAUSE_SETTLE_MS = 600;
 
@@ -1096,6 +1107,7 @@ export function moltenLine({ register, cfg, state } = {}) {
     else if (it.kind === "respell" && it.mode === "replace") applyRespell(it.text);
     else if (it.kind === "respell") append([{ kind: "word", text: it.text, s: it.s, e: it.e }]);
     else if (it.kind === "key") commitKey(it);
+    else if (it.kind === "recase") commitRecase(it);
     else if (it.kind === "instruction") { if (it.text) instruction = it.text; }
     else append([it]);
     committedTokens = Math.max(committedTokens, it.e);
@@ -1115,6 +1127,20 @@ export function moltenLine({ register, cfg, state } = {}) {
     if (!target) return 0;
     const said = committedRender.slice(target.len).replace(/^ +/, "");
     return riskyBackspace(said) ? 0 : said.length;
+  }
+  // "cap that" / "uppercase that" / "lowercase that" as a whole segment
+  // recases the last utterance in place; mid-sentence it types as words
+  function commitRecase(it) {
+    if (!(segmentBounds.has(it.s) && segmentBounds.has(it.e))) {
+      append(tokens.slice(it.s, it.e).map((t, k) => ({ kind: "word", text: t, s: it.s + k, e: it.s + k + 1 })));
+      return;
+    }
+    let target = null;
+    for (let i = snapshots.length - 1; i >= 0; i--) if (snapshots[i].len < committedRender.length) { target = snapshots[i]; break; }
+    if (!target) return;
+    const said = committedRender.slice(target.len);
+    if (riskyBackspace(said)) return;
+    committedRender = committedRender.slice(0, target.len) + recase(said, it.mode);
   }
   function applyScratch() {
     let target = null;

@@ -91,6 +91,15 @@ class FinalResult:
     reach_back: int = 0
 
 
+def recase(text: str, mode: str) -> str:
+    """"title": each word's first character a capital; "upper"; "lower"."""
+    if mode == "upper":
+        return text.upper()
+    if mode == "lower":
+        return text.lower()
+    return re.sub(r"(^|\s)(\S)", lambda m: m.group(1) + m.group(2).upper(), text)
+
+
 @dataclass(frozen=True)
 class NavAction:
     action: str   # e.g. "select:word:left", "press:tab"
@@ -134,7 +143,7 @@ _LAST_WORD = re.compile(r"(\S+?)([.,!?;:)\]}\"'»”’]*)(\s*)\Z")
 
 # Actions that rewrite committed text: they wait for a final transcript,
 # never a stability guess, so a misheard partial can't fire them.
-_FINAL_ONLY = ("respell", "key")
+_FINAL_ONLY = ("respell", "key", "recase")
 
 
 def risky_backspace(text: str) -> bool:
@@ -612,6 +621,8 @@ class FlowEngine:
             self._committed_render += delta
         elif item.kind == "key":
             self._commit_key(item)
+        elif item.kind == "recase":
+            self._commit_recase(item)
         elif item.kind == "instruction":
             if item.text:
                 self._instruction = item.text
@@ -661,6 +672,33 @@ class FlowEngine:
         ]
         delta, self._render_state = render_items(words, self._render_state, self._register)
         self._committed_render += delta
+
+    def _commit_recase(self, item: Item) -> None:
+        """"cap that" / "uppercase that" / "lowercase that", said as a
+        whole segment, recases the last utterance in place; said
+        mid-sentence it was dictation, and types as words."""
+        start, end = item.span
+        if not (start in self._segment_bounds and end in self._segment_bounds):
+            words = [
+                Item(kind="word", text=token, span=(index, index + 1))
+                for index, token in enumerate(self._tokens[start:end], start)
+            ]
+            delta, self._render_state = render_items(words, self._render_state, self._register)
+            self._committed_render += delta
+            return
+        target = None
+        for snapshot in reversed(self._snapshots):
+            if snapshot.render_len < len(self._committed_render):
+                target = snapshot
+                break
+        if target is None:
+            logger.info("flow: nothing to recase")
+            return
+        said = self._committed_render[target.render_len:]
+        if risky_backspace(said):
+            logger.warning("flow: refusing to recase across complex Unicode")
+            return
+        self._committed_render = self._committed_render[:target.render_len] + recase(said, item.mode)
 
     def _last_utterance_length(self) -> int:
         """Characters "select that" must cover: the last segment typed in

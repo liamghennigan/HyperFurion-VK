@@ -70,6 +70,12 @@ DEFAULT_COMMANDS: dict[str, tuple[str, ...]] = {
     ),
     "new_line": ("new line",),
     "new_paragraph": ("new paragraph",),
+    # Recase the last utterance, said on its own: "cap that" -> Title Case.
+    # Not "all caps that" / "no caps that": "all" and "no" would wait on
+    # every use for the rest of a phrase.
+    "cap_that": ("cap that", "capitalize that"),
+    "upper_that": ("uppercase that",),
+    "lower_that": ("lowercase that",),
     "bullet": ("new bullet",),  # not "bullet point": that is a noun phrase
     "number": ("new number",),  # "1. ", "2. ", … a numbered list
     "literal": ("literal",),
@@ -146,6 +152,7 @@ DEFAULT_EMOJI: dict[str, str] = {
 }
 
 _BREAKS = {"new_line": "\n", "new_paragraph": "\n\n"}
+_RECASE = {"cap_that": "title", "upper_that": "upper", "lower_that": "lower"}
 
 SPELL_WORD = "spell"
 
@@ -650,6 +657,9 @@ class Grammar:
                     items.append(Item(kind="break", text="", mode="number", span=span))
                 elif payload == "scratch_that":
                     items.append(Item(kind="scratch", span=span))
+                elif payload in _RECASE:
+                    items.append(Item(kind="recase", text=" ".join(tokens[index:index + consumed]),
+                                      mode=_RECASE[str(payload)], span=span))
                 else:  # a command with no stream effect (future actions)
                     items.append(Item(kind="word", text=tokens[index], span=(index, index + 1)))
                     index += 1

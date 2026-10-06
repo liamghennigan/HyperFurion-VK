@@ -1645,6 +1645,141 @@
   ]
  },
  {
+  "name": "cap that title-cases the last utterance",
+  "register": "prose",
+  "segments": [
+   "the quick brown fox",
+   "cap that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The quick brown fox"
+   ],
+   [
+    "screen",
+    "The Quick Brown Fox"
+   ],
+   [
+    "final",
+    "The Quick Brown Fox",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "uppercase that keeps earlier words",
+  "register": "prose",
+  "segments": [
+   "one",
+   "two three",
+   "uppercase that",
+   "four"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One TWO THREE"
+   ],
+   [
+    "screen",
+    "One TWO THREE four"
+   ],
+   [
+    "final",
+    "One TWO THREE four",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "lowercase that",
+  "register": "prose",
+  "segments": [
+   "HELLO there",
+   "lowercase that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "HELLO there"
+   ],
+   [
+    "screen",
+    "hello there"
+   ],
+   [
+    "final",
+    "hello there",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "cap that inside a sentence stays words",
+  "register": "prose",
+  "segments": [
+   "let's cap that at ten"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Let's cap that at ten"
+   ],
+   [
+    "final",
+    "Let's cap that at ten",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "cap that with nothing said does nothing",
+  "register": "prose",
+  "segments": [
+   "cap that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "scratch synonyms",
   "register": "prose",
   "segments": [
