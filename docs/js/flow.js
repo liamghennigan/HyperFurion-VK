@@ -35,16 +35,24 @@ const COMMANDS = {
   "uppercase that": "recase:upper", "lowercase that": "recase:lower",
 };
 const MARKERS = { bullet: "- ", heading: "# ", subheading: "## ", checkbox: "- [ ] " };  // grammar.py _MARKERS
-// the wake word as a speech model is likely to write it
-const WAKE_ALIASES = ["vk", "v.k.", "vk.", "vicky", "vikki", "veekay", "veek"];
+// the wake word as a recognizer writes it: "VK", "V.K.", "V-K", "V K".
+// Never a name or a word that only sounds close ("Vicky", "decay", "the k",
+// "BK"): what follows a wake word is an instruction, never typed, so a false
+// match would swallow dictation (grammar.py WAKE_ALIASES, wake_at)
+const WAKE_ALIASES = { vk: ["veekay"] };
+const bare = (c) => (c || "").replace(/[.-]/g, "");
 // returns how many tokens at i spell the wake word (0 = none)
 export function wakeAt(cores, i, wake) {
-  const w = (wake || "vk").toLowerCase();
-  const c = (cores[i] || "").replace(/\./g, "");
-  if (c === w.replace(/\./g, "") || WAKE_ALIASES.some((a) => a.replace(/\./g, "") === c)) return 1;
-  if (c === "v" && (cores[i + 1] || "").replace(/\./g, "") === "k") return 2;
+  const w = bare((wake || "vk").toLowerCase());
+  if (!w || i >= cores.length) return 0;
+  const c = bare(cores[i]);
+  if (c && (c === w || (Object.hasOwn(WAKE_ALIASES, w) && WAKE_ALIASES[w].includes(c)))) return 1;
+  if (w.length === 2 && c === w[0] && i + 1 < cores.length && bare(cores[i + 1]) === w[1]) return 2;  // "V K"
   return 0;
 }
+// quotation marks a recognizer puts around words it hears as a name or a
+// title: 'Select "Previous Word".' is still a command said on its own
+const QUOTES = /^["'\u201c\u201d\u2018\u2019\u00ab\u00bb\u201e]+|["'\u201c\u201d\u2018\u2019\u00ab\u00bb\u201e]+$/g;
 // phrase -> [glyph, mode, sentenceEnd]; modes: left|right|both|none
 const PUNCT = {
   "period": [".", "left", true], "full stop": [".", "left", true],
@@ -228,6 +236,7 @@ const ORDINALS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6,
   seventeenth: 17, eighteenth: 18, nineteenth: 19, twentieth: 20, thirtieth: 30 };
 export function parseDay(words) {
   words = words.map((w) => w.toLowerCase());
+  if (words.length === 1 && words[0].split("-").length === 2) words = words[0].split("-");  // "twenty-first", as a recognizer writes it
   if (words.length === 1 && words[0] in ORDINALS) return ORDINALS[words[0]];
   if (words.length === 2 && (words[0] === "twenty" || words[0] === "thirty") && words[1] in ORDINALS && ORDINALS[words[1]] <= 9) {
     const day = TENS[words[0]] + ORDINALS[words[1]];
@@ -485,6 +494,20 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       else if (tail[0] === "oh" || tail[0] === "point" || (lead && (NUMBER_WORDS.has(lead) || lead === "oh"))) { /* half a number never folds */ }
       else if (after && NOT_A_NUMBER_AFTER.has(core(after.text))) { /* a count: "the floor ten people" */ }
       else numbered = foldNumbered(words);
+    }
+    if (year === null && atTime === null && numbered === null && words.every((w) => Object.hasOwn(DIGITS, w) || w === "oh")) {
+      // "call five five five one two three four.": a number read digit by
+      // digit may end on the sentence's stop
+      let at = end, tail = [];
+      if (at < n && items[at].kind === "word" && clean(items[at].text) && core(items[at].text) === "oh" && inside(items[at])) { at += 1; tail = ["oh"]; }
+      const closer = at < n && items[at].kind === "word" && inside(items[at]) ? items[at] : null;
+      if (closer && !clean(closer.text) && !PUNCT_HEAD.test(closer.text)) {
+        const phone = foldDigits([...words, ...tail, core(closer.text)]);
+        if (phone !== null) {
+          out.push({ kind: "word", text: phone + (closer.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: closer.e });
+          i = at + 1; continue;
+        }
+      }
     }
     let digits = foldDigits(words);
     if (digits === null && numbered !== null) digits = numbered;
@@ -773,7 +796,10 @@ function fillerStop(token, items, s, e) {
 const AMBIGUOUS = new Set(["a", "i", "one", "two", "four", "eight"]);  // letters that are also words
 const PENDING = "pending";
 
-export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds = [], commits = [], register, cfg }) {
+// `unsplit`: tokens committed as written although they spell a number with
+// hyphens ("three-thirty" before "euros"); the context that kept them from
+// folding may be past the fence now, so they are never read as numbers again
+export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds = [], commits = [], unsplit = [], register, cfg }) {
   const codeReg = !!(register && (register.compiler || register.terminal));
   const reg = register || REGISTERS.prose;
   if (!reg.grammar) {
@@ -924,7 +950,9 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       const clean = (t) => !/[.,!?;:]/.test(t[0] || "") && !/[.,!?;:]$/.test(t);
       if (split !== null && tokens.slice(i, i + 2 + split).every(clean)) {
         const old = tokens.slice(i + 1, i + 1 + split).map((t) => t.toLowerCase()).join(" ");
-        const neu = tokens.slice(i + 2 + split, limit).join(" ").trim();  // as spoken: the engine renders it
+        // as spoken: the engine renders it. "Correct Monday to Friday.": the
+        // recognizer's own stop ends the command, not the word ("period" said is kept)
+        const neu = tokens.slice(i + 2 + split, limit).join(" ").trim().replace(/[.,!?;:]+$/, "");
         if (old && neu) { items.push({ kind: "correct", text: neu, mode: old, s: i, e: limit }); i = limit; continue; }
       }
     }
@@ -943,9 +971,12 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       if (spelled === PENDING) { pendingFrom = i; break; }
       if (spelled) { items.push(spelled[0]); i = spelled[1]; continue; }
     }
-    if (nav && cores[i] in NAV_VERBS) {
+    if (nav && Object.hasOwn(NAV_VERBS, cores[i].replace(QUOTES, ""))) {
       const [limit, decided] = limitAt(i);
-      const command = parseNav(cores.slice(0, limit), i, { decided });
+      // 'Select "Previous Word".': quotes a recognizer added are not part of
+      // a command (said mid-sentence it types as said)
+      const unquoted = cores.slice(0, limit).map((c) => core(c.replace(QUOTES, "")));
+      const command = parseNav(unquoted, i, { decided });
       if (command === NAV_PENDING) { pendingFrom = i; break; }
       if (command) {
         const [action, count, end] = command;
@@ -963,7 +994,9 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       } else if (kind === "vocab") {
         items.push({ kind: "word", text: payload, s: i, e: i + used });
         const tail = (tokens[i + used - 1].match(PUNCT_STRIP) || [""])[0];
-        for (const ch of tail) if (".,!?;:".includes(ch))
+        // "Emoji rocket." opening an utterance: a symbol, not a sentence
+        const lone = entry[2] === "emoji" && bounds.includes(i);
+        for (const ch of tail) if (".,!?;:".includes(ch) && !(lone && ".!?".includes(ch)))
           items.push({ kind: "punct", text: ch, mode: "left",
                        sentenceEnd: ".!?".includes(ch), s: i, e: i + used });
       } else if (payload === "literal") {
@@ -1025,37 +1058,110 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   const numbersOn = (cfg && cfg.numbers === "always") ||
     ((!cfg || cfg.numbers === "auto") && reg.numbersOn);
   const numbersMin = cfg && cfg.numbers === "always" ? 0 : reg.numbersMin;
-  if (numbersOn) {
-    const out = []; let run = [];
-    const nflush = flush || pendingFrom !== null;
-    const close = (atTail) => {
-      if (!run.length) return;
-      if (atTail && !nflush) {
-        if (pendingFrom === null) pendingFrom = run[0].s;
-        run = []; return;
-      }
-      const texts = run.map((it) => it.text);
-      const conv = convertNumbers(texts, numbersMin);
-      if (conv.length === texts.length && conv.every((t, k) => t === texts[k])) out.push(...run);
-      else for (const t of conv) out.push({ kind: "word", text: t, s: run[0].s, e: run[run.length - 1].e });
-      run = [];
-    };
-    for (const it of items) {
-      if (it.kind === "word" && NUMBER_WORDS.has(core(it.text))) {
-        if (run.length && run[0].s < frozen && it.s >= itemEnd(run[0].s)) close(false);  // the committed part folds alone
-        const before = out.length ? out[out.length - 1] : null;
-        if (!run.length && Object.hasOwn(DIGITS, core(it.text)) && before && before.kind === "punct" && before.text === "-" && before.mode === "none") {
-          run.push(it); close(false); continue;  // "kill dash nine one two three four": a flag is one digit (-9 1234)
-        }
-        run.push(it);
-      } else { close(false); out.push(it); }
-    }
-    close(run.length > 0 && run[0].s >= frozen);  // a run behind the fence was decided when committed
-    return { items: out, pendingFrom };
+  const unitsOn = !numbersOn && (!cfg || !cfg.numbers || cfg.numbers === "auto") && !codeReg;
+  const compounds = new Map();
+  let parsed = { items, pendingFrom };
+  if (numbersOn || unitsOn) parsed.items = splitCompounds(items, compounds, new Set(unsplit));
+  if (numbersOn) parsed = foldNumbers(parsed.items, pendingFrom, flush, frozen, itemEnd, numbersMin);
+  else if (unitsOn) parsed = foldUnits(parsed.items, frozen, itemEnd, pendingFrom, flush, settled);
+  if (compounds.size) parsed.items = mergeCompounds(parsed.items, compounds);
+  if (codeReg) parsed.items = unprose(parsed.items, tokens, bounds);
+  return parsed;
+}
+
+// a number a recognizer wrote with hyphens ("Twenty-five,", "three-thirty",
+// "four-oh-two") as the words a speaker said, its punctuation on the last
+// (numbers.py split_compound), so the folds read it as they read "twenty
+// five"; mergeCompounds puts back the parts of one that did not fold
+// ("Twenty-five people" stays as written)
+const CHAIN_WORDS = new Set([...Object.keys(UNITS), ...Object.keys(TENS), "hundred", "thousand", "oh"]);
+export function splitCompound(text) {
+  const body = text.replace(PUNCT_TAIL, "");
+  const parts = body.split("-");
+  if (parts.length < 2 || parts.some((p) => !CHAIN_WORDS.has(p.toLowerCase()))) return null;
+  parts[parts.length - 1] += text.slice(body.length);
+  return parts;
+}
+function splitCompounds(items, chains, unsplit) {
+  const out = [];
+  for (const it of items) {
+    const words = it.kind === "word" && it.mode !== "verbatim" && it.e - it.s === 1 && !unsplit.has(it.s) ? splitCompound(it.text) : null;
+    if (!words) { out.push(it); continue; }
+    const parts = words.map((w) => ({ ...it, text: w }));
+    out.push(...parts);
+    chains.set(parts[0], [parts, it]);
   }
-  const code = !!(reg.compiler || reg.terminal);
-  if ((!cfg || !cfg.numbers || cfg.numbers === "auto") && !code) return foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled);
-  return { items, pendingFrom };
+  return out;
+}
+function mergeCompounds(items, chains) {
+  const out = [];
+  for (let i = 0; i < items.length;) {
+    const chain = chains.get(items[i]);
+    if (chain && chain[0].every((part, k) => items[i + k] === part)) { out.push(chain[1]); i += chain[0].length; continue; }
+    out.push(items[i]); i += 1;
+  }
+  return out;
+}
+// terminals and code take what was said, not the recognizer's prose
+// (grammar.py _unprose): its sentence stops go ("List files." -> "list
+// files"; a spoken "period" stays), and so does the capital it gave a
+// sentence start ("For i in range" -> "for i in range"; "GitHub", "TODO"
+// and "I" keep theirs)
+const PRONOUN = new Set(["i", "i'm", "i'll", "i'd", "i've", "i\u2019m", "i\u2019ll", "i\u2019d", "i\u2019ve"]);
+function sentenceCase(t) {
+  const letters = [...t].filter((c) => /\p{L}/u.test(c));
+  return letters.length > 0 && /^\p{Lu}/u.test(t) && !letters.slice(1).some((c) => /\p{Lu}/u.test(c));
+}
+function unprose(items, tokens, bounds) {
+  const starts = new Set(bounds);
+  const out = [];
+  for (const it of items) {
+    const before = out.length ? out[out.length - 1] : null;
+    if (it.kind === "punct" && (it.text === "." || it.text === "?" || it.text === "!") && before && before.s === it.s && before.e === it.e)
+      continue;  // a stop attached to the word before, not said
+    if (it.kind !== "word" || it.mode === "verbatim") { out.push(it); continue; }
+    let t = it.text;
+    const stripped = t.replace(/[.?!]+$/, "");
+    if (stripped.replace(/^[.,!?;:]+|[.,!?;:]+$/g, "")) t = stripped;
+    const s = it.s;
+    if (it.e - s === 1 && s < tokens.length && it.text === tokens[s] &&
+        (s === 0 || starts.has(s) || /[.?!]$/.test(tokens[s - 1])) &&
+        sentenceCase(t) && !PRONOUN.has(core(t)) && (PHRASES.get(core(t)) || [""])[0] !== "vocab")
+      t = t.replace(/^\p{Lu}/u, (c) => c.toLowerCase());
+    out.push(t === it.text ? it : { ...it, text: t });
+  }
+  return out;
+}
+// convert runs of consecutive number-word items into digit items (grammar.py
+// _fold_numbers): a run still touching the molten tail is held back unless
+// flushing; no run crosses the frozen fence or a committed item's end
+function foldNumbers(items, pendingFrom, flush, frozen, itemEnd, numbersMin) {
+  const out = []; let run = [];
+  const nflush = flush || pendingFrom !== null;
+  const close = (atTail) => {
+    if (!run.length) return;
+    if (atTail && !nflush) {
+      if (pendingFrom === null) pendingFrom = run[0].s;
+      run = []; return;
+    }
+    const texts = run.map((it) => it.text);
+    const conv = convertNumbers(texts, numbersMin);
+    if (conv.length === texts.length && conv.every((t, k) => t === texts[k])) out.push(...run);
+    else for (const t of conv) out.push({ kind: "word", text: t, s: run[0].s, e: run[run.length - 1].e });
+    run = [];
+  };
+  for (const it of items) {
+    if (it.kind === "word" && NUMBER_WORDS.has(core(it.text))) {
+      if (run.length && run[0].s < frozen && it.s >= itemEnd(run[0].s)) close(false);  // the committed part folds alone
+      const before = out.length ? out[out.length - 1] : null;
+      if (!run.length && Object.hasOwn(DIGITS, core(it.text)) && before && before.kind === "punct" && before.text === "-" && before.mode === "none") {
+        run.push(it); close(false); continue;  // "kill dash nine one two three four": a flag is one digit (-9 1234)
+      }
+      run.push(it);
+    } else { close(false); out.push(it); }
+  }
+  close(run.length > 0 && run[0].s >= frozen);  // a run behind the fence was decided when committed
+  return { items: out, pendingFrom };
 }
 
 // "spell that <letters>" (replace the previous word) or "spell <letters>"
@@ -1352,7 +1458,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   function view() {
     const molten = barrier !== null ? "" : render(previewItems(), reg, { ...renderState }).text;
     let instr = "";
-    if (pendingIsInstruction()) instr = tokens.slice(pendingFrom + 1).join(" ") || " ";
+    if (pendingIsInstruction()) instr = tokens.slice(pendingFrom + wakeAt(tokens.map(core), pendingFrom, (cfg && cfg.wakeWord) || "vk")).join(" ") || " ";
     const captionTail = viewTokens().slice(committedTokens).join(" ");
     return { frozen: committedRender, molten, instr: instr.trim(), repair: lastRepair, action: barrier, caption: captionTail,
              pauseLog };
@@ -1432,14 +1538,20 @@ export function moltenLine({ register, cfg, state } = {}) {
   const holdsPause = (start, end) => [...pauseMap].some(([index, p]) => p.decision === null && start < index && index <= end);
 
   function reparse() {
+    const committed = items.slice(0, committedItems);
     const r = parse(viewTokens(), { flush: flushPending, frozen: committedTokens, settled: finalTokens,
                               bounds: [...segmentBounds].sort((a, b) => a - b),
-                              commits: items.slice(0, committedItems).map((it) => it.e), register: reg, cfg });
+                              commits: committed.map((it) => it.e),
+                              // "three-thirty" typed as written stays so below the fence
+                              unsplit: committed.filter((it) => it.kind === "word" && it.e - it.s === 1 && splitCompound(it.text)).map((it) => it.s),
+                              register: reg, cfg });
     items = r.items; pendingFrom = r.pendingFrom;
-    // a recognizer's period on a command ("Undo that.") is not a pause to review: never hold it
+    // a recognizer's period on a command ("Undo that.", "Correct Monday to
+    // Friday.", "Spell that S I O B H A N.") is not a pause to review: never hold it
     for (const [index, pause] of [...pauseMap]) {
       const it = pause.decision === null ? itemAt(index - 1) : null;
-      if (it && (it.kind === "key" || it.kind === "recase" || it.kind === "scratch")) pauseMap.delete(index);
+      if (it && (["key", "recase", "scratch", "correct"].includes(it.kind) || (it.kind === "respell" && it.mode === "replace")))
+        pauseMap.delete(index);
     }
   }
   function commitReady(now) {
@@ -1522,6 +1634,8 @@ export function moltenLine({ register, cfg, state } = {}) {
     if (!meant) return;
     if (heard.length > 1 && heard === heard.toUpperCase() && heard !== heard.toLowerCase()) meant = meant.toUpperCase();
     else if (/^\p{Lu}/u.test(heard) && !/^i(['’](m|ll|d|ve))?$/i.test(heard)) meant = meant.slice(0, 1).toUpperCase() + meant.slice(1);
+    if (meant.length > 1 && ".,!?;:".includes(meant.slice(-1)) && committedRender.slice(at + heard.length, at + heard.length + 1) === meant.slice(-1))
+      meant = meant.slice(0, -1);  // "Monday." corrected "to friday period": one period
     committedRender = committedRender.slice(0, at) + meant + committedRender.slice(at + heard.length);
     const shift = meant.length - heard.length;
     // a boundary inside the replaced words falls back to its start

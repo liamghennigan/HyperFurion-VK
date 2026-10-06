@@ -81,6 +81,23 @@ def _parse_cardinal(words: list[str]) -> Optional[int]:
     return total + current if seen_value else None
 
 
+# Words a recognizer joins with hyphens: "Twenty-five", "three-thirty",
+# "four-oh-two", "five-five-five-one-two-three-four".
+_CHAIN_WORDS = frozenset(_UNITS) | frozenset(_TENS) | {"hundred", "thousand", "oh"}
+
+
+def split_compound(token: str) -> Optional[list[str]]:
+    """A number a recognizer wrote with hyphens ("Twenty-five,") as the
+    words a speaker said ("Twenty", "five,"), its punctuation on the last;
+    None for anything else ("nine-ish", "twenty-first", "one-on-one")."""
+    body = token.rstrip(_PUNCT)
+    parts = body.split("-")
+    if len(parts) < 2 or any(part.lower() not in _CHAIN_WORDS for part in parts):
+        return None
+    parts[-1] += token[len(body):]
+    return parts
+
+
 def _parse_digit_sequence(words: list[str]) -> Optional[str]:
     """"one two seven" -> "127" — all words must be single digits."""
     if len(words) < 2 or any(word not in _DIGITS for word in words):
@@ -317,6 +334,8 @@ def parse_day(words: list[str]) -> Optional[int]:
     """"sixth" -> 6, "twenty first" -> 21, "thirtieth" -> 30; None unless
     a day of a month spoken as an ordinal."""
     words = [w.casefold() for w in words]
+    if len(words) == 1 and words[0].count("-") == 1:
+        words = words[0].split("-")  # "twenty-first", as a recognizer writes it
     if len(words) == 1 and words[0] in ORDINALS:
         return ORDINALS[words[0]]
     if (

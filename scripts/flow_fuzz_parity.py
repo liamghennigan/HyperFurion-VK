@@ -26,7 +26,10 @@ VOCAB = (
     "percent dollars and fifty cents pm am i quote unquote end said period comma new line "
     "bullet number heading scratch that spell n g x correct to cap uppercase select undo "
     "go left word emoji rocket point hundred thousand euros june first second graders "
-    "literal snake case user id dot com at example slash million dollars people double equals not less than value error type and greater than triple or um"
+    "literal snake case user id dot com at example slash million dollars people double equals not less than value error type and greater than triple or um "
+    # as a recognizer writes: capitals, its own stops, hyphens, quotes, the wake word
+    "Twenty-five three-thirty four-oh-two Monday. Friday. Correct Select \"previous word\". Emoji rocket. "
+    "Vk V K, run to do. List files. For I GitHub TODO six. four, Shivon. S I"
 ).split()
 
 

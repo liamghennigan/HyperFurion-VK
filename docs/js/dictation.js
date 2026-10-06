@@ -1,15 +1,21 @@
 // ═══ DICTATION — the product's forward lane, molten ════════════════════════
-// Every path — the in-tab speech model, your browser's speech engine, the
-// hosted xAI relay, and the scripted demo — feeds the same engine
-// (flow.js), the same way every provider feeds the daemon's. One engine
-// lives for one recording; each utterance the recognizer closes is a
-// final segment inside it. Words render molten, repair in place, freeze on
-// the stability window, honor the spoken grammar and the focused window's
-// register — and every keystroke lands on the board and in the window's
-// text field. "spell that …" swaps a word on screen; a navigation command
-// said on its own waits for the text to land, then presses its chord on
-// the board and moves the caret, exactly in the daemon's order.
-import { mic, micCap, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC, os } from "./env.js";
+// Every path — the in-tab speech model (the default), the hosted xAI relay
+// (opt-in, behind its sheet), your browser's own speech service (only when
+// you pick it, after the in-tab model could not run), and the scripted
+// demo — feeds the same engine (flow.js), the same way every provider
+// feeds the daemon's. One engine lives for one recording; each utterance
+// the recognizer closes is a final segment inside it. Words render molten,
+// repair in place, freeze when the utterance closes, honor the spoken
+// grammar and the focused window's register — and every keystroke lands
+// on the board and in the window's text field. "spell that …" swaps a word
+// on screen; a navigation command said on its own waits for the text to
+// land, then presses its chord on the board and moves the caret, exactly
+// in the daemon's order.
+//
+// Nothing happens on the visitor's behalf: when the in-tab model can't
+// run, the recording stops, the page says why, and the visitor chooses
+// what happens next. Nothing is typed that the visitor didn't say.
+import { $, mic, micCap, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC, os } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
 import { Ticker } from "./ticker.js";
@@ -25,15 +31,16 @@ import { keymap, chordsFor, label as navLabel } from "./nav.js";
 import { intentRequest, pageCommand } from "./intent.js";
 
 export const Dictation = (() => {
-  const SIM_LINES = [
-    { text: "dictated comma not typed em dash this sentence never touched a keyboard period" },
-    { text: "note to self colon cancel the RSI appointment", revise: { at: 6, wrong: "RSVP" } },
-    { text: "twenty three unread emails question mark later period" },
-  ];
   const D = { recording: false };
-  let engine = "none", rec = null, simIdx = 0;
+  let engine = "none";        // "local" | "relay" | "browser" — whatever the current recording uses
+  let rec = null;             // the browser's SpeechRecognition, when the visitor chose it
+  let browserChosen = false;  // the visitor picked the browser's speech service (for this page load)
+  let listening = false;      // audio is really being captured for recognition
+  let settling = false;       // stopped; the recognizer is still finishing what was said
+  let failed = false;         // this recording ended in a failure the page already explained
   let relay = null, relayT = 0, funneled = false;
   let local = null;           // the in-tab model session
+  let sigP = null;            // the mic acquisition for the current recording
   let line = null;            // the engine for the current recording
   let rawFinal = "", rawInterim = "";
   let guard = false;          // focus changed mid-dictation: typing is frozen
@@ -47,36 +54,127 @@ export const Dictation = (() => {
   // continues that text (a space, a capital only after a sentence end)
   let landing = null;         // { register, tail, when }
   const REJOIN_MS = 30000;
-  let seen = { scratches: 0, corrections: 0, pauses: 0 };  // for the hints strip and the status line
+  let seen = { scratches: 0, corrections: 0, pauses: 0, formats: 0 };  // for the hints strip and the status line
   Object.defineProperty(D, "engine", { get: () => engine });
 
   const liveFlow = () => settings.flowLive && settings.interim;
-  const wait = (ms) => new Promise((r) => setTimeout(r, reduced ? 0 : ms));
+  const wait = (ms) => new Promise((r) => setTimeout(r, reduced ? 0 : ms));   // an animation beat
+  const hold = (ms) => new Promise((r) => setTimeout(r, ms));                  // a speaker's pause, motion or not
   const log = (text, cls) => Window.log(text, cls);
+
+  // ── whose speech service: named plainly, with where the audio goes ──────
+  // Chrome's SpeechRecognition streams audio to Google, Edge's to
+  // Microsoft; Safari's goes through Apple's speech recognition, which may
+  // run on Apple's servers. Anything else is named generically.
+  const vendor = (() => {
+    const brands = ((navigator.userAgentData && navigator.userAgentData.brands) || []).map((b) => b.brand);
+    const ua = navigator.userAgent || "";
+    if (brands.includes("Microsoft Edge") || /\bEdg(A|iOS)?\//.test(ua)) return { service: "Edge's speech service", goes: "sends your audio to Microsoft" };
+    if (brands.includes("Google Chrome")) return { service: "Chrome's speech service", goes: "sends your audio to Google" };
+    if (/AppleWebKit/.test(ua) && /Apple/.test(navigator.vendor || "") && !brands.length && !/Chrome\/|Chromium/.test(ua))
+      return { service: "Safari's speech service", goes: "may send your audio to Apple" };
+    return { service: "your browser's speech service", goes: "may send your audio to your browser maker's servers" };
+  })();
 
   function engineLabel() {
     if (scripted) return ["scripted demo · nothing is listening", "sim"];
-    if (engine === "local") return ["Moonshine · " + (LocalSTT.device === "webgpu" ? "WebGPU" : "WASM") + " · in this tab", "live"];
-    if (engine === "loading") return ["loading Moonshine…", "live"];
+    if (engine === "local") {
+      if (LocalSTT.state === "ready")
+        return ["Moonshine · in this tab · " + (LocalSTT.device === "webgpu" ? "on your GPU (WebGPU)" : "on your CPU (WebAssembly)"), "live"];
+      if (LocalSTT.state === "loading")
+        return [(LocalSTT.pct != null ? "downloading Moonshine to this tab · " + LocalSTT.pct + "%" : "starting Moonshine in this tab") +
+                " · what you say now is typed once it's ready", "live"];
+      return ["", ""];
+    }
     if (engine === "relay") return ["xAI via relay · opt-in", "live"];
-    if (engine === "live") return ["browser speech engine", "live"];
-    if (engine === "trying") return ["listening…", "live"];
-    if (engine === "sim") return ["no speech engine · scripted stand-in", "sim"];
+    if (engine === "browser") return [vendor.service + " · " + vendor.goes + " · your choice", "live"];
     return ["", ""];
   }
-  function caption() { Window.setEngine(...engineLabel()); }
+  function caption() { Window.setEngine(...engineLabel()); capText(); }
+  // the big caption says what is really happening to your voice right now
+  function capText() {
+    if (!micCap) return;
+    let t = "Tap and speak";
+    if (D.recording) {
+      if (!listening) t = engine === "relay" ? "Connecting to the hosted engine…" : "Opening the microphone…";
+      else if (engine === "local" && LocalSTT.state !== "ready")
+        t = "Listening · the speech model is still loading" + (LocalSTT.pct != null ? " (" + LocalSTT.pct + "%)" : "…");
+      else t = "Listening… tap to stop";
+    } else if (settling) {
+      t = LocalSTT.state === "loading"
+        ? "Transcribing once the speech model is ready" + (LocalSTT.pct != null ? " (" + LocalSTT.pct + "%)" : "…")
+        : "Transcribing…";
+    }
+    micCap.textContent = t;
+  }
+  bus.on("stt:progress", () => { if (engine === "local" && (D.recording || settling)) caption(); });
 
   function setRecording(on) {
     D.recording = on;
     state.recording = on;   // the ticker's idle-park check reads this mirror
+    if (!on) listening = false;
     stopBtn.hidden = !on;
     mic.classList.toggle("live", on);
     mic.setAttribute("aria-pressed", String(on));
     document.title = on ? "● recording — " + baseTitle : baseTitle;
     favicon.href = on ? FAV_REC : FAV_IDLE;
     document.body.classList.toggle("recording", on);
-    if (micCap) micCap.textContent = on ? "Listening… tap to stop" : "Tap and speak";
+    capText();
   }
+
+  // ── when a speech engine can't run: say why, and let the visitor choose ─
+  // Nothing starts on its own. The browser's speech service is offered by
+  // name, with where it sends the audio, and starts only on that click.
+  const Choice = (() => {
+    const stage = $("stage");
+    if (!stage) return { show() {}, hide() {} };
+    const el = document.createElement("div");
+    el.id = "stt-choice"; el.className = "stt-choice";
+    el.style.cssText = "display:none;gap:12px;padding:14px 16px;border:1px solid var(--glass-line-2);border-radius:12px;background:var(--glass)";
+    const msg = document.createElement("p");
+    msg.id = "stt-choice-msg"; msg.setAttribute("role", "alert");
+    msg.style.cssText = "margin:0;font:14px/1.5 var(--sans);color:var(--sand-100)";
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;align-items:center";
+    const btn = (cls, text, fn) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = cls; b.textContent = text; b.style.whiteSpace = "normal"; b.style.textAlign = "left";
+      b.addEventListener("click", fn);
+      return b;
+    };
+    const useBrowser = btn("sbtn", "Use " + vendor.service + " — " + vendor.goes, () => {
+      browserChosen = true; hide(); start();
+    });
+    const useLocal = btn("sbtn", "Use the speech model in this tab instead", () => {
+      Demo.want = false; browserChosen = false;
+      const arm = $("relay-arm"); if (arm) arm.checked = false;
+      hide(); start();
+    });
+    const watch = btn("sbtn", "Watch the scripted demo", () => {
+      hide();
+      const a = $("autopilot"); if (a && a.getAttribute("aria-pressed") !== "true") a.click();
+    });
+    const dismiss = btn("textbtn", "dismiss", () => hide());
+    row.append(useBrowser, useLocal, watch, dismiss);
+    const det = document.createElement("details");
+    det.style.cssText = "font:12px/1.5 var(--mono);color:var(--sand-500)";
+    const sum = document.createElement("summary"); sum.textContent = "technical detail"; sum.style.cursor = "pointer";
+    const code = document.createElement("code"); code.style.cssText = "display:block;white-space:pre-wrap;word-break:break-word;margin-top:6px";
+    det.append(sum, code);
+    el.append(msg, row, det);
+    const hints = $("hints");
+    if (hints && hints.parentNode === stage) stage.insertBefore(el, hints); else stage.appendChild(el);
+
+    function show({ text, detail = "", browser = false, local: offerLocal = false }) {
+      useBrowser.hidden = !(browser && SR);
+      useLocal.hidden = !offerLocal;
+      code.textContent = detail; det.hidden = !detail; det.open = false;
+      el.style.display = "grid";
+      msg.textContent = text;
+    }
+    function hide() { el.style.display = "none"; }
+    return { show, hide };
+  })();
 
   // ── one render pipe: raw transcript -> engine -> the focused window ─────
   // live engines re-recognize or revise the whole utterance, so words stay
@@ -93,15 +191,25 @@ export const Dictation = (() => {
     const state0 = rejoinState();
     line = moltenLine({ register: Window.register(), cfg: live ? { ...settings, stabilityMs: Infinity } : settings, state: state0 });
     rawFinal = ""; rawInterim = ""; guard = false; busy = false;
-    seen = { scratches: 0, corrections: 0, pauses: 0 };
+    seen = { scratches: 0, corrections: 0, pauses: 0, formats: 0 };
     state.lastError = "";
     if (state0) log("continuing the last dictation · a space first" + (state0.capNext ? ", then a capital" : ""), "dim");
   }
   // the hints strip lights the command that just worked
+  const digits = (s) => (String(s || "").match(/\d/g) || []).length;
   function noticed(r) {
     if (!r) return;
     if (r.scratches > seen.scratches) { seen.scratches = r.scratches; bus.emit("flow:did", { kind: "scratch" }); }
-    if (r.corrections && r.corrections.length > seen.corrections) { seen.corrections = r.corrections.length; bus.emit("flow:did", { kind: "spell" }); }
+    if (r.corrections && r.corrections.length > seen.corrections) {
+      // "correct X to Y" and "spell that …" both fix a word: the later of
+      // the two commands in the transcript is the one that just acted
+      seen.corrections = r.corrections.length;
+      const t = raw().toLowerCase();
+      bus.emit("flow:did", { kind: t.lastIndexOf("correct ") > t.lastIndexOf("spell that") ? "correct" : "spell" });
+    }
+    // spoken numbers became digits ("twenty five percent" -> "25%")
+    const formats = Math.max(0, digits(r.frozen) + digits(r.molten) - digits(raw()));
+    if (formats > seen.formats) { seen.formats = formats; bus.emit("flow:did", { kind: "format" }); }
     if (r.pauseLog && r.pauseLog.length > seen.pauses) {
       // a period the recognizer put at a pause, revised by the next words
       const [before, after] = r.pauseLog[r.pauseLog.length - 1];
@@ -156,6 +264,19 @@ export const Dictation = (() => {
     const ms = settings.autoStopMs;
     if (ms > 0 && D.recording)
       autoStopT = setTimeout(() => { log("auto-stop: " + ms + " ms of silence", "dim"); stop(); }, ms);
+  }
+  // every recognizer feeds these two
+  function heardInterim(text) {
+    rawInterim = text;
+    state.mark = performance.now();
+    pump(); armAutoStop();
+    bus.emit("rec:interim", { text });
+  }
+  function heardFinal(text) {
+    state.mark = performance.now();
+    bus.emit("rec:final", { text });
+    closeUtterance(text);
+    armAutoStop();
   }
 
   // ── navigation: the text lands, then the chord, then the caret moves ────
@@ -259,120 +380,142 @@ export const Dictation = (() => {
     if (l === line) Typist.setTarget(l.peek());
   }
 
+  // ── a recording ─────────────────────────────────────────────────────────
+  // The in-tab model unless the visitor opted into the relay, or picked
+  // the browser's speech service after the model could not run here.
   function start() {
     if (D.recording) return;
+    if (settling) { log("still transcribing the last recording", "dim"); return; }
     cancelScript();
-    scripted = false;
+    Choice.hide();
+    scripted = false; failed = false;
+    if (Demo.armed()) { begin("relay"); startRelay(); return; }
+    if (browserChosen && SR) { begin("browser"); startBrowser(); return; }
+    if (!LocalSTT.supported()) {
+      Choice.show({
+        text: "This browser can't run the speech model here: it lacks microphone capture, Web Audio or WebAssembly. Nothing was recorded.",
+        browser: true,
+      });
+      return;
+    }
+    begin("local");
+    startLocal();
+  }
+  function begin(kind) {
+    engine = kind;
     sessionCommits = 0;
     newEngine(true);
     Typist.reset();
     setRecording(true);
     Window.setLatency(null);
-    const sigP = Signal.start();
+    sigP = Signal.start();
     Ticker.wake();
     // the stability clock ticks even between provider updates
     tickT = setInterval(tick, 350);
     armAutoStop();
-    if (Demo.armed()) {
-      engine = "relay";
-      caption();
-      bus.emit("rec:start", { engine });
-      startRelay(sigP);
-      return;
-    }
-    if (LocalSTT.supported()) {
-      engine = LocalSTT.state === "ready" ? "local" : "loading";
-      caption();
-      bus.emit("rec:start", { engine: "local" });
-      startLocal(sigP);
-      return;
-    }
-    bus.emit("rec:start", { engine });
-    startBrowser();
     caption();
+    bus.emit("rec:start", { engine: kind });
   }
 
-  // — the in-tab path: mic PCM → an open-source model on your GPU —
-  async function startLocal(sigP) {
+  // — the in-tab path: mic PCM → an open-source model, in this tab —
+  async function startLocal() {
+    const mine = sigP;
+    if (LocalSTT.state !== "ready") LocalSTT.load().catch(() => {});   // the download starts at the tap; failures land in the session
     try {
-      if (LocalSTT.state !== "ready") {
-        log("fetching Moonshine, once…", "dim");
-        await LocalSTT.load((loaded, total) => {
-          log("loading Moonshine " + Math.round(loaded / 1e6) + " / " + Math.round(total / 1e6) + " MB", "dim");
-        });
-      }
-      if (!D.recording) { Signal.stop(); return; }
-      await sigP;
-      if (!D.recording) { Signal.stop(); return; }
+      await mine;
+      if (!D.recording || sigP !== mine) { if (!D.recording) Signal.stop(); return; }
       const au = Signal.audio();
-      if (!au.stream) throw new Error("microphone not granted");
-      local = await LocalSTT.start(au.stream, {
-        onInterim(text) {
-          rawInterim = text;
-          state.mark = performance.now();
-          pump(); armAutoStop();
-          bus.emit("rec:interim", { text });
-        },
-        onFinal(text) {
-          state.mark = performance.now();
-          bus.emit("rec:final", { text });
-          closeUtterance(text);
-          armAutoStop();
-        },
-      });
-      engine = "local";
-      log("", "");
+      if (!au.stream) { micFail(); return; }
+      const session = await LocalSTT.start(au.stream, { onInterim: heardInterim, onFinal: heardFinal, onError: localFail });
+      if (!D.recording || sigP !== mine) { session.stop(); return; }
+      local = session;
+      listening = true;
       caption();
     } catch (err) {
-      localFail(err && err.message ? err.message : "unavailable");
+      localFail(err);
     }
   }
-  function localFail(msg) {
-    local = null;
-    state.lastError = "local model: " + msg;
-    log("local model failed: " + msg + " · using the browser engine", "err");
-    if (D.recording) { engine = "none"; startBrowser(); caption(); }
+  function localFail(err) {
+    if (failed) return;
+    failed = true;
+    const detail = err && err.message ? err.message : String(err || "");
+    state.lastError = "local model: " + detail;
+    const landed = sessionCommits > 0 || !!raw();
+    if (local) { const l = local; local = null; l.stop().catch(() => {}); }
+    if (D.recording) halt();
+    log("", "");
+    Choice.show({
+      text: (landed
+        ? "The speech model stopped working: " + LocalSTT.explain(err) + ". What it already typed stays; the rest wasn't transcribed."
+        : "The speech model couldn't start: " + LocalSTT.explain(err) + ". What you said wasn't transcribed.") +
+        " Your audio stayed in this tab.",
+      detail, browser: true,
+    });
   }
+  function micFail() {
+    failed = true;
+    const why = Signal.error();
+    state.lastError = "microphone: " + why;
+    if (D.recording) halt();
+    Choice.show({
+      text: why === "NotFoundError" ? "No microphone was found, so nothing was recorded."
+        : why === "unsupported" ? "This browser doesn't give pages microphone access here, so nothing was recorded."
+        : "Microphone access was blocked, so nothing was recorded. Allow the microphone for this page, then tap the mic again.",
+      detail: why,
+    });
+  }
+
+  // — the browser's own speech service: only after the visitor chose it —
   function startBrowser() {
-    if (SR) {
-      try {
-        rec = new SR();
-        rec.lang = settings.lang || "en-US";
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.onresult = (e) => {
-          let interim = "";
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            const r = e.results[i];
-            if (r.isFinal) { bus.emit("rec:final", { text: r[0].transcript }); closeUtterance(r[0].transcript); }
-            else interim += r[0].transcript;
-          }
-          if (engine !== "live") { engine = "live"; caption(); }
-          rawInterim = interim;
-          state.mark = performance.now();
-          pump();
-          armAutoStop();
-          bus.emit("rec:interim", { text: interim });
-        };
-        rec.onerror = () => { if (D.recording && engine !== "live") { engine = "sim"; caption(); } };
-        rec.onend = () => { if (D.recording && engine !== "live") { engine = "sim"; caption(); } };
-        rec.start();
-        engine = "trying";
-        return;
-      } catch { /* fall through to sim */ }
-    }
-    engine = "sim";
+    let fatal = "", restarts = 0;
+    const r = rec = new SR();
+    r.lang = settings.lang || "en-US";
+    r.continuous = true;
+    r.interimResults = true;
+    r.onstart = () => { if (rec === r && D.recording) { listening = true; caption(); } };
+    r.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) heardFinal(res[0].transcript);
+        else interim += res[0].transcript;
+      }
+      heardInterim(interim);
+    };
+    r.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") fatal = e.error || "error"; };
+    r.onend = () => {
+      if (rec !== r || !D.recording) return;
+      if (fatal) { browserFail(fatal); return; }
+      // the service closes a session after a quiet spell; you haven't stopped
+      if (restarts++ < 20) { try { r.start(); return; } catch {} }
+      stop();
+    };
+    try { r.start(); } catch (e) { browserFail(e && e.name ? e.name : "start"); }
+  }
+  function browserFail(code) {
+    if (failed) return;
+    failed = true;
+    state.lastError = "browser speech: " + code;
+    const why = code === "network" ? "it couldn't reach its servers"
+      : code === "not-allowed" || code === "service-not-allowed" ? "the browser didn't allow it (microphone or speech permission)"
+      : code === "audio-capture" ? "no microphone was available to it"
+      : code === "language-not-supported" ? "it doesn't support " + (settings.lang || "this language")
+      : "it ended with an error";
+    if (D.recording) halt();
+    browserChosen = false;
+    Choice.show({ text: vendor.service[0].toUpperCase() + vendor.service.slice(1) + " stopped: " + why + ".", detail: code, local: true });
   }
 
   // — the hosted-relay dictation path: mic PCM → relay → xai grok stt —
-  async function startRelay(sigP) {
+  async function startRelay() {
+    const mine = sigP;
     try {
-      await sigP;
+      await mine;
       // The user may have hit stop while the mic permission prompt was up:
       // release the now-arrived stream and never open the socket.
-      if (!D.recording) { Signal.stop(); return; }
+      if (!D.recording || sigP !== mine) { if (!D.recording) Signal.stop(); return; }
       const au = Signal.audio();
-      if (!au.stream || !au.ctx) throw new Error("microphone not granted");
+      if (!au.stream || !au.ctx) { micFail(); return; }
       const rate = Math.round(au.ctx.sampleRate);
       const ws = new WebSocket(Demo.wsBase + "/v1/demo/stt?sample_rate=" + rate +
         "&encoding=pcm&interim_results=true&language=" + encodeURIComponent((settings.lang || "en").slice(0, 2)));
@@ -392,33 +535,28 @@ export const Dictation = (() => {
         }
         ws.send(pcm.buffer);
       };
-      ws.onopen = () => { src.connect(proc); proc.connect(sink); sink.connect(au.ctx.destination); };
+      ws.onopen = () => {
+        src.connect(proc); proc.connect(sink); sink.connect(au.ctx.destination);
+        if (D.recording) { listening = true; caption(); }
+      };
       ws.onmessage = relayEvent;
-      ws.onerror = () => relayFail("connection failed");
+      ws.onerror = () => relayFail("the connection failed");
       ws.onclose = () => {
         if (!relay) return;
-        if (D.recording) relayFail("connection closed");
+        if (D.recording) relayFail("the connection closed");
         else relaySettle();  // audio.done sent; no more events are coming
       };
       caption();
     } catch (err) {
-      relayFail(err && err.message ? err.message : "unavailable");
+      relayFail(err && err.message ? err.message : "it couldn't start");
     }
   }
   function relayEvent(m) {
     if (!relay) return;
     let ev; try { ev = JSON.parse(m.data); } catch { return; }
     if (ev.type === "transcript.partial") {
-      state.mark = performance.now();
-      if (ev.is_final && ev.text) {
-        bus.emit("rec:final", { text: ev.text });
-        closeUtterance(ev.text);
-        armAutoStop();
-      } else {
-        rawInterim = ev.text || "";
-        pump(); armAutoStop();
-        bus.emit("rec:interim", { text: ev.text || "" });
-      }
+      if (ev.is_final && ev.text) heardFinal(ev.text);
+      else heardInterim(ev.text || "");
     } else if (ev.type === "transcript.done") {
       const t = String(ev.text || "");
       // the relay's closing transcript only matters if nothing was committed yet
@@ -430,7 +568,7 @@ export const Dictation = (() => {
     } else if (ev.type === "demo.limit") {
       log(ev.message, "dim");
     } else if (ev.type === "error") {
-      relayFail(ev.message || "error");
+      relayFail(ev.message || "it reported an error");
     }
   }
   function relayCleanup() {
@@ -449,22 +587,22 @@ export const Dictation = (() => {
     if (!relay) return;
     clearTimeout(relayT);
     relayCleanup();
-    settleLine().then((text) => { if (text) funnel(); else log("nothing recognized", "dim"); });
+    finish().then((text) => { if (text) funnel(); });
   }
   function relayFail(msg) {
     // NB: relay may be null here — a failure before the socket/nodes were
     // assigned (mic denied, WebSocket ctor threw). Clean up only if built.
     if (relay) relayCleanup();
     clearTimeout(relayT);
-    state.lastError = "hosted demo: " + msg;
-    log("hosted engine: " + msg + " · using the browser engine", "err");
-    if (D.recording) {
-      engine = "none";
-      startBrowser();
-      caption();
-    } else {
-      settleLine();
-    }
+    if (failed) return;
+    state.lastError = "hosted engine: " + msg;
+    if (!D.recording) { log("hosted engine: " + msg + " · its last words may be missing", "err"); finish(); return; }
+    failed = true;
+    halt();
+    Choice.show({
+      text: "The hosted engine stopped: " + msg + ". Nothing more was sent." + (sessionCommits || raw() ? " What it already typed stays." : ""),
+      local: true,
+    });
   }
   function funnel() {
     if (funneled) return;
@@ -527,8 +665,8 @@ export const Dictation = (() => {
     return text;
   }
 
-  function stop() {
-    if (!D.recording) return;
+  // the recording ends: mic off, timers off
+  function teardown() {
     setRecording(false);
     clearInterval(tickT);
     clearTimeout(autoStopT);
@@ -536,36 +674,47 @@ export const Dictation = (() => {
     if (rec) { try { rec.stop(); } catch {} rec = null; }
     state.dictations++;
     bus.emit("rec:stop", {});
-    const finish = async () => {
-      const text = await settleLine();
-      if (!text && !sessionCommits) {
-        if (engine === "sim" || engine === "trying" || engine === "none") {
-          log("nothing recognized · a scripted line stands in", "dim");
-          playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
-        } else log("nothing recognized", "dim");
-      }
-      caption();
-    };
+  }
+  // what landed lands; nothing is ever typed in place of what you said
+  async function finish() {
+    const text = await settleLine();
+    settling = false;
+    if (!text && !sessionCommits && !failed) log("Nothing was recognized in that recording.", "dim");
+    caption();
+    return text;
+  }
+  // a failure ends the recording at once
+  function halt() {
+    if (!D.recording) return;
+    teardown();
+    if (engine === "relay" && relay) relayCleanup();
+    finish();
+  }
+  function stop() {
+    if (!D.recording) return;
+    teardown();
     if (engine === "relay") {
       if (relay) relayFinish(); else finish();
       return;
     }
-    if (engine === "local" || engine === "loading") {
+    if (engine === "local") {
       const l = local; local = null;
-      if (l) l.stop().then(finish, finish); else finish();
+      if (l) { settling = true; caption(); l.stop().then(finish, finish); } else finish();
       return;
     }
-    // give a final result a beat to arrive, then settle the line
-    setTimeout(finish, engine === "live" || engine === "trying" ? 350 : 0);
+    // give the browser's final result a beat to arrive, then settle the line
+    setTimeout(finish, 350);
   }
 
-  // ── scripted playback: the autopilot and the no-engine fallback ─────────
+  // ── scripted playback: the autopilot and the hint chips ─────────────────
   // A scripted session replays interim snapshots through the same molten
   // engine a live session uses — deterministic, and shaped like the truth:
-  // one recording, several utterances, a pause between them.
+  // one recording, several utterances, a pause between them. With reduced
+  // motion each utterance lands whole; the pauses between them stay.
   // script: { text, revise } for one utterance, or { utterances: [...] }.
   async function playScript(scr, opts = {}) {
     cancelScript();
+    Choice.hide();
     const utterances = scr.utterances || [{ text: scr.text, revise: scr.revise || null }];
     const token = { live: true };
     script = { cancel: () => { token.live = false; } };
@@ -576,20 +725,21 @@ export const Dictation = (() => {
     Typist.reset();
     const stopped = () => !token.live;
     for (const u of utterances) {
-      if (u.press) { await humanPress(u.press); await wait(u.pause || 700); if (stopped()) return; continue; }
+      if (u.press) { await humanPress(u.press); await hold(u.pause || 700); if (stopped()) return; continue; }
       const compiled = compileScript(u.text, { revise: u.revise || null });
-      if (reduced || !liveFlow()) { closeUtterance(compiled.final); continue; }
-      let t0 = performance.now();
-      for (const step of compiled.steps) {
-        await wait(Math.max(0, step.t - (performance.now() - t0)));
+      if (!reduced && liveFlow()) {
+        const t0 = performance.now();
+        for (const step of compiled.steps) {
+          await wait(Math.max(0, step.t - (performance.now() - t0)));
+          if (stopped()) return;
+          rawInterim = step.text; pump();
+        }
+        await wait(560);
         if (stopped()) return;
-        rawInterim = step.text; pump();
       }
-      await wait(560);
-      if (stopped()) return;
       closeUtterance(compiled.final);
-      while (busy && !stopped()) await wait(50);   // a chord lands before the next words
-      await wait(u.pause || 900);
+      while (busy && !stopped()) await hold(50);   // a chord lands before the next words
+      await hold(u.pause || 900);
       if (stopped()) return;
     }
     const text = await settleLine();
@@ -617,8 +767,8 @@ export const Dictation = (() => {
   D.toggle = () => (D.recording ? stop() : start());
   // scripted typing into the focused window — the autopilot uses this;
   // it ends in the same type:text event real dictation does
-  D.simulate = (scr, opts) => { if (!D.recording) return playScript(scr, opts); return Promise.resolve(""); };
-  D.busy = () => D.recording || script !== null;
+  D.simulate = (scr, opts) => { if (!D.recording && !settling) return playScript(scr, opts); return Promise.resolve(""); };
+  D.busy = () => D.recording || settling || script !== null;
   D.cancelScript = cancelScript;
   // the focus guard: the window calls this when focus moves mid-dictation
   D.guard = () => {

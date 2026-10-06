@@ -41,6 +41,7 @@ from typing import Optional
 from voice_keyboard.flow import pauses
 from voice_keyboard.flow.grammar import Grammar, Item
 from voice_keyboard.flow.nav import FRESH_FIELD, GLUED
+from voice_keyboard.flow.numbers import split_compound
 from voice_keyboard.flow.code import flush_code
 from voice_keyboard.flow.registers import (
     Register,
@@ -371,7 +372,8 @@ class FlowEngine:
     def caption(self) -> str:
         """The uncommitted tail for the overlay's live caption."""
         if self._pending_is_instruction():
-            spoken = " ".join(self._tokens[self._pending_from + 1:])
+            wake = self._grammar.wake_at([token.casefold().strip(".,!?;:") for token in self._tokens], self._pending_from)
+            spoken = " ".join(self._tokens[self._pending_from + wake:])
             return f"⌁ {spoken}…" if spoken else "⌁ listening for instruction…"
         tail = " ".join(self._view_tokens()[self._committed_tokens:])
         return tail
@@ -465,7 +467,7 @@ class FlowEngine:
     def _pending_is_instruction(self) -> bool:
         if self._pending_from is None or self._pending_from >= len(self._tokens):
             return False
-        return self._grammar.is_wake_word(self._tokens[self._pending_from])
+        return self._grammar.starts_instruction(self._tokens, self._pending_from)
 
     def _view_tokens(self) -> list[str]:
         """The tokens as they should read: each pause's punctuation (and the
@@ -572,13 +574,19 @@ class FlowEngine:
         )
 
     def _reparse(self) -> None:
+        committed = self._items[:self._committed_items]
         result = self._grammar.parse(
             self._view_tokens(),
             flush=self._flush_pending,
             frozen=self._committed_tokens,
             settled=self._final_tokens,
             bounds=tuple(sorted(self._segment_bounds)),
-            commits=tuple(item.span[1] for item in self._items[:self._committed_items]),
+            commits=tuple(item.span[1] for item in committed),
+            # "three-thirty" typed as written stays so below the fence
+            unsplit=tuple(
+                item.span[0] for item in committed
+                if item.kind == "word" and item.span[1] - item.span[0] == 1 and split_compound(item.text)
+            ),
         )
         if result.items[:self._committed_items] != self._items[:self._committed_items]:
             # Deterministic parsing plus the frozen fence should make this
@@ -586,11 +594,15 @@ class FlowEngine:
             logger.warning("flow: committed items changed under reparse")
         self._items = result.items
         self._pending_from = result.pending_from
-        # "Undo that." / "Cap that." / "Scratch that.": a recognizer's period
-        # on a command is not a sentence pause to review — never hold it.
+        # "Undo that." / "Cap that." / "Scratch that." / "Correct Monday to
+        # Friday." / "Spell that S I O B H A N.": a recognizer's period on a
+        # command is not a sentence pause to review — never hold it.
         for index in [i for i, pause in self._pauses.items() if pause.decision is None]:
             item = self._item_at(index - 1)
-            if item is not None and item.kind in ("key", "recase", "scratch"):
+            if item is not None and (
+                item.kind in ("key", "recase", "scratch", "correct")
+                or (item.kind == "respell" and item.mode == "replace")
+            ):
                 del self._pauses[index]
 
     def _effective_required_stability(self) -> int:
@@ -764,6 +776,8 @@ class FlowEngine:
             meant = meant.upper()
         elif heard[:1].isupper() and not _PRONOUN_I.fullmatch(heard):
             meant = meant[:1].upper() + meant[1:]
+        if len(meant) > 1 and meant[-1] in ".,!?;:" and self._committed_render[match.end():match.end() + 1] == meant[-1]:
+            meant = meant[:-1]  # "Monday." corrected "to friday period": one period
         at = match.start()
         self._committed_render = self._committed_render[:at] + meant + self._committed_render[match.end():]
         shift = len(meant) - len(heard)

@@ -5379,7 +5379,7 @@
    ],
    [
     "final",
-    "version 12. then 4. 56",
+    "version 12. then 4 56",
     "",
     "",
     0,
@@ -6301,6 +6301,628 @@
   ]
  },
  {
+  "name": "a hyphenated number folds like the spoken words",
+  "register": "prose",
+  "segments": [
+   "Twenty-five percent by October sixth."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "25% by October 6."
+   ],
+   [
+    "final",
+    "25% by October 6.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a hyphenated number that does not fold stays as written",
+  "register": "prose",
+  "segments": [
+   "Twenty-five people came on June twenty-first.",
+   "I'm twenty-five, and fifty-fifty sure."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Twenty-five people came on June 21."
+   ],
+   [
+    "screen",
+    "Twenty-five people came on June 21. I'm twenty-five, and fifty-fifty sure."
+   ],
+   [
+    "final",
+    "Twenty-five people came on June 21. I'm twenty-five, and fifty-fifty sure.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "hyphenated times, rooms, years and phone numbers",
+  "register": "prose",
+  "segments": [
+   "Meet at three-thirty PM in room four-oh-two.",
+   "Call five-five-five-one-two-three-four.",
+   "Born in nineteen eighty-four, back in twenty twenty-six with twenty-twenty vision."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 3:30 PM in room 402."
+   ],
+   [
+    "screen",
+    "Meet at 3:30 PM in room 402. Call 555-1234."
+   ],
+   [
+    "screen",
+    "Meet at 3:30 PM in room 402. Call 555-1234. Born in 1984, back in 2026 with twenty-twenty vision."
+   ],
+   [
+    "final",
+    "Meet at 3:30 PM in room 402. Call 555-1234. Born in 1984, back in 2026 with twenty-twenty vision.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a phone number ends on the recognizer's stop",
+  "register": "prose",
+  "segments": [
+   "Call five five five one two three four.",
+   "Or five five five one two three four, then hang up."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call 555-1234."
+   ],
+   [
+    "screen",
+    "Call 555-1234. Or 555-1234, then hang up."
+   ],
+   [
+    "final",
+    "Call 555-1234. Or 555-1234, then hang up.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a hyphenated number in a terminal",
+  "register": "terminal",
+  "segments": [
+   "Twenty-three failed tests, rerun the flaky ones."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "23 failed tests, rerun the flaky ones"
+   ],
+   [
+    "final",
+    "23 failed tests, rerun the flaky ones",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct takes no stop from the recognizer",
+  "register": "prose",
+  "segments": [
+   "The launch is on Monday period.",
+   "We ship at noon period.",
+   "Correct Monday to Friday."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "The launch is on Monday."
+   ],
+   [
+    "screen",
+    "The launch is on Monday. We ship at noon."
+   ],
+   [
+    "screen",
+    "The launch is on Friday. We ship at noon."
+   ],
+   [
+    "final",
+    "The launch is on Friday. We ship at noon.",
+    "",
+    "",
+    0,
+    [
+     [
+      "Monday",
+      "Friday"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct mid-sentence takes no stop from the recognizer",
+  "register": "prose",
+  "segments": [
+   "The launch on Monday is confirmed.",
+   "Correct Monday to Friday."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The launch on Monday is confirmed."
+   ],
+   [
+    "screen",
+    "The launch on Friday is confirmed."
+   ],
+   [
+    "final",
+    "The launch on Friday is confirmed.",
+    "",
+    "",
+    0,
+    [
+     [
+      "Monday",
+      "Friday"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct keeps a spoken period after the recognizer's",
+  "register": "prose",
+  "segments": [
+   "See you Monday.",
+   "Correct Monday to Friday period."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See you Monday."
+   ],
+   [
+    "screen",
+    "See you Friday."
+   ],
+   [
+    "final",
+    "See you Friday.",
+    "",
+    "",
+    0,
+    [
+     [
+      "Monday",
+      "Friday"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "a quoted caret command still acts",
+  "register": "prose",
+  "segments": [
+   "Ship it on Friday.",
+   "Select \"Previous Word\".",
+   "Monday period."
+  ],
+  "options": {
+   "nav": true,
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "Ship it on Friday."
+   ],
+   [
+    "action",
+    "select:word:left",
+    1,
+    "Ship it on Friday."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Monday."
+   ],
+   [
+    "final",
+    "Monday.",
+    "Ship it on Friday.",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a quoted command inside a sentence types as said",
+  "register": "prose",
+  "segments": [
+   "I said \"select previous word\" twice."
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "I said \"select previous word\" twice."
+   ],
+   [
+    "final",
+    "I said \"select previous word\" twice.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an emoji said alone takes no stop",
+  "register": "prose",
+  "segments": [
+   "We launched today.",
+   "Emoji rocket.",
+   "Ship it emoji rocket.",
+   "Emoji fire! Nice."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "We launched today."
+   ],
+   [
+    "screen",
+    "We launched today. 🚀"
+   ],
+   [
+    "screen",
+    "We launched today. 🚀 Ship it 🚀."
+   ],
+   [
+    "screen",
+    "We launched today. 🚀 Ship it 🚀. 🔥 Nice."
+   ],
+   [
+    "final",
+    "We launched today. 🚀 Ship it 🚀. 🔥 Nice.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell that a name with the recognizer's capitals",
+  "register": "prose",
+  "segments": [
+   "I'll send it to Shivon.",
+   "Spell that S I O B H A N."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I'll send it to Shivon."
+   ],
+   [
+    "screen",
+    "I'll send it to Siobhan."
+   ],
+   [
+    "final",
+    "I'll send it to Siobhan.",
+    "",
+    "",
+    0,
+    [
+     [
+      "Shivon",
+      "Siobhan"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell that a name as scripted",
+  "register": "prose",
+  "segments": [
+   "i'll send it to Shivon",
+   "spell that s i o b h a n"
+  ],
+  "options": {
+   "nav": true,
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I'll send it to Shivon"
+   ],
+   [
+    "screen",
+    "I'll send it to Siobhan"
+   ],
+   [
+    "final",
+    "I'll send it to Siobhan",
+    "",
+    "",
+    0,
+    [
+     [
+      "Shivon",
+      "Siobhan"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "python drops the recognizer's capitals and stops",
+  "register": "python",
+  "segments": [
+   "For i in range ten colon.",
+   "Print i close paren."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range(10):"
+   ],
+   [
+    "screen",
+    "for i in range(10): print(i)"
+   ],
+   [
+    "final",
+    "for i in range(10): print(i)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "javascript drops the recognizer's capitals and stops",
+  "register": "javascript",
+  "segments": [
+   "Const total equals count plus one."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "const total = count +"
+   ],
+   [
+    "final",
+    "const total = count + 1",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "shell drops the recognizer's capitals and stops",
+  "register": "shell",
+  "segments": [
+   "List files pipe grep dash i error.",
+   "Git status. Then git diff?"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "list files | grep -i error"
+   ],
+   [
+    "screen",
+    "list files | grep -i error git status then git diff"
+   ],
+   [
+    "final",
+    "list files | grep -i error git status then git diff",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a terminal keeps spoken stops and spelled capitals",
+  "register": "terminal",
+  "segments": [
+   "Echo hello GitHub period",
+   "Grep TODO. I think so!",
+   "Cd dot dot.",
+   "Say literal Period."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "echo hello GitHub."
+   ],
+   [
+    "screen",
+    "echo hello GitHub. grep TODO I think so"
+   ],
+   [
+    "screen",
+    "echo hello GitHub. grep TODO I think so cd"
+   ],
+   [
+    "screen",
+    "echo hello GitHub. grep TODO I think so cd dot dot say Period"
+   ],
+   [
+    "final",
+    "echo hello GitHub. grep TODO I think so cd dot dot say Period",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "the wake word as a recognizer writes it",
+  "register": "prose",
+  "segments": [
+   "I think it works now.",
+   "Vk make that formal."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think it works now."
+   ],
+   [
+    "screen",
+    "I think it works now."
+   ],
+   [
+    "final",
+    "I think it works now.",
+    "",
+    "make that formal.",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "the wake word with dots",
+  "register": "prose",
+  "segments": [
+   "I think it works now.",
+   "V.K., make that formal."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think it works now."
+   ],
+   [
+    "screen",
+    "I think it works now."
+   ],
+   [
+    "final",
+    "I think it works now.",
+    "",
+    "make that formal.",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "the wake word in two letters",
+  "register": "shell",
+  "segments": [
+   "V K, run find every to do."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "run find every to do.",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a name or a sound-alike is never the wake word",
+  "register": "prose",
+  "segments": [
+   "Tell Vicky I said hi.",
+   "Bk is closed, decay too."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Tell Vicky I said hi."
+   ],
+   [
+    "screen",
+    "Tell Vicky I said hi. Bk is closed, decay too."
+   ],
+   [
+    "final",
+    "Tell Vicky I said hi. Bk is closed, decay too.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "pause · a pause before and joins the sentence",
   "register": "prose",
   "segments": [
@@ -6611,15 +7233,15 @@
   "events": [
    [
     "screen",
-    "cd the."
+    "cd the"
    ],
    [
     "screen",
-    "cd the. And then ls"
+    "cd the and then ls"
    ],
    [
     "final",
-    "cd the. And then ls",
+    "cd the and then ls",
     "",
     "",
     0,
@@ -8458,6 +9080,315 @@
     "That is done. Next the docs.",
     "",
     "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a recognizer's capitals and stops in a python stream",
+  "register": "python",
+  "steps": [
+   [
+    0.0,
+    "For",
+    "interim"
+   ],
+   [
+    0.3,
+    "For i",
+    "interim"
+   ],
+   [
+    0.6,
+    "For i in range",
+    "interim"
+   ],
+   [
+    0.9,
+    "For i in range ten",
+    "interim"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    2.8,
+    "For i in range ten colon.",
+    "final"
+   ],
+   [
+    3.2,
+    "For i in range ten colon. Print",
+    "interim"
+   ],
+   [
+    3.5,
+    "For i in range ten colon. Print i.",
+    "interim"
+   ],
+   [
+    3.8,
+    "For i in range ten colon. Print i.",
+    "interim"
+   ],
+   [
+    5.5,
+    "tick"
+   ],
+   [
+    6.0,
+    "For i in range ten colon. Print i close paren.",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for"
+   ],
+   [
+    "screen",
+    "for i"
+   ],
+   [
+    "screen",
+    "for i in range("
+   ],
+   [
+    "screen",
+    "for i in range("
+   ],
+   [
+    "screen",
+    "for i in range("
+   ],
+   [
+    "screen",
+    "for i in range(10):"
+   ],
+   [
+    "screen",
+    "for i in range(10): print("
+   ],
+   [
+    "screen",
+    "for i in range(10): print(i"
+   ],
+   [
+    "screen",
+    "for i in range(10): print(i"
+   ],
+   [
+    "screen",
+    "for i in range(10): print(i"
+   ],
+   [
+    "screen",
+    "for i in range(10): print(i)"
+   ],
+   [
+    "final",
+    "for i in range(10): print(i)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an emoji said alone commits early without its stop",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "We launched today.",
+    "final"
+   ],
+   [
+    0.4,
+    "We launched today. Emoji",
+    "interim"
+   ],
+   [
+    0.8,
+    "We launched today. Emoji rocket.",
+    "interim"
+   ],
+   [
+    1.1,
+    "We launched today. Emoji rocket.",
+    "interim"
+   ],
+   [
+    1.4,
+    "tick"
+   ],
+   [
+    2.0,
+    "We launched today. Emoji rocket.",
+    "final"
+   ]
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "We launched today."
+   ],
+   [
+    "screen",
+    "We launched today."
+   ],
+   [
+    "screen",
+    "We launched today. 🚀"
+   ],
+   [
+    "screen",
+    "We launched today. 🚀"
+   ],
+   [
+    "screen",
+    "We launched today. 🚀"
+   ],
+   [
+    "screen",
+    "We launched today. 🚀"
+   ],
+   [
+    "final",
+    "We launched today. 🚀",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a hyphenated number in a stream",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "Twenty-five",
+    "interim"
+   ],
+   [
+    0.3,
+    "Twenty-five percent",
+    "interim"
+   ],
+   [
+    0.6,
+    "Twenty-five percent by October",
+    "interim"
+   ],
+   [
+    0.9,
+    "Twenty-five percent by October sixth.",
+    "interim"
+   ],
+   [
+    2.6,
+    "tick"
+   ],
+   [
+    3.0,
+    "Twenty-five percent by October sixth.",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "25% by October"
+   ],
+   [
+    "screen",
+    "25% by"
+   ],
+   [
+    "screen",
+    "25% by"
+   ],
+   [
+    "screen",
+    "25% by October 6."
+   ],
+   [
+    "final",
+    "25% by October 6.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "the wake word split in two in a stream",
+  "register": "shell",
+  "steps": [
+   [
+    0.0,
+    "V",
+    "interim"
+   ],
+   [
+    0.3,
+    "V K,",
+    "interim"
+   ],
+   [
+    0.6,
+    "V K, run find",
+    "interim"
+   ],
+   [
+    1.0,
+    "V K, run find every to do.",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "v"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "run find every to do.",
     0,
     []
    ]
