@@ -26,6 +26,7 @@ _TENS = {
 _DIGITS = {word: value for word, value in _UNITS.items() if value <= 9}
 
 NUMBER_WORDS = set(_UNITS) | set(_TENS) | {"hundred", "thousand", "and", "point"}
+DIGIT_WORDS = frozenset(_DIGITS)
 
 _PUNCT = ".,!?;:"
 
@@ -167,17 +168,26 @@ _MERIDIEM = {"am": "AM", "a.m": "AM", "pm": "PM", "p.m": "PM"}
 
 
 def _clock(words: list[str]) -> Optional[str]:
-    """"three" -> "3", "three thirty five" -> "3:35"; None unless an hour
-    one..twelve, then nothing or minutes ten..fifty-nine."""
+    """"three" -> "3", "three thirty five" -> "3:35", "three oh five" ->
+    "3:05"; None unless an hour one..twelve, then nothing, "oh" and a
+    digit, or minutes ten..fifty-nine."""
     if not words or words[0] not in _UNITS or not 1 <= _UNITS[words[0]] <= 12:
         return None
     hour = _UNITS[words[0]]
     if len(words) == 1:
         return str(hour)
+    if len(words) == 3 and words[1] == "oh" and words[2] in _DIGITS:
+        return f"{hour}:0{_DIGITS[words[2]]}"
     minutes = _parse_cardinal(words[1:])
     if minutes is None or not 10 <= minutes <= 59 or words[1] == "and":
         return None
     return f"{hour}:{minutes:02d}"
+
+
+def _ascii_number(token: str) -> bool:
+    """"25", "2.5": ASCII digits only (str.isdigit takes "٢٥" and "²")."""
+    whole, _, frac = token.partition(".")
+    return bool(whole) and all(c in "0123456789" for c in whole + frac)
 
 
 def fold_unit(words: list[str], unit: str) -> Optional[str]:
@@ -191,7 +201,7 @@ def fold_unit(words: list[str], unit: str) -> Optional[str]:
     if unit in _MERIDIEM:
         clock = _clock(words)
         return f"{clock} {_MERIDIEM[unit]}" if clock else None
-    if len(words) == 1 and words[0].replace(".", "", 1).isdigit() and words[0][0].isdigit():
+    if len(words) == 1 and _ascii_number(words[0]):
         amount = words[0]
     elif "point" in words or _parse_cardinal(words) is not None:
         amount = parse_number_run(words)
@@ -217,6 +227,20 @@ ORDINALS = {
 }
 
 
+_MONTH_DAYS = {
+    "january": 31, "february": 29, "april": 30, "june": 30, "july": 31, "august": 31,
+    "september": 30, "october": 31, "november": 30, "december": 31,
+}
+# An ordinal that starts a noun phrase, not a day: "september second graders".
+NOT_A_DAY_AFTER = frozenset(
+    "grader graders grade half quarter time times place round floor class year".split()
+)
+
+
+def month_days(month: str) -> int:
+    return _MONTH_DAYS.get(month.casefold(), 31)
+
+
 def parse_day(words: list[str]) -> Optional[int]:
     """"sixth" -> 6, "twenty first" -> 21, "thirtieth" -> 30; None unless
     a day of a month spoken as an ordinal."""
@@ -240,9 +264,15 @@ def fold_digits(words: list[str]) -> Optional[str]:
     one two three four" -> "555-1234", ten -> "555-123-4567", other
     lengths joined. Fewer stay words (counting, "one two three go")."""
     words = [w.casefold() for w in words]
-    if len(words) < PHONE_MIN_DIGITS or any(w not in _DIGITS for w in words):
+    if len(words) < PHONE_MIN_DIGITS or words[0] == "oh":
         return None
-    digits = "".join(str(_DIGITS[w]) for w in words)
+    if any(w not in _DIGITS and w != "oh" for w in words):
+        return None  # "oh" reads as zero inside a number: "five five five oh one"
+    values = [_DIGITS.get(w, 0) for w in words]
+    steps = {b - a for a, b in zip(values, values[1:])}
+    if steps in ({1}, {-1}):
+        return None  # counting, not a number: "one two three four five six seven"
+    digits = "".join(str(v) for v in values)
     if len(digits) == 7:
         return f"{digits[:3]}-{digits[3:]}"
     if len(digits) == 10:

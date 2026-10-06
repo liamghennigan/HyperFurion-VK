@@ -20,10 +20,13 @@ from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import (
     NUMBER_WORDS,
     DATE_MONTHS,
+    DIGIT_WORDS,
+    NOT_A_DAY_AFTER,
     UNIT_WORDS,
     convert_numbers,
     fold_digits,
     fold_unit,
+    month_days,
     parse_cardinal,
     parse_day,
 )
@@ -221,6 +224,11 @@ def _address_part(core: str) -> bool:
 
 def _core(token: str) -> str:
     return token.casefold().strip(_PUNCT_STRIP)
+
+
+def _clean(token: str) -> bool:
+    """No punctuation attached at either end ("five," "...five")."""
+    return token.strip(_PUNCT_STRIP) == token
 
 
 def _phrase_tokens(phrase: str) -> tuple[str, ...]:
@@ -693,29 +701,39 @@ class Grammar:
                 pending_from = number_pending
         elif self._units_on:
             items, pending_from = self._fold_units(
-                items, frozen=frozen, item_end=item_end, pending_from=pending_from
+                items, frozen=frozen, item_end=item_end, pending_from=pending_from,
+                flush=flush, settled=settled,
             )
 
         return ParseResult(items=items, pending_from=pending_from)
 
     @staticmethod
-    def _date(items: list[Item], at: int) -> Optional[tuple[str, int]]:
+    def _date(items: list[Item], at: int, check_after: bool = True) -> Optional[tuple[str, int]]:
         """"october sixth" at `at` -> ("October 6", index of the day's last
-        word), or None. The day's trailing punctuation is kept."""
+        word), or None. The day's trailing punctuation is kept; a day the
+        month doesn't have, or an ordinal starting a noun phrase
+        ("september second graders"), is not a date."""
         month = items[at].text
-        if month.rstrip(".,!?;:") != month or month.casefold() not in DATE_MONTHS:
+        if not _clean(month) or month.casefold() not in DATE_MONTHS:
             return None
         for size in (2, 1):
             last = at + size
             if last >= len(items) or any(it.kind != "word" for it in items[at + 1:last + 1]):
                 continue
             words = [it.text for it in items[at + 1:last + 1]]
-            if any(w.rstrip(".,!?;:") != w for w in words[:-1]):
+            if any(not _clean(w) for w in words[:-1]) or words[-1].lstrip(_PUNCT_STRIP) != words[-1]:
                 continue
             day = parse_day([_core(w) for w in words])
-            if day is not None:
-                suffix = words[-1][len(words[-1].rstrip(".,!?;:")):]
-                return f"{month[:1].upper()}{month[1:]} {day}{suffix}", last
+            if day is None or day > month_days(month):
+                continue
+            after = items[last + 1] if last + 1 < len(items) else None
+            if (
+                check_after and after is not None and after.kind == "word" and _clean(words[-1])
+                and _core(after.text) in NOT_A_DAY_AFTER
+            ):
+                return None
+            suffix = words[-1][len(words[-1].rstrip(_PUNCT_STRIP)):]
+            return f"{month[:1].upper()}{month[1:]} {day}{suffix}", last
         return None
 
     @staticmethod
@@ -725,12 +743,13 @@ class Grammar:
             return None
         end = at + 1
         while (
-            end < len(items) and items[end].kind == "word"
-            and items[end].text.rstrip(".,!?;:") == items[end].text
+            end < len(items) and items[end].kind == "word" and _clean(items[end].text)
             and _core(items[end].text) in NUMBER_WORDS - {"and", "point", "hundred", "thousand"}
         ):
             end += 1
         if end == at + 1 or end >= len(items) or items[end].kind != "word":
+            return None
+        if items[end].text.lstrip(_PUNCT_STRIP) != items[end].text:
             return None
         if _core(items[end].text) not in ("cent", "cents"):
             return None
@@ -739,80 +758,121 @@ class Grammar:
 
     @staticmethod
     def _fold_units(
-        items: list[Item], *, frozen: int, item_end=None, pending_from: Optional[int] = None
+        items: list[Item],
+        *,
+        frozen: int,
+        item_end=None,
+        pending_from: Optional[int] = None,
+        flush: bool = False,
+        settled: int = 0,
     ) -> tuple[list[Item], Optional[int]]:
-        """Fold a spoken number and the unit right after it into one word:
-        "twenty five percent" -> "25%". A number run is held back only
-        while the words right after it are ("percent" might still become
-        "percent sign"); nothing behind the fence changes: a run committed
-        as words stays words."""
+        """Prose folds of a spoken number: a unit right after it ("twenty
+        five percent" -> "25%", "three pm" -> "3 PM"), a month before an
+        ordinal ("october sixth" -> "October 6"), or seven or more digits
+        read one by one ("555-1234").
+
+        Nothing behind the fence changes: a run that starts there ends
+        with the committed item it starts in, so it folds exactly as it
+        was committed (as one token, or not at all). At the molten tail a
+        run is held back while it might still grow or meet its unit: a
+        digit run until it ends, a number before a pending word ("percent"
+        might become "percent sign"), a time before "am" until the next
+        word says it isn't the verb ("which one am I")."""
         result: list[Item] = []
+        size = len(items)
+        tail_open = not flush
+
+        def molten(at: int) -> bool:
+            return tail_open and at >= frozen and at >= settled
+
         index = 0
-        while index < len(items):
+        while index < size:
             item = items[index]
-            date = Grammar._date(items, index) if item.kind == "word" else None
-            if date is not None and (
-                item.span[0] >= frozen
-                or (item_end is not None and items[date[1]].span[1] <= item_end(item.span[0]))
-            ):
+            committed = item.span[0] < frozen
+            limit = (item_end(item.span[0]) if item_end is not None else frozen) if committed else None
+
+            def inside(it: Item) -> bool:
+                return limit is None or it.span[1] <= limit
+
+            # a committed date was decided when it was typed: the noun check
+            # ran then ("june first" + "graders" later stays June 1)
+            date = Grammar._date(items, index, check_after=not committed) if item.kind == "word" else None
+            if date is not None and not committed and date[1] == size - 1 and molten(items[date[1]].span[0]):
+                return result, item.span[0]  # the next word says date or noun ("second graders")
+            if date is not None and inside(items[date[1]]):
                 result.append(Item(kind="word", text=date[0], span=(item.span[0], items[date[1]].span[1])))
                 index = date[1] + 1
                 continue
+
+            # The run: number words with nothing attached ("five," ends a
+            # thought), never starting on glue ("and", "oh"), never ending
+            # on it ("five and percent"), never crossing the fence.
             end = index
-            # number words with nothing attached ("five," ends a thought)
             while (
-                end < len(items) and items[end].kind == "word"
-                and items[end].text.rstrip(".,!?;:") == items[end].text
-                and _core(items[end].text) in NUMBER_WORDS
+                end < size and items[end].kind == "word" and _clean(items[end].text)
+                and inside(items[end])
+                and (_core(items[end].text) in NUMBER_WORDS or (end > index and _core(items[end].text) == "oh"))
             ):
                 end += 1
-            if end > index and _core(item.text) in ("and", "point"):
-                end = index + 1  # glue only joins a number already begun
+            if end > index and _core(item.text) == "and":
+                end = index
+            while end > index and _core(items[end - 1].text) in ("and", "point", "oh"):
+                end -= 1
             # one digit token from the recognizer is a run too: "25 percent"
-            if end == index and item.kind == "word" and item.text[:1].isdigit():
+            if end == index and item.kind == "word" and _clean(item.text) and item.text[:1] in "0123456789":
                 end = index + 1
-            if end > index and _core(item.text) not in ("and", "point") and end < len(items):
-                unit = items[end]
-                unit_core = _core(unit.text)
-                verb = (
-                    unit_core == "am" and end + 1 < len(items)
-                    and items[end + 1].kind == "word" and _core(items[end + 1].text) == "i"
-                )
-                if unit.kind == "word" and unit_core in UNIT_WORDS and not verb and (
-                    item.span[0] >= frozen
-                    or (item_end is not None and unit.span[1] <= item_end(item.span[0]))
-                ):
-                    folded = fold_unit([_core(it.text) for it in items[index:end]], unit_core)
-                    cents = Grammar._cents(items, end + 1) if folded and folded.startswith("$") else None
-                    if cents is not None and "." not in folded and (
-                        item.span[0] >= frozen
-                        or (item_end is not None and items[cents[1]].span[1] <= item_end(item.span[0]))
-                    ):
-                        folded += cents[0]  # "five dollars and fifty cents" -> "$5.50"
-                        unit, end = items[cents[1]], cents[1]
-                    if folded is not None:
-                        if unit_core not in ("a.m", "p.m"):  # "percent." keeps its period
-                            folded += unit.text[len(unit.text.rstrip(".,!?;:")):]
-                        result.append(Item(kind="word", text=folded, span=(item.span[0], unit.span[1])))
-                        index = end + 1
-                        continue
-            digits = fold_digits([_core(it.text) for it in items[index:end]]) if end > index else None
-            if digits is not None and (
-                item.span[0] >= frozen
-                or (item_end is not None and items[end - 1].span[1] <= item_end(item.span[0]))
-            ):
-                result.append(Item(kind="word", text=digits, span=(item.span[0], items[end - 1].span[1])))
+            if end == index:
+                result.append(item)
+                index += 1
+                continue
+            before = result[-1] if result else None
+            if before is not None and before.kind == "word" and _core(before.text) in NUMBER_WORDS - {"and"}:
+                # the rest of a number with something attached ("...twenty
+                # five percent"): half a number never folds
+                result.extend(items[index:end])
                 index = end
                 continue
+            words = [_core(it.text) for it in items[index:end]]
+
+            unit = items[end] if end < size and items[end].kind == "word" else None
+            unit_core = _core(unit.text) if unit is not None else ""
             if (
-                end > index and end == len(items) and pending_from is not None
-                and items[end - 1].span[1] == pending_from and item.span[0] >= frozen
-                and _core(item.text) not in ("and", "point")
+                unit is not None and unit_core in UNIT_WORDS and inside(unit)
+                and unit.text.lstrip(_PUNCT_STRIP) == unit.text
             ):
+                if unit_core == "am" and not committed:
+                    after = items[end + 1] if end + 1 < size else None
+                    if after is None and molten(unit.span[0]):
+                        return result, item.span[0]  # "am" is a time or the verb: the next word decides
+                    verb = after is not None and after.kind == "word" and _core(after.text) == "i"
+                else:
+                    verb = False
+                folded = None if verb else fold_unit(words, unit_core)
+                if folded is not None:
+                    last, last_at = unit, end
+                    cents = Grammar._cents(items, end + 1) if folded.startswith("$") and "." not in folded else None
+                    if cents is not None and inside(items[cents[1]]):
+                        folded += cents[0]  # "five dollars and fifty cents" -> "$5.50"
+                        last, last_at = items[cents[1]], cents[1]
+                    if unit_core not in ("a.m", "p.m"):  # "percent." keeps its period
+                        folded += last.text[len(last.text.rstrip(_PUNCT_STRIP)):]
+                    result.append(Item(kind="word", text=folded, span=(item.span[0], last.span[1])))
+                    index = last_at + 1
+                    continue
+
+            if end == size and not committed and pending_from is not None and items[end - 1].span[1] == pending_from:
                 return result, item.span[0]  # its unit may be what is pending
-            # a run that did not fold stays words, all of it: never "twenty 5%"
-            end = max(end, index + 1)
-            result.extend(items[index:end])
+            if (
+                end == size and molten(item.span[0]) and end - index >= 2
+                and all(w in DIGIT_WORDS or w == "oh" for w in words)
+            ):
+                return result, item.span[0]  # a number read digit by digit may still grow
+
+            digits = fold_digits(words)
+            if digits is not None:
+                result.append(Item(kind="word", text=digits, span=(item.span[0], items[end - 1].span[1])))
+            else:
+                result.extend(items[index:end])  # a run that did not fold stays words, all of it
             index = end
         return result, pending_from
 

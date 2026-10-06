@@ -72,6 +72,16 @@ CASES = [
     ("emoji names alone stay words", "prose", ["the emoji was a smile"], {}),
     ("phone numbers", "prose", ["call five five five one two three four or four one five five five five one two one two"], {}),
     ("a short digit count stays words", "prose", ["one two three go"], {}),
+    ("a committed phone number never re-reads as words", "prose", ["call five five five one two three four", "five six seven"], {}),
+    ("counting is not a phone number", "prose", ["count one two three four five six seven", "eight"], {}),
+    ("oh is a zero inside a number", "prose", ["dial five five five oh one two three"], {}),
+    ("a committed time stays a time", "prose", ["which one am", "i"], {}),
+    ("oh in a time", "prose", ["three oh five pm or twelve oh five am"], {}),
+    ("a leading point is a decimal", "prose", ["rates rose point five percent"], {}),
+    ("trailing glue never joins a unit", "prose", ["five and percent"], {}),
+    ("attached punctuation never folds away", "prose", ["it was ...twenty five percent due october ...sixth"], {}),
+    ("an ordinal before a noun is not a day", "prose", ["in september second graders and the january first half"], {}),
+    ("a day the month lacks is not a date", "prose", ["february thirtieth and june thirty first"], {}),
     ("dates", "prose", ["due october sixth or june twenty first, not july thirtieth."], {}),
     ("a month and a cardinal stay words", "prose", ["in june twenty people came and you may first check"], {}),
     ("dollars and cents", "prose", ["it costs five dollars and fifty cents and twenty dollars and five cents period"], {}),
@@ -211,6 +221,17 @@ CASES.append(("pauses are a prose thing", "terminal", ["cd the.", "And then ls"]
 # streaming cases: (name, register, steps, options); a step is
 # [t, text, "interim" | "final"] or [t, "tick"]
 STREAMS = [
+    ("a phone number read slowly holds until it ends", "prose", [
+        [0.0, "call five five five", "interim"], [0.4, "call five five five one two", "interim"], [2.0, "tick"],
+        [2.4, "call five five five one two three four", "interim"], [4.2, "tick"],
+        [4.5, "call five five five one two three four five six", "interim"], [6.5, "tick"],
+        [7.0, "call five five five one two three four five six seven thanks", "final"]], {}),
+    ("a date waits for the next word", "prose", [
+        [0.0, "due june first", "interim"], [0.6, "due june first", "interim"], [2.5, "tick"],
+        [3.0, "due june first graders", "final"]], {}),
+    ("am waits for the next word", "prose", [
+        [0.0, "which one am", "interim"], [2.0, "tick"], [2.5, "which one am i", "interim"], [4.5, "tick"],
+        [5.0, "which one am i", "final"]], {}),
     ("words land and freeze on the window", "prose", [
         [0.0, "fixed the", "interim"], [0.3, "fixed the race", "interim"], [0.6, "fixed the race condition", "interim"],
         [0.9, "fixed the race condition", "interim"], [1.2, "tick"], [2.2, "tick"], [2.5, "fixed the race condition in", "interim"],

@@ -21,7 +21,7 @@ const PROPER_WORDS = new Set(("monday tuesday wednesday thursday friday saturday
 // initialisms a lowercase recognizer writes small; never ones that are words ("us", "it")
 const ACRONYMS = new Set("ok tv usa uk faq pdf url api ai ceo eta asap fyi diy gps html css json sql usb".split(" "));
 const PRONOUN_I = /^i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*$/;
-const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "");
+const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "").replace(/^[.,!?;:]+/, "");  // both ends, as grammar.py _core
 
 const COMMANDS = {
   // "undo that", "strike that" are everyday words ("I can't undo that
@@ -160,6 +160,7 @@ function clock(words) {
   if (!words.length || !(words[0] in UNITS) || UNITS[words[0]] < 1 || UNITS[words[0]] > 12) return null;
   const hour = UNITS[words[0]];
   if (words.length === 1) return String(hour);
+  if (words.length === 3 && words[1] === "oh" && words[2] in DIGITS) return hour + ":0" + DIGITS[words[2]];
   const minutes = parseCardinal(words.slice(1));
   if (minutes === null || minutes < 10 || minutes > 59 || words[1] === "and") return null;
   return hour + ":" + String(minutes).padStart(2, "0");
@@ -190,19 +191,26 @@ export function parseDay(words) {
   }
   return null;
 }
-function dateAt(items, at) {
+const MONTH_DAYS = { january: 31, february: 29, april: 30, june: 30, july: 31, august: 31,
+  september: 30, october: 31, november: 30, december: 31 };
+// an ordinal that starts a noun phrase, not a day: "september second graders"
+const NOT_A_DAY_AFTER = new Set("grader graders grade half quarter time times place round floor class year".split(" "));
+const PUNCT_HEAD = /^[.,!?;:]+/;
+const clean = (t) => !PUNCT_TAIL.test(t) && !PUNCT_HEAD.test(t);  // nothing attached: "five," "...five"
+function dateAt(items, at, checkAfter = true) {
   const month = items[at].text;
-  if (PUNCT_TAIL.test(month) || !DATE_MONTHS.has(month.toLowerCase())) return null;
+  if (!clean(month) || !DATE_MONTHS.has(month.toLowerCase())) return null;
   for (const size of [2, 1]) {
     const last = at + size;
     if (last >= items.length || items.slice(at + 1, last + 1).some((x) => x.kind !== "word")) continue;
     const words = items.slice(at + 1, last + 1).map((x) => x.text);
-    if (words.slice(0, -1).some((w) => PUNCT_TAIL.test(w))) continue;
+    if (words.slice(0, -1).some((w) => !clean(w)) || PUNCT_HEAD.test(words[words.length - 1])) continue;
     const day = parseDay(words.map(core));
-    if (day !== null) {
-      const suffix = (words[words.length - 1].match(PUNCT_TAIL) || [""])[0];
-      return [month.slice(0, 1).toUpperCase() + month.slice(1) + " " + day + suffix, last];
-    }
+    if (day === null || day > (MONTH_DAYS[month.toLowerCase()] || 31)) continue;
+    const after = last + 1 < items.length ? items[last + 1] : null;
+    if (checkAfter && after && after.kind === "word" && clean(words[words.length - 1]) && NOT_A_DAY_AFTER.has(core(after.text))) return null;
+    const suffix = (words[words.length - 1].match(PUNCT_TAIL) || [""])[0];
+    return [month.slice(0, 1).toUpperCase() + month.slice(1) + " " + day + suffix, last];
   }
   return null;
 }
@@ -210,64 +218,88 @@ function dateAt(items, at) {
 function centsAt(items, at) {
   if (at >= items.length || items[at].kind !== "word" || items[at].text.toLowerCase() !== "and") return null;
   let end = at + 1;
-  while (end < items.length && items[end].kind === "word" && !PUNCT_TAIL.test(items[end].text) &&
+  while (end < items.length && items[end].kind === "word" && clean(items[end].text) &&
          NUMBER_WORDS.has(core(items[end].text)) && !["and", "point", "hundred", "thousand"].includes(core(items[end].text))) end += 1;
   if (end === at + 1 || end >= items.length || items[end].kind !== "word") return null;
+  if (PUNCT_HEAD.test(items[end].text)) return null;
   if (core(items[end].text) !== "cent" && core(items[end].text) !== "cents") return null;
   const value = parseCardinal(items.slice(at + 1, end).map((x) => core(x.text)));
   return value !== null && value >= 1 && value <= 99 ? ["." + String(value).padStart(2, "0"), end] : null;
 }
 // seven or more digits read one by one -> "555-1234", ten -> "555-123-4567"
-// (numbers.py fold_digits); fewer stay words
+// (numbers.py fold_digits); fewer stay words, and so does counting
 export function foldDigits(words) {
   words = words.map((w) => w.toLowerCase());
-  if (words.length < 7 || words.some((w) => !(w in DIGITS))) return null;
-  const d = words.map((w) => DIGITS[w]).join("");
+  if (words.length < 7 || words[0] === "oh") return null;
+  if (words.some((w) => !(w in DIGITS) && w !== "oh")) return null;  // "oh" reads as zero inside a number
+  const values = words.map((w) => DIGITS[w] || 0);
+  const steps = new Set(values.slice(1).map((v, k) => v - values[k]));
+  if (steps.size === 1 && (steps.has(1) || steps.has(-1))) return null;  // counting, not a number
+  const d = values.join("");
   if (d.length === 7) return d.slice(0, 3) + "-" + d.slice(3);
   if (d.length === 10) return d.slice(0, 3) + "-" + d.slice(3, 6) + "-" + d.slice(6);
   return d;
 }
-function foldUnits(items, frozen, itemEnd, pendingFrom) {
+// Prose folds of a spoken number (grammar.py _fold_units): a unit after it,
+// a month before an ordinal, seven or more digits. A run that starts behind
+// the fence ends with the committed item it starts in; at the molten tail a
+// run is held while it might still grow or meet its unit.
+function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
   const out = [];
-  const bare = (it) => it.kind === "word" && !PUNCT_TAIL.test(it.text) && NUMBER_WORDS.has(core(it.text));
+  const n = items.length;
+  const molten = (at) => !flush && at >= frozen && at >= settled;
   let i = 0;
-  while (i < items.length) {
+  while (i < n) {
     const it = items[i];
-    const date = it.kind === "word" ? dateAt(items, i) : null;
-    if (date && (it.s >= frozen || items[date[1]].e <= itemEnd(it.s))) {
+    const committed = it.s < frozen;
+    const limit = committed ? itemEnd(it.s) : null;
+    const inside = (x) => limit === null || x.e <= limit;
+    const date = it.kind === "word" ? dateAt(items, i, !committed) : null;  // a committed date was decided when typed
+    if (date && !committed && date[1] === n - 1 && molten(items[date[1]].s)) return { items: out, pendingFrom: it.s };  // the next word says date or noun
+    if (date && inside(items[date[1]])) {
       out.push({ kind: "word", text: date[0], s: it.s, e: items[date[1]].e });
       i = date[1] + 1; continue;
     }
+    // the run: clean number words, never starting on "and"/"oh", never ending on glue, never crossing the fence
     let end = i;
-    while (end < items.length && bare(items[end])) end += 1;  // "five," ends a thought
-    if (end > i && GLUE.has(core(it.text))) end = i + 1;  // glue only joins a number already begun
-    if (end === i && it.kind === "word" && /^\d/.test(it.text)) end = i + 1;  // "25 percent"
-    if (end > i && !GLUE.has(core(it.text)) && end < items.length) {
-      const unit = items[end], uc = unit.kind === "word" ? core(unit.text) : "";
-      const verb = uc === "am" && end + 1 < items.length && items[end + 1].kind === "word" && core(items[end + 1].text) === "i";
-      if (unit.kind === "word" && UNIT_WORDS.has(uc) && !verb && (it.s >= frozen || unit.e <= itemEnd(it.s))) {
-        let folded = foldUnit(items.slice(i, end).map((x) => core(x.text)), uc);
-        let u = unit;
-        const cents = folded && folded.startsWith("$") && !folded.includes(".") ? centsAt(items, end + 1) : null;
-        if (cents && (it.s >= frozen || items[cents[1]].e <= itemEnd(it.s))) {
-          folded += cents[0]; u = items[cents[1]]; end = cents[1];  // "five dollars and fifty cents" -> "$5.50"
-        }
-        if (folded !== null) {
-          if (uc !== "a.m" && uc !== "p.m") folded += (u.text.match(PUNCT_TAIL) || [""])[0];  // "percent." keeps its period
-          out.push({ kind: "word", text: folded, s: it.s, e: u.e });
-          i = end + 1; continue;
-        }
+    while (end < n && items[end].kind === "word" && clean(items[end].text) && inside(items[end]) &&
+           (NUMBER_WORDS.has(core(items[end].text)) || (end > i && core(items[end].text) === "oh"))) end += 1;
+    if (end > i && core(it.text) === "and") end = i;
+    while (end > i && ["and", "point", "oh"].includes(core(items[end - 1].text))) end -= 1;
+    if (end === i && it.kind === "word" && clean(it.text) && /^[0-9]/.test(it.text)) end = i + 1;  // "25 percent"
+    if (end === i) { out.push(it); i += 1; continue; }
+    const before = out.length ? out[out.length - 1] : null;
+    if (before && before.kind === "word" && NUMBER_WORDS.has(core(before.text)) && core(before.text) !== "and") {
+      out.push(...items.slice(i, end)); i = end; continue;  // the rest of a number with something attached: half a number never folds
+    }
+    const words = items.slice(i, end).map((x) => core(x.text));
+    const unit = end < n && items[end].kind === "word" ? items[end] : null;
+    const uc = unit ? core(unit.text) : "";
+    if (unit && UNIT_WORDS.has(uc) && inside(unit) && !PUNCT_HEAD.test(unit.text)) {
+      let verb = false;
+      if (uc === "am" && !committed) {
+        const after = end + 1 < n ? items[end + 1] : null;
+        if (!after && molten(unit.s)) return { items: out, pendingFrom: it.s };  // the next word decides: time or verb
+        verb = !!after && after.kind === "word" && core(after.text) === "i";
+      }
+      let folded = verb ? null : foldUnit(words, uc);
+      if (folded !== null) {
+        let last = unit, lastAt = end;
+        const cents = folded.startsWith("$") && !folded.includes(".") ? centsAt(items, end + 1) : null;
+        if (cents && inside(items[cents[1]])) { folded += cents[0]; last = items[cents[1]]; lastAt = cents[1]; }  // "$5.50"
+        if (uc !== "a.m" && uc !== "p.m") folded += (last.text.match(PUNCT_TAIL) || [""])[0];  // "percent." keeps its period
+        out.push({ kind: "word", text: folded, s: it.s, e: last.e });
+        i = lastAt + 1; continue;
       }
     }
-    const digits = end > i ? foldDigits(items.slice(i, end).map((x) => core(x.text))) : null;
-    if (digits !== null && (it.s >= frozen || items[end - 1].e <= itemEnd(it.s))) {
-      out.push({ kind: "word", text: digits, s: it.s, e: items[end - 1].e });
-      i = end; continue;
-    }
-    if (end > i && end === items.length && pendingFrom !== null && items[end - 1].e === pendingFrom &&
-        it.s >= frozen && !GLUE.has(core(it.text))) return { items: out, pendingFrom: it.s };  // its unit may be what is pending
-    end = Math.max(end, i + 1);  // a run that did not fold stays words, all of it
-    out.push(...items.slice(i, end)); i = end;
+    if (end === n && !committed && pendingFrom !== null && items[end - 1].e === pendingFrom)
+      return { items: out, pendingFrom: it.s };  // its unit may be what is pending
+    if (end === n && molten(it.s) && end - i >= 2 && words.every((w) => w in DIGITS || w === "oh"))
+      return { items: out, pendingFrom: it.s };  // a number read digit by digit may still grow
+    const digits = foldDigits(words);
+    if (digits !== null) out.push({ kind: "word", text: digits, s: it.s, e: items[end - 1].e });
+    else out.push(...items.slice(i, end));  // a run that did not fold stays words, all of it
+    i = end;
   }
   return { items: out, pendingFrom };
 }
@@ -667,7 +699,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
     return { items: out, pendingFrom };
   }
   const code = !!(reg.compiler || reg.terminal);
-  if ((!cfg || !cfg.numbers || cfg.numbers === "auto") && !code) return foldUnits(items, frozen, itemEnd, pendingFrom);
+  if ((!cfg || !cfg.numbers || cfg.numbers === "auto") && !code) return foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled);
   return { items, pendingFrom };
 }
 

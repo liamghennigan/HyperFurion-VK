@@ -695,6 +695,241 @@
   ]
  },
  {
+  "name": "a committed phone number never re-reads as words",
+  "register": "prose",
+  "segments": [
+   "call five five five one two three four",
+   "five six seven"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call 555-1234"
+   ],
+   [
+    "screen",
+    "Call 555-1234 five six seven"
+   ],
+   [
+    "final",
+    "Call 555-1234 five six seven",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "counting is not a phone number",
+  "register": "prose",
+  "segments": [
+   "count one two three four five six seven",
+   "eight"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Count one two three four five six seven"
+   ],
+   [
+    "screen",
+    "Count one two three four five six seven eight"
+   ],
+   [
+    "final",
+    "Count one two three four five six seven eight",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "oh is a zero inside a number",
+  "register": "prose",
+  "segments": [
+   "dial five five five oh one two three"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Dial 555-0123"
+   ],
+   [
+    "final",
+    "Dial 555-0123",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a committed time stays a time",
+  "register": "prose",
+  "segments": [
+   "which one am",
+   "i"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Which 1 AM"
+   ],
+   [
+    "screen",
+    "Which 1 AM I"
+   ],
+   [
+    "final",
+    "Which 1 AM I",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "oh in a time",
+  "register": "prose",
+  "segments": [
+   "three oh five pm or twelve oh five am"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "3:05 PM or 12:05 AM"
+   ],
+   [
+    "final",
+    "3:05 PM or 12:05 AM",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a leading point is a decimal",
+  "register": "prose",
+  "segments": [
+   "rates rose point five percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Rates rose"
+   ],
+   [
+    "final",
+    "Rates rose 0.5%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "trailing glue never joins a unit",
+  "register": "prose",
+  "segments": [
+   "five and percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Five and"
+   ],
+   [
+    "final",
+    "Five and percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "attached punctuation never folds away",
+  "register": "prose",
+  "segments": [
+   "it was ...twenty five percent due october ...sixth"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It was ...twenty five percent due October ...sixth"
+   ],
+   [
+    "final",
+    "It was ...twenty five percent due October ...sixth",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an ordinal before a noun is not a day",
+  "register": "prose",
+  "segments": [
+   "in september second graders and the january first half"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "In September second graders and the January first half"
+   ],
+   [
+    "final",
+    "In September second graders and the January first half",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a day the month lacks is not a date",
+  "register": "prose",
+  "segments": [
+   "february thirtieth and june thirty first"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "February thirtieth and June thirty first"
+   ],
+   [
+    "final",
+    "February thirtieth and June thirty first",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "dates",
   "register": "prose",
   "segments": [
@@ -3899,6 +4134,204 @@
    [
     "final",
     "cd the. And then ls",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a phone number read slowly holds until it ends",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "call five five five",
+    "interim"
+   ],
+   [
+    0.4,
+    "call five five five one two",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.4,
+    "call five five five one two three four",
+    "interim"
+   ],
+   [
+    4.2,
+    "tick"
+   ],
+   [
+    4.5,
+    "call five five five one two three four five six",
+    "interim"
+   ],
+   [
+    6.5,
+    "tick"
+   ],
+   [
+    7.0,
+    "call five five five one two three four five six seven thanks",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call 555-1234"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call 555123456"
+   ],
+   [
+    "screen",
+    "Call 555-123-4567 thanks"
+   ],
+   [
+    "final",
+    "Call 555-123-4567 thanks",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a date waits for the next word",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "due june first",
+    "interim"
+   ],
+   [
+    0.6,
+    "due june first",
+    "interim"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    3.0,
+    "due june first graders",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Due"
+   ],
+   [
+    "screen",
+    "Due"
+   ],
+   [
+    "screen",
+    "Due"
+   ],
+   [
+    "screen",
+    "Due June first graders"
+   ],
+   [
+    "final",
+    "Due June first graders",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "am waits for the next word",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "which one am",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.5,
+    "which one am i",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    5.0,
+    "which one am i",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Which"
+   ],
+   [
+    "screen",
+    "Which"
+   ],
+   [
+    "screen",
+    "Which one am I"
+   ],
+   [
+    "screen",
+    "Which one am I"
+   ],
+   [
+    "screen",
+    "Which one am I"
+   ],
+   [
+    "final",
+    "Which one am I",
     "",
     "",
     0,
