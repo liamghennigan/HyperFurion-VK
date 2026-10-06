@@ -394,7 +394,9 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       }
     }
     const unit = end < n && items[end].kind === "word" ? items[end] : null;
-    const uc = unit ? core(unit.text) : "";
+    let uc = unit ? core(unit.text) : "", unitEnd = end;
+    if (unit && uc === "per" && clean(unit.text) && end + 1 < n && items[end + 1].kind === "word" && core(items[end + 1].text) === "cent" &&
+        !PUNCT_HEAD.test(items[end + 1].text) && inside(items[end + 1])) { uc = "percent"; unitEnd = end + 1; }  // "per cent", as a recognizer may write it
     if (unit && UNIT_WORDS.has(uc) && inside(unit) && !PUNCT_HEAD.test(unit.text)) {
       let verb = false;
       if (uc === "am" && !committed) {
@@ -404,7 +406,7 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       }
       let folded = verb ? null : foldUnit(words, uc);
       if (folded !== null) {
-        let last = unit, lastAt = end;
+        let last = items[unitEnd], lastAt = unitEnd;
         const cents = "$€".includes(folded[0]) && !folded.includes(".") ? centsAt(items, end + 1) : null;
         if (cents && inside(items[cents[1]])) { folded += cents[0]; last = items[cents[1]]; lastAt = cents[1]; }  // "$5.50"
         if (uc !== "a.m" && uc !== "p.m") folded += (last.text.match(PUNCT_TAIL) || [""])[0];  // "percent." keeps its period

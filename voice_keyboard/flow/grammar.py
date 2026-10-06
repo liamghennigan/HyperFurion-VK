@@ -1239,6 +1239,13 @@ class Grammar:
 
             unit = items[end] if end < size and items[end].kind == "word" else None
             unit_core = _core(unit.text) if unit is not None else ""
+            unit_end = end
+            if (
+                unit is not None and unit_core == "per" and _clean(unit.text) and end + 1 < size
+                and items[end + 1].kind == "word" and _core(items[end + 1].text) == "cent"
+                and items[end + 1].text.lstrip(_PUNCT_STRIP) == items[end + 1].text and inside(items[end + 1])
+            ):
+                unit_core, unit_end = "percent", end + 1  # "per cent", as a recognizer may write it
             if (
                 unit is not None and unit_core in UNIT_WORDS and inside(unit)
                 and unit.text.lstrip(_PUNCT_STRIP) == unit.text
@@ -1252,7 +1259,7 @@ class Grammar:
                     verb = False
                 folded = None if verb else fold_unit(words, unit_core)
                 if folded is not None:
-                    last, last_at = unit, end
+                    last, last_at = items[unit_end], unit_end
                     cents = Grammar._cents(items, end + 1) if folded[:1] in "$€" and "." not in folded else None
                     if cents is not None and inside(items[cents[1]]):
                         folded += cents[0]  # "five dollars and fifty cents" -> "$5.50"

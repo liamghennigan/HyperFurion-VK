@@ -52,10 +52,14 @@ export const LocalSTT = (() => {
     return "this browser couldn't run it";
   };
 
+  let lastByte = 0, settleT = 0;
   function report() {
     const total = BYTES[S.device] || BYTES.wasm;
     S.fetched = fetched;
-    S.pct = inflight > 0 && S.state === "loading" ? Math.min(99, Math.floor((100 * fetched) / total)) : null;
+    // a moment between two files is still downloading; after that it isn't
+    const downloading = inflight > 0 || performance.now() - lastByte < 500;
+    if (!inflight && downloading && !settleT) settleT = setTimeout(() => { settleT = 0; report(); }, 520);
+    S.pct = downloading && fetched > 0 && S.state === "loading" ? Math.min(99, Math.floor((100 * fetched) / total)) : null;
     for (const f of listeners) { try { f(S); } catch {} }
     bus.emit("stt:progress", { state: S.state, device: S.device, pct: S.pct });
   }
@@ -73,7 +77,7 @@ export const LocalSTT = (() => {
       const counter = new TransformStream({
         transform(chunk, ctl) {
           if (id === copies) {
-            fetched += chunk.byteLength;
+            fetched += chunk.byteLength; lastByte = performance.now();
             const pct = Math.floor((100 * fetched) / (BYTES[S.device] || BYTES.wasm));
             if (pct !== last) { last = pct; report(); }
           }

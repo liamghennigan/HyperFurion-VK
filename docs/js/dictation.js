@@ -83,7 +83,7 @@ export const Dictation = (() => {
         return ["Moonshine · in this tab · " + (LocalSTT.device === "webgpu" ? "on your GPU (WebGPU)" : "on your CPU (WebAssembly)"), "live"];
       if (LocalSTT.state === "loading")
         return [(LocalSTT.pct != null ? "downloading Moonshine to this tab · " + LocalSTT.pct + "%" : "starting Moonshine in this tab") +
-                " · what you say now is typed once it's ready", "live"];
+                (D.recording ? " · what you say now is typed once it's ready" : settling ? " · what you said is typed once it's ready" : ""), "live"];
       return ["", ""];
     }
     if (engine === "relay") return ["xAI via relay · opt-in", "live"];
@@ -107,7 +107,7 @@ export const Dictation = (() => {
     }
     micCap.textContent = t;
   }
-  bus.on("stt:progress", () => { if (engine === "local" && (D.recording || settling)) caption(); });
+  bus.on("stt:progress", () => { if (engine === "local") caption(); });
 
   function setRecording(on) {
     D.recording = on;
