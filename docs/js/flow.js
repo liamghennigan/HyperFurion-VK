@@ -18,6 +18,8 @@ const PUNCT_STRIP = /[.,!?;:]+$/;
 // days and months a lowercase recognizer writes small; not "may"/"march" (verbs)
 const PROPER_WORDS = new Set(("monday tuesday wednesday thursday friday saturday sunday january february " +
   "april june july august september october november december").split(" "));
+// initialisms a lowercase recognizer writes small; never ones that are words ("us", "it")
+const ACRONYMS = new Set("ok tv usa uk faq pdf url api ai ceo eta asap fyi diy gps html css json sql usb".split(" "));
 const PRONOUN_I = /^i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*$/;
 const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "");
 
@@ -755,6 +757,8 @@ export function render(items, register, state) {
       if (it.sentenceEnd && reg.smartCaps) st.capNext = true;
     } else if (it.kind === "word") {
       let t = it.text;
+      const tc = t.replace(PUNCT_STRIP, "");
+      if (reg.smartCaps && it.mode !== "verbatim" && ACRONYMS.has(tc.toLowerCase())) t = tc.toUpperCase() + t.slice(tc.length);
       if (reg.smartCaps && it.mode !== "verbatim" && (st.capNext || PRONOUN_I.test(t) || PROPER_WORDS.has(t.replace(/[.,!?;:'\u2019s]+$/, "").toLowerCase()))) t = capitalized(t);
       emit(t, false);
       st.capNext = reg.smartCaps && ENDERS.test(t.trimEnd());

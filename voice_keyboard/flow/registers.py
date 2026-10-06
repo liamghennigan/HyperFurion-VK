@@ -78,6 +78,11 @@ PROPER_WORDS = frozenset(
     "monday tuesday wednesday thursday friday saturday sunday january february "
     "april june july august september october november december".split()
 )
+# Initialisms a lowercase recognizer writes small ("ok", "pdf", "asap").
+# Never ones that are also words ("us", "it", "am", "it's").
+ACRONYMS = frozenset(
+    "ok tv usa uk faq pdf url api ai ceo eta asap fyi diy gps html css json sql usb".split()
+)
 _PRONOUN_I = re.compile(r"i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*")
 
 def resolve_register(name: str) -> Register:
@@ -222,6 +227,9 @@ def render_items(
                 capitalize_next = True
         elif item.kind == "word":
             text = item.text
+            core = text.rstrip(".,!?;:")
+            if register.smart_caps and item.mode != "verbatim" and core.casefold() in ACRONYMS:
+                text = core.upper() + text[len(core):]
             if register.smart_caps and item.mode != "verbatim" and (
                 capitalize_next or _PRONOUN_I.fullmatch(text)
                 or text.rstrip(".,!?;:'\u2019s").casefold() in PROPER_WORDS

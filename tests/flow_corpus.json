@@ -470,6 +470,50 @@
   ]
  },
  {
+  "name": "initialisms are capitals",
+  "register": "prose",
+  "segments": [
+   "ok send the pdf asap, fyi it's for us"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "OK send the PDF ASAP, FYI it's for us"
+   ],
+   [
+    "final",
+    "OK send the PDF ASAP, FYI it's for us",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "initialisms in code stay as said",
+  "register": "python",
+  "segments": [
+   "ok equals api"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ok = api"
+   ],
+   [
+    "final",
+    "ok = api",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "i inside a word stays",
   "register": "prose",
   "segments": [
