@@ -892,7 +892,7 @@ def main() -> None:
             " | intent <request...> | ask <question...> | find <query...>"
             " | learned [accept N | reject N | hotword N | macro N <name> |"
             " add <spoken> = <written> | forget <spoken>] | stats [--json]"
-            " | commands [filter] | try [register:] <words…>"
+            " | commands [filter] | try [register:] <words…> (no words: one per line)"
         ),
     )
     parser.add_argument(
@@ -956,6 +956,8 @@ def main() -> None:
     if args.command == "try":
         from voice_keyboard import trial
 
+        if not args.args:
+            sys.exit(trial.repl(config, sys.stdin, sys.stdout))
         try:
             print(trial.run(config, args.args))
         except ValueError as exc:

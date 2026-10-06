@@ -808,7 +808,9 @@ warning as before.
 - `voice-keyboard try [register:] <words…>` prints what the keyboard would
   type for those words with your config — no microphone needed; `|` is a
   pause (`try see you monday | correct monday to friday`), and
-  `try python: x equals five` picks a register.
+  `try python: x equals five` picks a register. With no words it reads one
+  dictation per line: a prompt to play at, or a batch from a pipe
+  (`voice-keyboard try < phrases.txt`).
 - `voice-keyboard commands [filter]` prints everything you can say, built
   from the same tables the engine uses with your config merged in —
   `voice-keyboard commands percent` shows just the matching lines.

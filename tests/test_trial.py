@@ -27,3 +27,13 @@ def test_config_applies_and_instructions_are_noted() -> None:
 def test_nothing_said_is_an_error() -> None:
     with pytest.raises(ValueError):
         trial.run(_config(), ["prose:"])
+
+
+def test_repl_runs_one_dictation_per_line() -> None:
+    import io
+
+    from voice_keyboard.trial import repl
+
+    out = io.StringIO()
+    assert repl(DEFAULT_CONFIG, io.StringIO("twenty five percent\n\npython: x equals one\n"), out) == 0
+    assert out.getvalue() == "25%\nx = 1\n"

@@ -47,3 +47,27 @@ def run(config: dict, words: list[str]) -> str:
     if result.scratches:
         notes.append(f"[scratched {result.scratches}]")
     return text + ("\n" + " ".join(notes) if notes else "")
+
+
+def repl(config: dict, stdin, stdout) -> int:
+    """`voice-keyboard try` with no words: each line is one dictation —
+    typed at a prompt, or piped in for a batch of cases."""
+    interactive = stdin.isatty()
+    if interactive:
+        stdout.write("Say it as words (\"|\" marks a pause, \"python:\" picks a register). Ctrl-D quits.\n")
+    while True:
+        if interactive:
+            stdout.write("› ")
+            stdout.flush()
+        line = stdin.readline()
+        if not line:
+            if interactive:
+                stdout.write("\n")
+            return 0
+        if not line.strip():
+            continue
+        try:
+            stdout.write(run(config, line.split()) + "\n")
+        except ValueError as exc:
+            stdout.write(f"{exc}\n")
+        stdout.flush()
