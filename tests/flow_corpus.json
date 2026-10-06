@@ -1689,6 +1689,121 @@
   ]
  },
  {
+  "name": "quote unquote wraps the words between",
+  "register": "prose",
+  "segments": [
+   "she said quote ship it unquote and left"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "She said \"ship it\" and left"
+   ],
+   [
+    "final",
+    "She said \"ship it\" and left",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "end quote closes too, keeping its period",
+  "register": "prose",
+  "segments": [
+   "he wrote quote done end quote."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "He wrote \"done\"."
+   ],
+   [
+    "final",
+    "He wrote \"done\".",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quote unquote with nothing between stays prose",
+  "register": "prose",
+  "segments": [
+   "his quote unquote friend"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "His quote unquote friend"
+   ],
+   [
+    "final",
+    "His quote unquote friend",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a quote with no unquote stays a word",
+  "register": "prose",
+  "segments": [
+   "a quote from the book"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "A quote from the book"
+   ],
+   [
+    "final",
+    "A quote from the book",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quote and unquote across a pause stay words",
+  "register": "prose",
+  "segments": [
+   "she said quote ship it",
+   "unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "She said quote ship it"
+   ],
+   [
+    "screen",
+    "She said quote ship it unquote"
+   ],
+   [
+    "final",
+    "She said quote ship it unquote",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "correct a word anywhere in the dictation",
   "register": "prose",
   "segments": [
@@ -5852,15 +5967,15 @@
    ],
    [
     "screen",
-    "Say open quote"
+    "Say open"
    ],
    [
     "screen",
-    "Say open quote"
+    "Say open"
    ],
    [
     "screen",
-    "Say open quote"
+    "Say open"
    ],
    [
     "screen",

@@ -234,6 +234,16 @@ def _address_part(core: str) -> bool:
     return bool(core) and core.replace("-", "").isalnum() and core.isascii()
 
 
+def _find_unquote(cores: list[str], start: int, end: int) -> Optional[tuple[int, int]]:
+    """The first "unquote" or "end quote" in cores[start:end]: (index, length)."""
+    for at in range(start, end):
+        if cores[at] == "unquote":
+            return at, 1
+        if cores[at] == "end" and at + 1 < end and cores[at + 1] == "quote":
+            return at, 2
+    return None
+
+
 def _core(token: str) -> str:
     return token.casefold().strip(_PUNCT_STRIP)
 
@@ -515,6 +525,7 @@ class Grammar:
         def item_end(at: int) -> int:
             return ends[at] if at < frozen else frozen
 
+        close_quote: dict[int, int] = {}  # where an "unquote" closes, and its length
         while index < len(tokens):
             core = cores[index]
             fence = item_end(index) - index if index < frozen else len(tokens)
@@ -558,6 +569,26 @@ class Grammar:
                     items.extend(new_items)
                     continue
 
+            # "quote ... unquote" / "quote ... end quote": the words between
+            # in quotation marks. Only with words between ("his quote
+            # unquote friend" stays prose), within one utterance.
+            if index in close_quote:
+                span = (index, index + close_quote[index])
+                items.append(Item(kind="punct", text='"', mode="left", span=span))
+                items.extend(self._trailing_punct(tokens[span[1] - 1], span))
+                index = span[1]
+                continue
+            if core == "quote" and self.enabled:
+                end, decided = self._segment_end(index, len(tokens), settled, flush, bounds)
+                close = _find_unquote(cores, index + 2, end)
+                if close is None and not decided:
+                    pending_from = index
+                    break
+                if close is not None:
+                    close_quote[close[0]] = close[1]
+                    items.append(Item(kind="punct", text='"', mode="right", span=(index, index + 1)))
+                    index += 1
+                    continue
             if self._spelling and core == CORRECT_WORD and index in bounds:
                 # "correct monday to friday", said on its own: the engine
                 # swaps the last "monday" it typed. Decided at the end of
@@ -916,6 +947,16 @@ class Grammar:
                 result.extend(items[index:end])  # a run that did not fold stays words, all of it
             index = end
         return result, pending_from
+
+    @staticmethod
+    def _segment_end(
+        index: int, total: int, settled: int, flush: bool, bounds: tuple[int, ...]
+    ) -> tuple[int, bool]:
+        """The end of the utterance holding `index`, and whether it is
+        decided (the recognizer closed it, or the dictation is ending)."""
+        if index >= settled:
+            return total, flush
+        return next((bound for bound in bounds if bound > index), settled), True
 
     @staticmethod
     def _limit(

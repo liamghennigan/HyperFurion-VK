@@ -12,6 +12,9 @@ proven to be the daemon's.
 
 ### Added
 
+- **"Quote … unquote".** "She said quote ship it unquote" types
+  `She said "ship it"`; "end quote" closes too. Only with words between,
+  so "his quote unquote friend" stays prose, and only within one utterance.
 - **"Correct monday to friday".** Said on its own, it swaps the last
   "monday" typed in this dictation for "friday" — whole words, any case,
   across punctuation, capitals kept — and the pair is a correction the

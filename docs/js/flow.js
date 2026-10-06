@@ -553,6 +553,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
     if (i < frozen) limit = Math.min(limit, itemEnd(i));
     return [limit, true];
   };
+  const closeQuote = new Map();  // where an "unquote" closes, and its length
   while (i < tokens.length) {
     const fence = i < frozen ? itemEnd(i) - i : tokens.length;
     // wake word: everything after it is an instruction, never typed —
@@ -583,6 +584,31 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       const f = parseFormatter(i, limit, decided);
       if (f === PENDING) { pendingFrom = i; break; }
       if (f) { items.push(...f[0]); i = f[1]; continue; }
+    }
+    // "quote ... unquote" / "quote ... end quote": the words between in
+    // quotation marks, only with words between, within one utterance
+    if (closeQuote.has(i)) {
+      const e = i + closeQuote.get(i);
+      items.push({ kind: "punct", text: '"', mode: "left", sentenceEnd: false, s: i, e });
+      const tail = (tokens[e - 1].match(PUNCT_STRIP) || [""])[0];
+      for (const ch of tail) if (".,!?;:".includes(ch))
+        items.push({ kind: "punct", text: ch, mode: "left", sentenceEnd: ".!?".includes(ch), s: i, e });
+      i = e; continue;
+    }
+    if (cores[i] === "quote") {
+      let end = tokens.length, decided = flush;
+      if (i < settled) { decided = true; end = settled; for (const b of bounds) if (b > i) { end = b; break; } }
+      let close = null;
+      for (let k = i + 2; k < end && !close; k++) {
+        if (cores[k] === "unquote") close = [k, 1];
+        else if (cores[k] === "end" && k + 1 < end && cores[k + 1] === "quote") close = [k, 2];
+      }
+      if (!close && !decided) { pendingFrom = i; break; }
+      if (close) {
+        closeQuote.set(close[0], close[1]);
+        items.push({ kind: "punct", text: '"', mode: "right", sentenceEnd: false, s: i, e: i + 1 });
+        i += 1; continue;
+      }
     }
     if (spelling && cores[i] === "correct" && bounds.includes(i)) {
       // "correct monday to friday", said on its own: the engine swaps the
