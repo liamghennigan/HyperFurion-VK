@@ -365,7 +365,7 @@ export const Dictation = (() => {
     const l = line;
     const text = l.committed();
     if (!text) { log("nothing typed yet to rewrite · dictate first, then the wake word", "dim"); return; }
-    const rewritten = pageRewrite(text, instr);
+    const rewritten = /^\s*/.exec(text)[0] + pageRewrite(text, instr);   // the space that joined it to earlier text stays
     busy = true;
     await Typist.settled();
     await wait(420);

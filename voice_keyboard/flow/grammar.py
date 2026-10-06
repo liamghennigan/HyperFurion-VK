@@ -287,7 +287,7 @@ def _sentence_case(text: str) -> bool:
     return bool(letters) and text[:1].isupper() and not any(ch.isupper() for ch in letters[1:])
 
 
-def _split_compounds(items: list[Item], unsplit: frozenset = frozenset()) -> tuple[list[Item], dict]:
+def _split_compounds(items: list[Item], unsplit: frozenset = frozenset(), oh: bool = True) -> tuple[list[Item], dict]:
     """Each "Twenty-five" as the words a speaker said, so the number folds
     read it as they read "twenty five" ("Twenty-five percent" -> "25%").
     _merge_compounds puts back together the parts of one that did not
@@ -301,7 +301,7 @@ def _split_compounds(items: list[Item], unsplit: frozenset = frozenset()) -> tup
             and item.span[0] not in unsplit
             else None
         )
-        if words is None:
+        if words is None or (not oh and any(_core(word) == "oh" for word in words)):
             out.append(item)
             continue
         parts = [Item(kind="word", text=word, mode=item.mode, span=item.span) for word in words]
@@ -979,7 +979,8 @@ class Grammar:
 
         compounds: dict[int, tuple[Item, Item]] = {}
         if self._numbers_on or self._units_on:
-            items, compounds = _split_compounds(items, frozenset(unsplit))
+            # in a terminal "oh" is a word, so "four-oh-two" stays as written
+            items, compounds = _split_compounds(items, frozenset(unsplit), oh=not self._numbers_on)
         if self._numbers_on:
             items, number_pending = self._fold_numbers(
                 items,

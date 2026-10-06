@@ -1061,7 +1061,8 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   const unitsOn = !numbersOn && (!cfg || !cfg.numbers || cfg.numbers === "auto") && !codeReg;
   const compounds = new Map();
   let parsed = { items, pendingFrom };
-  if (numbersOn || unitsOn) parsed.items = splitCompounds(items, compounds, new Set(unsplit));
+  // in a terminal "oh" is a word, so "four-oh-two" stays as written
+  if (numbersOn || unitsOn) parsed.items = splitCompounds(items, compounds, new Set(unsplit), !numbersOn);
   if (numbersOn) parsed = foldNumbers(parsed.items, pendingFrom, flush, frozen, itemEnd, numbersMin);
   else if (unitsOn) parsed = foldUnits(parsed.items, frozen, itemEnd, pendingFrom, flush, settled);
   if (compounds.size) parsed.items = mergeCompounds(parsed.items, compounds);
@@ -1082,11 +1083,11 @@ export function splitCompound(text) {
   parts[parts.length - 1] += text.slice(body.length);
   return parts;
 }
-function splitCompounds(items, chains, unsplit) {
+function splitCompounds(items, chains, unsplit, oh) {
   const out = [];
   for (const it of items) {
     const words = it.kind === "word" && it.mode !== "verbatim" && it.e - it.s === 1 && !unsplit.has(it.s) ? splitCompound(it.text) : null;
-    if (!words) { out.push(it); continue; }
+    if (!words || (!oh && words.some((w) => core(w) === "oh"))) { out.push(it); continue; }
     const parts = words.map((w) => ({ ...it, text: w }));
     out.push(...parts);
     chains.set(parts[0], [parts, it]);
