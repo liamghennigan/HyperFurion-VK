@@ -31,3 +31,22 @@ def test_filter_keeps_matching_lines():
     assert "percent sign" in text and "25%" in text
     assert "emoji rocket" not in text
     assert "Nothing matches" in render(_config(), "zzzz")
+
+
+def test_fold_examples_type_what_they_promise():
+    """Every number/date/address example in the cheat sheet is what the
+    engine really types."""
+    from voice_keyboard.cheatsheet import _FOLDS
+    from voice_keyboard.trial import run
+
+    config = _config()
+    checked = 0
+    for said, typed in _FOLDS:
+        alternatives, results = said.split(" / "), typed.split(" / ")
+        if len(alternatives) != len(results) or "…" in said or " to " in said or said.startswith("spell"):
+            continue
+        for words, expect in zip(alternatives, results):
+            got = run(config, words.split())
+            assert got.casefold() == expect.casefold() and got[1:] == expect[1:], (words, got, expect)
+            checked += 1
+    assert checked >= 12

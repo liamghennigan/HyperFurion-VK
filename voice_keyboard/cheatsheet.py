@@ -38,10 +38,14 @@ _NAV = [
 
 _FOLDS = [
     ("twenty five percent / five dollars and fifty cents", "25% / $5.50"),
+    ("one point five dollars / two million euros", "$1.50 / €2 million"),
     ("three thirty pm / three oh five am", "3:30 PM / 3:05 AM"),
     ("october sixth / june twenty first", "October 6 / June 21"),
+    ("june fifth nineteen ninety nine", "June 5, 1999"),
+    ("nineteen oh five / twenty twenty six", "1905 / 2026"),
     ("five five five one two three four", "555-1234"),
-    ("docs dot python dot org / liam at example dot com", "docs.python.org / an email"),
+    ("docs dot python dot org / example dot com slash docs", "docs.python.org / example.com/docs"),
+    ("liam at example dot com", "liam@example.com"),
     ("quote ship it unquote / quote … end quote", "\"ship it\""),
     ("spell that n g i n x", "replace the last word, spelled"),
     ("correct monday to friday", "swap the last \"monday\" you said (said on its own)"),
