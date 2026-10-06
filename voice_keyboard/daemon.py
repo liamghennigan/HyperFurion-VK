@@ -1635,6 +1635,12 @@ class Daemon:
                 final = await self._finish_live(worker, final, result.instruction)
             else:
                 final = await self._finish_classic(final, result.instruction)
+            if "\n" in final and not self._session_register.terminal and not _surely_not_a_terminal(self._session_focus):
+                # Say why "new line" typed a space: unknown focus could be a terminal.
+                await self._show_hotkey_overlay(
+                    "listening", detail="Line break typed as a space: this app couldn't be identified",
+                    timeout_ms=2500,
+                )
             segment = final
             if result.typed_before:
                 # Earlier segments, before navigation moved the caret.
