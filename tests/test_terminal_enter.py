@@ -68,3 +68,31 @@ def test_prose_keeps_its_line_breaks() -> None:
     injector = _dictate("dear team new line thanks", "gedit")
     assert injector.screen == "Dear team\nThanks"
     assert injector.enters == 1
+
+
+def _ipc(app: str, coro_name: str, *args, llm_answer: str = ""):
+    from unittest import mock
+
+    from voice_keyboard.focusprobe import FocusInfo
+
+    injector = EnterInjector()
+    daemon = _make_daemon(FakeStreamingSTT([]), injector, app=app)
+    daemon._last_typed = "earlier"
+    llm = mock.Mock()
+    llm.rewrite = mock.Mock(return_value=llm_answer)
+    with mock.patch("voice_keyboard.daemon.probe_focus", return_value=FocusInfo(app=app, role="text")), \
+            mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
+        asyncio.run(getattr(daemon, coro_name)(*args))
+    return injector
+
+
+@pytest.mark.parametrize("app, enters", [("kitty", 0), ("gedit", 1)])
+def test_type_command_refuses_enter_only_in_a_terminal(app, enters) -> None:
+    injector = _ipc(app, "_type_text", "make build\n")
+    assert injector.enters == enters
+    assert injector.suppress_enter is False  # restored
+
+
+def test_transform_command_refuses_enter_in_a_terminal() -> None:
+    injector = _ipc("kitty", "_transform_last", "make it two lines", llm_answer="ls\nrm -rf /")
+    assert injector.enters == 0

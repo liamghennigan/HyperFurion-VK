@@ -41,8 +41,12 @@ proven to be the daemon's.
   render a spoken line break as nothing, and the daemon arms the
   injector's Enter refusal for the whole of a terminal session (every
   path: keycodes, newlines, clipboard paste), released at teardown; the
-  intent and ask paths restore that state instead of clearing it. Only a
-  hand sends, as the landing page always said.
+  intent and ask paths restore that state instead of clearing it. The
+  paths that type outside a recording — `voice-keyboard type` (and so
+  `recall`) and `voice-keyboard transform` — probe the focused app and
+  refuse Enter there too when it is a terminal; an integrator that means
+  Enter presses it with `voice-keyboard key`. Only a hand sends, as the
+  landing page always said.
 - **Python register: calls read like Python.** An opening paren or
   bracket right after a name glues to it — "def get user open paren"
   types `def get_user(`, "items open bracket zero close bracket" types

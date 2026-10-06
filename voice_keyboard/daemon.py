@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import signal
@@ -1812,6 +1813,33 @@ class Daemon:
 
     # -------------------------------------------------------- transforms
 
+    @contextlib.asynccontextmanager
+    async def _enter_refused_in_a_terminal(self):
+        """Outside a recording session — typing for `voice-keyboard type`,
+        `recall` or `transform` — probe the focused app, and when it is a
+        terminal, refuse Enter on every injector path while typing: there
+        a newline would run the line. (A session arms this itself.)"""
+        injector = self._injector
+        before = getattr(injector, "suppress_enter", None)
+        terminal = False
+        if before is not None and self._config.get("registers", {}).get("probe", True):
+            focus = await asyncio.to_thread(probe_focus)
+            registers_cfg = self._config.get("registers", {})
+            register = register_for_app(
+                focus.app if focus else "",
+                focus.role if focus else "",
+                config_map=registers_cfg.get("map", {}) or {},
+                default=str(registers_cfg.get("default", "prose")),
+            )
+            terminal = register.terminal
+        if terminal:
+            injector.suppress_enter = True
+        try:
+            yield terminal
+        finally:
+            if terminal:
+                injector.suppress_enter = before
+
     async def _transform_last(self, instruction: str) -> str:
         """IPC `transform`: rewrite the last dictation in place."""
         if self._hotkey_lock is None:
@@ -1819,7 +1847,8 @@ class Daemon:
         async with self._hotkey_lock:
             if self._recording:
                 raise RuntimeError("stop recording before transforming")
-            text = await self._run_transform(instruction, worker=None)
+            async with self._enter_refused_in_a_terminal():
+                text = await self._run_transform(instruction, worker=None)
             self._remember_typed(text)
             return text
 
@@ -2463,10 +2492,13 @@ class Daemon:
         return bool(current and current.identity and current.identity != focus.identity)
 
     async def _type_text(self, text: str) -> None:
-        """IPC `type`: inject text directly (used by `voice-keyboard recall`)."""
+        """IPC `type`: inject text directly (used by `voice-keyboard recall`).
+        Into a terminal a newline becomes a space: Enter is pressed only by
+        a hand, or explicitly with the `key` command."""
         if self._recording:
             raise RuntimeError("cannot type while recording")
-        await asyncio.to_thread(self._injector.type_text, text)
+        async with self._enter_refused_in_a_terminal():
+            await asyncio.to_thread(self._injector.type_text, text)
 
     async def _press_keys(self, names: list) -> None:
         """IPC `key`: press a key chord (e.g. ctrl+t, alt+Tab, Return). Used by
