@@ -12,6 +12,11 @@ proven to be the daemon's.
 
 ### Added
 
+- **"Correct monday to friday".** Said on its own, it swaps the last
+  "monday" typed in this dictation for "friday" — whole words, any case,
+  across punctuation, capitals kept — and the pair is a correction the
+  learner can mine, like "spell that". With nothing to correct, or said
+  mid-sentence, it is typed as words.
 - **Spoken headings and to-dos.** "New heading", "new subheading" and
   "new checkbox" type `# `, `## ` and `- [ ] ` on a line of their own —
   markdown, and live headings and to-dos in Notion and Obsidian.

@@ -571,6 +571,7 @@ recognizer's periods.
 | --- | --- |
 | `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |
 | `new line` / `new paragraph` | `\n` / `\n\n` — nothing in a terminal or shell, where a line break is Enter and would run the line |
+| `correct monday to friday` (said on its own) | the last "monday" in this dictation becomes "Friday", capitals kept — and the pair goes to `voice-keyboard learned`; with nothing to correct, it is typed as words |
 | `cap that`, `uppercase that`, `lowercase that` (said on their own) | the last utterance in Title Case, UPPER or lower, fixed in place |
 | `new bullet` | `- ` on a new line (right there after a line break); nothing in a terminal or in code |
 | `new heading`, `new subheading`, `new checkbox` | `# `, `## `, `- [ ] ` on a new line — markdown, and live headings and to-dos in Notion and Obsidian; nothing in a terminal or in code |

@@ -584,6 +584,20 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       if (f === PENDING) { pendingFrom = i; break; }
       if (f) { items.push(...f[0]); i = f[1]; continue; }
     }
+    if (spelling && cores[i] === "correct" && bounds.includes(i)) {
+      // "correct monday to friday", said on its own: the engine swaps the
+      // last "monday" it typed; decided at the end of the segment
+      const [limit, decided] = limitAt(i);
+      if (!decided) { pendingFrom = i; break; }
+      const rest = cores.slice(i + 1, limit);
+      let split = null;
+      for (let k = 1; k < rest.length - 1; k++) if (rest[k] === "to") { split = k; break; }
+      if (split !== null) {
+        const old = rest.slice(0, split).join(" ");
+        const neu = tokens.slice(i + 2 + split, limit).map((t) => t.replace(PUNCT_STRIP, "").replace(/^[.,!?;:]+/, "")).join(" ").trim();
+        if (old && neu) { items.push({ kind: "correct", text: neu, mode: old, s: i, e: limit }); i = limit; continue; }
+      }
+    }
     if (spelling && cores[i] === SPELL_WORD) {
       let [limit, decided] = limitAt(i);
       const head = i + (cores[i + 1] === "that" ? 2 : 1);
@@ -809,6 +823,12 @@ export function render(items, register, state) {
 
 // char-counted backspacing over `text` may not match how the focused app
 // groups grapheme clusters (astral plane, combining marks, ZWJ sequences)
+// the spoken words of a phrase as typed text: case-insensitive, whole words,
+// any punctuation or spacing between them (engine.py _phrase_pattern)
+function phrasePattern(phrase) {
+  const words = phrase.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp("(?<![\\p{L}\\p{N}_'])" + words.join("[^\\p{L}\\p{N}]+") + "(?![\\p{L}\\p{N}_'])", "giu");
+}
 // "title": each word's first character a capital; "upper"; "lower" (engine.py recase)
 export function recase(text, mode) {
   if (mode === "upper") return text.toUpperCase();
@@ -845,7 +865,7 @@ export function riskyBackspace(text) {
 // and calls completeAction(), which starts a fresh segment: the caret has
 // moved, so nothing before the command can be repaired or scratched.
 const LAST_WORD = /(\S+?)([.,!?;:)\]}"'»”’]*)(\s*)$/;
-const FINAL_ONLY = new Set(["respell", "key", "recase"]);  // rewrite committed text: never on a stability guess
+const FINAL_ONLY = new Set(["respell", "key", "recase", "correct"]);  // rewrite committed text: never on a stability guess
 // a pause's next word counts as settled after surviving an update or this long
 const PAUSE_SETTLE_MS = 600;
 
@@ -1117,6 +1137,7 @@ export function moltenLine({ register, cfg, state } = {}) {
     else if (it.kind === "respell") append([{ kind: "word", text: it.text, s: it.s, e: it.e }]);
     else if (it.kind === "key") commitKey(it);
     else if (it.kind === "recase") commitRecase(it);
+    else if (it.kind === "correct") commitCorrect(it);
     else if (it.kind === "instruction") { if (it.text) instruction = it.text; }
     else append([it]);
     committedTokens = Math.max(committedTokens, it.e);
@@ -1138,6 +1159,26 @@ export function moltenLine({ register, cfg, state } = {}) {
     if (riskyBackspace(said)) return 0;
     selectState = target.st;
     return said.length;
+  }
+  // "correct monday to friday" as a whole segment: the last "monday" typed
+  // in this recording becomes "friday", its capitals kept; mid-sentence, or
+  // with nothing to correct, it was dictation (engine.py _commit_correct)
+  function commitCorrect(it) {
+    const whole = segmentBounds.has(it.s) && segmentBounds.has(it.e);
+    const matches = whole ? [...committedRender.matchAll(phrasePattern(it.mode))] : [];
+    if (!matches.length) {
+      append(tokens.slice(it.s, it.e).map((t, k) => ({ kind: "word", text: t, s: it.s + k, e: it.s + k + 1 })));
+      return;
+    }
+    const m = matches[matches.length - 1], heard = m[0], at = m.index;
+    if (riskyBackspace(committedRender.slice(at))) return;
+    let meant = it.text;
+    if (heard.length > 1 && heard === heard.toUpperCase() && heard !== heard.toLowerCase()) meant = meant.toUpperCase();
+    else if (/^\p{Lu}/u.test(heard)) meant = meant.slice(0, 1).toUpperCase() + meant.slice(1);
+    committedRender = committedRender.slice(0, at) + meant + committedRender.slice(at + heard.length);
+    const shift = meant.length - heard.length;
+    snapshots = snapshots.map((sn) => (sn.len <= at ? sn : { len: sn.len + shift, st: sn.st }));
+    if (heard !== meant) corrections.push([heard, meant]);
   }
   // "cap that" / "uppercase that" / "lowercase that" as a whole segment
   // recases the last utterance in place; mid-sentence it types as words

@@ -42,6 +42,7 @@ _FOLDS = [
     ("five five five one two three four", "555-1234"),
     ("docs dot python dot org / liam at example dot com", "docs.python.org / an email"),
     ("spell that n g i n x", "replace the last word, spelled"),
+    ("correct monday to friday", "swap the last \"monday\" you said (said on its own)"),
 ]
 
 

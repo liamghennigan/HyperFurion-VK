@@ -159,6 +159,7 @@ _MARKERS = {"bullet": "- ", "heading": "# ", "subheading": "## ", "checkbox": "-
 _RECASE = {"cap_that": "title", "upper_that": "upper", "lower_that": "lower"}
 
 SPELL_WORD = "spell"
+CORRECT_WORD = "correct"
 
 # Hesitation sounds a streaming recognizer writes down: dropped from what
 # is typed ([flow] fillers). Only sounds — never words that carry meaning
@@ -557,6 +558,27 @@ class Grammar:
                     items.extend(new_items)
                     continue
 
+            if self._spelling and core == CORRECT_WORD and index in bounds:
+                # "correct monday to friday", said on its own: the engine
+                # swaps the last "monday" it typed. Decided at the end of
+                # the segment, so it waits only when it starts one.
+                limit, decided = self._limit(
+                    index, len(tokens), frozen, settled, flush, bounds, item_end
+                )
+                if not decided:
+                    pending_from = index
+                    break
+                rest = cores[index + 1:limit]
+                split = next((k for k in range(1, len(rest) - 1) if rest[k] == "to"), None)
+                if split is not None:
+                    old = " ".join(rest[:split])
+                    new = " ".join(
+                        t.strip(_PUNCT_STRIP) for t in tokens[index + 2 + split:limit]
+                    ).strip()
+                    if old and new:
+                        items.append(Item(kind="correct", text=new, mode=old, span=(index, limit)))
+                        index = limit
+                        continue
             if self._spelling and core == SPELL_WORD:
                 limit, decided = self._limit(
                     index, len(tokens), frozen, settled, flush, bounds, item_end

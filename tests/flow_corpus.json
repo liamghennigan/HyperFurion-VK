@@ -1689,6 +1689,193 @@
   ]
  },
  {
+  "name": "correct a word anywhere in the dictation",
+  "register": "prose",
+  "segments": [
+   "see you on monday period",
+   "it starts at nine",
+   "correct monday to friday"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See you on Monday."
+   ],
+   [
+    "screen",
+    "See you on Monday. It starts at nine"
+   ],
+   [
+    "screen",
+    "See you on Friday. It starts at nine"
+   ],
+   [
+    "final",
+    "See you on Friday. It starts at nine",
+    "",
+    "",
+    0,
+    [
+     [
+      "Monday",
+      "Friday"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct keeps capitals and takes the last one",
+  "register": "prose",
+  "segments": [
+   "NASA called NASA",
+   "correct nasa to esa"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "NASA called NASA"
+   ],
+   [
+    "screen",
+    "NASA called ESA"
+   ],
+   [
+    "final",
+    "NASA called ESA",
+    "",
+    "",
+    0,
+    [
+     [
+      "NASA",
+      "ESA"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct a phrase across punctuation",
+  "register": "prose",
+  "segments": [
+   "meet the new team, ok",
+   "correct team ok to team OK"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet the new team, OK"
+   ],
+   [
+    "screen",
+    "Meet the new team OK"
+   ],
+   [
+    "final",
+    "Meet the new team OK",
+    "",
+    "",
+    0,
+    [
+     [
+      "team, OK",
+      "team OK"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct with nothing to correct is dictation",
+  "register": "prose",
+  "segments": [
+   "correct the essay to the end"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Correct the essay to the end"
+   ],
+   [
+    "final",
+    "Correct the essay to the end",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct mid-sentence is dictation",
+  "register": "prose",
+  "segments": [
+   "that is correct to a point"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "That is correct to a point"
+   ],
+   [
+    "final",
+    "That is correct to a point",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct then scratch keeps snapshots",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "three",
+   "correct two to twenty",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One twenty three"
+   ],
+   [
+    "screen",
+    "One twenty"
+   ],
+   [
+    "final",
+    "One twenty",
+    "",
+    "",
+    1,
+    [
+     [
+      "two",
+      "twenty"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
   "name": "cap that title-cases the last utterance",
   "register": "prose",
   "segments": [

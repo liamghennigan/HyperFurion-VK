@@ -91,6 +91,13 @@ class FinalResult:
     reach_back: int = 0
 
 
+def _phrase_pattern(phrase: str) -> "re.Pattern[str]":
+    """The spoken words of `phrase` as typed text: case-insensitive, whole
+    words, any punctuation or spacing between them."""
+    words = [re.escape(word) for word in phrase.split()]
+    return re.compile(r"(?<![\w'])" + r"[\W_]+".join(words) + r"(?![\w'])", re.IGNORECASE)
+
+
 def recase(text: str, mode: str) -> str:
     """"title": each word's first character a capital; "upper"; "lower"."""
     if mode == "upper":
@@ -143,7 +150,7 @@ _LAST_WORD = re.compile(r"(\S+?)([.,!?;:)\]}\"'»”’]*)(\s*)\Z")
 
 # Actions that rewrite committed text: they wait for a final transcript,
 # never a stability guess, so a misheard partial can't fire them.
-_FINAL_ONLY = ("respell", "key", "recase")
+_FINAL_ONLY = ("respell", "key", "recase", "correct")
 
 
 def risky_backspace(text: str) -> bool:
@@ -636,6 +643,8 @@ class FlowEngine:
             self._commit_key(item)
         elif item.kind == "recase":
             self._commit_recase(item)
+        elif item.kind == "correct":
+            self._commit_correct(item)
         elif item.kind == "instruction":
             if item.text:
                 self._instruction = item.text
@@ -686,18 +695,55 @@ class FlowEngine:
         delta, self._render_state = render_items(words, self._render_state, self._register)
         self._committed_render += delta
 
+    def _type_as_words(self, item: Item) -> None:
+        """A command that turned out to be dictation: its tokens as words."""
+        start, end = item.span
+        words = [
+            Item(kind="word", text=token, span=(index, index + 1))
+            for index, token in enumerate(self._tokens[start:end], start)
+        ]
+        delta, self._render_state = render_items(words, self._render_state, self._register)
+        self._committed_render += delta
+
+    def _commit_correct(self, item: Item) -> None:
+        """"correct monday to friday", said as a whole segment: the last
+        "monday" typed in this recording becomes "friday" (its capitals
+        kept), and the pair is a correction the learner can mine. Said
+        mid-sentence, or with nothing to correct, it was dictation."""
+        start, end = item.span
+        whole = start in self._segment_bounds and end in self._segment_bounds
+        matches = list(_phrase_pattern(item.mode).finditer(self._committed_render)) if whole else []
+        if not matches:
+            self._type_as_words(item)
+            return
+        match = matches[-1]
+        heard = match.group(0)
+        if risky_backspace(self._committed_render[match.start():]):
+            logger.info("flow: not correcting across complex Unicode")
+            return
+        meant = item.text
+        if len(heard) > 1 and heard.isupper():
+            meant = meant.upper()
+        elif heard[:1].isupper():
+            meant = meant[:1].upper() + meant[1:]
+        at = match.start()
+        self._committed_render = self._committed_render[:at] + meant + self._committed_render[match.end():]
+        shift = len(meant) - len(heard)
+        self._snapshots = [
+            snap if snap.render_len <= at
+            else _Snapshot(render_len=snap.render_len + shift, render_state=snap.render_state)
+            for snap in self._snapshots
+        ]
+        if heard != meant:
+            self._corrections.append((heard, meant))
+
     def _commit_recase(self, item: Item) -> None:
         """"cap that" / "uppercase that" / "lowercase that", said as a
         whole segment, recases the last utterance in place; said
         mid-sentence it was dictation, and types as words."""
         start, end = item.span
         if not (start in self._segment_bounds and end in self._segment_bounds):
-            words = [
-                Item(kind="word", text=token, span=(index, index + 1))
-                for index, token in enumerate(self._tokens[start:end], start)
-            ]
-            delta, self._render_state = render_items(words, self._render_state, self._register)
-            self._committed_render += delta
+            self._type_as_words(item)
             return
         target = None
         for snapshot in reversed(self._snapshots):
