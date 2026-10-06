@@ -125,6 +125,8 @@ class TextInjector:
         # text, or newline smuggled through a clipboard paste. Pressing
         # Enter stays a human act.
         self.suppress_enter = False
+        # A chat app: a line break is Shift+Enter (plain Enter sends).
+        self.shift_newline = False
         self._warned_no_clipboard = False
 
     def start(self) -> None:
@@ -233,7 +235,9 @@ class TextInjector:
 
     def _type_keyable(self, text: str) -> None:
         for ch in text:
-            if ch.isupper():
+            if ch == "\n" and self.shift_newline:
+                self._press_key(e.KEY_ENTER, shift=True)
+            elif ch.isupper():
                 self._press_key(CHAR_TO_KEY[ch.lower()], shift=True)
             elif ch in SHIFT_MAP:
                 self._press_key(CHAR_TO_KEY[SHIFT_MAP[ch]], shift=True)

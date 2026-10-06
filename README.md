@@ -700,7 +700,10 @@ into `python` or `shell`). A line break is never typed where a terminal
 can't be ruled out: in a known terminal (whatever register you map it
 to), and wherever the focused app couldn't be identified — there "new
 line" types a space. If that happens everywhere on Linux, the AT-SPI
-bindings are missing; `voice-keyboard doctor` says so. If focus moves to a different app
+bindings are missing; `voice-keyboard doctor` says so. In chat apps where Enter sends (Slack, Discord,
+Teams, Signal, Telegram, WhatsApp, Element, Mattermost, …) a line break is
+typed as Shift+Enter, so "new line" never sends half a message; add others
+with `[registers] chat_apps`. (A chat in a browser tab looks like the browser.) If focus moves to a different app
 mid-dictation, typing freezes immediately and the transcript lands on the
 clipboard instead — dictation never types into the wrong window. On Linux
 the probe also sees the focused *widget*: a password field always forces

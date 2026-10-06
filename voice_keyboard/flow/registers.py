@@ -70,6 +70,22 @@ TERMINAL_APPS = {
     "mintty", "hyper",
 }
 
+# Apps where Enter sends the message and Shift+Enter is a line break: a
+# spoken "new line" there must not send half a message.
+CHAT_APPS = {
+    "slack", "discord", "teams", "ms-teams", "signal", "signal-desktop",
+    "telegram-desktop", "telegram", "whatsapp", "element", "element-desktop",
+    "mattermost", "mattermost-desktop", "zulip", "skype", "rocket.chat",
+    "beeper", "wire", "threema", "session",
+}
+
+
+def is_chat_app(app: str, extra=()) -> bool:
+    """Enter sends here; a line break must be Shift+Enter."""
+    key = (app or "").strip().lower()
+    key = key[:-4] if key.endswith(".exe") else key
+    return bool(key) and (key in CHAT_APPS or key in {str(x).strip().lower() for x in extra})
+
 
 # A lowercase recognizer's "i", "i'm", "i'll": the pronoun is always a capital.
 # Days and months a lowercase recognizer writes small. Not "may" or

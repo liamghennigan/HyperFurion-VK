@@ -25,6 +25,7 @@ from voice_keyboard.flow.registers import (
     RenderState,
     continuation_state,
     Register,
+    is_chat_app,
     register_for_app,
     resolve_register,
     TERMINAL,
@@ -1106,6 +1107,12 @@ class Daemon:
         # not identify, or a terminal app mapped to another register.
         if hasattr(self._injector, "suppress_enter"):
             self._injector.suppress_enter = bool(register.terminal) or not _surely_not_a_terminal(focus)
+        if hasattr(self._injector, "shift_newline"):
+            # Slack, Discord, Teams…: Enter sends, so a line break is Shift+Enter.
+            chat_extra = (self._config.get("registers", {}) or {}).get("chat_apps", []) or []
+            self._injector.shift_newline = bool(
+                focus is not None and _surely_not_a_terminal(focus) and is_chat_app(focus.app, chat_extra)
+            )
 
         # A secret widget gets maximum protection: verbatim register (set
         # above via the role), no ledger entry, no vocabulary bias.
@@ -1165,6 +1172,8 @@ class Daemon:
     async def _teardown_flow_session(self) -> None:
         if hasattr(self._injector, "suppress_enter"):
             self._injector.suppress_enter = False
+        if hasattr(self._injector, "shift_newline"):
+            self._injector.shift_newline = False
         if self._nav_task is not None:
             self._nav_task.cancel()
             self._nav_task = None

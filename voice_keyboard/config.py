@@ -634,6 +634,9 @@ def validate_config(config: dict) -> None:
     for name, text in snippets.items():
         if not str(name).strip() or not isinstance(text, str) or not text:
             raise RuntimeError(f"snippets.{name!r}: a spoken name and the text to type")
+    chat_apps = (config.get("registers", {}) or {}).get("chat_apps", [])
+    if not isinstance(chat_apps, list) or not all(isinstance(a, str) and a.strip() for a in chat_apps):
+        raise RuntimeError('registers.chat_apps must be a list of app names, e.g. ["mychat"]')
     polish_map = (config.get("polish", {}) or {}).get("map", {})
     if not isinstance(polish_map, dict) or not all(
         isinstance(v, str) and v.strip() for v in polish_map.values()

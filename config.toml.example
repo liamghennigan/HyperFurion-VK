@@ -214,6 +214,11 @@ default = "prose"
 # macOS, Win32 on Windows) to pick the register automatically.
 probe = true
 
+# Chat apps (Slack, Discord, Teams, Signal, Telegram, WhatsApp, Element,
+# Mattermost, …) type a spoken line break as Shift+Enter, because Enter
+# sends there. Add your own; a chat in a browser tab can't be told apart.
+# chat_apps = ["mychat"]
+
 [registers.map]
 # App -> register overrides, merged over the built-in terminal list.
 # kitty = "terminal"

@@ -12,6 +12,10 @@ proven to be the daemon's.
 
 ### Added
 
+- **Line breaks in chat apps are Shift+Enter.** In Slack, Discord, Teams,
+  Signal, Telegram, WhatsApp, Element, Mattermost and others, Enter sends —
+  so a spoken "new line", a list or a multi-line snippet no longer sends
+  half a message. All three platforms; add apps with `[registers] chat_apps`.
 - **`voice-keyboard try [register:] <words…>`.** Prints what the keyboard
   would type for those words through your config's grammar — no microphone
   or daemon; `|` marks a pause between utterances, a leading `python:` (or

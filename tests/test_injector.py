@@ -49,6 +49,15 @@ class TestTextInjector:
             assert first[1] == e.KEY_LEFTSHIFT
             assert first[2] == 1
 
+    def test_chat_line_break_is_shift_enter(self, injector: TextInjector) -> None:
+        from evdev import ecodes as e
+        with mock.patch("voice_keyboard.injector.UInput") as mock_uinput:
+            injector.start()
+            injector.shift_newline = True
+            injector.type_text("\n")
+            writes = [call.args[1:] for call in mock_uinput.return_value.write.call_args_list]
+            assert writes == [(e.KEY_LEFTSHIFT, 1), (e.KEY_ENTER, 1), (e.KEY_ENTER, 0), (e.KEY_LEFTSHIFT, 0)]
+
     def test_shifted_symbol(self, injector: TextInjector) -> None:
         with mock.patch("voice_keyboard.injector.UInput") as mock_uinput:
             injector.start()

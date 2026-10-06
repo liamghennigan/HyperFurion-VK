@@ -62,3 +62,31 @@ def test_terminals_and_code_get_no_pasted_marks() -> None:
     assert trial.run(terminal, "terminal: echo emoji rocket".split()) == "echo emoji rocket"
     assert " " not in trial.run(terminal, "terminal: ls point virgule ls".split())
     assert trial.run(terminal, "ça va point d'interrogation".split()) == "Ça va ?"  # prose keeps French spacing
+
+
+def test_chat_apps_are_known_and_configurable() -> None:
+    from voice_keyboard.flow.registers import is_chat_app
+
+    assert is_chat_app("Slack") and is_chat_app("Discord.exe") and is_chat_app("signal-desktop")
+    assert not is_chat_app("gedit") and not is_chat_app("")
+    assert is_chat_app("mychat", ["MyChat"])
+
+
+@pytest.mark.parametrize("app, shifted", [("slack", True), ("gedit", False), ("", False)])
+def test_a_chat_app_session_types_line_breaks_as_shift_enter(app, shifted) -> None:
+    injector = RecordingInjector()
+    injector.suppress_enter = False
+    injector.shift_newline = False
+    daemon = _make_daemon(FakeStreamingSTT([{"type": "transcript.partial", "text": "hi", "is_final": True}]),
+                          injector, app=app)
+    seen = {}
+
+    async def run() -> None:
+        with daemon._audio_patch, daemon._stt_patch, daemon._probe_patch:
+            await daemon._start_recording()
+            seen["during"] = injector.shift_newline
+            await asyncio.sleep(0.05)
+            await daemon._stop_recording()
+
+    asyncio.run(run())
+    assert seen["during"] is shifted and injector.shift_newline is False

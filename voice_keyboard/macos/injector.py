@@ -103,6 +103,8 @@ class MacTextInjector:
         # must never run them: while set, a newline in the text becomes a
         # space — a typed "\n" is Return in Terminal.
         self.suppress_enter = False
+        # A chat app: a line break is Shift+Return (plain Return sends).
+        self.shift_newline = False
 
     def start(self) -> None:
         import Quartz  # pyobjc-framework-Quartz; darwin only
@@ -119,6 +121,13 @@ class MacTextInjector:
             raise RuntimeError("Injector not started")
         if self.suppress_enter:
             text = strip_line_breaks(text)
+        elif self.shift_newline and "\n" in text:
+            first, *rest = text.replace("\r\n", "\n").split("\n")
+            self.type_text(first)
+            for part in rest:
+                self.press_combo(["shift", "return"])
+                self.type_text(part)
+            return
         q = self._quartz
         for chunk in chunk_text(text):
             units = _utf16_units(chunk)
