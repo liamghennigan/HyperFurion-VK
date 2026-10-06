@@ -8,6 +8,12 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from voice_keyboard.providers import (  # noqa: F401
+    DEFAULT_TTS_MODELS,
+    DEFAULT_TTS_VOICES,
+    SUPPORTED_TTS_PROVIDERS,
+)
+
 logger = logging.getLogger(__name__)
 
 XAI_TTS_URL = "https://api.x.ai/v1/tts"
@@ -15,21 +21,8 @@ OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
 ELEVENLABS_TTS_URL_TEMPLATE = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 HYPERFURION_DEFAULT_BASE_URL = "https://api.hyperfurion.com"
 
-SUPPORTED_TTS_PROVIDERS = {"xai", "hyperfurion", "openai", "elevenlabs"}
 
-DEFAULT_TTS_MODELS = {
-    "xai": "",
-    "hyperfurion": "",
-    "openai": "gpt-4o-mini-tts",
-    "elevenlabs": "eleven_multilingual_v2",
-}
 
-DEFAULT_TTS_VOICES = {
-    "xai": "eve",
-    "hyperfurion": "eve",
-    "openai": "coral",
-    "elevenlabs": "JBFqnCBsd6RMkjVDRZzb",
-}
 
 
 def _build_session() -> requests.Session:

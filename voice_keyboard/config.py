@@ -8,8 +8,13 @@ from typing import Optional
 import tomllib
 
 from voice_keyboard import paths
-from voice_keyboard.stt import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS
-from voice_keyboard.tts import DEFAULT_TTS_MODELS, DEFAULT_TTS_VOICES, SUPPORTED_TTS_PROVIDERS
+from voice_keyboard.providers import (
+    DEFAULT_STT_MODELS,
+    DEFAULT_TTS_MODELS,
+    DEFAULT_TTS_VOICES,
+    SUPPORTED_STT_PROVIDERS,
+    SUPPORTED_TTS_PROVIDERS,
+)
 
 logger = logging.getLogger(__name__)
 

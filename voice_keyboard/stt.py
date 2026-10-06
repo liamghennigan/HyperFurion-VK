@@ -15,6 +15,8 @@ import websockets
 from websockets.exceptions import WebSocketException
 from urllib3.util.retry import Retry
 
+from voice_keyboard.providers import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 XAI_STT_WS_URL = "wss://api.x.ai/v1/stt"
@@ -25,18 +27,9 @@ DEEPGRAM_STT_URL = "https://api.deepgram.com/v1/listen"
 ASSEMBLYAI_UPLOAD_URL = "https://api.assemblyai.com/v2/upload"
 ASSEMBLYAI_TRANSCRIPT_URL = "https://api.assemblyai.com/v2/transcript"
 
-SUPPORTED_STT_PROVIDERS = {"xai", "hyperfurion", "openai", "groq", "deepgram", "assemblyai"}
 MAX_CONNECT_RETRIES = 2
 CONNECT_BACKOFF_BASE = 0.5
 
-DEFAULT_STT_MODELS = {
-    "xai": "",
-    "hyperfurion": "",
-    "openai": "gpt-4o-transcribe",
-    "groq": "whisper-large-v3-turbo",
-    "deepgram": "nova-3",
-    "assemblyai": "",
-}
 
 
 def _bias_tokens(bias: str, cap: int = 24) -> list[str]:

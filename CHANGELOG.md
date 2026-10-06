@@ -267,6 +267,10 @@ proven to be the daemon's.
 
 ### Fixed
 
+- **The CLI starts ~130 ms faster.** Every `voice-keyboard` command (the
+  GNOME shortcut runs `voice-keyboard toggle` per press) imported the speech
+  clients, and with them `requests` and `websockets`, just to validate the
+  config; the provider tables now live in a plain module. 190 → 60 ms.
 - **Safety: Enter is refused wherever a terminal can't be ruled out.** A
   session whose focus could not be identified, or a terminal app mapped to
   another register in `[registers.map]`, now refuses Enter on every path
