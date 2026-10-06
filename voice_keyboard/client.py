@@ -858,7 +858,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login", "quit", "devices", "setup", "stats",
+            "login", "quit", "devices", "setup", "stats", "commands",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -869,7 +869,7 @@ def main() -> None:
             "history [count] | recall [n-back] | transform <instruction...>"
             " | intent <request...> | ask <question...> | find <query...>"
             " | learned [accept N | reject N | hotword N | macro N <name> |"
-            " forget <spoken>] | stats [--json]"
+            " forget <spoken>] | stats [--json] | commands [filter]"
         ),
     )
     parser.add_argument(
@@ -912,6 +912,12 @@ def main() -> None:
 
     if args.command == "devices":
         _run_devices()
+        return
+
+    if args.command == "commands":
+        from voice_keyboard.cheatsheet import render
+
+        print(render(config, " ".join(args.args)), end="")
         return
 
     socket_path = args.socket or config["daemon"]["socket_path"]

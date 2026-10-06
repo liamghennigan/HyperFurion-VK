@@ -9,6 +9,10 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **`voice-keyboard commands [filter]`**: everything you can say — commands,
+  punctuation, emoji, caret commands, formatters, wake-word channels and
+  your own vocabulary and snippets — built from the live grammar with your
+  config merged in, so it never drifts from what the engine does.
 - **"Cap that", "uppercase that", "lowercase that".** Said on their own,
   they recase the last utterance in place — no model, no selection.
   Mid-sentence ("let's cap that at ten") they stay words.

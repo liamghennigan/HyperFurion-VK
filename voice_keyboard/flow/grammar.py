@@ -316,6 +316,11 @@ class Grammar:
             (len(p) for p in self._phrases), default=1
         )
 
+    def phrases(self) -> list[tuple[str, str, object]]:
+        """Every spoken phrase this grammar knows, after config merges:
+        (phrase, kind, payload) with kind "command" | "punct" | "vocab"."""
+        return [(" ".join(tokens), kind, payload) for tokens, (kind, payload) in self._phrases.items()]
+
     _TRAILING_SPECS = {
         ".": ("left", True), ",": ("left", False), "!": ("left", True),
         "?": ("left", True), ";": ("left", False), ":": ("left", False),

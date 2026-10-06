@@ -775,6 +775,9 @@ warning as before.
   second-most-recent entry. Off by default.
 - `voice-keyboard status` now reports provider, register, flow state,
   focused app, and the last error.
+- `voice-keyboard commands [filter]` prints everything you can say, built
+  from the same tables the engine uses with your config merged in —
+  `voice-keyboard commands percent` shows just the matching lines.
 - `voice-keyboard stats` shows latency percentiles (p50/p95/max) over the
   last 200 dictations:
   - speech → first transcript (the recognizer);
