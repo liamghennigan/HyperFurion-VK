@@ -536,6 +536,50 @@
   ]
  },
  {
+  "name": "dollars and cents",
+  "register": "prose",
+  "segments": [
+   "it costs five dollars and fifty cents and twenty dollars and five cents period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It costs $5.50 and $20.05."
+   ],
+   [
+    "final",
+    "It costs $5.50 and $20.05.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "dollars and something else",
+  "register": "prose",
+  "segments": [
+   "five dollars and some change"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "$5 and some change"
+   ],
+   [
+    "final",
+    "$5 and some change",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "prose decimal percent",
   "register": "prose",
   "segments": [

@@ -65,6 +65,8 @@ CASES = [
     ("prose percent", "prose", ["about twenty five percent of users"], {}),
     ("prose percent held while percent might grow", "prose", ["it went up one hundred percent"], {}),
     ("prose dollars", "prose", ["it costs twenty five dollars period"], {}),
+    ("dollars and cents", "prose", ["it costs five dollars and fifty cents and twenty dollars and five cents period"], {}),
+    ("dollars and something else", "prose", ["five dollars and some change"], {}),
     ("prose decimal percent", "prose", ["growth was two point five percent"], {}),
     ("prose times", "prose", ["meet at three thirty pm or twelve am"], {}),
     ("which one am I stays words", "prose", ["which one am i"], {}),

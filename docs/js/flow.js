@@ -167,6 +167,17 @@ export function foldUnit(words, unit) {
   if (amount === null) return null;
   return unit === "percent" ? amount + "%" : "$" + amount;
 }
+// "and fifty cents" at `at` -> [".50", index of "cents"], or null
+function centsAt(items, at) {
+  if (at >= items.length || items[at].kind !== "word" || items[at].text.toLowerCase() !== "and") return null;
+  let end = at + 1;
+  while (end < items.length && items[end].kind === "word" && !PUNCT_TAIL.test(items[end].text) &&
+         NUMBER_WORDS.has(core(items[end].text)) && !["and", "point", "hundred", "thousand"].includes(core(items[end].text))) end += 1;
+  if (end === at + 1 || end >= items.length || items[end].kind !== "word") return null;
+  if (core(items[end].text) !== "cent" && core(items[end].text) !== "cents") return null;
+  const value = parseCardinal(items.slice(at + 1, end).map((x) => core(x.text)));
+  return value !== null && value >= 1 && value <= 99 ? ["." + String(value).padStart(2, "0"), end] : null;
+}
 function foldUnits(items, frozen, itemEnd, pendingFrom) {
   const out = [];
   const bare = (it) => it.kind === "word" && !PUNCT_TAIL.test(it.text) && NUMBER_WORDS.has(core(it.text));
@@ -182,9 +193,14 @@ function foldUnits(items, frozen, itemEnd, pendingFrom) {
       const verb = uc === "am" && end + 1 < items.length && items[end + 1].kind === "word" && core(items[end + 1].text) === "i";
       if (unit.kind === "word" && UNIT_WORDS.has(uc) && !verb && (it.s >= frozen || unit.e <= itemEnd(it.s))) {
         let folded = foldUnit(items.slice(i, end).map((x) => core(x.text)), uc);
+        let u = unit;
+        const cents = folded && folded.startsWith("$") && !folded.includes(".") ? centsAt(items, end + 1) : null;
+        if (cents && (it.s >= frozen || items[cents[1]].e <= itemEnd(it.s))) {
+          folded += cents[0]; u = items[cents[1]]; end = cents[1];  // "five dollars and fifty cents" -> "$5.50"
+        }
         if (folded !== null) {
-          if (uc !== "a.m" && uc !== "p.m") folded += (unit.text.match(PUNCT_TAIL) || [""])[0];  // "percent." keeps its period
-          out.push({ kind: "word", text: folded, s: it.s, e: unit.e });
+          if (uc !== "a.m" && uc !== "p.m") folded += (u.text.match(PUNCT_TAIL) || [""])[0];  // "percent." keeps its period
+          out.push({ kind: "word", text: folded, s: it.s, e: u.e });
           i = end + 1; continue;
         }
       }

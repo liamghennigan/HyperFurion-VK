@@ -9,10 +9,14 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **A lowercase recognizer's "i" is a capital in prose.** Streaming models
+  that write everything lowercase typed "i think i'm"; prose now types
+  "I think I'm" (also I'll, I'd, I've). Spelled words are left alone.
 - **Amounts and times in prose.** Prose still keeps spoken numbers as words
   ("no one knows"), but a unit right after one makes the reading certain:
   "twenty five percent" → `25%`, "five dollars" → `$5`, "three thirty pm"
-  → `3:30 PM`, and a recognizer's "25 percent" → `25%`. "Which one am I"
+  → `3:30 PM`, "five dollars and fifty cents" → `$5.50`, and a recognizer's
+  "25 percent" → `25%`. "Which one am I"
   stays words; a run already typed as words is never rewritten.
 - **Spoken numbered lists.** "Steps colon new number build new number test"
   types `Steps:` / `1. Build` / `2. Test`. The count survives a scratch

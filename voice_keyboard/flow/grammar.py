@@ -17,7 +17,13 @@ from typing import Optional
 from voice_keyboard.flow.nav import PENDING as NAV_PENDING
 from voice_keyboard.flow.nav import VERBS as NAV_VERBS
 from voice_keyboard.flow.nav import parse_nav
-from voice_keyboard.flow.numbers import NUMBER_WORDS, UNIT_WORDS, convert_numbers, fold_unit
+from voice_keyboard.flow.numbers import (
+    NUMBER_WORDS,
+    UNIT_WORDS,
+    convert_numbers,
+    fold_unit,
+    parse_cardinal,
+)
 from voice_keyboard.flow.pauses import COMMON_LOWER
 from voice_keyboard.flow.spelling import (
     MAX_SPELLED_LETTERS,
@@ -658,6 +664,25 @@ class Grammar:
         return ParseResult(items=items, pending_from=pending_from)
 
     @staticmethod
+    def _cents(items: list[Item], at: int) -> Optional[tuple[str, int]]:
+        """"and fifty cents" at `at` -> (".50", index of "cents"), or None."""
+        if at >= len(items) or items[at].kind != "word" or items[at].text.casefold() != "and":
+            return None
+        end = at + 1
+        while (
+            end < len(items) and items[end].kind == "word"
+            and items[end].text.rstrip(".,!?;:") == items[end].text
+            and _core(items[end].text) in NUMBER_WORDS - {"and", "point", "hundred", "thousand"}
+        ):
+            end += 1
+        if end == at + 1 or end >= len(items) or items[end].kind != "word":
+            return None
+        if _core(items[end].text) not in ("cent", "cents"):
+            return None
+        value = parse_cardinal([_core(it.text) for it in items[at + 1:end]])
+        return (f".{value:02d}", end) if value is not None and 1 <= value <= 99 else None
+
+    @staticmethod
     def _fold_units(
         items: list[Item], *, frozen: int, item_end=None, pending_from: Optional[int] = None
     ) -> tuple[list[Item], Optional[int]]:
@@ -695,6 +720,13 @@ class Grammar:
                     or (item_end is not None and unit.span[1] <= item_end(item.span[0]))
                 ):
                     folded = fold_unit([_core(it.text) for it in items[index:end]], unit_core)
+                    cents = Grammar._cents(items, end + 1) if folded and folded.startswith("$") else None
+                    if cents is not None and "." not in folded and (
+                        item.span[0] >= frozen
+                        or (item_end is not None and items[cents[1]].span[1] <= item_end(item.span[0]))
+                    ):
+                        folded += cents[0]  # "five dollars and fifty cents" -> "$5.50"
+                        unit, end = items[cents[1]], cents[1]
                     if folded is not None:
                         if unit_core not in ("a.m", "p.m"):  # "percent." keeps its period
                             folded += unit.text[len(unit.text.rstrip(".,!?;:")):]

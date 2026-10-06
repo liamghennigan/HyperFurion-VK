@@ -87,6 +87,11 @@ def _parse_digit_sequence(words: list[str]) -> Optional[str]:
     return "".join(str(_DIGITS[word]) for word in words)
 
 
+def parse_cardinal(words: list[str]) -> Optional[int]:
+    """A complete cardinal ("fifty five" -> 55), or None."""
+    return _parse_cardinal([w.casefold() for w in words])
+
+
 def parse_number_run(words: list[str]) -> Optional[str]:
     """Parse a run of spoken-number words into a digit string.
 
