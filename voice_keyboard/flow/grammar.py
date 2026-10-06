@@ -250,6 +250,9 @@ def _core(token: str) -> str:
     return token.casefold().strip(_PUNCT_STRIP)
 
 
+DATE_MONTHS_SET = frozenset(DATE_MONTHS)
+
+
 def _clean(token: str) -> bool:
     """No punctuation attached at either end ("five," "...five")."""
     return token.strip(_PUNCT_STRIP) == token
@@ -874,6 +877,15 @@ class Grammar:
         index = 0
         while index < size:
             item = items[index]
+            # Fast path: most words can start no fold at all.
+            if item.kind != "word" or not (
+                item.text[:1] in "0123456789"
+                or (lowered := item.text.casefold().strip(_PUNCT_STRIP)) in NUMBER_WORDS
+                or lowered in DATE_MONTHS_SET
+            ):
+                result.append(item)
+                index += 1
+                continue
             committed = item.span[0] < frozen
             limit = (item_end(item.span[0]) if item_end is not None else frozen) if committed else None
 
