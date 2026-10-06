@@ -18,6 +18,7 @@ from voice_keyboard.flow.nav import PENDING as NAV_PENDING
 from voice_keyboard.flow.nav import VERBS as NAV_VERBS
 from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import NUMBER_WORDS, convert_numbers
+from voice_keyboard.flow.pauses import COMMON_LOWER
 from voice_keyboard.flow.spelling import (
     MAX_SPELLED_LETTERS,
     could_be_capital,
@@ -52,12 +53,12 @@ class ParseResult:
 # action name -> default trigger phrases
 DEFAULT_COMMANDS: dict[str, tuple[str, ...]] = {
     "scratch_that": (
-        "scratch that", "delete that", "strike that", "undo that",
-        "scratch this", "scratched that",  # how recognizers often write it
+        "scratch that", "delete that",
+        "scratched that",  # how recognizers often write it
     ),
     "new_line": ("new line",),
     "new_paragraph": ("new paragraph",),
-    "bullet": ("bullet point", "new bullet"),
+    "bullet": ("new bullet",),  # not "bullet point": that is a noun phrase
     "literal": ("literal",),
 }
 
@@ -113,9 +114,9 @@ _SENTENCE_STOPS = ".?!"
 # example dot com" -> liam@example.com. A run only becomes an address
 # when it ends in one of these, so "meet at the office" stays prose.
 TLDS = frozenset(
-    "com org net io dev ai app co edu gov uk de fr us ca me info biz xyz sh gg tv "
-    "eu nl se no es it jp in au nz ch at be ly so to cc".split()
-)
+    "com org net io dev ai app co edu gov uk de fr ca info biz xyz sh gg tv "
+    "eu nl se es jp au nz ch ly cc".split()
+)  # never English words ("in", "at", "it", "to", "so", "me", "no", "be", "us")
 _ADDRESS_GLUE = {"dot": ".", "at": "@"}
 
 # Spoken case formatters: "snake case user id" -> user_id. The formatter
@@ -200,12 +201,15 @@ class Grammar:
         nav: bool = False,
         fillers=DEFAULT_FILLERS,
         addresses: bool = True,
-        formatters: bool = True,
+        formatters="code",
         code: bool = False,
     ):
         self.enabled = enabled
         self._address_on = addresses
-        self._formatters = formatters
+        # "code" (default): only in code and terminal registers, where "no
+        # space" or "all caps" are never prose; "everywhere"; "off".
+        mode = {True: "code", False: "off"}.get(formatters, formatters)
+        self._formatters = mode == "everywhere" or (mode == "code" and code)
         self._formatter_stops = CODE_FORMATTER_STOPS if code else FORMATTER_STOPS
         self._spelling = spelling
         self._fillers = frozenset(
@@ -305,7 +309,12 @@ class Grammar:
         if not self._address_on or index + 1 >= limit:
             return None  # a lone word at the tail is just a word, for now
         first = cores[index]
-        if not _address_part(first) or first in _ADDRESS_GLUE or first in self._fillers:
+        if (
+            not _address_part(first)
+            or first in _ADDRESS_GLUE
+            or first in self._fillers
+            or first in COMMON_LOWER  # "the dot com bubble", "a red dot co…"
+        ):
             return None
         if cores[index + 1] not in _ADDRESS_GLUE:
             return None

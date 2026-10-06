@@ -190,10 +190,23 @@ def test_the_selection_is_rewritten_in_place() -> None:
     assert run.result == "The quick fox."
 
 
-def test_a_multiline_selection_may_keep_its_lines() -> None:
+def test_a_multiline_selection_is_refused() -> None:
+    # Typing its line breaks would press Enter: in a chat box, that sends.
     run = _session(FocusInfo(**EDITOR), "One.\nTwo.", selection=("one\ntwo", 7))
-    assert run.injector.screen == "One.\nTwo."
-    assert run.injector.guarded == [False]
+    run.llm.rewrite.assert_not_called()
+    assert run.injector.screen == ""
+    assert any(state == "error" and "multi-line" in detail for state, detail in run.overlays)
+
+
+def test_windows_ignores_an_editors_whole_line_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    from voice_keyboard import clipboard
+    from voice_keyboard.flow.registers import PROSE
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(clipboard, "selection_text", lambda **k: "    return x\r\n")
+    daemon = _make_daemon(FakeStreamingSTT([]), RecordingInjector())
+    daemon._session_focus, daemon._session_secret, daemon._session_register = FocusInfo(app="Code.exe"), False, PROSE
+    assert asyncio.run(daemon._focused_selection()) == ""
 
 
 def test_a_single_line_rewrite_cannot_press_enter() -> None:

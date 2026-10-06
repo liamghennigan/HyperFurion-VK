@@ -77,11 +77,14 @@ proven to be the daemon's.
 
 ### Added
 
-- **Spoken bullets.** "Shopping list colon bullet point milk bullet point
+- **Spoken bullets.** "Shopping list colon new bullet milk new bullet
   eggs" types a list: `Shopping list:` then `- Milk` and `- Eggs` on lines
-  of their own. A bullet at the start of a line needs no extra break; in
-  a terminal or a code register it types nothing. "New bullet" works too.
-- **Spoken case formatters (`[flow] formatters`).** "snake case user id"
+  of their own. Right after a line break no extra one is added; in a
+  terminal or a code register it types nothing. ("Bullet point" stays a
+  noun phrase: "the first bullet point is about cost" is prose.)
+- **Spoken case formatters (`[flow] formatters = "code"`).** In code and
+  terminal registers — where "no space" or "all caps" is never prose;
+  `"everywhere"` opts prose in. "snake case user id"
   types `user_id`, "camel case get user name" `getUserName`, "pascal case
   http client" `HttpClient`; kebab, constant, dot and title case, "all
   caps" and "no space" too. A formatter takes the words after it up to a
@@ -104,9 +107,10 @@ proven to be the daemon's.
   Only when the caret is surely still right after it — the same app and
   register, within 30 seconds, no focus change, nothing complex to
   backspace over; otherwise the overlay says why and nothing is touched.
-  "Strike that", "undo that", "scratch this" and the recognizer's
-  "scratched that" now work in the daemon too (the landing page already
-  took them).
+  The recognizer's "scratched that" works too. (The landing page's "undo
+  that" and "strike that" are gone: "I can't undo that decision" is a
+  sentence, not a command.) A scratch needs to know which app has focus,
+  and takes the live preview back before counting.
 - **`[snippets]` — text you type by name.** `"my email" =
   "you@example.com"` in config, then "VK, my email" types it — alone, or
   at the end of a dictation ("send the invoice to VK, my email"), where
@@ -123,7 +127,9 @@ proven to be the daemon's.
   in order; an answer that adds, swaps or respells a word, or deletes
   more than 60 % of the dictation, is thrown away and your text stays as
   dictated. The screen repairs itself in place. Dictations without a cue
-  are never sent; prose fields only. Off by default; `voice-keyboard
+  are never sent, nor a cue that opens the sentence ("Sorry for the
+  delay") or one with line breaks; prose fields only; a recording that
+  continues a sentence keeps its lowercase start. Off by default; `voice-keyboard
   setup` asks.
 - **Rewrite any selection, in any app.** Highlight text, say "VK, make
   this shorter" (or fix the grammar, translate, make it friendlier) and
@@ -137,8 +143,11 @@ proven to be the daemon's.
   restored. Never in
   a terminal or a password field; a single-line selection never gains an
   Enter; over 4000 characters is refused out loud rather than rewriting
-  something else. With nothing selected, an instruction alone still
-  rewrites your previous dictation.
+  something else. A multi-line selection is refused (typing its line
+  breaks would press Enter, which sends a chat message); on Windows an
+  editor's copy of the whole caret line (VS Code does that when nothing
+  is selected) counts as no selection. With nothing selected, an
+  instruction alone still rewrites your previous dictation.
 - **Hesitations never reach the page (`[flow] fillers`).** Streaming
   recognizers write down "um" and "uh"; they are now dropped from what is
   typed, with the commas that bracket them: "Um, so we should, uh, ship

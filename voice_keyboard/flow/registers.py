@@ -106,7 +106,8 @@ class RenderState:
     pending: str = ""              # semantic-compiler hold (dash, call-open, call)
     after_name: bool = False       # code: the last atom was a name ("f" before "(")
     open_calls: int = 0            # code: calls a spoken callable opened, not yet closed
-    line_start: bool = True        # the caret is at the start of a line
+    inner_parens: int = 0          # code: explicit parens opened inside those calls
+    line_start: bool = False       # the caret is surely at the start of a line
 
 
 def initial_state(register: Register) -> RenderState:

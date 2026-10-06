@@ -73,6 +73,7 @@ def _compile(
     pending = state.pending
     after_name = state.after_name
     open_calls = state.open_calls
+    inner_parens = state.inner_parens
 
     def emit(text: str, *, glue_left: bool, name: bool = False) -> None:
         nonlocal at_start, glue_next, after_name
@@ -109,6 +110,7 @@ def _compile(
             flush_dash()
             pending = ""
             open_calls = 0
+            inner_parens = 0
             out.append(item.text)
             at_start = False
             glue_next = True
@@ -119,9 +121,9 @@ def _compile(
                 continue
             if open_calls and item.text == ":":
                 # "range len xs colon": a colon closes every open call
-                emit(")" * open_calls + ":", glue_left=True)
+                emit(")" * (inner_parens + open_calls) + ":", glue_left=True)
                 pending = ""
-                open_calls = 0
+                open_calls = inner_parens = 0
                 continue
             if dash_hold and item.text == "-" and item.mode == "none":
                 # Hold the dash: the next word becomes a flag ("-i").
@@ -131,10 +133,14 @@ def _compile(
             flush_dash()
             if pending == "call-open":
                 pending = "call" if open_calls else ""
-            if open_calls and item.text == ")":
+            if item.text == ")" and inner_parens:
+                inner_parens -= 1  # closes a paren said inside the call
+            elif open_calls and item.text == ")":
                 open_calls -= 1
                 if not open_calls:
                     pending = ""
+            elif open_calls and item.text == "(":
+                inner_parens += 1
             if glue_calls and after_name and item.text in "([" and item.mode == "right":
                 emit(item.text, glue_left=True)  # a call or a subscript: f(, xs[
                 glue_next = True
@@ -170,6 +176,7 @@ def _compile(
         pending=pending,
         after_name=after_name,
         open_calls=open_calls,
+        inner_parens=inner_parens,
     )
 
 

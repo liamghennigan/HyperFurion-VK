@@ -66,9 +66,14 @@ def test_scratch_that_alone_takes_back_the_last_dictation() -> None:
     assert any("scratched" in o for o in overlays)
 
 
-@pytest.mark.parametrize("phrase", ["strike that", "undo that", "Scratch that."])
+@pytest.mark.parametrize("phrase", ["scratched that", "Scratch that.", "delete that"])
 def test_synonyms(phrase) -> None:
     assert _two("send it on Friday.", phrase)[0] == ""
+
+
+def test_everyday_words_are_not_commands() -> None:
+    screen, _ = _two("send it on Friday.", "I cannot undo that decision now")
+    assert screen == "Send it on Friday. I cannot undo that decision now"
 
 
 def test_not_in_another_app() -> None:
@@ -96,3 +101,9 @@ def test_a_scratch_inside_a_recording_stays_inside_it() -> None:
 def test_only_once() -> None:
     injector_screen, _ = _two("send it on Friday.", "scratch that scratch that")
     assert injector_screen == ""
+
+
+def test_never_without_knowing_the_app() -> None:
+    screen, overlays = _two("send it on Friday.", "scratch that", apps=("", ""))
+    assert screen == "Send it on Friday."
+    assert any("which app" in o for o in overlays)

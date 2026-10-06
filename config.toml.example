@@ -143,7 +143,9 @@ addresses = true
 # user_id, "camel case get user name" -> getUserName; also pascal, kebab,
 # constant, dot and title case, "all caps", "no space". A formatter takes
 # the words after it up to a pause, punctuation or another command.
-formatters = true
+# "code" = in code and terminal registers only, where they are never
+# prose ("there is no space left" stays a sentence); "everywhere"; "off".
+formatters = "code"
 # Hesitation sounds the recognizer writes down are dropped from what is
 # typed: "um, so we should, uh, ship it" -> "So we should, ship it".
 # Only sounds, never words that carry meaning. [] keeps them all.

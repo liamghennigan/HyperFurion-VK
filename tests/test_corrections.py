@@ -25,6 +25,8 @@ class TestRules:
 
     @pytest.mark.parametrize("text", [
         "We ship on Friday.", "This is not fine", "Make that call today.", "", "x " * 400,
+        "Sorry for the delay, the report is ready.",   # a cue that opens the sentence corrects nothing
+        "Hi team, I mean everyone,\n\nThanks",        # line structure is never sent
     ])
     def test_no_cue_is_never_sent(self, text) -> None:
         assert not needs_cleanup(text)
@@ -137,3 +139,17 @@ def test_no_cue_no_call() -> None:
     final, _, call = _dictate("We ship on Friday.", "We ship.")
     call.assert_not_called()
     assert final == "We ship on Friday."
+
+
+def test_a_rejoined_sentence_stays_lowercase() -> None:
+    from voice_keyboard.flow.registers import PROSE
+
+    daemon = _make_daemon(FakeStreamingSTT([]), RecordingInjector())
+    daemon._config["flow"]["corrections"] = "llm"
+    daemon._config["llm"].update(base_url="http://127.0.0.1:8081/v1", model="m")
+    daemon._session_secret, daemon._focus_lost, daemon._session_register = False, False, PROSE
+    llm = mock.Mock()
+    llm.clean_corrections = mock.Mock(return_value="On Wednesday.")
+    with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
+        # A recording that continues "We ship" mid-sentence starts with a space
+        assert asyncio.run(daemon._self_corrected(" on Tuesday, no wait, Wednesday.")) == " on Wednesday."

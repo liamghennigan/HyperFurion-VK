@@ -17,9 +17,10 @@ const PUNCT_STRIP = /[.,!?;:]+$/;
 const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "");
 
 const COMMANDS = {
-  "scratch that": "scratch", "scratched that": "scratch", "scratch this": "scratch",
-  "strike that": "scratch", "delete that": "scratch", "undo that": "scratch",
-  "new line": "\n", "new paragraph": "\n\n", "bullet point": "bullet", "new bullet": "bullet",
+  // "undo that", "strike that" are everyday words ("I can't undo that
+  // decision"); "scratched that" is how recognizers write the command
+  "scratch that": "scratch", "scratched that": "scratch", "delete that": "scratch",
+  "new line": "\n", "new paragraph": "\n\n", "new bullet": "bullet",
 };
 // the wake word as a speech model is likely to write it
 const WAKE_ALIASES = ["vk", "v.k.", "vk.", "vicky", "vikki", "veekay", "veek"];
@@ -200,7 +201,7 @@ const isName = (t) => /^[A-Za-z_][\w.]*$/.test(t) && !PY_KEYWORDS.has(t);
 function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
   const out = [];
   let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "", afterName = !!state.afterName;
-  let openCalls = state.openCalls || 0;
+  let openCalls = state.openCalls || 0, innerParens = state.innerParens || 0;
   const emit = (text, glueLeft, name = false) => {
     if (!atStart && !glueNext && !glueLeft) out.push(" ");
     out.push(text); atStart = false; glueNext = false; afterName = name;
@@ -214,14 +215,16 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
   const flushDash = () => { if (pending === "dash") { emit("-", false); pending = ""; } };
   for (const it of items) {
     if (it.kind === "break" && it.mode === "bullet") continue;  // a list bullet means nothing in code
-    if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
+    if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; innerParens = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
       if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
-      if (openCalls && it.text === ":") { emit(")".repeat(openCalls) + ":", true); pending = ""; openCalls = 0; continue; }  // a colon closes every open call
+      if (openCalls && it.text === ":") { emit(")".repeat(innerParens + openCalls) + ":", true); pending = ""; openCalls = innerParens = 0; continue; }  // a colon closes every open call
       if (dashHold && it.text === "-" && it.mode === "none") { flushDash(); pending = "dash"; continue; }
       flushDash();
       if (pending === "call-open") pending = openCalls ? "call" : "";
-      if (openCalls && it.text === ")") { openCalls -= 1; if (!openCalls) pending = ""; }
+      if (it.text === ")" && innerParens) innerParens -= 1;  // closes a paren said inside the call
+      else if (openCalls && it.text === ")") { openCalls -= 1; if (!openCalls) pending = ""; }
+      else if (openCalls && it.text === "(") innerParens += 1;
       if (glueCalls && afterName && "([".includes(it.text) && it.mode === "right") { emit(it.text, true); glueNext = true; continue; }
       emitMode(it.text, it.mode);
     } else if (it.kind === "word") {
@@ -234,7 +237,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
       emit(it.text, false, !!glueCalls && isName(it.text));
     }
   }
-  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName, openCalls } };
+  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName, openCalls, innerParens } };
 }
 
 // ── parse: raw tokens -> items, with the frozen fence (grammar.py) ────────
@@ -252,8 +255,9 @@ const SENTENCE_STOPS = ".?!";
 // spoken addresses: "docs dot python dot org" -> docs.python.org, "liam at
 // example dot com" -> liam@example.com; a run only becomes an address when
 // it ends in one of these, so "meet at the office" stays prose
-const TLDS = new Set(("com org net io dev ai app co edu gov uk de fr us ca me info biz xyz sh gg tv " +
-  "eu nl se no es it jp in au nz ch at be ly so to cc").split(" "));
+// never English words ("in", "at", "it", "to", "so", "me", "no", "be", "us")
+const TLDS = new Set(("com org net io dev ai app co edu gov uk de fr ca info biz xyz sh gg tv " +
+  "eu nl se es jp au nz ch ly cc").split(" "));
 const ADDRESS_GLUE = { dot: ".", at: "@" };
 const isGlue = (c) => Object.hasOwn(ADDRESS_GLUE, c);
 const addressPart = (c) => !!c && /^[a-z0-9-]+$/.test(c) && /[a-z0-9]/.test(c);
@@ -262,7 +266,7 @@ const addressPart = (c) => !!c && /^[a-z0-9-]+$/.test(c) && /[a-z0-9]/.test(c);
 function addressAt(cores, index, limit, decided, fillers) {
   if (index + 1 >= limit) return null;  // a lone word at the tail is just a word, for now
   const first = cores[index];
-  if (!addressPart(first) || isGlue(first) || fillers.has(first)) return null;
+  if (!addressPart(first) || isGlue(first) || fillers.has(first) || pauses.COMMON_LOWER.has(first)) return null;  // "the dot com bubble"
   if (!isGlue(cores[index + 1])) return null;
   const parts = [first], seps = [];
   let cursor = index + 1, best = null;
@@ -330,7 +334,10 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
   const spelling = !cfg || cfg.spelling !== false;
   const addressOn = !cfg || cfg.addresses !== false;
-  const formattersOn = !cfg || cfg.formatters !== false;
+  // formatters: "code" (default) in code and terminal registers only,
+  // where "no space" is never prose; "everywhere"; "off"
+  const fmode = !cfg || cfg.formatters === undefined || cfg.formatters === true ? "code" : cfg.formatters === false ? "off" : cfg.formatters;
+  const formattersOn = fmode === "everywhere" || (fmode === "code" && !!(reg.compiler || reg.terminal));
   const stops = reg.compiler ? CODE_FORMATTER_STOPS : FORMATTER_STOPS;
   // "camel case get user name" at i: [[items], next]; PENDING while the
   // words could still continue; null when this is not a formatter
@@ -577,7 +584,7 @@ function capitalized(t) {
   return t;
 }
 export function initialState(register) {
-  return { atStart: true, glueNext: false, capNext: (register || REGISTERS.prose).smartCaps, pending: "", lineStart: true };
+  return { atStart: true, glueNext: false, capNext: (register || REGISTERS.prose).smartCaps, pending: "", lineStart: false };
 }
 // the state a recording starts in when it continues text the previous one
 // left at the caret ([flow] rejoin): a space before its first word, and a
@@ -596,7 +603,7 @@ export function render(items, register, state) {
   const st = state ? { ...state } : initialState(reg);
   if (reg.compiler && COMPILERS[reg.compiler]) return compileCode(items, st, COMPILERS[reg.compiler]);
   const out = [];
-  if (st.lineStart === undefined) st.lineStart = true;
+  if (st.lineStart === undefined) st.lineStart = false;
   const emit = (text, glueLeft) => {
     if (!st.atStart && !st.glueNext && !glueLeft) out.push(" ");
     out.push(text); st.atStart = false; st.glueNext = false; st.lineStart = false;

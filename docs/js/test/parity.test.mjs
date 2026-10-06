@@ -14,7 +14,8 @@ const S = 1000;  // the corpus clock is in seconds; the page's in ms
 function makeEngine({ register, options }) {
   const cfg = { wakeWord: "vk", numbers: options.numbers || "auto", spelling: options.spelling !== false,
                 nav: !!options.nav, stabilityMs: 1500, stabilityUpdates: 2, adaptive: true,
-                pauseReview: options.pause_review || "off", ...(options.fillers ? { fillers: options.fillers } : {}) };
+                pauseReview: options.pause_review || "off", ...(options.fillers ? { fillers: options.fillers } : {}),
+                ...(options.formatters ? { formatters: options.formatters } : {}) };
   const state = options.continues ? continuationState(options.continues, REGISTERS[register]) : null;
   return moltenLine({ register: REGISTERS[register], cfg, state });
 }

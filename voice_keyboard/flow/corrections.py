@@ -21,7 +21,9 @@ CUES = (
     "no wait", "wait no", "no no", "i mean", "sorry", "actually",
     "or rather", "let me rephrase", "correction", "oops",
 )
-_CUE_RE = re.compile(r"\b(?:" + "|".join(re.escape(cue) for cue in CUES) + r")\b")
+# A correction comes after something to correct: "Sorry for the delay"
+# opens a sentence; "Anna, sorry, Hannah" corrects one.
+_CUE_RE = re.compile(r"\S\s+(?:" + "|".join(re.escape(cue) for cue in CUES) + r")\b")
 _WORD_RE = re.compile(r"[\w'’-]+")
 
 # Longest dictation worth tidying: beyond this, the stop would wait on the
@@ -38,8 +40,8 @@ def words(text: str) -> list[str]:
 
 def needs_cleanup(text: str) -> bool:
     """A correction cue, or a stuttered repeat ("the the"), is present."""
-    if not text or len(text) > MAX_CHARS:
-        return False
+    if not text or len(text) > MAX_CHARS or "\n" in text.strip():
+        return False  # line structure is never sent for tidying
     lowered = " ".join(words(text))
     if _CUE_RE.search(lowered):
         return True

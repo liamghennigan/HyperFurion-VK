@@ -569,9 +569,9 @@ recognizer's periods.
 
 | You say | You get |
 | --- | --- |
-| `scratch that` / `delete that` / `strike that` / `undo that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |
+| `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |
 | `new line` / `new paragraph` | `\n` / `\n\n` — nothing in a terminal or shell, where a line break is Enter and would run the line |
-| `bullet point` / `new bullet` | `- ` on a new line (or right there, at the start of a line); nothing in a terminal or in code |
+| `new bullet` | `- ` on a new line (right there after a line break); nothing in a terminal or in code |
 | `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
@@ -580,7 +580,7 @@ recognizer's periods.
 | `VK, make this shorter` with text **selected** (alone) | rewrites the selection in any app via `[llm]` and types the answer over it; your app's undo brings the original back |
 | `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |
-| `snake case user id`, `camel case get user name`, `pascal case http client` | `user_id`, `getUserName`, `HttpClient` — also `kebab case`, `constant case`, `dot case`, `title case`, `all caps`, `no space`; the words up to a pause, punctuation or another command (in code, an operator word, a keyword or a callable ends the run too: "for snake case row count in range ten colon" → `for row_count in range(10):`) |
+| `snake case user id`, `camel case get user name`, `pascal case http client` (in code and terminal registers; `[flow] formatters = "everywhere"` for prose too) | `user_id`, `getUserName`, `HttpClient` — also `kebab case`, `constant case`, `dot case`, `title case`, `all caps`, `no space`; the words up to a pause, punctuation or another command (in code, an operator word, a keyword or a callable ends the run too: "for snake case row count in range ten colon" → `for row_count in range(10):`) |
 | `liam at example dot com`, `docs dot python dot org` | `liam@example.com`, `docs.python.org` — never auto-capitalized; only runs ending in a known top-level domain (`[flow] addresses`) |
 | "um", "uh" and the like | nothing — hesitation sounds the recognizer writes down are dropped, with the commas around them (`[flow] fillers`) |
 | "Tuesday, no wait, Wednesday" | "Wednesday" — with `[flow] corrections = "llm"`, a dictation with a correction cue is tidied by `[llm]` at stop; the answer may only delete words |
@@ -604,7 +604,8 @@ chat box, press the hotkey and say only the instruction — "VK, make this
 shorter", "VK, fix the grammar", "VK, translate to German". The selection
 and the instruction go to `[llm]`, and the answer is typed over the
 selection (typing replaces a selection everywhere); the app's own undo
-restores the original. On Linux the selection is read from the focused
+restores the original. One paragraph at a time: a multi-line selection is
+refused, because typing its line breaks would press Enter. On Linux the selection is read from the focused
 widget through accessibility, and only when you ask — the probe that runs
 at every recording never reads what is on screen, and the PRIMARY
 selection, which can belong to another window, is never used — and on

@@ -72,6 +72,12 @@ def test_addresses_switch() -> None:
     assert finalize("mail liam at example dot com", addresses=False) == "Mail liam at example dot com"
 
 
-def test_formatters_switch() -> None:
-    assert finalize("call snake case user id") == "Call user_id"
-    assert finalize("call snake case user id", formatters=False) == "Call snake case user id"
+def test_formatters_are_for_code_unless_asked() -> None:
+    from voice_keyboard.flow.registers import TERMINAL
+
+    # prose keeps its words: "there is no space left" is a sentence
+    assert finalize("there is no space left on the disk") == "There is no space left on the disk"
+    assert finalize("we use snake case for names") == "We use snake case for names"
+    assert finalize("export snake case user id", TERMINAL, code=True) == "export user_id"
+    assert finalize("call snake case user id", formatters="everywhere") == "Call user_id"
+    assert finalize("export snake case user id", TERMINAL, code=True, formatters="off") == "export snake case user id"

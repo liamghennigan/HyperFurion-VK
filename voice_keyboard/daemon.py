@@ -159,6 +159,7 @@ class Daemon:
         self._session_remote_audio = False
         self._last_caption = ""
         self._last_typed = ""
+        self._overlay_said = False  # the stop path already showed its outcome
         # Where the last dictation left the caret: the app, the register,
         # and the last character typed — so the next recording can continue
         # the sentence instead of gluing itself to it ([flow] rejoin).
@@ -573,8 +574,11 @@ class Daemon:
         if not self._recording:
             return
         await self._show_hotkey_overlay("processing")
+        self._overlay_said = False
         final = await self._stop_recording()
-        if final:
+        if self._overlay_said:
+            pass  # the stop already said what happened ("⌁ scratched: …")
+        elif final:
             await self._show_hotkey_overlay(
                 "inserted",
                 detail=f"Inserted {len(final)} characters",
@@ -944,8 +948,8 @@ class Daemon:
             spelling=bool(flow_cfg.get("spelling", True)),
             fillers=flow_cfg.get("fillers", DEFAULT_FILLERS),
             addresses=bool(flow_cfg.get("addresses", True)),
-            formatters=bool(flow_cfg.get("formatters", True)),
-            code=bool(register.compiler),
+            formatters=str(flow_cfg.get("formatters", "code")).lower(),
+            code=bool(register.compiler) or register.terminal,
             nav=self._nav_enabled(),
         )
 
@@ -1583,7 +1587,7 @@ class Daemon:
                 and not result.typed_before
                 and self._peek_pending_rewrite() is None
             ):
-                await self._scratch_previous()
+                await self._scratch_previous(worker)
             if not result.instruction:
                 final = await self._self_corrected(final)
             if worker is not None:
@@ -1800,7 +1804,7 @@ class Daemon:
         self._last_error = ""
         self._landing = None if self._focus_lost else {
             "identity": self._session_focus.identity if self._session_focus else "",
-            "register": register or self._session_register.name,
+            "register": self._session_register.name,
             "tail": final[-1:],
             "when": time.monotonic(),
         }
@@ -1837,7 +1841,7 @@ class Daemon:
         try:
             yield terminal
         finally:
-            if terminal:
+            if terminal and not self._recording:  # a session that began meanwhile keeps its guard
                 injector.suppress_enter = before
 
     async def _transform_last(self, instruction: str) -> str:
@@ -1852,7 +1856,7 @@ class Daemon:
             self._remember_typed(text)
             return text
 
-    async def _scratch_previous(self) -> bool:
+    async def _scratch_previous(self, worker: Optional[InjectionWorker] = None) -> bool:
         """A recording that was only "scratch that": take back the previous
         dictation — when the caret is surely still right after it: the
         same app and register, within REJOIN_WINDOW_S, no focus change,
@@ -1865,6 +1869,8 @@ class Daemon:
         reason = ""
         if not landing or not text:
             reason = "nothing to scratch"
+        elif not identity:
+            reason = "can't tell which app has focus — nothing scratched"
         elif self._focus_lost or identity != landing["identity"] or \
                 self._session_register.name != landing["register"]:
             reason = "the last dictation was in another app"
@@ -1877,13 +1883,23 @@ class Daemon:
         if reason:
             logger.info("scratch that: %s", reason)
             await self._show_hotkey_overlay("empty", detail=f"⌁ {reason}", timeout_ms=1800)
+            self._overlay_said = True
             return False
+        if worker is not None:
+            # A molten preview of this recording ("Scratch the…") may be on
+            # screen after the previous dictation: take it back first, so
+            # the count below covers the previous dictation and nothing else.
+            worker.set_target("")
+            if await worker.drain(timeout=self._drain_timeout(text)) != "" or worker.abandoned:
+                logger.info("scratch that: the preview didn't clear; nothing scratched")
+                return False
         await asyncio.to_thread(self._injector.delete_chars, len(text))
         self._last_typed = ""
         self._landing = None
         preview = text if len(text) <= 40 else text[:37] + "…"
         logger.info("scratch that: removed the last dictation (%d characters)", len(text))
         await self._show_hotkey_overlay("inserted", detail=f"⌁ scratched: {preview}", timeout_ms=1800)
+        self._overlay_said = True
         return True
 
     async def _self_corrected(self, text: str) -> str:
@@ -1916,6 +1932,9 @@ class Daemon:
             logger.info("Self-correction tidy-up changed more than it deleted; keeping the text")
             return text
         lead = text[: len(text) - len(text.lstrip())]
+        said = text.lstrip()
+        if said[:1].islower() and cleaned[:1].isupper() and corrections.words(said)[:1] == corrections.words(cleaned)[:1]:
+            cleaned = cleaned[0].lower() + cleaned[1:]  # mid-sentence (a rejoined recording) stays lowercase
         logger.info("Self-correction: %d → %d words", len(corrections.words(text)), len(corrections.words(cleaned)))
         return lead + cleaned
 
@@ -1939,6 +1958,10 @@ class Daemon:
                 registers=self._config.get("registers", {}),
                 notes=notes,
             )
+            if text and text.endswith("\n") and "\n" not in text.rstrip("\r\n"):
+                # One whole line plus its line break: an editor copying the
+                # caret's line because nothing was selected (VS Code does).
+                return ""
             chars = len(text or "")
             text = text if chars <= MAX_SELECTION_CHARS else ""
         elif sys.platform == "darwin":
@@ -1958,6 +1981,10 @@ class Daemon:
         return text if text and text.strip() else ""
 
     async def _run_selection_rewrite(self, instruction: str, selection: str) -> str:
+        if "\n" in selection.strip("\r\n"):
+            # Typing a line break is pressing Enter, which sends a chat
+            # message; a multi-line rewrite would need a paste path.
+            raise RuntimeError("multi-line selections aren't rewritten yet — select one paragraph")
         """"VK, make this shorter" with text selected: send the selection
         and the instruction to [llm] and type the answer over it — typing
         replaces a selection in any editor. Your app's own undo puts the
@@ -1976,10 +2003,7 @@ class Daemon:
         if rewritten == selection.strip():
             await self._show_hotkey_overlay("empty", detail="⌁ nothing to change", timeout_ms=1500)
             return ""
-        if "\n" in selection:
-            await asyncio.to_thread(self._injector.type_text, rewritten)
-        else:
-            await self._type_no_enter(rewritten)
+        await self._type_no_enter(rewritten)
         logger.info("Rewrote a %d-character selection", len(selection))
         await self._show_hotkey_overlay(
             "inserted", detail="⌁ rewritten — your app's undo brings it back", timeout_ms=2200

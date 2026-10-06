@@ -126,8 +126,10 @@ DEFAULT_CONFIG: dict = {
         # top-level domain; "meet at the office" stays prose).
         "addresses": True,
         # "snake case user id" -> user_id, "camel case get user name" ->
-        # getUserName; pascal, kebab, constant, title, dot, all caps, no space.
-        "formatters": True,
+        # getUserName; pascal, kebab, constant, title, dot, all caps, no
+        # space. "code" = in code and terminal registers only (where "no
+        # space" is never prose); "everywhere"; "off".
+        "formatters": "code",
         # Hesitation sounds dropped from what is typed. [] keeps them all.
         "fillers": ["um", "umm", "uh", "uhh", "uhm", "erm"],
         # Self-corrections ("Tuesday, no wait, Wednesday"): "llm" asks
@@ -324,7 +326,6 @@ _FLOW_BOOL_KEYS = (
     "personal_dictionary",
     "spelling",
     "addresses",
-    "formatters",
     "rejoin",
     "rewrite_pending",
 )
@@ -616,6 +617,8 @@ def validate_config(config: dict) -> None:
     _validate_intent_config(config)
     _validate_nav_config(config)
     snippets = config.get("snippets", {})
+    if not isinstance(snippets, dict):
+        raise RuntimeError("snippets must be a [snippets] table of name = \"text\"")
     for name, text in snippets.items():
         if not str(name).strip() or not isinstance(text, str) or not text:
             raise RuntimeError(f"snippets.{name!r}: a spoken name and the text to type")
@@ -786,6 +789,8 @@ def _validate_flow_config(config: dict) -> None:
         raise RuntimeError("flow.live_rest must be one of: auto, always, off")
     if str(flow_cfg.get("numbers", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.numbers must be one of: auto, always, off")
+    if str(flow_cfg.get("formatters", "code")).lower() not in {"code", "everywhere", "off"}:
+        raise RuntimeError("flow.formatters must be one of: code, everywhere, off")
     if str(flow_cfg.get("corrections", "off")).lower() not in {"llm", "off"}:
         raise RuntimeError("flow.corrections must be one of: llm, off")
     if str(flow_cfg.get("pause_review", "auto")).lower() not in {"auto", "llm", "rules", "off"}:

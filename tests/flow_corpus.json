@@ -407,7 +407,7 @@
   "name": "bullets",
   "register": "prose",
   "segments": [
-   "shopping list colon bullet point milk bullet point eggs"
+   "shopping list colon new bullet milk new bullet eggs"
   ],
   "options": {},
   "events": [
@@ -426,25 +426,25 @@
   ]
  },
  {
-  "name": "a bullet at a line start needs no break",
+  "name": "a bullet after a line break needs no other",
   "register": "prose",
   "segments": [
-   "bullet point first new bullet second",
-   "notes new line bullet point one"
+   "notes new line new bullet one",
+   "new bullet first"
   ],
   "options": {},
   "events": [
    [
     "screen",
-    "- First\n- Second"
+    "Notes\n- One"
    ],
    [
     "screen",
-    "- First\n- Second notes\n- One"
+    "Notes\n- One\n- First"
    ],
    [
     "final",
-    "- First\n- Second notes\n- One",
+    "Notes\n- One\n- First",
     "",
     "",
     0,
@@ -456,7 +456,7 @@
   "name": "a bullet in a terminal is nothing",
   "register": "terminal",
   "segments": [
-   "ls bullet point x"
+   "ls new bullet x"
   ],
   "options": {},
   "events": [
@@ -478,7 +478,7 @@
   "name": "a bullet in code is nothing",
   "register": "python",
   "segments": [
-   "x bullet point equals one"
+   "x new bullet equals one"
   ],
   "options": {},
   "events": [
@@ -501,9 +501,9 @@
   "register": "prose",
   "segments": [
    "todo colon",
-   "bullet point milk",
+   "new bullet milk",
    "scratch that",
-   "bullet point eggs"
+   "new bullet eggs"
   ],
   "options": {},
   "events": [
@@ -771,12 +771,10 @@
   "register": "prose",
   "segments": [
    "one",
-   "strike that",
+   "delete that",
    "two",
-   "undo that",
-   "three",
-   "scratch this",
-   "four"
+   "scratched that",
+   "three"
   ],
   "options": {},
   "events": [
@@ -801,19 +799,43 @@
     "Three"
    ],
    [
+    "final",
+    "Three",
+    "",
+    "",
+    2,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "everyday words are not commands",
+  "register": "prose",
+  "segments": [
+   "I cannot undo that decision",
+   "strike that pose",
+   "the first bullet point is about cost"
+  ],
+  "options": {},
+  "events": [
+   [
     "screen",
-    ""
+    "I cannot undo that decision"
    ],
    [
     "screen",
-    "Four"
+    "I cannot undo that decision strike that pose"
+   ],
+   [
+    "screen",
+    "I cannot undo that decision strike that pose the first bullet point is about cost"
    ],
    [
     "final",
-    "Four",
+    "I cannot undo that decision strike that pose the first bullet point is about cost",
     "",
     "",
-    3,
+    0,
     []
    ]
   ]
@@ -2292,12 +2314,14 @@
   ]
  },
  {
-  "name": "snake and camel case",
+  "name": "snake and camel case where asked",
   "register": "prose",
   "segments": [
    "call camel case get user name, then snake case user id."
   ],
-  "options": {},
+  "options": {
+   "formatters": "everywhere"
+  },
   "events": [
    [
     "screen",
@@ -2306,6 +2330,33 @@
    [
     "final",
     "Call getUserName, then user_id.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose keeps formatter words",
+  "register": "prose",
+  "segments": [
+   "there is no space left on the disk",
+   "we use snake case for names"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "There is no space left on the disk"
+   ],
+   [
+    "screen",
+    "There is no space left on the disk we use snake case for names"
+   ],
+   [
+    "final",
+    "There is no space left on the disk we use snake case for names",
     "",
     "",
     0,
@@ -2390,7 +2441,9 @@
   "segments": [
    "title case the lord of the rings period"
   ],
-  "options": {},
+  "options": {
+   "formatters": "everywhere"
+  },
   "events": [
    [
     "screen",
@@ -2434,7 +2487,9 @@
   "segments": [
    "all caps do not merge, then no space data base"
   ],
-  "options": {},
+  "options": {
+   "formatters": "everywhere"
+  },
   "events": [
    [
     "screen",
@@ -2456,7 +2511,9 @@
   "segments": [
    "no space hyper furion"
   ],
-  "options": {},
+  "options": {
+   "formatters": "everywhere"
+  },
   "events": [
    [
     "screen",
@@ -2479,7 +2536,9 @@
    "the camel walked all the way",
    "no one came"
   ],
-  "options": {},
+  "options": {
+   "formatters": "everywhere"
+  },
   "events": [
    [
     "screen",
@@ -2501,24 +2560,46 @@
  },
  {
   "name": "a formatter ends at the pause",
-  "register": "prose",
+  "register": "terminal",
   "segments": [
-   "snake case user id",
-   "is the key"
+   "export snake case user id",
+   "equals five"
   ],
   "options": {},
   "events": [
    [
     "screen",
-    "user_id"
+    "export user_id"
    ],
    [
     "screen",
-    "user_id is the key"
+    "export user_id equals"
    ],
    [
     "final",
-    "user_id is the key",
+    "export user_id equals 5",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "explicit parens inside a spoken call",
+  "register": "python",
+  "segments": [
+   "for x in sorted foo open paren close paren colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for x in sorted(foo()):"
+   ],
+   [
+    "final",
+    "for x in sorted(foo()):",
     "",
     "",
     0,
@@ -2666,6 +2747,38 @@
    [
     "final",
     "Meet at the office the dot product we are at dot com scale",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a dot is a dot",
+  "register": "prose",
+  "segments": [
+   "put a red dot in the middle",
+   "click the blue dot at the top",
+   "the dot com bubble"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Put a red dot in the middle"
+   ],
+   [
+    "screen",
+    "Put a red dot in the middle click the blue dot at the top"
+   ],
+   [
+    "screen",
+    "Put a red dot in the middle click the blue dot at the top the dot com bubble"
+   ],
+   [
+    "final",
+    "Put a red dot in the middle click the blue dot at the top the dot com bubble",
     "",
     "",
     0,
