@@ -267,7 +267,11 @@ WINDOWS_TERMINAL: dict[str, Optional[list[list[str]]]] = {
 
 # Commands that leave a selection or a gap: the next dictated word replaces
 # or fills it, so it starts glued (no leading space) — see FlowEngine.
-REPLACING = ("select:", "delete:")
+# Moves to a line/document start glue too.
+GLUED = ("select:", "delete:")
+# Keys that likely land in another field: dictation after them starts
+# fresh (no leading space, a capital in prose).
+FRESH_FIELD = ("press:tab", "press:escape", "press:pageup", "press:pagedown")
 
 
 def _forbidden(chord: list[str]) -> bool:

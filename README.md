@@ -601,8 +601,9 @@ sentence, "delete the previous word" is just typed as words.
 - Text you dictated before the command is on screen before the keys are
   pressed. After the keys, dictation starts a new segment: repairs and
   `scratch that` never reach behind the caret's old position.
-- After `select …` or `delete …`, the next word fills the gap with no
-  leading space.
+- After `select …`, `delete …` or `go to start of …`, the next word has
+  no leading space. After `press tab`, `press escape` or `press page
+  up`/`down`, dictation starts as if in a new field.
 - With hold-to-talk, the keys fire after you let go of the hotkey, so the
   hotkey's modifiers never combine with them.
 - **Enter is never pressed.** No command produces it, and a `[nav.keys]`

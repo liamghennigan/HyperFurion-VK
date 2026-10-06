@@ -1158,9 +1158,12 @@ class Daemon:
         action = engine.pending_action()
         if action is None:
             return
-        await worker.drain(timeout=self._drain_timeout(engine.desired_text()))
+        target = engine.desired_text()
+        typed = await worker.drain(timeout=self._drain_timeout(target))
         if engine is not self._flow_engine or engine.pending_action() is not action:
             return  # the dictation ended (stop handles the rest) or moved on
+        if typed != target and not worker.abandoned:
+            return  # not on screen yet: never press keys mid-typing; retry next tick
         await self._press_nav(action, abandoned=worker.abandoned)
         engine.complete_action(time.monotonic())
         worker.reset()
@@ -1208,8 +1211,9 @@ class Daemon:
         while result.action is not None:
             if worker is not None:
                 worker.set_target(result.text)
-                await worker.drain(timeout=self._drain_timeout(result.text))
-                abandoned = worker.abandoned
+                typed = await worker.drain(timeout=self._drain_timeout(result.text))
+                # Keys pressed before the text lands would act mid-word.
+                abandoned = worker.abandoned or typed != result.text
             else:
                 abandoned = self._focus_lost
                 if result.text and not abandoned:

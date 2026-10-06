@@ -134,6 +134,14 @@ class TestEngine:
         engine.on_transcript("hello wrold spell that w o r l d then", is_final=True, now=30)
         assert engine.desired_text() == "Hello world then"
 
+    def test_letters_may_follow_in_the_next_segment(self) -> None:
+        engine = make_engine()
+        engine.on_transcript("hello wrold", is_final=True, now=0.0)
+        engine.on_transcript("hello wrold spell that", is_final=True, now=1.0)
+        assert "spell" not in engine.desired_text().lower()  # held, not typed
+        engine.on_transcript("hello wrold spell that w o r l d", is_final=True, now=2.0)
+        assert engine.desired_text() == "Hello world"
+
     def test_nothing_to_replace(self) -> None:
         result = make_engine().finalize("spell that a b", now=0.0)
         assert result.text == ""

@@ -245,7 +245,16 @@ class TestEngine:
             seen.append((result.text, result.action.action))
             result = engine.complete_action(now=5.0)
         assert seen == [("Alpha", "move:char:left"), (" beta", "press:tab")]
-        assert result.text == " gamma"
+        # Tab likely moved to another field: dictation there starts fresh.
+        assert result.text == "Gamma"
+
+    def test_line_start_glues(self) -> None:
+        engine = make_engine()
+        engine.on_transcript("one", is_final=True, now=0.0)
+        engine.on_transcript("one go to start of line", is_final=True, now=1.0)
+        engine.complete_action(now=1.1)
+        result = engine.finalize("one go to start of line two", now=2.0)
+        assert result.text == "two"
 
     def test_scratch_cannot_cross_a_command(self) -> None:
         engine = make_engine()

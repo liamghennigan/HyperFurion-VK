@@ -40,7 +40,7 @@ from typing import Optional
 
 from voice_keyboard.flow import pauses
 from voice_keyboard.flow.grammar import Grammar, Item
-from voice_keyboard.flow.nav import REPLACING
+from voice_keyboard.flow.nav import FRESH_FIELD, GLUED
 from voice_keyboard.flow.registers import (
     Register,
     RenderState,
@@ -75,7 +75,8 @@ class FlowConfig:
 
 @dataclass(frozen=True)
 class FinalResult:
-    text: str          # full post-grammar text that should be on screen
+    text: str          # post-grammar text that should be on screen (since
+    # the last navigation command, if any: see typed_before)
     instruction: str   # wake-word instruction ("" if none)
     scratches: int     # segments discarded by "scratch that"
     # (heard, meant) for each "spell that ..." that replaced a word.
@@ -289,8 +290,12 @@ class FlowEngine:
         self._typed_before += self._committed_render
         self._committed_render = ""
         state = self._render_state
-        if action.action.startswith(REPLACING):
-            # The next word fills a selection or a gap: no leading space.
+        if action.action in FRESH_FIELD:
+            # Tab / Escape / a page away: likely a different field.
+            state = initial_state(self._register)
+        elif action.action.startswith(GLUED) or action.action.endswith(":start"):
+            # The next word fills a selection or a gap, or starts a line:
+            # no leading space.
             state = replace(state, glue_next=True)
         self._render_state = state
         self._snapshots = [_Snapshot(render_len=0, render_state=state)]

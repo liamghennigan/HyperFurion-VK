@@ -2,9 +2,10 @@
 
 Turns raw transcript tokens into render items — words, punctuation glyphs,
 line breaks — plus action items the engine executes ("scratch that", a
-wake-word instruction, "spell that n g i n x", "select previous word"). Parsing is a deterministic left-to-right scan with
-bounded lookahead, so parsing a token prefix yields a prefix of the items:
-the engine relies on this to keep committed output frozen.
+wake-word instruction, "spell that n g i n x", "select previous word").
+Parsing is a deterministic left-to-right scan with bounded lookahead, so
+parsing a token prefix yields a prefix of the items: the engine relies on
+this to keep committed output frozen.
 
 Everything is data-driven: command phrases, the punctuation table, and the
 user vocabulary all come from config and can be remapped or disabled.
@@ -272,6 +273,11 @@ class Grammar:
 
             if self._spelling and core == SPELL_WORD:
                 limit, decided = self._limit(index, len(tokens), frozen, settled, flush)
+                head = index + (2 if cores[index + 1:index + 2] == ["that"] else 1)
+                if index >= frozen and head >= limit:
+                    # "spell that" ended its segment: the letters may come
+                    # after a pause, in the next one.
+                    limit, decided = len(tokens), flush
                 spelled = self._parse_spelling(
                     tokens[:limit], cores[:limit], index, decided
                 )
