@@ -1,0 +1,8561 @@
+[
+ {
+  "name": "prose caps and punctuation",
+  "register": "prose",
+  "segments": [
+   "hello world period this is a test comma right question mark"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello world. This is a test, right?"
+   ],
+   [
+    "final",
+    "Hello world. This is a test, right?",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose keeps small numbers as words",
+  "register": "prose",
+  "segments": [
+   "no one knows the nine lives"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "No one knows the nine lives"
+   ],
+   [
+    "final",
+    "No one knows the nine lives",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "terminal digits",
+  "register": "terminal",
+  "segments": [
+   "twenty three failed tests comma rerun the flaky ones"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "23 failed tests, rerun the flaky ones"
+   ],
+   [
+    "final",
+    "23 failed tests, rerun the flaky ones",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "digit runs and decimals",
+  "register": "terminal",
+  "segments": [
+   "ping one two seven dot zero dot zero dot one",
+   "pi is three point one four"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ping 127 dot 0 dot 0 dot"
+   ],
+   [
+    "screen",
+    "ping 127 dot 0 dot 0 dot 1 pi is"
+   ],
+   [
+    "final",
+    "ping 127 dot 0 dot 0 dot 1 pi is 3.14",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "python compiles",
+  "register": "python",
+  "segments": [
+   "for i in range ten colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range(10):"
+   ],
+   [
+    "final",
+    "for i in range(10):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "python print",
+  "register": "python",
+  "segments": [
+   "print x close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "print(x)"
+   ],
+   [
+    "final",
+    "print(x)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a spoken open paren after a callable is absorbed",
+  "register": "python",
+  "segments": [
+   "print open paren x close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "print(x)"
+   ],
+   [
+    "final",
+    "print(x)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "calls and subscripts glue to the name",
+  "register": "python",
+  "segments": [
+   "def snake case get user open paren user close paren colon",
+   "items open bracket zero close bracket"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "def get_user(user):"
+   ],
+   [
+    "screen",
+    "def get_user(user): items[0]"
+   ],
+   [
+    "final",
+    "def get_user(user): items[0]",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "keywords and operators keep their space",
+  "register": "python",
+  "segments": [
+   "x equals open paren a plus b close paren",
+   "if open paren x close paren colon",
+   "return open paren a close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = (a + b)"
+   ],
+   [
+    "screen",
+    "x = (a + b) if (x):"
+   ],
+   [
+    "screen",
+    "x = (a + b) if (x): return (a)"
+   ],
+   [
+    "final",
+    "x = (a + b) if (x): return (a)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a method call",
+  "register": "python",
+  "segments": [
+   "foo dot bar open paren close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "foo.bar()"
+   ],
+   [
+    "final",
+    "foo.bar()",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "calls nest and a colon closes them all",
+  "register": "python",
+  "segments": [
+   "for i in range len xs colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range(len(xs)):"
+   ],
+   [
+    "final",
+    "for i in range(len(xs)):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "nested calls closed by hand",
+  "register": "python",
+  "segments": [
+   "print range ten close paren close paren",
+   "x equals abs y close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "print(range(10))"
+   ],
+   [
+    "screen",
+    "print(range(10)) x = abs(y)"
+   ],
+   [
+    "final",
+    "print(range(10)) x = abs(y)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a nested call across segments",
+  "register": "python",
+  "segments": [
+   "for i in range",
+   "len xs colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range("
+   ],
+   [
+    "screen",
+    "for i in range(len(xs)):"
+   ],
+   [
+    "final",
+    "for i in range(len(xs)):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "shell compiles flags",
+  "register": "shell",
+  "segments": [
+   "pipe grep dash i error"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "| grep -i error"
+   ],
+   [
+    "final",
+    "| grep -i error",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "shell long flags and glued pairs",
+  "register": "shell",
+  "segments": [
+   "docker run dash dash rm dash p eight zero eight zero colon eighty nginx",
+   "export foo equals sign bar"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "docker run --rm -p 8080:80 nginx"
+   ],
+   [
+    "screen",
+    "docker run --rm -p 8080:80 nginx export foo=bar"
+   ],
+   [
+    "final",
+    "docker run --rm -p 8080:80 nginx export foo=bar",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "python constants and string prefixes",
+  "register": "python",
+  "segments": [
+   "if x is not none colon",
+   "print open paren f quote hello unquote close paren",
+   "x equals true"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "if x is not None:"
+   ],
+   [
+    "screen",
+    "if x is not None: print(f\"hello\")"
+   ],
+   [
+    "screen",
+    "if x is not None: print(f\"hello\") x = True"
+   ],
+   [
+    "final",
+    "if x is not None: print(f\"hello\") x = True",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "python operators from two words",
+  "register": "python",
+  "segments": [
+   "if a double equals b colon",
+   "x plus equals one",
+   "if not x less than equals y colon",
+   "def f open paren close paren arrow str colon",
+   "return x is not"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "if a == b:"
+   ],
+   [
+    "screen",
+    "if a == b: x +="
+   ],
+   [
+    "screen",
+    "if a == b: x += 1 if not x <= y:"
+   ],
+   [
+    "screen",
+    "if a == b: x += 1 if not x <= y: def f() -> str:"
+   ],
+   [
+    "screen",
+    "if a == b: x += 1 if not x <= y: def f() -> str: return x is not"
+   ],
+   [
+    "final",
+    "if a == b: x += 1 if not x <= y: def f() -> str: return x is not",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "builtin exceptions by name",
+  "register": "python",
+  "segments": [
+   "raise value error open paren quote bad unquote close paren",
+   "except key error colon",
+   "x equals type open paren y close paren",
+   "return value"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "raise ValueError(\"bad\")"
+   ],
+   [
+    "screen",
+    "raise ValueError(\"bad\") except KeyError:"
+   ],
+   [
+    "screen",
+    "raise ValueError(\"bad\") except KeyError: x = type(y)"
+   ],
+   [
+    "screen",
+    "raise ValueError(\"bad\") except KeyError: x = type(y) return value"
+   ],
+   [
+    "final",
+    "raise ValueError(\"bad\") except KeyError: x = type(y) return value",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "shell dots, paths and redirects",
+  "register": "shell",
+  "segments": [
+   "cd dot dot slash src and and ls dot dash a",
+   "find dot dash name star dot py",
+   "tail dash f slash var slash log",
+   "chmod plus x dot slash run dot sh",
+   "echo hi greater than out dot txt"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "cd ../src && ls . -a"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log chmod +x ./run.sh"
+   ],
+   [
+    "screen",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log chmod +x ./run.sh echo hi > out.txt"
+   ],
+   [
+    "final",
+    "cd ../src && ls . -a find . -name *.py tail -f /var/log chmod +x ./run.sh echo hi > out.txt",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a flag after a dash is one digit",
+  "register": "shell",
+  "segments": [
+   "kill dash nine one two three four",
+   "head dash n twenty file"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "kill -9"
+   ],
+   [
+    "screen",
+    "kill -9 1234 head -n 20 file"
+   ],
+   [
+    "final",
+    "kill -9 1234 head -n 20 file",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held word is typed before a key",
+  "register": "python",
+  "segments": [
+   "x equals not",
+   "go left",
+   "y"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "x = not"
+   ],
+   [
+    "action",
+    "move:char:left",
+    1,
+    "x = not"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " y"
+   ],
+   [
+    "final",
+    " y",
+    "x = not",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held dot is typed before tab",
+  "register": "shell",
+  "segments": [
+   "git add dot",
+   "press tab"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "git add"
+   ],
+   [
+    "action",
+    "press:tab",
+    1,
+    "git add ."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "git add .",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch takes back a held word's segment",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "not",
+   "scratch that",
+   "y"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1 not"
+   ],
+   [
+    "screen",
+    "x = 1"
+   ],
+   [
+    "screen",
+    "x = 1 y"
+   ],
+   [
+    "final",
+    "x = 1 y",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch in the same segment as a hold",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "not scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1"
+   ],
+   [
+    "final",
+    "x = 1",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that covers a held word",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "not",
+   "select that",
+   "z"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1 not"
+   ],
+   [
+    "action",
+    "select:that",
+    4,
+    "x = 1 not"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " z"
+   ],
+   [
+    "final",
+    " z",
+    "x = 1 not",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "recase a held word",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "value",
+   "uppercase that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1 value"
+   ],
+   [
+    "screen",
+    "x = 1 VALUE"
+   ],
+   [
+    "final",
+    "x = 1 VALUE",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell that over a held word",
+  "register": "python",
+  "segments": [
+   "x equals value",
+   "spell that v a l",
+   "print key",
+   "spell that k e y s"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = value"
+   ],
+   [
+    "screen",
+    "x = val"
+   ],
+   [
+    "screen",
+    "x = val print(key"
+   ],
+   [
+    "screen",
+    "x = val print(keys"
+   ],
+   [
+    "final",
+    "x = val print(keys",
+    "",
+    "",
+    0,
+    [
+     [
+      "value",
+      "val"
+     ],
+     [
+      "key",
+      "keys"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct a held word",
+  "register": "python",
+  "segments": [
+   "x equals key",
+   "correct key to k"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = key"
+   ],
+   [
+    "screen",
+    "x = k"
+   ],
+   [
+    "final",
+    "x = k",
+    "",
+    "",
+    0,
+    [
+     [
+      "key",
+      "k"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "shell dot after a command and before an operator",
+  "register": "shell",
+  "segments": [
+   "source dot venv slash bin slash activate",
+   "git add dot and and git commit",
+   "cat style dot less",
+   "echo quote done dot unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "source .venv/bin/activate"
+   ],
+   [
+    "screen",
+    "source .venv/bin/activate git add . && git commit"
+   ],
+   [
+    "screen",
+    "source .venv/bin/activate git add . && git commit cat style"
+   ],
+   [
+    "screen",
+    "source .venv/bin/activate git add . && git commit cat style.less echo \"done.\""
+   ],
+   [
+    "final",
+    "source .venv/bin/activate git add . && git commit cat style.less echo \"done.\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held callable before an operator is a name",
+  "register": "python",
+  "segments": [
+   "type equals five",
+   "if a not equal b colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "type ="
+   ],
+   [
+    "screen",
+    "type = 5 if a != b:"
+   ],
+   [
+    "final",
+    "type = 5 if a != b:",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "javascript operators and arrows",
+  "register": "javascript",
+  "segments": [
+   "const add equals open paren a comma b close paren arrow a plus b semicolon",
+   "if open paren x triple equals null and and y not equals z close paren open brace",
+   "console dot log open paren quote hi unquote close paren",
+   "return a or or b"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "const add = (a, b) => a + b;"
+   ],
+   [
+    "screen",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {"
+   ],
+   [
+    "screen",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {console.log(\"hi\")"
+   ],
+   [
+    "screen",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {console.log(\"hi\") return a || b"
+   ],
+   [
+    "final",
+    "const add = (a, b) => a + b; if (x === null && y !== z) {console.log(\"hi\") return a || b",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held dash is typed at the end",
+  "register": "shell",
+  "segments": [
+   "ls dash"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ls -"
+   ],
+   [
+    "final",
+    "ls -",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "shell path",
+  "register": "shell",
+  "segments": [
+   "pytest dash x tests slash test underscore flow dot py"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "pytest -x tests/test_flow.py"
+   ],
+   [
+    "final",
+    "pytest -x tests/test_flow.py",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "years read in pairs",
+  "register": "prose",
+  "segments": [
+   "born in nineteen eighty four, moved in nineteen oh five",
+   "back in twenty twenty six with twenty twenty vision and nineteen people"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Born in 1984, moved in 1905"
+   ],
+   [
+    "screen",
+    "Born in 1984, moved in 1905 back in 2026 with twenty twenty vision and nineteen people"
+   ],
+   [
+    "final",
+    "Born in 1984, moved in 1905 back in 2026 with twenty twenty vision and nineteen people",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a stutter is dropped",
+  "register": "prose",
+  "segments": [
+   "the the meeting is",
+   "tomorrow and i i think he had had enough of the the the plan"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The meeting is"
+   ],
+   [
+    "screen",
+    "The meeting is tomorrow and I think he had had enough of the plan"
+   ],
+   [
+    "final",
+    "The meeting is tomorrow and I think he had had enough of the plan",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "code keeps a repeat",
+  "register": "python",
+  "segments": [
+   "the the"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "the the"
+   ],
+   [
+    "final",
+    "the the",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "half a year never folds",
+  "register": "prose",
+  "segments": [
+   "the class of nineteen ninety nine's reunion, nineteen sixty nine-ish"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The class of nineteen ninety nine's reunion, nineteen sixty nine-ish"
+   ],
+   [
+    "final",
+    "The class of nineteen ninety nine's reunion, nineteen sixty nine-ish",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a count is not a year",
+  "register": "prose",
+  "segments": [
+   "there were nineteen forty people and it costs nineteen ninety nine dollars"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "There were nineteen forty people and it costs nineteen ninety nine dollars"
+   ],
+   [
+    "final",
+    "There were nineteen forty people and it costs nineteen ninety nine dollars",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a year after oh carries the stop",
+  "register": "prose",
+  "segments": [
+   "born in nineteen oh five. and on june fifth nineteen oh five."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Born in 1905. And on June 5, 1905."
+   ],
+   [
+    "final",
+    "Born in 1905. And on June 5, 1905.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a path stops at a common word",
+  "register": "prose",
+  "segments": [
+   "see example dot com slash docs dot then we leave"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See example.com/docs dot then we leave"
+   ],
+   [
+    "final",
+    "See example.com/docs dot then we leave",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a hashtag is a word",
+  "register": "prose",
+  "segments": [
+   "what hashtag should we use"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "What hashtag should we use"
+   ],
+   [
+    "final",
+    "What hashtag should we use",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a date and its year",
+  "register": "prose",
+  "segments": [
+   "on june fifth nineteen ninety nine we met",
+   "and on october sixth, twenty twenty six",
+   "june fifth nineteen people came"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "On June 5, 1999 we met"
+   ],
+   [
+    "screen",
+    "On June 5, 1999 we met and on October 6, 2026"
+   ],
+   [
+    "screen",
+    "On June 5, 1999 we met and on October 6, 2026 June 5 nineteen people came"
+   ],
+   [
+    "final",
+    "On June 5, 1999 we met and on October 6, 2026 June 5 nineteen people came",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a time after at",
+  "register": "prose",
+  "segments": [
+   "meet at three thirty tomorrow, or at twelve oh five.",
+   "look at three thirty people at three"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 3:30 tomorrow, or at 12:05."
+   ],
+   [
+    "screen",
+    "Meet at 3:30 tomorrow, or at 12:05. Look at three thirty people at three"
+   ],
+   [
+    "final",
+    "Meet at 3:30 tomorrow, or at 12:05. Look at three thirty people at three",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "at, stuttered or before o'clock",
+  "register": "prose",
+  "segments": [
+   "meet at at three thirty, not at three thirty o'clock"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 3:30, not at three thirty o'clock"
+   ],
+   [
+    "final",
+    "Meet at 3:30, not at three thirty o'clock",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a stutter after a hesitation",
+  "register": "prose",
+  "segments": [
+   "the um the plan is to to go and I told you you were right"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The plan is to go and I told you you were right"
+   ],
+   [
+    "final",
+    "The plan is to go and I told you you were right",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "no stutter across a segment end",
+  "register": "prose",
+  "segments": [
+   "I talked to the.",
+   "the meeting was fine"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I talked to the."
+   ],
+   [
+    "screen",
+    "I talked to the. The meeting was fine"
+   ],
+   [
+    "final",
+    "I talked to the. The meeting was fine",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbered nouns, quarters, sizes",
+  "register": "prose",
+  "segments": [
+   "send the q three report by eod, it's two point five megabytes",
+   "meet in room four oh two on page twenty five. version three point one point four",
+   "the room was nice and the q is long"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Send the Q3 report by EOD, it's 2.5 MB"
+   ],
+   [
+    "screen",
+    "Send the Q3 report by EOD, it's 2.5 MB meet in room 402 on page 25. Version 3.1.4"
+   ],
+   [
+    "screen",
+    "Send the Q3 report by EOD, it's 2.5 MB meet in room 402 on page 25. Version 3.1.4 the room was nice and the q is long"
+   ],
+   [
+    "final",
+    "Send the Q3 report by EOD, it's 2.5 MB meet in room 402 on page 25. Version 3.1.4 the room was nice and the q is long",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a hundred before a unit",
+  "register": "prose",
+  "segments": [
+   "about a hundred and fifty dollars, a hundred percent, a thousand euros and a hundred people"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "About $150, 100%, €1,000 and a hundred people"
+   ],
+   [
+    "final",
+    "About $150, 100%, €1,000 and a hundred people",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbered nouns: stops, glue and halves",
+  "register": "prose",
+  "segments": [
+   "room four oh two. version two point five. page one hundred and five.",
+   "room five twenty. page five. season one, episode two. step one is to",
+   "see page five and six and page five and then"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Room 402. Version 2.5. Page 105."
+   ],
+   [
+    "screen",
+    "Room 402. Version 2.5. Page 105. Room five twenty. Page 5. Season 1, episode 2. Step one is to"
+   ],
+   [
+    "screen",
+    "Room 402. Version 2.5. Page 105. Room five twenty. Page 5. Season 1, episode 2. Step one is to see page five and six and page five and then"
+   ],
+   [
+    "final",
+    "Room 402. Version 2.5. Page 105. Room five twenty. Page 5. Season 1, episode 2. Step one is to see page five and six and page five and then",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbered nouns: verbs, pronouns, counts",
+  "register": "prose",
+  "segments": [
+   "we need to build one more and can you page one of the engineers",
+   "the lesson one learns, the floor ten people stood on, page two of three, q one twenty"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We need to build one more and can you page one of the engineers"
+   ],
+   [
+    "screen",
+    "We need to build one more and can you page one of the engineers the lesson one learns, the floor ten people stood on, page two of three, q one twenty"
+   ],
+   [
+    "final",
+    "We need to build one more and can you page one of the engineers the lesson one learns, the floor ten people stood on, page two of three, q one twenty",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "o'clock",
+  "register": "prose",
+  "segments": [
+   "meet at five o'clock, or six o’clock. it's ten o'clock"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 5 o'clock, or 6 o’clock. It's 10 o'clock"
+   ],
+   [
+    "final",
+    "Meet at 5 o'clock, or 6 o’clock. It's 10 o'clock",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a price shows its cents",
+  "register": "prose",
+  "segments": [
+   "it costs one point five dollars or two point two five euros"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It costs $1.50 or €2.25"
+   ],
+   [
+    "final",
+    "It costs $1.50 or €2.25",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a scale stays a word after the figure",
+  "register": "prose",
+  "segments": [
+   "we raised three point two billion dollars",
+   "from five million users and two million, dollars"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We raised $3.2 billion"
+   ],
+   [
+    "screen",
+    "We raised $3.2 billion from five million users and two million, dollars"
+   ],
+   [
+    "final",
+    "We raised $3.2 billion from five million users and two million, dollars",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a domain goes on as a path",
+  "register": "prose",
+  "segments": [
+   "see example dot com slash docs slash intro dot html today",
+   "mail sam at example dot com slash later"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See example.com/docs/intro.html today"
+   ],
+   [
+    "screen",
+    "See example.com/docs/intro.html today mail sam@example.com slash later"
+   ],
+   [
+    "final",
+    "See example.com/docs/intro.html today mail sam@example.com slash later",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "symbols by name",
+  "register": "prose",
+  "segments": [
+   "hash sign launch day and two asterisk three",
+   "a less than sign b greater than sign c caret sign d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "#launch day and two * three"
+   ],
+   [
+    "screen",
+    "#launch day and two * three a < b > c ^ d"
+   ],
+   [
+    "final",
+    "#launch day and two * three a < b > c ^ d",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "verbatim is words",
+  "register": "verbatim",
+  "segments": [
+   "scratch that period new line"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "scratch that period new line"
+   ],
+   [
+    "final",
+    "scratch that period new line",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "new line and paragraph",
+  "register": "prose",
+  "segments": [
+   "first line new line second line new paragraph third"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "First line\nSecond line\n\nThird"
+   ],
+   [
+    "final",
+    "First line\nSecond line\n\nThird",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "bullets",
+  "register": "prose",
+  "segments": [
+   "shopping list colon new bullet milk new bullet eggs"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Shopping list:\n- Milk\n- Eggs"
+   ],
+   [
+    "final",
+    "Shopping list:\n- Milk\n- Eggs",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a lowercase recognizer's i is a capital",
+  "register": "prose",
+  "segments": [
+   "i think i can and i'm sure i'll say i'd"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think I can and I'm sure I'll say I'd"
+   ],
+   [
+    "final",
+    "I think I can and I'm sure I'll say I'd",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "days and months are capitals",
+  "register": "prose",
+  "segments": [
+   "see you monday, or friday's meeting in october but you may march"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See you Monday, or Friday's meeting in October but you may march"
+   ],
+   [
+    "final",
+    "See you Monday, or Friday's meeting in October but you may march",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "initialisms are capitals",
+  "register": "prose",
+  "segments": [
+   "ok send the pdf asap, fyi it's for us"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "OK send the PDF ASAP, FYI it's for us"
+   ],
+   [
+    "final",
+    "OK send the PDF ASAP, FYI it's for us",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "initialisms in code stay as said",
+  "register": "python",
+  "segments": [
+   "ok equals api"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ok = api"
+   ],
+   [
+    "final",
+    "ok = api",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "i inside a word stays",
+  "register": "prose",
+  "segments": [
+   "it is in it"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It is in it"
+   ],
+   [
+    "final",
+    "It is in it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose percent",
+  "register": "prose",
+  "segments": [
+   "about twenty five percent of users"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "About 25% of users"
+   ],
+   [
+    "final",
+    "About 25% of users",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose percent held while percent might grow",
+  "register": "prose",
+  "segments": [
+   "it went up one hundred percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It went up"
+   ],
+   [
+    "final",
+    "It went up 100%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose dollars",
+  "register": "prose",
+  "segments": [
+   "it costs twenty five dollars period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It costs $25."
+   ],
+   [
+    "final",
+    "It costs $25.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "emoji",
+  "register": "prose",
+  "segments": [
+   "ship it emoji rocket emoji thumbs up.",
+   "nice emoji fire"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Ship it 🚀 👍."
+   ],
+   [
+    "screen",
+    "Ship it 🚀 👍. Nice 🔥"
+   ],
+   [
+    "final",
+    "Ship it 🚀 👍. Nice 🔥",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "emoji names alone stay words",
+  "register": "prose",
+  "segments": [
+   "the emoji was a smile"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The emoji was a smile"
+   ],
+   [
+    "final",
+    "The emoji was a smile",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "phone numbers",
+  "register": "prose",
+  "segments": [
+   "call five five five one two three four or four one five five five five one two one two"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call 555-1234 or 415-555-1212"
+   ],
+   [
+    "final",
+    "Call 555-1234 or 415-555-1212",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a short digit count stays words",
+  "register": "prose",
+  "segments": [
+   "one two three go"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One two three go"
+   ],
+   [
+    "final",
+    "One two three go",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a committed phone number never re-reads as words",
+  "register": "prose",
+  "segments": [
+   "call five five five one two three four",
+   "five six seven"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call 555-1234"
+   ],
+   [
+    "screen",
+    "Call 555-1234 five six seven"
+   ],
+   [
+    "final",
+    "Call 555-1234 five six seven",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "counting is not a phone number",
+  "register": "prose",
+  "segments": [
+   "count one two three four five six seven",
+   "eight"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Count one two three four five six seven"
+   ],
+   [
+    "screen",
+    "Count one two three four five six seven eight"
+   ],
+   [
+    "final",
+    "Count one two three four five six seven eight",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "oh is a zero inside a number",
+  "register": "prose",
+  "segments": [
+   "dial five five five oh one two three"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Dial 555-0123"
+   ],
+   [
+    "final",
+    "Dial 555-0123",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a committed time stays a time",
+  "register": "prose",
+  "segments": [
+   "which one am",
+   "i"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Which 1 AM"
+   ],
+   [
+    "screen",
+    "Which 1 AM I"
+   ],
+   [
+    "final",
+    "Which 1 AM I",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "oh in a time",
+  "register": "prose",
+  "segments": [
+   "three oh five pm or twelve oh five am"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "3:05 PM or 12:05 AM"
+   ],
+   [
+    "final",
+    "3:05 PM or 12:05 AM",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a leading point is a decimal",
+  "register": "prose",
+  "segments": [
+   "rates rose point five percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Rates rose"
+   ],
+   [
+    "final",
+    "Rates rose 0.5%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "trailing glue never joins a unit",
+  "register": "prose",
+  "segments": [
+   "five and percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Five and"
+   ],
+   [
+    "final",
+    "Five and percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "attached punctuation never folds away",
+  "register": "prose",
+  "segments": [
+   "it was ...twenty five percent due october ...sixth"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It was ...twenty five percent due October ...sixth"
+   ],
+   [
+    "final",
+    "It was ...twenty five percent due October ...sixth",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an ordinal before a noun is not a day",
+  "register": "prose",
+  "segments": [
+   "in september second graders and the january first half"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "In September second graders and the January first half"
+   ],
+   [
+    "final",
+    "In September second graders and the January first half",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a day the month lacks is not a date",
+  "register": "prose",
+  "segments": [
+   "february thirtieth and june thirty first"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "February thirtieth and June thirty first"
+   ],
+   [
+    "final",
+    "February thirtieth and June thirty first",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "dates",
+  "register": "prose",
+  "segments": [
+   "due october sixth or june twenty first, not july thirtieth."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Due October 6 or June 21, not July 30."
+   ],
+   [
+    "final",
+    "Due October 6 or June 21, not July 30.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a month and a cardinal stay words",
+  "register": "prose",
+  "segments": [
+   "in june twenty people came and you may first check"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "In June twenty people came and you may first check"
+   ],
+   [
+    "final",
+    "In June twenty people came and you may first check",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "dollars and cents",
+  "register": "prose",
+  "segments": [
+   "it costs five dollars and fifty cents and twenty dollars and five cents period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It costs $5.50 and $20.05."
+   ],
+   [
+    "final",
+    "It costs $5.50 and $20.05.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "euros and yen",
+  "register": "prose",
+  "segments": [
+   "five euros and fifty cents or two thousand yen"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "€5.50 or ¥2,000"
+   ],
+   [
+    "final",
+    "€5.50 or ¥2,000",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a yen for travel stays words",
+  "register": "prose",
+  "segments": [
+   "a yen for travel"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "A yen for travel"
+   ],
+   [
+    "final",
+    "A yen for travel",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "big amounts get thousands separators",
+  "register": "prose",
+  "segments": [
+   "one hundred thousand dollars and 1500 dollars"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "$100,000 and $1,500"
+   ],
+   [
+    "final",
+    "$100,000 and $1,500",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "dollars and something else",
+  "register": "prose",
+  "segments": [
+   "five dollars and some change"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "$5 and some change"
+   ],
+   [
+    "final",
+    "$5 and some change",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose decimal percent",
+  "register": "prose",
+  "segments": [
+   "growth was two point five percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Growth was"
+   ],
+   [
+    "final",
+    "Growth was 2.5%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose times",
+  "register": "prose",
+  "segments": [
+   "meet at three thirty pm or twelve am"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 3:30 PM or 12 AM"
+   ],
+   [
+    "final",
+    "Meet at 3:30 PM or 12 AM",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "which one am I stays words",
+  "register": "prose",
+  "segments": [
+   "which one am i"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Which one am I"
+   ],
+   [
+    "final",
+    "Which one am I",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose digits and a unit",
+  "register": "prose",
+  "segments": [
+   "up 25 percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Up"
+   ],
+   [
+    "final",
+    "Up 25%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a digit string is never an amount",
+  "register": "prose",
+  "segments": [
+   "one two three percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "One two three percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose numbers alone stay words",
+  "register": "prose",
+  "segments": [
+   "no one knows the twenty five reasons"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "No one knows the twenty five reasons"
+   ],
+   [
+    "final",
+    "No one knows the twenty five reasons",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "glue never starts an amount",
+  "register": "prose",
+  "segments": [
+   "this and five percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "This and"
+   ],
+   [
+    "final",
+    "This and 5%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "units across a pause stay words",
+  "register": "prose",
+  "segments": [
+   "twenty five",
+   "percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Twenty five"
+   ],
+   [
+    "screen",
+    "Twenty five"
+   ],
+   [
+    "final",
+    "Twenty five percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbers off leaves units alone",
+  "register": "prose",
+  "segments": [
+   "twenty five percent"
+  ],
+  "options": {
+   "numbers": "off"
+  },
+  "events": [
+   [
+    "screen",
+    "Twenty five"
+   ],
+   [
+    "final",
+    "Twenty five percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "headings and tasks",
+  "register": "prose",
+  "segments": [
+   "new heading groceries new checkbox milk new checkbox eggs new subheading later"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n# Groceries\n- [ ] Milk\n- [ ] Eggs\n## Later"
+   ],
+   [
+    "final",
+    "\n# Groceries\n- [ ] Milk\n- [ ] Eggs\n## Later",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a heading in a terminal is nothing",
+  "register": "terminal",
+  "segments": [
+   "ls new heading x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ls x"
+   ],
+   [
+    "final",
+    "ls x",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbered lists count",
+  "register": "prose",
+  "segments": [
+   "steps colon new number build new number test new number ship"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Steps:\n1. Build\n2. Test\n3. Ship"
+   ],
+   [
+    "final",
+    "Steps:\n1. Build\n2. Test\n3. Ship",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a new paragraph starts a new list",
+  "register": "prose",
+  "segments": [
+   "new number a new number b new paragraph new number c"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n1. A\n2. B\n\n1. C"
+   ],
+   [
+    "final",
+    "\n1. A\n2. B\n\n1. C",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratching a numbered item gives its number back",
+  "register": "prose",
+  "segments": [
+   "new number a",
+   "new number b",
+   "scratch that",
+   "new number c"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n1. A"
+   ],
+   [
+    "screen",
+    "\n1. A\n2. B"
+   ],
+   [
+    "screen",
+    "\n1. A"
+   ],
+   [
+    "screen",
+    "\n1. A\n2. C"
+   ],
+   [
+    "final",
+    "\n1. A\n2. C",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a bullet after a line break needs no other",
+  "register": "prose",
+  "segments": [
+   "notes new line new bullet one",
+   "new bullet first"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Notes\n- One"
+   ],
+   [
+    "screen",
+    "Notes\n- One\n- First"
+   ],
+   [
+    "final",
+    "Notes\n- One\n- First",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a bullet in a terminal is nothing",
+  "register": "terminal",
+  "segments": [
+   "ls new bullet x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ls x"
+   ],
+   [
+    "final",
+    "ls x",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a bullet in code is nothing",
+  "register": "python",
+  "segments": [
+   "x new bullet equals one"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "final",
+    "x = 1",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch after a bullet",
+  "register": "prose",
+  "segments": [
+   "todo colon",
+   "new bullet milk",
+   "scratch that",
+   "new bullet eggs"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Todo:"
+   ],
+   [
+    "screen",
+    "Todo:\n- Milk"
+   ],
+   [
+    "screen",
+    "Todo:"
+   ],
+   [
+    "screen",
+    "Todo:\n- Eggs"
+   ],
+   [
+    "final",
+    "Todo:\n- Eggs",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a terminal never gets a line break",
+  "register": "terminal",
+  "segments": [
+   "rm dash rf build new line",
+   "ls new paragraph"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "rm - rf build"
+   ],
+   [
+    "screen",
+    "rm - rf build ls"
+   ],
+   [
+    "final",
+    "rm - rf build ls",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a shell never gets a line break",
+  "register": "shell",
+  "segments": [
+   "make clean new line make"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "make clean make"
+   ],
+   [
+    "final",
+    "make clean make",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quotes and dashes",
+  "register": "prose",
+  "segments": [
+   "open quote hyper furion close quote em dash a voice keyboard"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\"HyperFurion\"—a voice keyboard"
+   ],
+   [
+    "final",
+    "\"HyperFurion\"—a voice keyboard",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "literal",
+  "register": "prose",
+  "segments": [
+   "say literal period to type the word"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say period to type the word"
+   ],
+   [
+    "final",
+    "Say period to type the word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "vocabulary with trailing punctuation",
+  "register": "prose",
+  "segments": [
+   "hyper furion, is open source period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "HyperFurion, is open source."
+   ],
+   [
+    "final",
+    "HyperFurion, is open source.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch mid-utterance",
+  "register": "prose",
+  "segments": [
+   "fixed the race addition scratch that fixed the race condition period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Fixed the race condition."
+   ],
+   [
+    "final",
+    "Fixed the race condition.",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch as its own segment",
+  "register": "prose",
+  "segments": [
+   "hello world period",
+   "scratch that",
+   "goodbye period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello world."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Goodbye."
+   ],
+   [
+    "final",
+    "Goodbye.",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch twice",
+  "register": "prose",
+  "segments": [
+   "one",
+   "two",
+   "three",
+   "scratch that",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "final",
+    "One",
+    "",
+    "",
+    2,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch with nothing typed",
+  "register": "prose",
+  "segments": [
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "Correct. as an answer is dictation",
+  "register": "prose",
+  "segments": [
+   "should we go now question mark",
+   "Correct. Go to the store."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Should we go now?"
+   ],
+   [
+    "screen",
+    "Should we go now? Correct. Go to the store."
+   ],
+   [
+    "final",
+    "Should we go now? Correct. Go to the store.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "Correct, as an answer is dictation",
+  "register": "prose",
+  "segments": [
+   "I went home",
+   "Correct, I went to the bank"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I went home"
+   ],
+   [
+    "screen",
+    "I went home Correct, I went to the bank"
+   ],
+   [
+    "final",
+    "I went home Correct, I went to the bank",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quotes pair with their own closer",
+  "register": "prose",
+  "segments": [
+   "my quote unquote friend said quote hi unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "My quote unquote friend said \"hi\""
+   ],
+   [
+    "final",
+    "My quote unquote friend said \"hi\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "two quote unquote idioms stay words",
+  "register": "prose",
+  "segments": [
+   "a quote unquote expert and a quote unquote fan"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "A quote unquote expert and a quote unquote fan"
+   ],
+   [
+    "final",
+    "A quote unquote expert and a quote unquote fan",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter stops at the closer",
+  "register": "python",
+  "segments": [
+   "x equals quote camel case foo bar unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = \"fooBar\""
+   ],
+   [
+    "final",
+    "x = \"fooBar\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct never crosses a line break",
+  "register": "prose",
+  "segments": [
+   "new bullet milk new bullet eggs",
+   "correct milk eggs to bread"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n- Milk\n- Eggs"
+   ],
+   [
+    "screen",
+    "\n- Milk\n- Eggs correct milk eggs to bread"
+   ],
+   [
+    "final",
+    "\n- Milk\n- Eggs correct milk eggs to bread",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct then scratch inside the match",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "three",
+   "correct two three to five",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One five"
+   ],
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "final",
+    "One",
+    "",
+    "",
+    1,
+    [
+     [
+      "two three",
+      "five"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct renders the replacement",
+  "register": "prose",
+  "segments": [
+   "see you monday",
+   "correct monday to friday period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See you Monday"
+   ],
+   [
+    "screen",
+    "See you Friday."
+   ],
+   [
+    "final",
+    "See you Friday.",
+    "",
+    "",
+    0,
+    [
+     [
+      "Monday",
+      "Friday."
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct uses vocabulary in the replacement",
+  "register": "prose",
+  "segments": [
+   "we use hyper",
+   "correct hyper to hyper furion"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We use"
+   ],
+   [
+    "screen",
+    "We use HyperFurion"
+   ],
+   [
+    "final",
+    "We use HyperFurion",
+    "",
+    "",
+    0,
+    [
+     [
+      "hyper",
+      "HyperFurion"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct never carries the capital of I",
+  "register": "prose",
+  "segments": [
+   "so I think",
+   "correct i to we"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "So I think"
+   ],
+   [
+    "screen",
+    "So we think"
+   ],
+   [
+    "final",
+    "So we think",
+    "",
+    "",
+    0,
+    [
+     [
+      "I",
+      "we"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct never matches inside a word",
+  "register": "prose",
+  "segments": [
+   "don’t go",
+   "correct don to dan"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Don’t go"
+   ],
+   [
+    "screen",
+    "Don’t go correct don to dan"
+   ],
+   [
+    "final",
+    "Don’t go correct don to dan",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a heading restarts the numbered list",
+  "register": "prose",
+  "segments": [
+   "new number a new number b new heading c new number d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n1. A\n2. B\n# C\n1. D"
+   ],
+   [
+    "final",
+    "\n1. A\n2. B\n# C\n1. D",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quote unquote wraps the words between",
+  "register": "prose",
+  "segments": [
+   "she said quote ship it unquote and left"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "She said \"ship it\" and left"
+   ],
+   [
+    "final",
+    "She said \"ship it\" and left",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "end quote closes too, keeping its period",
+  "register": "prose",
+  "segments": [
+   "he wrote quote done end quote."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "He wrote \"done\"."
+   ],
+   [
+    "final",
+    "He wrote \"done\".",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quote unquote with nothing between stays prose",
+  "register": "prose",
+  "segments": [
+   "his quote unquote friend"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "His quote unquote friend"
+   ],
+   [
+    "final",
+    "His quote unquote friend",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a quote with no unquote stays a word",
+  "register": "prose",
+  "segments": [
+   "a quote from the book"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "A quote from the book"
+   ],
+   [
+    "final",
+    "A quote from the book",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quote and unquote across a pause stay words",
+  "register": "prose",
+  "segments": [
+   "she said quote ship it",
+   "unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "She said quote ship it"
+   ],
+   [
+    "screen",
+    "She said quote ship it unquote"
+   ],
+   [
+    "final",
+    "She said quote ship it unquote",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct a word anywhere in the dictation",
+  "register": "prose",
+  "segments": [
+   "see you on monday period",
+   "it starts at nine",
+   "correct monday to friday"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See you on Monday."
+   ],
+   [
+    "screen",
+    "See you on Monday. It starts at nine"
+   ],
+   [
+    "screen",
+    "See you on Friday. It starts at nine"
+   ],
+   [
+    "final",
+    "See you on Friday. It starts at nine",
+    "",
+    "",
+    0,
+    [
+     [
+      "Monday",
+      "Friday"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct keeps capitals and takes the last one",
+  "register": "prose",
+  "segments": [
+   "NASA called NASA",
+   "correct nasa to esa"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "NASA called NASA"
+   ],
+   [
+    "screen",
+    "NASA called ESA"
+   ],
+   [
+    "final",
+    "NASA called ESA",
+    "",
+    "",
+    0,
+    [
+     [
+      "NASA",
+      "ESA"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct a phrase across punctuation",
+  "register": "prose",
+  "segments": [
+   "meet the new team, ok",
+   "correct team ok to team OK"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet the new team, OK"
+   ],
+   [
+    "screen",
+    "Meet the new team OK"
+   ],
+   [
+    "final",
+    "Meet the new team OK",
+    "",
+    "",
+    0,
+    [
+     [
+      "team, OK",
+      "team OK"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct with nothing to correct is dictation",
+  "register": "prose",
+  "segments": [
+   "correct the essay to the end"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Correct the essay to the end"
+   ],
+   [
+    "final",
+    "Correct the essay to the end",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct mid-sentence is dictation",
+  "register": "prose",
+  "segments": [
+   "that is correct to a point"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "That is correct to a point"
+   ],
+   [
+    "final",
+    "That is correct to a point",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct then scratch keeps snapshots",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "three",
+   "correct two to twenty",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One twenty three"
+   ],
+   [
+    "screen",
+    "One twenty"
+   ],
+   [
+    "final",
+    "One twenty",
+    "",
+    "",
+    1,
+    [
+     [
+      "two",
+      "twenty"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "cap that title-cases the last utterance",
+  "register": "prose",
+  "segments": [
+   "the quick brown fox",
+   "cap that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The quick brown fox"
+   ],
+   [
+    "screen",
+    "The Quick Brown Fox"
+   ],
+   [
+    "final",
+    "The Quick Brown Fox",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "uppercase that keeps earlier words",
+  "register": "prose",
+  "segments": [
+   "one",
+   "two three",
+   "uppercase that",
+   "four"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One TWO THREE"
+   ],
+   [
+    "screen",
+    "One TWO THREE four"
+   ],
+   [
+    "final",
+    "One TWO THREE four",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "lowercase that",
+  "register": "prose",
+  "segments": [
+   "HELLO there",
+   "lowercase that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "HELLO there"
+   ],
+   [
+    "screen",
+    "hello there"
+   ],
+   [
+    "final",
+    "hello there",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "recase refuses a change of length",
+  "register": "prose",
+  "segments": [
+   "one",
+   "straße",
+   "uppercase that",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One straße"
+   ],
+   [
+    "screen",
+    "One straße"
+   ],
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "final",
+    "One",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "cap that inside a sentence stays words",
+  "register": "prose",
+  "segments": [
+   "let's cap that at ten"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Let's cap that at ten"
+   ],
+   [
+    "final",
+    "Let's cap that at ten",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "cap that with nothing said does nothing",
+  "register": "prose",
+  "segments": [
+   "cap that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch synonyms",
+  "register": "prose",
+  "segments": [
+   "one",
+   "delete that",
+   "two",
+   "scratched that",
+   "three"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Two"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Three"
+   ],
+   [
+    "final",
+    "Three",
+    "",
+    "",
+    2,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "everyday words are not commands",
+  "register": "prose",
+  "segments": [
+   "I cannot undo that decision",
+   "strike that pose",
+   "the first bullet point is about cost"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I cannot undo that decision"
+   ],
+   [
+    "screen",
+    "I cannot undo that decision strike that pose"
+   ],
+   [
+    "screen",
+    "I cannot undo that decision strike that pose the first bullet point is about cost"
+   ],
+   [
+    "final",
+    "I cannot undo that decision strike that pose the first bullet point is about cost",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a recognizer's past tense still scratches",
+  "register": "prose",
+  "segments": [
+   "keep this",
+   "drop this",
+   "scratched that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Keep this"
+   ],
+   [
+    "screen",
+    "Keep this drop this"
+   ],
+   [
+    "screen",
+    "Keep this"
+   ],
+   [
+    "final",
+    "Keep this",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "instruction at the end",
+  "register": "prose",
+  "segments": [
+   "i think it works now vk make that formal"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think it works now"
+   ],
+   [
+    "final",
+    "I think it works now",
+    "",
+    "make that formal",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "instruction alone",
+  "register": "prose",
+  "segments": [
+   "hello",
+   "vk make that formal"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "final",
+    "Hello",
+    "",
+    "make that formal",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell that replaces keeping punctuation",
+  "register": "prose",
+  "segments": [
+   "I run wrold.",
+   "spell that w o r l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I run wrold."
+   ],
+   [
+    "screen",
+    "I run world."
+   ],
+   [
+    "final",
+    "I run world.",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "world"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell that keeps a capital",
+  "register": "prose",
+  "segments": [
+   "Ngnix spell that n g i n x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Nginx"
+   ],
+   [
+    "final",
+    "Nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "Ngnix",
+      "Nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell that with nato and capital",
+  "register": "prose",
+  "segments": [
+   "the host is engine-x",
+   "spell that capital n golf india november x-ray"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The host is engine-x"
+   ],
+   [
+    "screen",
+    "The host is Nginx"
+   ],
+   [
+    "final",
+    "The host is Nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "engine-x",
+      "Nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell that hyphenated",
+  "register": "prose",
+  "segments": [
+   "use ngnix",
+   "spell that n-g-i-n-x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Use ngnix"
+   ],
+   [
+    "screen",
+    "Use nginx"
+   ],
+   [
+    "final",
+    "Use nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "ngnix",
+      "nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell inserts",
+  "register": "terminal",
+  "segments": [
+   "kubectl spell k eight s"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "kubectl k8s"
+   ],
+   [
+    "final",
+    "kubectl k8s",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell that heard as one capitalized word",
+  "register": "prose",
+  "segments": [
+   "the proxy is engine-x",
+   "spell that NGINX"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The proxy is engine-x"
+   ],
+   [
+    "screen",
+    "The proxy is nginx"
+   ],
+   [
+    "final",
+    "The proxy is nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "engine-x",
+      "nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell a capitalized word inserts",
+  "register": "terminal",
+  "segments": [
+   "kubectl spell K8S now"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "kubectl k8s now"
+   ],
+   [
+    "final",
+    "kubectl k8s now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell letters follow in the next segment",
+  "register": "prose",
+  "segments": [
+   "hello wrold",
+   "spell that",
+   "w o r l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "final",
+    "Hello world",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "world"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell then more words",
+  "register": "prose",
+  "segments": [
+   "hello wrold spell that w o r l d then more"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello world then more"
+   ],
+   [
+    "final",
+    "Hello world then more",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "world"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell ambiguous tail stays prose",
+  "register": "prose",
+  "segments": [
+   "mark it x spell that y a good one"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Mark it y a good one"
+   ],
+   [
+    "final",
+    "Mark it y a good one",
+    "",
+    "",
+    0,
+    [
+     [
+      "x",
+      "y"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell nothing to replace",
+  "register": "prose",
+  "segments": [
+   "spell that a b"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "cast a spell stays prose",
+  "register": "prose",
+  "segments": [
+   "cast a spell on them"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Cast a spell on them"
+   ],
+   [
+    "final",
+    "Cast a spell on them",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spelling off",
+  "register": "prose",
+  "segments": [
+   "wrold spell that w o r l d"
+  ],
+  "options": {
+   "spelling": false
+  },
+  "events": [
+   [
+    "screen",
+    "Wrold spell that w o r l d"
+   ],
+   [
+    "final",
+    "Wrold spell that w o r l d",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch after respell rewinds the shifted boundary",
+  "register": "prose",
+  "segments": [
+   "first part",
+   "ngnix",
+   "spell that n g i n x",
+   "more words scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "First part"
+   ],
+   [
+    "screen",
+    "First part ngnix"
+   ],
+   [
+    "screen",
+    "First part nginx"
+   ],
+   [
+    "screen",
+    "First part nginx"
+   ],
+   [
+    "final",
+    "First part nginx",
+    "",
+    "",
+    1,
+    [
+     [
+      "ngnix",
+      "nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "select previous word then type over",
+  "register": "prose",
+  "segments": [
+   "hello world",
+   "select previous word",
+   "planet"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "action",
+    "select:word:left",
+    1,
+    "Hello world"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "final",
+    "planet",
+    "Hello world",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "go to end of line keeps spacing",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "go to end of line",
+   "three"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "action",
+    "move:line:end",
+    1,
+    "One two"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " three"
+   ],
+   [
+    "final",
+    " three",
+    "One two",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "go to start of line glues",
+  "register": "prose",
+  "segments": [
+   "one",
+   "go to start of line",
+   "two"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "action",
+    "move:line:start",
+    1,
+    "One"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "two"
+   ],
+   [
+    "final",
+    "two",
+    "One",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "undo that is a command alone",
+  "register": "prose",
+  "segments": [
+   "fix it",
+   "undo that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Fix it"
+   ],
+   [
+    "action",
+    "edit:undo",
+    1,
+    "Fix it"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "Fix it",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that covers the last utterance",
+  "register": "prose",
+  "segments": [
+   "one",
+   "two three",
+   "select that",
+   "four"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "action",
+    "select:that",
+    10,
+    "One two three"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " four"
+   ],
+   [
+    "final",
+    " four",
+    "One two three",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that with nothing said selects nothing",
+  "register": "prose",
+  "segments": [
+   "select that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "action",
+    "select:that",
+    0,
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "words after select that start where the utterance started",
+  "register": "prose",
+  "segments": [
+   "see you",
+   "on monday period",
+   "select that",
+   "tomorrow"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "See you"
+   ],
+   [
+    "screen",
+    "See you on Monday."
+   ],
+   [
+    "action",
+    "select:that",
+    11,
+    "See you on Monday."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " tomorrow"
+   ],
+   [
+    "final",
+    " tomorrow",
+    "See you on Monday.",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that over a sentence start keeps its capital",
+  "register": "prose",
+  "segments": [
+   "Done period",
+   "next we go",
+   "select that",
+   "then we stop"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Done."
+   ],
+   [
+    "screen",
+    "Done. Next we go"
+   ],
+   [
+    "action",
+    "select:that",
+    11,
+    "Done. Next we go"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " Then we stop"
+   ],
+   [
+    "final",
+    " Then we stop",
+    "Done. Next we go",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that over a numbered item",
+  "register": "prose",
+  "segments": [
+   "steps",
+   "new number build",
+   "select that",
+   "test"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Steps"
+   ],
+   [
+    "screen",
+    "Steps\n1. Build"
+   ],
+   [
+    "action",
+    "select:that",
+    9,
+    "Steps\n1. Build"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " test"
+   ],
+   [
+    "final",
+    " test",
+    "Steps\n1. Build",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that refuses combining marks",
+  "register": "prose",
+  "segments": [
+   "one",
+   "नमस्ते",
+   "select that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One नमस्ते"
+   ],
+   [
+    "action",
+    "select:that",
+    0,
+    "One नमस्ते"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "One नमस्ते",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a command's own period never waits",
+  "register": "prose",
+  "segments": [
+   "Hello world.",
+   "Undo that.",
+   "x"
+  ],
+  "options": {
+   "nav": true,
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "Hello world."
+   ],
+   [
+    "action",
+    "edit:undo",
+    1,
+    "Hello world."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " X"
+   ],
+   [
+    "final",
+    " X",
+    "Hello world.",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "paste it then more words",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "paste it",
+   "done"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "action",
+    "edit:paste",
+    1,
+    "One two"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " done"
+   ],
+   [
+    "final",
+    " done",
+    "One two",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "undo and paste inside a sentence stay words",
+  "register": "prose",
+  "segments": [
+   "undo the merge and paste the link"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Undo the merge and paste the link"
+   ],
+   [
+    "final",
+    "Undo the merge and paste the link",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "several commands",
+  "register": "prose",
+  "segments": [
+   "alpha",
+   "go left",
+   "beta",
+   "press tab",
+   "gamma"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Alpha"
+   ],
+   [
+    "action",
+    "move:char:left",
+    1,
+    "Alpha"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " beta"
+   ],
+   [
+    "action",
+    "press:tab",
+    1,
+    " beta"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Gamma"
+   ],
+   [
+    "final",
+    "Gamma",
+    "Alpha beta",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "count and unit",
+  "register": "prose",
+  "segments": [
+   "a b c d",
+   "select the next four words",
+   "x"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "A b c d"
+   ],
+   [
+    "action",
+    "select:word:right",
+    4,
+    "A b c d"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "x"
+   ],
+   [
+    "final",
+    "x",
+    "A b c d",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "delete line",
+  "register": "prose",
+  "segments": [
+   "old line",
+   "delete the line",
+   "fresh text"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Old line"
+   ],
+   [
+    "action",
+    "delete:line:here",
+    1,
+    "Old line"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "fresh text"
+   ],
+   [
+    "final",
+    "fresh text",
+    "Old line",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "press escape twice",
+  "register": "prose",
+  "segments": [
+   "hello",
+   "press escape twice",
+   "world"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "action",
+    "press:escape",
+    2,
+    "Hello"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "World"
+   ],
+   [
+    "final",
+    "World",
+    "Hello",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "mid-sentence command is typed",
+  "register": "prose",
+  "segments": [
+   "please go left three words now"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Please go left three words now"
+   ],
+   [
+    "final",
+    "Please go left three words now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "command split across segments is words",
+  "register": "prose",
+  "segments": [
+   "select",
+   "previous word"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Select"
+   ],
+   [
+    "screen",
+    "Select previous word"
+   ],
+   [
+    "final",
+    "Select previous word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spelling split across three segments",
+  "register": "prose",
+  "segments": [
+   "hello wrold",
+   "spell that w o r",
+   "l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    "Hello wor"
+   ],
+   [
+    "screen",
+    "Hello wor l d"
+   ],
+   [
+    "final",
+    "Hello wor l d",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "wor"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell held then flushed by time is not regrown",
+  "register": "prose",
+  "segments": [
+   "hello wrold spell that w o r",
+   "l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello wor"
+   ],
+   [
+    "screen",
+    "Hello wor l d"
+   ],
+   [
+    "final",
+    "Hello wor l d",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "wor"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "scratch cannot cross a command",
+  "register": "prose",
+  "segments": [
+   "keep this",
+   "go left",
+   "oops scratch that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Keep this"
+   ],
+   [
+    "action",
+    "move:char:left",
+    1,
+    "Keep this"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "Keep this",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "nav off types the words",
+  "register": "prose",
+  "segments": [
+   "hello",
+   "select previous word"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "screen",
+    "Hello select previous word"
+   ],
+   [
+    "final",
+    "Hello select previous word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "terminal navigation",
+  "register": "shell",
+  "segments": [
+   "pytest dash x tests slash test underscore flow dot py",
+   "delete previous word",
+   "tests slash test underscore nav dot py"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "pytest -x tests/test_flow.py"
+   ],
+   [
+    "action",
+    "delete:word:left",
+    1,
+    "pytest -x tests/test_flow.py"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "tests/test_nav.py"
+   ],
+   [
+    "final",
+    "tests/test_nav.py",
+    "pytest -x tests/test_flow.py",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "go left twenty words",
+  "register": "prose",
+  "segments": [
+   "many words here",
+   "go left twenty words",
+   "front"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Many words here"
+   ],
+   [
+    "action",
+    "move:word:left",
+    20,
+    "Many words here"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " front"
+   ],
+   [
+    "final",
+    " front",
+    "Many words here",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "out of range count is prose",
+  "register": "prose",
+  "segments": [
+   "go left fifty words"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Go left fifty words"
+   ],
+   [
+    "final",
+    "Go left fifty words",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell after a selection",
+  "register": "prose",
+  "segments": [
+   "hello wrold",
+   "select previous word",
+   "spell that w o r l d"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "action",
+    "select:word:left",
+    1,
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "world"
+   ],
+   [
+    "final",
+    "world",
+    "Hello wrold",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbers always in prose",
+  "register": "prose",
+  "segments": [
+   "nine lives and twenty three cats"
+  ],
+  "options": {
+   "numbers": "always"
+  },
+  "events": [
+   [
+    "screen",
+    "9 lives and 23 cats"
+   ],
+   [
+    "final",
+    "9 lives and 23 cats",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "number glue and thousands",
+  "register": "terminal",
+  "segments": [
+   "two thousand twenty six and counting",
+   "one hundred and five"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "2026 and counting"
+   ],
+   [
+    "screen",
+    "2026 and counting"
+   ],
+   [
+    "final",
+    "2026 and counting 105",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "digit pairs and attached punctuation",
+  "register": "terminal",
+  "segments": [
+   "version one two period then four. five six"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "version 12. then"
+   ],
+   [
+    "final",
+    "version 12. then 4. 56",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "twenty hundred and zero",
+  "register": "terminal",
+  "segments": [
+   "twenty hundred then zero then zero zero"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "2000 then 0 then"
+   ],
+   [
+    "final",
+    "2000 then 0 then 00",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbers off",
+  "register": "terminal",
+  "segments": [
+   "twenty three"
+  ],
+  "options": {
+   "numbers": "off"
+  },
+  "events": [
+   [
+    "screen",
+    "twenty three"
+   ],
+   [
+    "final",
+    "twenty three",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "fillers at the start",
+  "register": "prose",
+  "segments": [
+   "Um, so we should ship it."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "So we should ship it."
+   ],
+   [
+    "final",
+    "So we should ship it.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "fillers bracketed by commas",
+  "register": "prose",
+  "segments": [
+   "we should, uh, ship it"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We should ship it"
+   ],
+   [
+    "final",
+    "We should ship it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler's sentence end survives",
+  "register": "prose",
+  "segments": [
+   "I think so, um.",
+   "Next one."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think so."
+   ],
+   [
+    "screen",
+    "I think so. Next one."
+   ],
+   [
+    "final",
+    "I think so. Next one.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler alone says nothing",
+  "register": "prose",
+  "segments": [
+   "Uh.",
+   "Okay then"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Okay then"
+   ],
+   [
+    "final",
+    "Okay then",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "fillers in a row",
+  "register": "prose",
+  "segments": [
+   "well, um, um, yes"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Well yes"
+   ],
+   [
+    "final",
+    "Well yes",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler-like word is a word",
+  "register": "prose",
+  "segments": [
+   "the umbrella is red, uhm, blue"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The umbrella is red blue"
+   ],
+   [
+    "final",
+    "The umbrella is red blue",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "literal keeps a filler",
+  "register": "prose",
+  "segments": [
+   "say literal um please"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say um please"
+   ],
+   [
+    "final",
+    "Say um please",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "fillers off",
+  "register": "prose",
+  "segments": [
+   "we should, uh, ship it"
+  ],
+  "options": {
+   "fillers": []
+  },
+  "events": [
+   [
+    "screen",
+    "We should, uh, ship it"
+   ],
+   [
+    "final",
+    "We should, uh, ship it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler after a pause lets the next word decide",
+  "register": "prose",
+  "segments": [
+   "I was thinking about the project.",
+   "Um, and how it works."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how it works."
+   ],
+   [
+    "final",
+    "I was thinking about the project and how it works.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a comma word at a segment end keeps its comma",
+  "register": "prose",
+  "segments": [
+   "we should,",
+   "uh, ship it"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We should,"
+   ],
+   [
+    "screen",
+    "We should, ship it"
+   ],
+   [
+    "final",
+    "We should, ship it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "snake and camel case where asked",
+  "register": "prose",
+  "segments": [
+   "call camel case get user name, then snake case user id."
+  ],
+  "options": {
+   "formatters": "everywhere"
+  },
+  "events": [
+   [
+    "screen",
+    "Call getUserName, then user_id."
+   ],
+   [
+    "final",
+    "Call getUserName, then user_id.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose keeps formatter words",
+  "register": "prose",
+  "segments": [
+   "there is no space left on the disk",
+   "we use snake case for names"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "There is no space left on the disk"
+   ],
+   [
+    "screen",
+    "There is no space left on the disk we use snake case for names"
+   ],
+   [
+    "final",
+    "There is no space left on the disk we use snake case for names",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "formatters in python",
+  "register": "python",
+  "segments": [
+   "for snake case row count in range ten colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for row_count in range(10):"
+   ],
+   [
+    "final",
+    "for row_count in range(10):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter stops at an operator",
+  "register": "python",
+  "segments": [
+   "snake case user id equals five"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "user_id ="
+   ],
+   [
+    "final",
+    "user_id = 5",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pascal and constant",
+  "register": "python",
+  "segments": [
+   "class pascal case http client",
+   "constant case max retries equals three"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "class HttpClient"
+   ],
+   [
+    "screen",
+    "class HttpClient MAX_RETRIES ="
+   ],
+   [
+    "final",
+    "class HttpClient MAX_RETRIES = 3",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "title case keeps small words",
+  "register": "prose",
+  "segments": [
+   "title case the lord of the rings period"
+  ],
+  "options": {
+   "formatters": "everywhere"
+  },
+  "events": [
+   [
+    "screen",
+    "The Lord of the Rings."
+   ],
+   [
+    "final",
+    "The Lord of the Rings.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "kebab in a shell",
+  "register": "shell",
+  "segments": [
+   "git checkout dash b kebab case fix the login bug"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "git checkout -b fix-the-login-bug"
+   ],
+   [
+    "final",
+    "git checkout -b fix-the-login-bug",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "all caps and no space",
+  "register": "prose",
+  "segments": [
+   "all caps do not merge, then no space data base"
+  ],
+  "options": {
+   "formatters": "everywhere"
+  },
+  "events": [
+   [
+    "screen",
+    "DO NOT MERGE, then database"
+   ],
+   [
+    "final",
+    "DO NOT MERGE, then database",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a vocabulary phrase wins over a formatter's words",
+  "register": "prose",
+  "segments": [
+   "no space hyper furion"
+  ],
+  "options": {
+   "formatters": "everywhere"
+  },
+  "events": [
+   [
+    "screen",
+    "No space HyperFurion"
+   ],
+   [
+    "final",
+    "No space HyperFurion",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter word alone is a word",
+  "register": "prose",
+  "segments": [
+   "the camel walked all the way",
+   "no one came"
+  ],
+  "options": {
+   "formatters": "everywhere"
+  },
+  "events": [
+   [
+    "screen",
+    "The camel walked all the way"
+   ],
+   [
+    "screen",
+    "The camel walked all the way no one came"
+   ],
+   [
+    "final",
+    "The camel walked all the way no one came",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter ends at the pause",
+  "register": "terminal",
+  "segments": [
+   "export snake case user id",
+   "equals five"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "export user_id"
+   ],
+   [
+    "screen",
+    "export user_id equals"
+   ],
+   [
+    "final",
+    "export user_id equals 5",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "explicit parens inside a spoken call",
+  "register": "python",
+  "segments": [
+   "for x in sorted foo open paren close paren colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for x in sorted(foo()):"
+   ],
+   [
+    "final",
+    "for x in sorted(foo()):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an email",
+  "register": "prose",
+  "segments": [
+   "email liam at example dot com please"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Email liam@example.com please"
+   ],
+   [
+    "final",
+    "Email liam@example.com please",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an email starts a sentence in lowercase",
+  "register": "prose",
+  "segments": [
+   "liam at gmail dot com.",
+   "next one"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "liam@gmail.com."
+   ],
+   [
+    "screen",
+    "liam@gmail.com. Next one"
+   ],
+   [
+    "final",
+    "liam@gmail.com. Next one",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a dotted mailbox",
+  "register": "prose",
+  "segments": [
+   "liam dot hennigan at gmail dot com"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "liam.hennigan@gmail.com"
+   ],
+   [
+    "final",
+    "liam.hennigan@gmail.com",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a domain",
+  "register": "prose",
+  "segments": [
+   "see docs dot python dot org."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See docs.python.org."
+   ],
+   [
+    "final",
+    "See docs.python.org.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "the longest domain wins",
+  "register": "prose",
+  "segments": [
+   "go to example dot co dot uk now"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Go to example.co.uk now"
+   ],
+   [
+    "final",
+    "Go to example.co.uk now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose with at and dot stays prose",
+  "register": "prose",
+  "segments": [
+   "meet at the office",
+   "the dot product",
+   "we are at dot com scale"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at the office"
+   ],
+   [
+    "screen",
+    "Meet at the office the dot product"
+   ],
+   [
+    "screen",
+    "Meet at the office the dot product we are at dot com scale"
+   ],
+   [
+    "final",
+    "Meet at the office the dot product we are at dot com scale",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a dot is a dot",
+  "register": "prose",
+  "segments": [
+   "put a red dot in the middle",
+   "click the blue dot at the top",
+   "the dot com bubble"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Put a red dot in the middle"
+   ],
+   [
+    "screen",
+    "Put a red dot in the middle click the blue dot at the top"
+   ],
+   [
+    "screen",
+    "Put a red dot in the middle click the blue dot at the top the dot com bubble"
+   ],
+   [
+    "final",
+    "Put a red dot in the middle click the blue dot at the top the dot com bubble",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a domain in a terminal",
+  "register": "terminal",
+  "segments": [
+   "ping example dot com"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ping example.com"
+   ],
+   [
+    "final",
+    "ping example.com",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an address across segments is words",
+  "register": "prose",
+  "segments": [
+   "liam at example",
+   "dot com"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Liam at example"
+   ],
+   [
+    "screen",
+    "Liam at example dot com"
+   ],
+   [
+    "final",
+    "Liam at example dot com",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "rejoin after a sentence end",
+  "register": "prose",
+  "segments": [
+   "next sentence"
+  ],
+  "options": {
+   "continues": "Hello world."
+  },
+  "events": [
+   [
+    "screen",
+    " Next sentence"
+   ],
+   [
+    "final",
+    " Next sentence",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "rejoin mid-sentence",
+  "register": "prose",
+  "segments": [
+   "and more"
+  ],
+  "options": {
+   "continues": "Hello world"
+  },
+  "events": [
+   [
+    "screen",
+    " and more"
+   ],
+   [
+    "final",
+    " and more",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "rejoin then scratch rewinds to the join",
+  "register": "prose",
+  "segments": [
+   "oops",
+   "scratch that better"
+  ],
+  "options": {
+   "continues": "Hello world"
+  },
+  "events": [
+   [
+    "screen",
+    " oops"
+   ],
+   [
+    "screen",
+    " better"
+   ],
+   [
+    "final",
+    " better",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "rejoin in a terminal glues",
+  "register": "terminal",
+  "segments": [
+   "tmp"
+  ],
+  "options": {
+   "continues": "cd"
+  },
+  "events": [
+   [
+    "screen",
+    " tmp"
+   ],
+   [
+    "final",
+    " tmp",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a pause before and joins the sentence",
+  "register": "prose",
+  "segments": [
+   "i was thinking about the project.",
+   "And how we could make it simpler."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how we could make it simpler."
+   ],
+   [
+    "final",
+    "I was thinking about the project and how we could make it simpler.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a pause before but takes a comma",
+  "register": "prose",
+  "segments": [
+   "we could ship today.",
+   "But the tests are red."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "We could ship today."
+   ],
+   [
+    "screen",
+    "We could ship today, but the tests are red."
+   ],
+   [
+    "final",
+    "We could ship today, but the tests are red.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a pause after an open ending joins",
+  "register": "prose",
+  "segments": [
+   "send it to the.",
+   "Team by noon."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "Send it to the."
+   ],
+   [
+    "screen",
+    "Send it to the Team by noon."
+   ],
+   [
+    "final",
+    "Send it to the Team by noon.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a pause after an open ending keeps a name's capital",
+  "register": "prose",
+  "segments": [
+   "send it to.",
+   "Friday is fine."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "Send it to."
+   ],
+   [
+    "screen",
+    "Send it to Friday is fine."
+   ],
+   [
+    "final",
+    "Send it to Friday is fine.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · an unclear pause keeps the period",
+  "register": "prose",
+  "segments": [
+   "that is done.",
+   "Next the docs."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done. Next the docs."
+   ],
+   [
+    "final",
+    "That is done. Next the docs.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · spoken punctuation replaces the guess",
+  "register": "prose",
+  "segments": [
+   "that is done.",
+   "comma then the docs"
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done, then the docs"
+   ],
+   [
+    "final",
+    "That is done, then the docs",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a command after a pause keeps the sentence end",
+  "register": "prose",
+  "segments": [
+   "that is done.",
+   "scratch that",
+   "all done."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "All done."
+   ],
+   [
+    "final",
+    "All done.",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · an abbreviation's period is not a pause",
+  "register": "prose",
+  "segments": [
+   "see fig.",
+   "Two for details."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "See fig."
+   ],
+   [
+    "screen",
+    "See fig. Two for details."
+   ],
+   [
+    "final",
+    "See fig. Two for details.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause · a lowercase word seen earlier loses its capital",
+  "register": "prose",
+  "segments": [
+   "the furion daemon.",
+   "The.",
+   "Furion overlay too."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "The furion daemon."
+   ],
+   [
+    "screen",
+    "The furion daemon. The."
+   ],
+   [
+    "screen",
+    "The furion daemon. The furion overlay too."
+   ],
+   [
+    "final",
+    "The furion daemon. The furion overlay too.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pause review off keeps the recognizer's periods",
+  "register": "prose",
+  "segments": [
+   "i was thinking about the project.",
+   "And how we could make it simpler."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project. And how we could make it simpler."
+   ],
+   [
+    "final",
+    "I was thinking about the project. And how we could make it simpler.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pauses are a prose thing",
+  "register": "terminal",
+  "segments": [
+   "cd the.",
+   "And then ls"
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "cd the."
+   ],
+   [
+    "screen",
+    "cd the. And then ls"
+   ],
+   [
+    "final",
+    "cd the. And then ls",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quote unquote freezes as one item",
+  "register": "prose",
+  "steps": [
+   [
+    1.2,
+    "comma I is",
+    "interim"
+   ],
+   [
+    2.4,
+    "comma I is thirty",
+    "interim"
+   ],
+   [
+    4.4,
+    "tick"
+   ],
+   [
+    5.6,
+    "comma I is thirty percent",
+    "interim"
+   ],
+   [
+    6.6,
+    "tick"
+   ],
+   [
+    7.8,
+    "comma point is thirty percent quote",
+    "interim"
+   ],
+   [
+    8.3,
+    "tick"
+   ],
+   [
+    8.6,
+    "comma point is thirty percent quote unquote",
+    "interim"
+   ],
+   [
+    9.1,
+    "tick"
+   ],
+   [
+    9.7,
+    "comma point is thirty percent quote unquote one",
+    "interim"
+   ],
+   [
+    10.0,
+    "comma point is thirty percent quote and one unquote",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ", I is"
+   ],
+   [
+    "screen",
+    ", I is thirty"
+   ],
+   [
+    "screen",
+    ", I is thirty"
+   ],
+   [
+    "screen",
+    ", I is"
+   ],
+   [
+    "screen",
+    ", I is 30%"
+   ],
+   [
+    "screen",
+    ", I is 30%"
+   ],
+   [
+    "screen",
+    ", I is 30%"
+   ],
+   [
+    "screen",
+    ", I is 30% quote unquote"
+   ],
+   [
+    "screen",
+    ", I is 30% quote unquote"
+   ],
+   [
+    "screen",
+    ", I is 30% quote unquote one"
+   ],
+   [
+    "screen",
+    ", I is 30% \"and one\""
+   ],
+   [
+    "final",
+    ", I is 30% \"and one\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a stutter never flips a pause",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "I talked to the.",
+    "final"
+   ],
+   [
+    0.3,
+    "I talked to the. The",
+    "interim"
+   ],
+   [
+    0.8,
+    "tick"
+   ],
+   [
+    1.3,
+    "tick"
+   ],
+   [
+    1.8,
+    "tick"
+   ],
+   [
+    2.2,
+    "I talked to the. The meeting was fine.",
+    "final"
+   ]
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I talked to the."
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the meeting was fine."
+   ],
+   [
+    "final",
+    "I talked to the the meeting was fine.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a time after at waits for a count noun",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    0.5,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    1.0,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    1.5,
+    "tick"
+   ],
+   [
+    2.0,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    2.8,
+    "meet at three thirty five people came",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at three thirty five people came"
+   ],
+   [
+    "final",
+    "Meet at three thirty five people came",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a phone number read slowly holds until it ends",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "call five five five",
+    "interim"
+   ],
+   [
+    0.4,
+    "call five five five one two",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.4,
+    "call five five five one two three four",
+    "interim"
+   ],
+   [
+    4.2,
+    "tick"
+   ],
+   [
+    4.5,
+    "call five five five one two three four five six",
+    "interim"
+   ],
+   [
+    6.5,
+    "tick"
+   ],
+   [
+    7.0,
+    "call five five five one two three four five six seven thanks",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call 555-1234"
+   ],
+   [
+    "screen",
+    "Call"
+   ],
+   [
+    "screen",
+    "Call 555123456"
+   ],
+   [
+    "screen",
+    "Call 555-123-4567 thanks"
+   ],
+   [
+    "final",
+    "Call 555-123-4567 thanks",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a date waits for the next word",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "due june first",
+    "interim"
+   ],
+   [
+    0.6,
+    "due june first",
+    "interim"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    3.0,
+    "due june first graders",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Due"
+   ],
+   [
+    "screen",
+    "Due"
+   ],
+   [
+    "screen",
+    "Due"
+   ],
+   [
+    "screen",
+    "Due June first graders"
+   ],
+   [
+    "final",
+    "Due June first graders",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a quote waits for its utterance to close",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "she said quote ship it",
+    "interim"
+   ],
+   [
+    0.4,
+    "she said quote ship it",
+    "interim"
+   ],
+   [
+    2.2,
+    "tick"
+   ],
+   [
+    2.5,
+    "she said quote ship it unquote",
+    "interim"
+   ],
+   [
+    2.8,
+    "she said quote ship it on quote",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    5.0,
+    "she said quote ship it unquote",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said \"ship it\""
+   ],
+   [
+    "final",
+    "She said \"ship it\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a typed number never re-reads alone",
+  "register": "python",
+  "steps": [
+   [
+    4.9,
+    "the heading scratch",
+    "final"
+   ],
+   [
+    5.0,
+    "the heading scratch one",
+    "interim"
+   ],
+   [
+    5.6,
+    "the heading scratch one thousand",
+    "interim"
+   ],
+   [
+    5.9,
+    "the heading scratch one thousand hundred",
+    "interim"
+   ],
+   [
+    7.5,
+    "the heading scratch one thousand hundred it",
+    "interim"
+   ],
+   [
+    8.1,
+    "the heading scratch one thousand hundred it pm",
+    "interim"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "the heading"
+   ],
+   [
+    "screen",
+    "the heading scratch"
+   ],
+   [
+    "screen",
+    "the heading scratch"
+   ],
+   [
+    "screen",
+    "the heading scratch"
+   ],
+   [
+    "screen",
+    "the heading scratch 1000 hundred it"
+   ],
+   [
+    "screen",
+    "the heading scratch 1000 hundred it pm"
+   ],
+   [
+    "final",
+    "the heading scratch 1000 hundred it pm",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a quote held behind a number never expires",
+  "register": "prose",
+  "steps": [
+   [
+    4.4,
+    "g",
+    "final"
+   ],
+   [
+    9.7,
+    "g cents said euros bullet i the",
+    "interim"
+   ],
+   [
+    10.3,
+    "g cents said euros bullet i the one",
+    "interim"
+   ],
+   [
+    11.9,
+    "g cents said euros bullet i the one quote",
+    "interim"
+   ],
+   [
+    14.8,
+    "g cents said euros bullet i the one quote at comma undo heading word",
+    "interim"
+   ],
+   [
+    16.4,
+    "g cents said euros bullet i the one quote at comma undo rocket word",
+    "interim"
+   ],
+   [
+    16.5,
+    "tick"
+   ],
+   [
+    16.6,
+    "g cents said euros bullet i the one quote at comma twenty rocket word",
+    "interim"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "G"
+   ],
+   [
+    "screen",
+    "G cents said euros bullet I the"
+   ],
+   [
+    "screen",
+    "G cents said euros bullet I the one"
+   ],
+   [
+    "screen",
+    "G cents said euros bullet I the"
+   ],
+   [
+    "screen",
+    "G cents said euros bullet I the"
+   ],
+   [
+    "screen",
+    "G cents said euros bullet I the"
+   ],
+   [
+    "screen",
+    "G cents said euros bullet I the"
+   ],
+   [
+    "screen",
+    "G cents said euros bullet I the"
+   ],
+   [
+    "final",
+    "G cents said euros bullet I the one quote at, twenty rocket word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "am waits for the next word",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "which one am",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.5,
+    "which one am i",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    5.0,
+    "which one am i",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Which"
+   ],
+   [
+    "screen",
+    "Which"
+   ],
+   [
+    "screen",
+    "Which one am I"
+   ],
+   [
+    "screen",
+    "Which one am I"
+   ],
+   [
+    "screen",
+    "Which one am I"
+   ],
+   [
+    "final",
+    "Which one am I",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "words land and freeze on the window",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "fixed the",
+    "interim"
+   ],
+   [
+    0.3,
+    "fixed the race",
+    "interim"
+   ],
+   [
+    0.6,
+    "fixed the race condition",
+    "interim"
+   ],
+   [
+    0.9,
+    "fixed the race condition",
+    "interim"
+   ],
+   [
+    1.2,
+    "tick"
+   ],
+   [
+    2.2,
+    "tick"
+   ],
+   [
+    2.5,
+    "fixed the race condition in",
+    "interim"
+   ],
+   [
+    4.0,
+    "tick"
+   ],
+   [
+    4.5,
+    "fixed the race condition in the audio thread",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Fixed the"
+   ],
+   [
+    "screen",
+    "Fixed the race"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio thread"
+   ],
+   [
+    "final",
+    "Fixed the race condition in the audio thread",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a revision repairs the molten tail",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "fixed the race addition",
+    "interim"
+   ],
+   [
+    0.3,
+    "fixed the race addition in",
+    "interim"
+   ],
+   [
+    0.6,
+    "fixed the race condition in the",
+    "interim"
+   ],
+   [
+    0.9,
+    "fixed the race condition in the audio",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.6,
+    "tick"
+   ],
+   [
+    3.0,
+    "fixed the race condition in the audio thread",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Fixed the race addition"
+   ],
+   [
+    "screen",
+    "Fixed the race addition in"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio"
+   ],
+   [
+    "screen",
+    "Fixed the race condition in the audio thread"
+   ],
+   [
+    "final",
+    "Fixed the race condition in the audio thread",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a deep revision widens the horizon",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    0.2,
+    "we need to shift the ring to bay",
+    "interim"
+   ],
+   [
+    0.4,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    0.6,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    2.2,
+    "tick"
+   ],
+   [
+    2.4,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    2.6,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    2.8,
+    "we need to ship the thing today",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    6.0,
+    "we need to ship the thing today",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to shift the ring to bay"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "screen",
+    "We need to ship the thing today"
+   ],
+   [
+    "final",
+    "We need to ship the thing today",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a half phrase is held, then let go",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "ready open",
+    "interim"
+   ],
+   [
+    0.3,
+    "ready open",
+    "interim"
+   ],
+   [
+    0.6,
+    "ready open",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    3.2,
+    "tick"
+   ],
+   [
+    3.6,
+    "ready open",
+    "interim"
+   ],
+   [
+    4.0,
+    "ready open quote",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready"
+   ],
+   [
+    "screen",
+    "Ready open"
+   ],
+   [
+    "screen",
+    "Ready open"
+   ],
+   [
+    "screen",
+    "Ready open quote"
+   ],
+   [
+    "final",
+    "Ready open quote",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "an email waits until it can't grow",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "mail liam",
+    "interim"
+   ],
+   [
+    0.3,
+    "mail liam at",
+    "interim"
+   ],
+   [
+    0.6,
+    "mail liam at example",
+    "interim"
+   ],
+   [
+    0.9,
+    "mail liam at example dot",
+    "interim"
+   ],
+   [
+    1.2,
+    "mail liam at example dot com",
+    "interim"
+   ],
+   [
+    1.5,
+    "mail liam at example dot com",
+    "interim"
+   ],
+   [
+    3.5,
+    "tick"
+   ],
+   [
+    4.0,
+    "mail liam at example dot com today",
+    "interim"
+   ],
+   [
+    6.5,
+    "tick"
+   ],
+   [
+    7.0,
+    "mail liam at example dot com today",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Mail liam"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com today"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com today"
+   ],
+   [
+    "screen",
+    "Mail liam@example.com today"
+   ],
+   [
+    "final",
+    "Mail liam@example.com today",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a comma word waits for one more word, then merges with a filler",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "we should,",
+    "interim"
+   ],
+   [
+    0.3,
+    "we should,",
+    "interim"
+   ],
+   [
+    0.6,
+    "we should, uh,",
+    "interim"
+   ],
+   [
+    0.9,
+    "we should, uh, ship",
+    "interim"
+   ],
+   [
+    3.0,
+    "tick"
+   ],
+   [
+    3.3,
+    "we should, uh, ship it",
+    "interim"
+   ],
+   [
+    5.0,
+    "we should, uh, ship it",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We"
+   ],
+   [
+    "screen",
+    "We"
+   ],
+   [
+    "screen",
+    "We should"
+   ],
+   [
+    "screen",
+    "We should ship"
+   ],
+   [
+    "screen",
+    "We should ship"
+   ],
+   [
+    "screen",
+    "We should ship it"
+   ],
+   [
+    "screen",
+    "We should ship it"
+   ],
+   [
+    "final",
+    "We should ship it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held number is let go, then a bigger number follows",
+  "register": "terminal",
+  "steps": [
+   [
+    0.0,
+    "one",
+    "interim"
+   ],
+   [
+    0.3,
+    "one",
+    "interim"
+   ],
+   [
+    0.6,
+    "one",
+    "interim"
+   ],
+   [
+    3.2,
+    "tick"
+   ],
+   [
+    3.4,
+    "tick"
+   ],
+   [
+    3.6,
+    "one hundred",
+    "interim"
+   ],
+   [
+    3.9,
+    "one hundred",
+    "interim"
+   ],
+   [
+    4.2,
+    "one hundred",
+    "interim"
+   ],
+   [
+    7.0,
+    "tick"
+   ],
+   [
+    7.5,
+    "one hundred five",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1"
+   ],
+   [
+    "screen",
+    "1 hundred"
+   ],
+   [
+    "screen",
+    "1 hundred"
+   ],
+   [
+    "final",
+    "1 hundred 5",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "words committed one at a time never merge",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "say open",
+    "interim"
+   ],
+   [
+    0.3,
+    "say open",
+    "interim"
+   ],
+   [
+    0.6,
+    "say open",
+    "interim"
+   ],
+   [
+    3.2,
+    "tick"
+   ],
+   [
+    3.5,
+    "say open quote",
+    "interim"
+   ],
+   [
+    3.8,
+    "say open quote",
+    "interim"
+   ],
+   [
+    4.1,
+    "say open quote",
+    "interim"
+   ],
+   [
+    6.5,
+    "tick"
+   ],
+   [
+    7.0,
+    "say open quote hi close quote",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say open"
+   ],
+   [
+    "screen",
+    "Say open"
+   ],
+   [
+    "screen",
+    "Say open"
+   ],
+   [
+    "screen",
+    "Say open"
+   ],
+   [
+    "screen",
+    "Say open"
+   ],
+   [
+    "screen",
+    "Say open quote hi\""
+   ],
+   [
+    "final",
+    "Say open quote hi\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a bare literal stays bare when more words commit",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "say literal",
+    "interim"
+   ],
+   [
+    0.5,
+    "say literal",
+    "interim"
+   ],
+   [
+    1.0,
+    "say literal",
+    "interim"
+   ],
+   [
+    4.0,
+    "tick"
+   ],
+   [
+    5.0,
+    "say literal period now",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say literal"
+   ],
+   [
+    "screen",
+    "Say literal. Now"
+   ],
+   [
+    "final",
+    "Say literal. Now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a non ascii word commits early",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "café au lait",
+    "interim"
+   ],
+   [
+    0.2,
+    "café au lait",
+    "interim"
+   ],
+   [
+    0.4,
+    "café au lait",
+    "interim"
+   ],
+   [
+    0.6,
+    "tick"
+   ],
+   [
+    3.0,
+    "café au lait",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "screen",
+    "Café au lait"
+   ],
+   [
+    "final",
+    "Café au lait",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a scratch mid-stream",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "send it to bob",
+    "interim"
+   ],
+   [
+    0.3,
+    "send it to bob",
+    "interim"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.2,
+    "send it to bob scratch that",
+    "interim"
+   ],
+   [
+    2.5,
+    "send it to bob scratch that send it to alice",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    5.0,
+    "send it to bob scratch that send it to alice",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob"
+   ],
+   [
+    "screen",
+    "Send it to bob send it to alice"
+   ],
+   [
+    "screen",
+    "Send it to bob send it to alice"
+   ],
+   [
+    "screen",
+    "Send it to alice"
+   ],
+   [
+    "final",
+    "Send it to alice",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a long molten tail is forced to commit",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "interim"
+   ],
+   [
+    0.1,
+    "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "interim"
+   ],
+   [
+    0.2,
+    "tick"
+   ],
+   [
+    1.0,
+    "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "screen",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+   ],
+   [
+    "final",
+    "Word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a pause settles once the next word has",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "i was thinking about the project.",
+    "final"
+   ],
+   [
+    0.3,
+    "i was thinking about the project. And",
+    "interim"
+   ],
+   [
+    0.5,
+    "i was thinking about the project. And how",
+    "interim"
+   ],
+   [
+    1.5,
+    "tick"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    3.0,
+    "i was thinking about the project. And how we could make it simpler.",
+    "final"
+   ]
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project and"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how"
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how we could make it simpler."
+   ],
+   [
+    "final",
+    "I was thinking about the project and how we could make it simpler.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a pause with nothing after it yet",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "that is done.",
+    "final"
+   ],
+   [
+    1.0,
+    "tick"
+   ],
+   [
+    2.0,
+    "tick"
+   ],
+   [
+    2.5,
+    "that is done. Next",
+    "interim"
+   ],
+   [
+    3.5,
+    "tick"
+   ],
+   [
+    4.0,
+    "that is done. Next the docs.",
+    "final"
+   ]
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done."
+   ],
+   [
+    "screen",
+    "That is done. Next"
+   ],
+   [
+    "screen",
+    "That is done. Next"
+   ],
+   [
+    "screen",
+    "That is done. Next the docs."
+   ],
+   [
+    "final",
+    "That is done. Next the docs.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a command waits at a barrier while words keep coming",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "hello world",
+    "final"
+   ],
+   [
+    1.0,
+    "hello world select previous word",
+    "final"
+   ],
+   [
+    1.2,
+    "hello world select previous word pla",
+    "interim"
+   ],
+   [
+    1.4,
+    "hello world select previous word planet",
+    "interim"
+   ],
+   [
+    1.6,
+    "press"
+   ],
+   [
+    1.8,
+    "hello world select previous word planet",
+    "interim"
+   ],
+   [
+    3.5,
+    "tick"
+   ],
+   [
+    4.0,
+    "hello world select previous word planet",
+    "final"
+   ]
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "action",
+    "select:word:left",
+    1,
+    "Hello world"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "final",
+    "planet",
+    "Hello world",
+    "",
+    0,
+    []
+   ]
+  ]
+ }
+]

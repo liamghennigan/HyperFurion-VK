@@ -24,6 +24,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 PROBE_TIMEOUT_S = 1.2
+# The longest selection read for "VK, make this …": a rewrite of more is a
+# job for an editor, not a keyboard.
+MAX_SELECTION_CHARS = 4000
 
 
 @dataclass(frozen=True)
@@ -181,6 +184,36 @@ print(json.dumps({
     "editable": state_contains(focused, Editable),
     "secret": role == "password text",
 }))
+"""
+
+# On demand only — never part of the probe above, which runs at every
+# recording start and must not read what is on screen. This one runs when
+# the user has asked to rewrite their selection ("VK, make this shorter"
+# with nothing dictated): it reads the focused widget's own selection,
+# which is exactly what typing will replace. Editable widgets only, never
+# a password field.
+SELECTION_PROBE_SCRIPT = ATSPI_PROBE_SCRIPT[:ATSPI_PROBE_SCRIPT.index("role = accessible_role(focused)")] + r"""
+result = {"selection": "", "chars": 0}
+role = accessible_role(focused)
+if state_contains(focused, Editable) and role != "password text":
+    try:
+        count = Atspi.Text.get_n_selections(focused)
+    except Exception:
+        count = 0
+    if count >= 1:
+        try:
+            span = Atspi.Text.get_selection(focused, 0)
+            start, end = int(span.start_offset), int(span.end_offset)
+        except Exception:
+            start = end = 0
+        if end > start:
+            result["chars"] = end - start
+            if end - start <= LIMIT:
+                try:
+                    result["selection"] = Atspi.Text.get_text(focused, start, end) or ""
+                except Exception:
+                    result["chars"] = 0
+print(json.dumps(result))
 """
 
 
@@ -380,6 +413,30 @@ def _windows_caret_and_secret(user32, thread_id: int) -> tuple[int, int, bool]:
     if not user32.ClientToScreen(info.hwndCaret, ctypes.byref(point)):
         return -1, -1, secret
     return int(point.x), int(point.y), secret
+
+
+def probe_selection(timeout: float = PROBE_TIMEOUT_S) -> Optional[tuple[str, int]]:
+    """Linux, on demand: the focused editable widget's selection and its
+    length in characters — ("", n) when it is longer than
+    MAX_SELECTION_CHARS, ("", 0) when there is none; None when the
+    accessibility tree can't be asked."""
+    try:
+        result = subprocess.run(
+            ["/usr/bin/python3", "-c", f"LIMIT = {MAX_SELECTION_CHARS}\n" + SELECTION_PROBE_SCRIPT],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+        return str(payload.get("selection", "") or "")[:MAX_SELECTION_CHARS], int(payload.get("chars", 0) or 0)
+    except (TypeError, ValueError):
+        return None
 
 
 def probe_focus(timeout: float = PROBE_TIMEOUT_S) -> Optional[FocusInfo]:

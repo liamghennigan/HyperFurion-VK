@@ -98,6 +98,26 @@ def save_dictionary(data: dict) -> None:
     os.chmod(path, 0o600)
 
 
+def add_word(spoken: str, written: str) -> tuple[str, bool]:
+    """`voice-keyboard learned add hyper furion = HyperFurion`: what you say
+    now types `written`, and a one-word `written` also becomes a hotword
+    the recognizer is biased toward. Returns (the spoken key, whether a
+    hotword was added)."""
+    # as the grammar hears it: casefolded, punctuation off each word
+    key = " ".join(w.strip(".,!?;:") for w in spoken.split() if w.strip(".,!?;:")).casefold()
+    written = written.strip()
+    if not key or not written:
+        raise ValueError("both the spoken words and the written form are needed")
+    data = load_dictionary()
+    data["overrides"][key] = written
+    data["rejected"] = [r for r in data["rejected"] if not r.startswith(key + " -> ")]
+    hotword = len(written.split()) == 1 and written.casefold() not in {w.casefold() for w in data["hotwords"]}
+    if hotword:
+        data["hotwords"].append(written)
+    save_dictionary(data)
+    return key, hotword
+
+
 def vocabulary_overrides() -> dict:
     """Accepted spoken→replacement pairs, for the grammar merge."""
     return dict(load_dictionary().get("overrides") or {})

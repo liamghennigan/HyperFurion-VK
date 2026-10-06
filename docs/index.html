@@ -85,11 +85,12 @@
                 <button type="button" role="tab" data-register="terminal" aria-selected="false" tabindex="-1">terminal</button>
                 <button type="button" role="tab" data-register="python" aria-selected="false" tabindex="-1">python</button>
                 <button type="button" role="tab" data-register="shell" aria-selected="false" tabindex="-1">shell</button>
+                <button type="button" role="tab" data-register="javascript" aria-selected="false" tabindex="-1">js</button>
               </div>
             </div>
             <div class="fwin-body">
-              <div class="fwin-lines" id="fwin-lines" aria-live="polite"></div>
-              <div class="fwin-text" aria-hidden="true"><span class="prompt"></span><span class="frozen" id="fwin-frozen"></span><span class="molten" id="fwin-molten"></span><span class="caret"></span><span class="placeholder" id="fwin-placeholder">tap the mic and speak</span></div>
+              <div class="fwin-doc" id="fwin-doc" aria-label="The text field"><span class="prompt"></span><span class="caret"></span><span class="placeholder">tap the mic and speak</span></div>
+              <p class="sr-only" id="fwin-announce" aria-live="polite"></p>
               <p class="fwin-instr" id="fwin-instr" hidden></p>
             </div>
             <div class="fwin-status" id="fwin-status" aria-live="polite"></div>
@@ -98,7 +99,7 @@
           <div class="stage-3d">
             <div class="board" id="board" aria-hidden="true"><div class="plate"></div></div>
           </div>
-          <p class="sr-only">A keyboard that presses its own keys as the words you speak are typed into the window above it. Enter is marked yours and is never pressed.</p>
+          <p class="sr-only">A keyboard that presses its own keys as the words you speak are typed into the text field above it, and presses the arrow and modifier keys when you move the caret by voice. Enter is marked yours and is never pressed.</p>
 
           <div class="stage-bar">
             <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">
@@ -109,7 +110,8 @@
             <span class="spacer"></span>
             <button class="textbtn" id="autopilot" type="button" aria-pressed="false">watch a scripted demo</button>
           </div>
-          <p class="sigcap stage-note">Recognition runs in your browser: <a href="https://github.com/usefulsensors/moonshine" rel="noopener">Moonshine tiny</a> (MIT, Useful Sensors, California), fetched once, about 55 MB. Words freeze when you pause. Nothing you say leaves this tab.</p>
+          <div class="hints" id="hints" aria-label="Things to say"></div>
+          <p class="sigcap stage-note">Recognition runs in your browser: <a href="https://github.com/usefulsensors/moonshine" rel="noopener">Moonshine tiny</a> (MIT, Useful Sensors, California), fetched once, about 55 MB. Words freeze when you pause; a period the recognizer puts at a pause stays revisable until the next words decide it. Nothing you say leaves this tab.</p>
         </div>
       </div>
     </section>
@@ -120,7 +122,7 @@
         <div>
           <span class="eyebrow">01 · molten dictation</span>
           <h2 id="molten-title">Words land while you speak.</h2>
-          <p>Each word stays molten for 1.5 seconds — long enough to repair itself in place — then freezes and is never touched again. Say “scratch that” to take a sentence back, “period” for punctuation, “new line” for a break.</p>
+          <p>Each word stays molten for 1.5 seconds — long enough to repair itself in place — then freezes and is never touched again. Say “scratch that” to take a sentence back, “period” for punctuation, “new line” for a break, “new number” for a numbered list. Amounts, dates and phone numbers come out the way you'd write them — “twenty five percent by october sixth” types 25% by October 6 — and “emoji rocket” types 🚀. Misheard a name? “Spell that n g i n x” swaps the last word on screen, and “correct monday to friday” fixes a word anywhere in what you just said. Say a caret command on its own — “select previous word”, “go to end of line”, “delete the line” — and the keyboard presses the real keys for it after your words have landed.</p>
         </div>
         <figure class="fig">
           <p class="sample"><span class="frozen">Fixed the race condition in the </span><span class="molten repair">audio thread</span><span class="caret"></span></p>
@@ -134,7 +136,7 @@
         <div>
           <span class="eyebrow">02 · registers</span>
           <h2 id="registers-title">The same words, typed the way the app wants.</h2>
-          <p>It probes the focused app and picks a register: prose gets capitals and punctuation, a terminal gets digits and no caps, python and shell compile speech into code. The panes show your last dictation through each.</p>
+          <p>It probes the focused app and picks a register: prose gets capitals and punctuation, a terminal gets digits and no caps, python, shell and javascript compile speech into code. The same probe picks the keys: an editor gets <kbd>ctrl</kbd><kbd>←</kbd> for “go back a word” (<kbd>option</kbd><kbd>←</kbd> on a Mac), a shell gets readline's <kbd>alt</kbd><kbd>b</kbd>. The panes show your last dictation through each.</p>
         </div>
         <figure class="fig" id="register-panes">
           <div class="pane" data-register="prose"><span class="pane-title">notes.md · prose</span><span class="pane-text"></span></div>
@@ -149,12 +151,12 @@
         <div>
           <span class="eyebrow consent">03 · consent</span>
           <h2 id="consent-title">Only a hand may send.</h2>
-          <p>In a terminal it drafts one line and stops. It never presses Enter to send — enforced in the injector, on every path, not promised in copy.</p>
+          <p>In a terminal it drafts one line and stops. It never presses Enter to send — enforced in the injector, on every path, not promised in copy. No caret command can press it either: a shortcut that would (<code>ctrl+m</code>, <code>ctrl+j</code>) is refused before it reaches the keys.</p>
           <p class="aphorism">The machine may draft. Only a hand may send.</p>
         </div>
         <figure class="fig">
           <p class="sample term"><span class="frozen">rg -n "TODO|FIXME" .</span><span class="caret"></span></p>
-          <figcaption class="sigcap"><span class="held">⏎ enter — yours</span> drafted for review; the injector cannot send it</figcaption>
+          <figcaption class="sigcap"><span class="held">⏎ enter — yours</span> drafted for review; the injector cannot send it · try it: “VK, run find every todo” in the shell tab above</figcaption>
         </figure>
       </div>
     </section>
@@ -206,7 +208,10 @@ base_url = <span class="s">"http://localhost:8000/v1"</span>
 curl -fsSL https://github.com/liamghennigan/HyperFurion-VK\
 /releases/latest/download/install-hyperfurion-vk.sh | bash
 
-<span class="c"># then press</span> <span class="a">Ctrl + Alt + V</span> <span class="c">and speak</span></code></pre>
+<span class="c"># then press</span> <span class="a">Ctrl + Alt + V</span> <span class="c">and speak</span>
+
+<span class="c"># not typing? it names the fix</span>
+voice-keyboard doctor</code></pre>
           </div>
           <div class="terminal">
             <div class="terminal-bar"><span>windows · powershell</span><button class="copy" type="button" data-copy="win">copy</button></div>
@@ -224,9 +229,12 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
         <span class="eyebrow">the full board</span>
         <h2 id="features-title">Everything a keyboard does, spoken.</h2>
         <div class="feature-grid">
-          <article class="feature"><small>edit</small><h3>Spoken edits</h3><p>“Scratch that”, “new line”, “period”, “open quote” — a real edit grammar, parsed before anything is typed. Say <code>literal</code> to type the next word as-is.</p></article>
-          <article class="feature"><small>numbers</small><h3>Digits where they belong</h3><p>“Twenty three” becomes 23 in a terminal and stays words in prose. “One two seven” is 127. Decimals too.</p></article>
-          <article class="feature"><small>rewrite</small><h3>“VK, make that formal”</h3><p>The wake word sends what you just said through your language model and repairs it on screen, in place. Hold it for approval if you like.</p></article>
+          <article class="feature"><small>edit</small><h3>Spoken edits</h3><p>“Scratch that”, “new line”, “period”, “quote … unquote”, “new bullet”, “new number”, “new heading”, “new checkbox”, “emoji rocket” — a real edit grammar, parsed before anything is typed, with Spanish, French and German sets too (“punto”, “à la ligne”, “neue Zeile”). Say <code>literal</code> to type the next word as-is.</p></article>
+          <article class="feature"><small>numbers</small><h3>Written the way you'd write it</h3><p>“Twenty three” is 23 in a terminal and words in prose — until a unit makes it certain: 25%, $5.50, $3.2 billion, 3:30 PM, June 5, 1999, room 402, Q3, 2.5 MB, 555-1234, example.com/docs. Lowercase recognizers get their I, OK and Monday capitalized.</p></article>
+          <article class="feature"><small>spell</small><h3>“Spell that n g i n x”</h3><p>Swaps the last word for the one you spelled — letters, NATO words, “capital k”, spoken digits — keeping its punctuation and its capital. Each fix is offered to your personal dictionary, never applied on its own.</p></article>
+          <article class="feature"><small>navigate</small><h3>Move the caret by voice</h3><p>“Go left three words”, “select that”, “go to end of line”, “undo that”, “paste that”, “press tab”. Said on its own, a command presses the app's own keys after your words land — editors get the shift and ctrl chords, shells get readline's. Enter is never one of them, and a terminal never gets a paste.</p></article>
+          <article class="feature"><small>fix</small><h3>“Correct monday to friday”</h3><p>Fixes a word anywhere in what you just said, its capital kept, and offers the pair to your dictionary. “Cap that”, “uppercase that”, “lowercase that” recase the last thing you said — no model, no selection.</p></article>
+          <article class="feature"><small>rewrite</small><h3>“VK, make that formal”</h3><p>The wake word sends what you just said through your language model and repairs it on screen, in place. Select any text in any app first, and it rewrites the selection instead.</p></article>
           <article class="feature"><small>assistant</small><h3>Kai, in the keyboard</h3><p>Hold Right Ctrl and ask. In a terminal Kai drafts the command and stops. Anywhere else it answers aloud. A one-gigabyte local model is enough.</p></article>
           <article class="feature"><small>read</small><h3>Read anything aloud</h3><p>Select text in any app and the keyboard speaks it — xAI, OpenAI, ElevenLabs, or a local voice.</p></article>
           <article class="feature"><small>recall</small><h3>An opt-in memory</h3><p>A local ledger of what you dictated: list it, re-type it, search it. It also mines your corrections to learn your vocabulary. Off until you turn it on.</p></article>
@@ -247,6 +255,9 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
               <tr><th scope="row">Linux, Wayland &amp; X11</th><td class="yes">first-class</td><td class="mid">supported</td><td class="yes">Linux-only</td><td class="mid">X11-focused</td><td class="no">Windows-only</td></tr>
               <tr><th scope="row">Streaming “molten” dictation</th><td class="yes">yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
               <tr><th scope="row">Never auto-sends in a terminal</th><td class="yes">guaranteed</td><td class="mid">scriptable</td><td class="mid">scriptable</td><td class="no">n/a</td><td class="no">n/a</td></tr>
+              <tr><th scope="row">Caret commands by voice</th><td class="yes">editors &amp; readline</td><td class="yes">extensive</td><td class="yes">yes</td><td class="no">—</td><td class="yes">yes</td></tr>
+              <tr><th scope="row">Spoken edits (correct, select, cap)</th><td class="yes">built in</td><td class="mid">scriptable</td><td class="mid">scriptable</td><td class="no">—</td><td class="yes">built in</td></tr>
+              <tr><th scope="row">Per-app style via your own model</th><td class="yes">opt-in</td><td class="mid">scriptable</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
               <tr><th scope="row">Runs fully offline</th><td class="yes">local model</td><td class="yes">local</td><td class="yes">local</td><td class="yes">local</td><td class="yes">local</td></tr>
             </tbody>
           </table>
@@ -263,7 +274,8 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
           <li>Linux and Windows are first-class. macOS is in beta, installed from a checkout. iOS cannot host a system-wide keyboard like this.</li>
           <li>Live, molten typing needs a streaming speech provider. Non-streaming providers type when you stop talking.</li>
           <li>Repairs assume nothing else edits the field while you dictate. Click elsewhere mid-sentence and the text lands on your clipboard instead.</li>
-          <li>A spoken “new line” in prose types a line break. The Enter refusal applies where it matters: command drafting and Kai. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
+          <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend. Hands-free navigation is off by default in the daemon (<code>[nav] enabled = true</code>, or say yes in <code>voice-keyboard setup</code>); this page has it on, with your own platform's keys.</li>
+          <li>A spoken “new line” types a line break in prose and nothing in a terminal, where a line break would be Enter. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
         </ul>
       </div>
     </section>
@@ -272,6 +284,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
   <footer>
     <div class="wrap">
       <p class="sigcap"><span id="bytes">self-hosted · no third-party requests</span> · no analytics · no cookies · nothing you say is stored</p>
+      <p class="sigcap">the engine on this page is a port of the daemon's, and CI replays the same <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/tests/flow_corpus.json" rel="noopener">corpus</a> through both — same screens, same keys</p>
       <p class="sigcap" id="fetched" hidden></p>
       <div class="footer-grid">
         <div>HyperFurion VK · MIT · a voice keyboard, not a dictation app · a hosted subscription may return; nothing is paywalled</div>

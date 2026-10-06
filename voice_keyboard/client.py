@@ -348,6 +348,15 @@ def _package_version() -> str:
         return "unknown"
 
 
+class _LazyVersion(argparse.Action):
+    """--version, looked up only when asked: importlib.metadata costs every
+    other invocation (each hotkey press on GNOME) ~20 ms."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(f"{parser.prog} {_package_version()}")
+        parser.exit()
+
+
 def _list_input_devices() -> list[dict]:
     """Audio inputs as PyAudio sees them: [{name, channels, rate, default}]."""
     import pyaudio
@@ -632,21 +641,34 @@ def _run_learned(extra_args: list[str]) -> None:
         data["rejected"].append(dictionary.candidate_key("macro", text))
         dictionary.save_dictionary(data)
         print("macro candidate rejected")
+    elif action == "add" and "=" in extra_args[1:]:
+        at = extra_args.index("=", 1)
+        try:
+            key, hotword = dictionary.add_word(" ".join(extra_args[1:at]), " ".join(extra_args[at + 1:]))
+        except ValueError as exc:
+            print(f"learned add: {exc}", file=sys.stderr)
+            sys.exit(2)
+        written = " ".join(extra_args[at + 1:]).strip()
+        print(f'added: "{key}" -> "{written}"' + (" (and a hotword)" if hotword else ""))
     elif action == "forget" and len(extra_args) > 1:
         spoken = " ".join(extra_args[1:]).casefold()
         removed = [k for k in data["overrides"] if k.casefold() == spoken]
+        written = {data["overrides"][k].casefold() for k in removed}
         for key in removed:
             del data["overrides"][key]
-        data["hotwords"] = [w for w in data["hotwords"] if w.casefold() != spoken]
+        # the hotword `learned add` made for it goes too
+        data["hotwords"] = [w for w in data["hotwords"] if w.casefold() not in written | {spoken}]
         had_macro = data["macros"].pop(spoken, None) is not None
         dictionary.save_dictionary(data)
         found = bool(removed) or had_macro
-        print(f"forgot: {extra_args[1]}" if found else f"not found: {extra_args[1]}")
+        said = " ".join(extra_args[1:])
+        print(f"forgot: {said}" if found else f"not found: {said}")
     else:
         print(
             "usage: voice-keyboard learned"
             " [accept N | reject N | hotword N | reject-hotword N |"
-            " macro N <name> | reject-macro N | forget <spoken>]",
+            " macro N <name> | reject-macro N | add <spoken> = <written> |"
+            " forget <spoken>]",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -858,7 +880,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login", "quit", "devices", "setup", "stats",
+            "login", "quit", "devices", "setup", "stats", "commands", "doctor", "try",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -869,13 +891,15 @@ def main() -> None:
             "history [count] | recall [n-back] | transform <instruction...>"
             " | intent <request...> | ask <question...> | find <query...>"
             " | learned [accept N | reject N | hotword N | macro N <name> |"
-            " forget <spoken>] | stats [--json]"
+            " add <spoken> = <written> | forget <spoken>] | stats [--json]"
+            " | commands [filter] | try [register:] <words…> (no words: one per line)"
         ),
     )
     parser.add_argument(
         "--version",
-        action="version",
-        version=f"%(prog)s {_package_version()}",
+        action=_LazyVersion,
+        nargs=0,
+        help="show the version and exit",
     )
     parser.add_argument(
         "--socket",
@@ -895,6 +919,21 @@ def main() -> None:
             if stream is not None and hasattr(stream, "reconfigure"):
                 stream.reconfigure(errors="replace")
 
+    if args.command == "doctor":
+        # Before the config loads: a broken config is one of its findings.
+        from voice_keyboard import doctor, paths
+
+        path = paths.config_dir() / "config.toml"
+        try:
+            loaded = load_config(path)
+            if args.socket:
+                loaded["daemon"]["socket_path"] = args.socket
+        except Exception:
+            loaded = None
+        findings = doctor.run(path, loaded)
+        print(doctor.render(findings), end="")
+        sys.exit(1 if any(f.status == doctor.FAIL for f in findings) else 0)
+
     if args.command == "setup":
         # The settings walkthrough; it must run before the config is
         # loaded, since fixing a missing or broken config is its job.
@@ -912,6 +951,24 @@ def main() -> None:
 
     if args.command == "devices":
         _run_devices()
+        return
+
+    if args.command == "try":
+        from voice_keyboard import trial
+
+        if not args.args:
+            sys.exit(trial.repl(config, sys.stdin, sys.stdout))
+        try:
+            print(trial.run(config, args.args))
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            sys.exit(2)
+        return
+
+    if args.command == "commands":
+        from voice_keyboard.cheatsheet import render
+
+        print(render(config, " ".join(args.args)), end="")
         return
 
     socket_path = args.socket or config["daemon"]["socket_path"]

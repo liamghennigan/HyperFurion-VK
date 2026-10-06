@@ -6,8 +6,19 @@ export const settings = {
   code: "KeyV", mods: { ctrl: true, alt: true, shift: false, meta: false },
   mode: "auto", holdMs: 280,
   // [flow]
-  flowLive: true, interim: true, stabilityMs: 1500, autoStopMs: 0,
+  flowLive: true, interim: true, stabilityMs: 1500, stabilityUpdates: 2, autoStopMs: 0,
   numbers: "auto", wakeWord: "vk",
+  // [flow] spelling = true; [nav] enabled — off by default in the daemon,
+  // on here so the page can show it
+  spelling: true, nav: true,
+  // [flow] rejoin = true: a recording started within 30 s continues the last
+  rejoin: true, adaptive: true,
+  // [flow] pause_review: the daemon's default "auto" is rules plus an [llm]
+  // review of the unclear pauses; the page has no model, so: rules
+  pauseReview: "rules",
+  // [intent]: "vk, run …" types ONE command line and never presses Enter —
+  // off by default in the daemon, on here so the consent story is live
+  intent: { enabled: true, verbs: ["run", "command", "execute"] },
   lang: (navigator.language || "en-US"),
   // [tts]
   tts: { rate: 1, pitch: 1, voice: null },

@@ -1,6 +1,9 @@
 import asyncio
+import contextlib
+import datetime
 import json
 import logging
+import re
 import signal
 import sys
 import threading
@@ -15,14 +18,21 @@ from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
+from voice_keyboard.flow import corrections
+from voice_keyboard.flow.grammar import grammar_from_config
+from voice_keyboard.focusprobe import MAX_SELECTION_CHARS
 from voice_keyboard.flow.registers import (
+    RenderState,
+    continuation_state,
     Register,
+    is_chat_app,
     register_for_app,
     resolve_register,
+    TERMINAL,
 )
 from voice_keyboard.flow.vad import OnsetDetector, SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import common_prefix_len
-from voice_keyboard.focusprobe import FocusInfo, probe_focus
+from voice_keyboard.focusprobe import FocusInfo, probe_focus, probe_selection
 from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty_binding
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
@@ -52,6 +62,9 @@ FLOW_TICK_S = 0.25
 # At stop, how long a navigation command waits for the hotkey's modifiers
 # to be released before it is refused.
 NAV_RELEASE_WAIT_S = 1.5
+# A recording that starts this soon after the last one, in the same app
+# and prose register, continues the text that one left at the caret.
+REJOIN_WINDOW_S = 30.0
 # Pause reviews ([flow] pause_review): one call's limit, and how long the
 # stop path waits for the last ones before the rules decide.
 PAUSE_REVIEW_CALL_S = 5.0
@@ -67,6 +80,58 @@ CAPTION_MAX_CHARS = 46
 # A held rewrite that is neither kept nor discarded evaporates.
 PENDING_REWRITE_TTL_S = 120.0
 
+
+
+
+# Shorter dictations ("ok", "on my way") are left as said.
+POLISH_MIN_WORDS = 4
+
+
+def polish_plausible(original: str, polished: str) -> bool:
+    """An automatic polish replaces your words only when it still looks
+    like them: not empty, not a ramble twice their length, no fences or
+    a reply prefix ("Sure, here's …")."""
+    polished = polished.strip()
+    if not polished or len(polished) > 2 * len(original.strip()) + 40:
+        return False
+    if "\n" in polished and "\n" not in original:
+        return False  # a polish adds no line breaks (in a chat, one sends)
+    lowered = polished.lower()
+    return not (polished.startswith("```") or lowered.startswith(("sure", "here is", "here's")))
+
+_PLACEHOLDER = re.compile(r"\{(date|isodate|time|weekday)\}")
+
+
+def expand_placeholders(text: str, now: Optional[datetime.datetime] = None) -> str:
+    """A [snippets] entry's {date} (October 6, 2026), {isodate}
+    (2026-10-06), {time} (14:05) and {weekday} (Tuesday), filled in when
+    it is typed. Any other braces are typed as written."""
+    now = now or datetime.datetime.now()
+    values = {
+        "date": f"{now:%B} {now.day}, {now.year}",
+        "isodate": f"{now:%Y-%m-%d}",
+        "time": f"{now:%H:%M}",
+        "weekday": f"{now:%A}",
+    }
+    return _PLACEHOLDER.sub(lambda m: values[m.group(1)], text)
+
+def _surely_not_a_terminal(focus) -> bool:
+    """Focus was identified, and it is neither a known terminal app nor a
+    terminal widget — whatever register [registers.map] gives it."""
+    if focus is None or not (focus.app or "").strip():
+        return False
+    return register_for_app(focus.app, focus.role) is not TERMINAL
+
+
+def _nav_refusal(action) -> str:
+    """What the overlay says when a caret command is refused."""
+    if action.action == "select:that" and action.count < 1:
+        return "Nothing to select yet"
+    if action.action == "select:that" and action.count > nav.MAX_SELECT_THAT:
+        return "Too long to select by voice"
+    if action.action.startswith("edit:"):
+        return f"Can't {action.action.split(':')[1]} here"
+    return f"Can't {action.action.split(':')[0]} that here"
 
 class Daemon:
     def __init__(
@@ -150,6 +215,11 @@ class Daemon:
         self._session_remote_audio = False
         self._last_caption = ""
         self._last_typed = ""
+        self._overlay_said = False  # the stop path already showed its outcome
+        # Where the last dictation left the caret: the app, the register,
+        # and the last character typed — so the next recording can continue
+        # the sentence instead of gluing itself to it ([flow] rejoin).
+        self._landing: Optional[dict] = None
         self._last_error = ""
         # Molten diffs: a rewrite held for approval ([flow] rewrite_pending).
         self._pending_rewrite: Optional[dict] = None
@@ -560,8 +630,11 @@ class Daemon:
         if not self._recording:
             return
         await self._show_hotkey_overlay("processing")
+        self._overlay_said = False
         final = await self._stop_recording()
-        if final:
+        if self._overlay_said:
+            pass  # the stop already said what happened ("⌁ scratched: …")
+        elif final:
             await self._show_hotkey_overlay(
                 "inserted",
                 detail=f"Inserted {len(final)} characters",
@@ -919,22 +992,13 @@ class Daemon:
                     vocabulary.setdefault(spoken, replacement)
             except Exception:
                 logger.exception("Could not load the personal dictionary")
-        return Grammar(
-            enabled=bool(flow_cfg.get("grammar", True)) and register.grammar_enabled,
-            commands=flow_cfg.get("commands") or {},
-            punctuation=flow_cfg.get("punctuation") or {},
-            vocabulary=vocabulary,
-            wake_word=str(flow_cfg.get("wake_word", "vk")),
-            numbers=str(flow_cfg.get("numbers", "auto")).lower(),
-            numbers_on=register.numbers_on,
-            numbers_min=register.numbers_min,
-            spelling=bool(flow_cfg.get("spelling", True)),
-            nav=self._nav_enabled(),
+        return grammar_from_config(
+            self._config, register, vocabulary=vocabulary, nav=self._nav_enabled()
         )
 
     def _nav_enabled(self) -> bool:
-        """[nav] is on and this platform's injector can press chords
-        (macOS's cannot yet: the commands stay words there)."""
+        """[nav] is on and this platform's injector can press chords (all
+        three do; an injector without press_combo keeps the commands words)."""
         if not bool(self._config.get("nav", {}).get("enabled", False)):
             return False
         return callable(getattr(self._injector, "press_combo", None))
@@ -993,13 +1057,7 @@ class Daemon:
                 except Exception:
                     focus = None
             self._session_focus = focus
-            registers_cfg = self._config.get("registers", {})
-            self._session_register = register_for_app(
-                focus.app if focus else "",
-                focus.role if focus else "",
-                config_map=registers_cfg.get("map", {}) or {},
-                default=str(registers_cfg.get("default", "prose")),
-            )
+            self._session_register = self._register_for(focus)
             self._flow_engine = None
             self._flow_worker = None
             # A hands-free question ends itself on silence; a hold ends on
@@ -1027,21 +1085,34 @@ class Daemon:
                 focus = None
         self._session_focus = focus
 
-        registers_cfg = self._config.get("registers", {})
-        register = register_for_app(
-            focus.app if focus else "",
-            focus.role if focus else "",
-            config_map=registers_cfg.get("map", {}) or {},
-            default=str(registers_cfg.get("default", "prose")),
-        )
+        register = self._register_for(focus)
         self._session_register = register
         kind = "terminal" if register.terminal else "editor"
         self._nav_keys = nav.keymap(
             terminal=register.terminal,
             overrides=(self._config.get("nav", {}).get("keys", {}) or {}).get(kind),
         )
+        if not register.terminal and not _surely_not_a_terminal(focus):
+            # A terminal mapped to another register, or focus we couldn't
+            # identify: ctrl+z suspends the job there, ctrl+v can paste a
+            # line break that runs. Undo, redo and paste need certainty.
+            for action in ("edit:undo", "edit:redo", "edit:paste"):
+                self._nav_keys[action] = None
         if hasattr(self._injector, "paste_chord_shift"):
             self._injector.paste_chord_shift = register.paste_chord_shift
+        # In a terminal a line break IS Enter, and Enter runs the line. The
+        # grammar already drops a spoken "new line" there; the injector
+        # refuses Enter for the whole session as well, on every path — and
+        # so it does wherever a terminal can't be ruled out: focus we could
+        # not identify, or a terminal app mapped to another register.
+        if hasattr(self._injector, "suppress_enter"):
+            self._injector.suppress_enter = bool(register.terminal) or not _surely_not_a_terminal(focus)
+        if hasattr(self._injector, "shift_newline"):
+            # Slack, Discord, Teams…: Enter sends, so a line break is Shift+Enter.
+            chat_extra = (self._config.get("registers", {}) or {}).get("chat_apps", []) or []
+            self._injector.shift_newline = bool(
+                focus is not None and _surely_not_a_terminal(focus) and is_chat_app(focus.app, chat_extra)
+            )
 
         # A secret widget gets maximum protection: verbatim register (set
         # above via the role), no ledger entry, no vocabulary bias.
@@ -1067,6 +1138,7 @@ class Daemon:
             self._flow_config_obj(self._pause_review_mode()),
             self._build_grammar(register),
             register,
+            initial_state=self._rejoin_state(focus, register),
         )
 
         auto_stop_ms = flow_cfg.get("auto_stop_ms", 0)
@@ -1098,6 +1170,10 @@ class Daemon:
         )
 
     async def _teardown_flow_session(self) -> None:
+        if hasattr(self._injector, "suppress_enter"):
+            self._injector.suppress_enter = False
+        if hasattr(self._injector, "shift_newline"):
+            self._injector.shift_newline = False
         if self._nav_task is not None:
             self._nav_task.cancel()
             self._nav_task = None
@@ -1197,12 +1273,10 @@ class Daemon:
         if chords is None:
             logger.info("nav: %s has no binding in this app", action.action)
             await self._show_hotkey_overlay(
-                "error",
-                detail=f"Can't {action.action.split(':')[0]} that here",
-                timeout_ms=1800,
+                "error", detail=_nav_refusal(action), timeout_ms=1800
             )
             return False
-        label = action.action.replace(":", " ").replace("move ", "")
+        label = action.action.replace(":", " ").replace("move ", "").replace("edit ", "")
         if action.count > 1:
             label += f" ×{action.count}"
         # Show what fired — without holding the keys back for the overlay.
@@ -1211,6 +1285,11 @@ class Daemon:
         )
         try:
             for chord in chords:
+                if self._hotkey_combo_held() and not await self._wait_hotkey_released():
+                    # a held hold-to-talk modifier would join the chord
+                    # (shift+left becomes ctrl+shift+left): stop here
+                    logger.info("nav: stopped %s — the hotkey is held", action.action)
+                    return False
                 await asyncio.to_thread(self._injector.press_combo, chord)
         except Exception as exc:
             logger.warning("nav: pressing %s failed: %s", action.action, exc)
@@ -1551,10 +1630,26 @@ class Daemon:
             final = result.text
             self._last_scratches = result.scratches
             self._note_spellings(result.corrections)
+            if (
+                not final
+                and result.reach_back
+                and not result.instruction
+                and not result.typed_before
+                and self._peek_pending_rewrite() is None
+            ):
+                await self._scratch_previous(worker)
+            if not result.instruction:
+                final = await self._self_corrected(final)
             if worker is not None:
                 final = await self._finish_live(worker, final, result.instruction)
             else:
                 final = await self._finish_classic(final, result.instruction)
+            if "\n" in final and not self._session_register.terminal and not _surely_not_a_terminal(self._session_focus):
+                # Say why "new line" typed a space: unknown focus could be a terminal.
+                await self._show_hotkey_overlay(
+                    "listening", detail="Line break typed as a space: this app couldn't be identified",
+                    timeout_ms=2500,
+                )
             segment = final
             if result.typed_before:
                 # Earlier segments, before navigation moved the caret.
@@ -1571,8 +1666,11 @@ class Daemon:
         self._remember_typed(final)
         if result.typed_before and not self._session_secret:
             # Only the text after the last command is where the caret left
-            # it: a later transform/keep may backspace over that, nothing more.
+            # it: a later transform/keep may backspace over that, nothing
+            # more — and the next recording may rejoin that, or nothing.
             self._last_typed = segment
+            if self._landing is not None:
+                self._landing = {**self._landing, "tail": segment[-1:]} if segment else None
         return final
 
     async def _finish_live(
@@ -1601,7 +1699,22 @@ class Daemon:
             )
             final = typed
 
-        if instruction and final and not worker.abandoned:
+        snippet = self._snippet(instruction) if instruction and final else None
+        if snippet is not None and not worker.abandoned:
+            # "send the invoice to VK, my email": the text lands after the
+            # words, not a rewrite of them.
+            target = final + self._snippet_gap(final, snippet) + snippet
+            worker.set_target(target)
+            final = await worker.drain(timeout=self._drain_timeout(target))
+        elif not instruction and final and not worker.abandoned and (style := self._polish_style(final)):
+            try:
+                final = await self._run_transform(
+                    f"polish this dictation: {style}", worker=worker, guard=polish_plausible
+                )
+            except Exception as exc:
+                # The dictation stands as typed; polish is a nicety.
+                logger.info("Polish skipped: %s", exc)
+        elif instruction and final and not worker.abandoned:
             try:
                 final = await self._run_transform(instruction, worker=worker)
             except Exception as exc:
@@ -1618,7 +1731,23 @@ class Daemon:
         resolved = await self._maybe_resolve_pending(final, None)
         if resolved is not None:
             return resolved
-        if instruction and final:
+        snippet = self._snippet(instruction) if instruction and final else None
+        style = self._polish_style(final) if not instruction and final else ""
+        if snippet is not None:
+            final = final + self._snippet_gap(final, snippet) + snippet
+        elif style:
+            llm_client = create_llm_client(self._config)
+            if llm_client is not None:
+                await self._show_hotkey_overlay("processing", detail=f"⌁ polish: {style}")
+                try:
+                    polished = await asyncio.to_thread(llm_client.rewrite, final, f"polish this dictation: {style}")
+                    if polish_plausible(final, polished):
+                        final = polished
+                    else:
+                        logger.info("Polish skipped: the rewrite didn't look like the dictation")
+                except Exception as exc:
+                    logger.info("Polish skipped: %s", exc)  # typed as dictated
+        elif instruction and final:
             llm_client = create_llm_client(self._config)
             if llm_client is None:
                 await self._show_hotkey_overlay(
@@ -1656,7 +1785,7 @@ class Daemon:
         recall verb searches the ledger; anything else rewrites the
         previous dictation in place."""
         try:
-            macro = dictionary.macro_text(instruction)
+            macro = self._snippet(instruction)
             if macro is not None:
                 return await self._run_macro(macro)
             if self._intent_request(instruction):
@@ -1666,6 +1795,9 @@ class Daemon:
             if self._verb_request("recall", instruction):
                 query = self._strip_verb(instruction, {"recall", "remember"})
                 return await self._run_recall(query)
+            selection = await self._focused_selection()
+            if selection:
+                return await self._run_selection_rewrite(instruction, selection)
             return await self._run_transform(instruction, worker=None)
         except Exception as exc:
             logger.warning("Voice transform failed: %s", exc)
@@ -1718,6 +1850,27 @@ class Daemon:
             register=self._session_register.name,
         )
 
+    def _rejoin_state(self, focus, register) -> Optional[RenderState]:
+        """The render state a recording starts in when it continues the
+        text the last one left at the caret: same app, same prose
+        register, within REJOIN_WINDOW_S, and that text did not end in
+        whitespace. Terminals and code registers never get a leading
+        space (a shell may treat one as "keep out of history")."""
+        landing = self._landing
+        if landing is None or not register.smart_caps:
+            return None
+        if not bool(self._config.get("flow", {}).get("rejoin", True)):
+            return None
+        identity = focus.identity if focus is not None else ""
+        if not identity or identity != landing["identity"] or register.name != landing["register"]:
+            return None  # unknown focus could be anything, even a terminal
+        if time.monotonic() - landing["when"] > REJOIN_WINDOW_S:
+            return None
+        state = continuation_state(landing["tail"], register)
+        if state is not None:
+            logger.info("Rejoining the last dictation in %r", identity or "the focused app")
+        return state
+
     def _remember_typed(self, final: str, *, register: str = "") -> None:
         if not final:
             return
@@ -1726,6 +1879,12 @@ class Daemon:
             return
         self._last_typed = final
         self._last_error = ""
+        self._landing = None if self._focus_lost else {
+            "identity": self._session_focus.identity if self._session_focus else "",
+            "register": self._session_register.name,
+            "tail": final[-1:],
+            "when": time.monotonic(),
+        }
         if self._config.get("flow", {}).get("history", False):
             history.append_entry(
                 final,
@@ -1735,6 +1894,69 @@ class Daemon:
 
     # -------------------------------------------------------- transforms
 
+    def _polish_style(self, final: str) -> str:
+        """The [polish.map] style for the app this dictation went to, or ""
+        when none applies: unmapped app, a terminal / code / secret field,
+        focus moved, or a dictation too short to restyle."""
+        styles = (self._config.get("polish", {}) or {}).get("map", {}) or {}
+        focus = self._session_focus
+        if not styles or focus is None or not focus.app:
+            return ""
+        if self._session_secret or self._focus_lost or not self._session_register.smart_caps:
+            return ""
+        if len(final.split()) < POLISH_MIN_WORDS or not llm_ready(self._config):
+            return ""
+        app = focus.app.strip().lower()
+        for key in (app, app[:-4] if app.endswith(".exe") else app):
+            for name, style in styles.items():
+                if str(name).strip().lower() == key:
+                    return str(style).strip()
+        return ""
+
+    def _register_for(self, focus) -> Register:
+        """The register for a focused app, per [registers]."""
+        registers_cfg = self._config.get("registers", {})
+        return register_for_app(
+            focus.app if focus else "",
+            focus.role if focus else "",
+            config_map=registers_cfg.get("map", {}) or {},
+            default=str(registers_cfg.get("default", "prose")),
+        )
+
+    @contextlib.contextmanager
+    def _enter_refused(self):
+        """Refuse Enter on every injector path while typing, then put the
+        previous state back (a terminal session keeps its own refusal)."""
+        injector = self._injector
+        before = getattr(injector, "suppress_enter", None)
+        if before is not None:
+            injector.suppress_enter = True
+        try:
+            yield
+        finally:
+            if before is not None:
+                injector.suppress_enter = before
+
+    @contextlib.asynccontextmanager
+    async def _enter_refused_in_a_terminal(self):
+        """Outside a recording session — typing for `voice-keyboard type`,
+        `recall` or `transform` — probe the focused app, and when it is a
+        terminal, refuse Enter on every injector path while typing: there
+        a newline would run the line. (A session arms this itself.)"""
+        injector = self._injector
+        before = getattr(injector, "suppress_enter", None)
+        terminal = False
+        if before is not None and self._config.get("registers", {}).get("probe", True):
+            focus = await asyncio.to_thread(probe_focus)
+            terminal = self._register_for(focus).terminal
+        if terminal:
+            injector.suppress_enter = True
+        try:
+            yield terminal
+        finally:
+            if terminal and not self._recording:  # a session that began meanwhile keeps its guard
+                injector.suppress_enter = before
+
     async def _transform_last(self, instruction: str) -> str:
         """IPC `transform`: rewrite the last dictation in place."""
         if self._hotkey_lock is None:
@@ -1742,12 +1964,167 @@ class Daemon:
         async with self._hotkey_lock:
             if self._recording:
                 raise RuntimeError("stop recording before transforming")
-            text = await self._run_transform(instruction, worker=None)
+            async with self._enter_refused_in_a_terminal():
+                text = await self._run_transform(instruction, worker=None)
             self._remember_typed(text)
             return text
 
+    async def _scratch_previous(self, worker: Optional[InjectionWorker] = None) -> bool:
+        """A recording that was only "scratch that": take back the previous
+        dictation — when the caret is surely still right after it: the
+        same app and register, within REJOIN_WINDOW_S, no focus change,
+        nothing typed since, and no complex Unicode (backspacing by
+        characters is unreliable there). Otherwise say why and leave the
+        screen alone."""
+        landing, text = self._landing, self._last_typed
+        focus = self._session_focus
+        identity = focus.identity if focus is not None else ""
+        reason = ""
+        if not landing or not text:
+            reason = "nothing to scratch"
+        elif not identity:
+            reason = "can't tell which app has focus — nothing scratched"
+        elif self._focus_lost or identity != landing["identity"] or \
+                self._session_register.name != landing["register"]:
+            reason = "the last dictation was in another app"
+        elif time.monotonic() - landing["when"] > REJOIN_WINDOW_S:
+            reason = "the last dictation is too old to scratch"
+        elif self._session_secret:
+            reason = "not in a secret field"
+        elif risky_backspace(text):
+            reason = "can't backspace safely over that text"
+        if reason:
+            logger.info("scratch that: %s", reason)
+            await self._show_hotkey_overlay("empty", detail=f"⌁ {reason}", timeout_ms=1800)
+            self._overlay_said = True
+            return False
+        if worker is not None:
+            # A molten preview of this recording ("Scratch the…") may be on
+            # screen after the previous dictation: take it back first, so
+            # the count below covers the previous dictation and nothing else.
+            worker.set_target("")
+            if await worker.drain(timeout=self._drain_timeout(text)) != "" or worker.abandoned:
+                logger.info("scratch that: the preview didn't clear; nothing scratched")
+                return False
+        await asyncio.to_thread(self._injector.delete_chars, len(text))
+        self._last_typed = ""
+        self._landing = None
+        preview = text if len(text) <= 40 else text[:37] + "…"
+        logger.info("scratch that: removed the last dictation (%d characters)", len(text))
+        await self._show_hotkey_overlay("inserted", detail=f"⌁ scratched: {preview}", timeout_ms=1800)
+        self._overlay_said = True
+        return True
+
+    async def _self_corrected(self, text: str) -> str:
+        """[flow] corrections = "llm": a dictation with a correction cue
+        ("no wait", "I mean", a stuttered "the the") goes to [llm] to have
+        the false start deleted. The answer is used only if it deleted
+        words and did nothing else (flow/corrections.py) — otherwise, or
+        on any failure, the text stays exactly as dictated. Prose only;
+        never a secret field, never after focus moved."""
+        mode = str(self._config.get("flow", {}).get("corrections", "off")).strip().lower()
+        if (
+            mode != "llm"
+            or self._session_secret
+            or self._focus_lost
+            or not self._session_register.smart_caps
+            or not corrections.needs_cleanup(text)
+            or not llm_ready(self._config)
+        ):
+            return text
+        llm_client = create_llm_client(self._config)
+        if llm_client is None:
+            return text
+        await self._show_hotkey_overlay("processing", detail="⌁ tidying a self-correction")
+        try:
+            cleaned = await asyncio.to_thread(llm_client.clean_corrections, text.strip())
+        except Exception as exc:
+            logger.info("Self-correction tidy-up failed; keeping the text: %s", exc)
+            return text
+        if not corrections.deletion_only(text, cleaned):
+            logger.info("Self-correction tidy-up changed more than it deleted; keeping the text")
+            return text
+        lead = text[: len(text) - len(text.lstrip())]
+        said = text.lstrip()
+        if said[:1].islower() and cleaned[:1].isupper() and corrections.words(said)[:1] == corrections.words(cleaned)[:1]:
+            cleaned = cleaned[0].lower() + cleaned[1:]  # mid-sentence (a rejoined recording) stays lowercase
+        logger.info("Self-correction: %d → %d words", len(corrections.words(text)), len(corrections.words(cleaned)))
+        return lead + cleaned
+
+    async def _focused_selection(self) -> str:
+        """The text selected in the focused field — what typing would
+        replace — or "" when there is none or the platform can't say for
+        sure. Linux asks the focused widget itself, on demand (editable
+        widgets only — never the PRIMARY selection, which may belong to
+        another window); Windows
+        copies the focused app's selection and puts the clipboard back.
+        Never in a secret field, never in a terminal (typing does not
+        replace a terminal's selection). Raises when the selection is too
+        long to rewrite, rather than quietly rewriting something else."""
+        if self._session_secret or self._session_register.terminal:
+            return ""
+        if sys.platform == "win32":
+            notes: list = []
+            text = await asyncio.to_thread(
+                clipboard.selection_text,
+                clipboard_fallback=False,
+                registers=self._config.get("registers", {}),
+                notes=notes,
+            )
+            if text and text.endswith("\n") and "\n" not in text.rstrip("\r\n"):
+                # One whole line plus its line break: an editor copying the
+                # caret's line because nothing was selected (VS Code does).
+                return ""
+            chars = len(text or "")
+            text = text if chars <= MAX_SELECTION_CHARS else ""
+        elif sys.platform == "darwin":
+            return ""
+        else:
+            # Read now, because the user asked: the always-on focus probe
+            # never reads what is on screen.
+            read = await asyncio.to_thread(probe_selection)
+            if read is None:
+                return ""
+            text, chars = read
+        if chars and not text:
+            raise RuntimeError(
+                f"the selection is too long to rewrite ({chars} characters; "
+                f"up to {MAX_SELECTION_CHARS})"
+            )
+        return text if text and text.strip() else ""
+
+    async def _run_selection_rewrite(self, instruction: str, selection: str) -> str:
+        if "\n" in selection.strip("\r\n"):
+            # Typing a line break is pressing Enter, which sends a chat
+            # message; a multi-line rewrite would need a paste path.
+            raise RuntimeError("multi-line selections aren't rewritten yet — select one paragraph")
+        """"VK, make this shorter" with text selected: send the selection
+        and the instruction to [llm] and type the answer over it — typing
+        replaces a selection in any editor. Your app's own undo puts the
+        original back. A single-line selection never gains an Enter: in a
+        chat box that would send the message."""
+        llm_client = create_llm_client(self._config)
+        if llm_client is None:
+            raise RuntimeError("[llm] is not configured")
+        await self._show_hotkey_overlay("processing", detail=f"⌁ {instruction} — the selection")
+        rewritten = (await asyncio.to_thread(llm_client.rewrite, selection, instruction)).strip()
+        if not rewritten:
+            raise RuntimeError("the rewrite came back empty")
+        if await self._focus_changed_since_session():
+            clipboard.set_text(rewritten)
+            raise RuntimeError("focus changed — the rewrite is on the clipboard")
+        if rewritten == selection.strip():
+            await self._show_hotkey_overlay("empty", detail="⌁ nothing to change", timeout_ms=1500)
+            return ""
+        await self._type_no_enter(rewritten)
+        logger.info("Rewrote a %d-character selection", len(selection))
+        await self._show_hotkey_overlay(
+            "inserted", detail="⌁ rewritten — your app's undo brings it back", timeout_ms=2200
+        )
+        return rewritten
+
     async def _run_transform(
-        self, instruction: str, *, worker: Optional[InjectionWorker]
+        self, instruction: str, *, worker: Optional[InjectionWorker], guard=None
     ) -> str:
         llm_client = create_llm_client(self._config)
         if llm_client is None:
@@ -1759,6 +2136,8 @@ class Daemon:
 
         await self._show_hotkey_overlay("processing", detail=f"⌁ {instruction}")
         rewritten = await asyncio.to_thread(llm_client.rewrite, target, instruction)
+        if guard is not None and not guard(target, rewritten):
+            raise RuntimeError("the rewrite didn't look like the dictation; kept as typed")
 
         if await self._focus_changed_since_session():
             clipboard.set_text(rewritten)
@@ -1771,6 +2150,9 @@ class Daemon:
                 "text": rewritten,
                 "target": target,
                 "expires": time.monotonic() + PENDING_REWRITE_TTL_S,
+                # where it belongs: "keep it" anywhere else would erase
+                # someone else's text
+                "identity": self._session_focus.identity if self._session_focus else "",
             }
             preview = rewritten if len(rewritten) <= 90 else rewritten[:87] + "…"
             await self._show_hotkey_overlay(
@@ -1787,16 +2169,19 @@ class Daemon:
                 raise RuntimeError(
                     "can't repair across pasted text — the rewrite is on the clipboard"
                 )
-            worker.set_target(rewritten)
-            return await worker.drain(timeout=self._drain_timeout(rewritten))
+            # A model's line break is never an Enter: in a chat it sends.
+            with self._enter_refused():
+                worker.set_target(rewritten)
+                return await worker.drain(timeout=self._drain_timeout(rewritten))
 
         if risky_backspace(target):
             clipboard.set_text(rewritten)
             raise RuntimeError(
                 "can't repair across pasted text — the rewrite is on the clipboard"
             )
-        await asyncio.to_thread(self._injector.delete_chars, len(target))
-        await asyncio.to_thread(self._injector.type_text, rewritten)
+        with self._enter_refused():
+            await asyncio.to_thread(self._injector.delete_chars, len(target))
+            await asyncio.to_thread(self._injector.type_text, rewritten)
         return rewritten
 
     # ----------------------------------------------------------- intents
@@ -1860,15 +2245,8 @@ class Daemon:
         """Type a command at the caret with Enter refused on every injector
         path. The single chokepoint for 'draft an action, never run it' —
         used by the intent channel AND the assistant's hands."""
-        injector = self._injector
-        has_flag = hasattr(injector, "suppress_enter")
-        if has_flag:
-            injector.suppress_enter = True
-        try:
-            await asyncio.to_thread(injector.type_text, command)
-        finally:
-            if has_flag:
-                injector.suppress_enter = False
+        with self._enter_refused():
+            await asyncio.to_thread(self._injector.type_text, command)
 
     # --------------------------------------------------------- the mind
 
@@ -2114,6 +2492,10 @@ class Daemon:
             raise RuntimeError("no pending rewrite")
         target = str(pending["target"])
         rewritten = str(pending["text"])
+        here = await asyncio.to_thread(probe_focus)
+        if not pending.get("identity") or here is None or here.identity != pending["identity"]:
+            clipboard.set_text(rewritten)
+            raise RuntimeError("the rewrite belongs to another app — it is on the clipboard")
         if await self._focus_changed_since_session():
             clipboard.set_text(rewritten)
             raise RuntimeError("focus changed — the rewrite is on the clipboard")
@@ -2122,8 +2504,9 @@ class Daemon:
             raise RuntimeError(
                 "can't repair across pasted text — the rewrite is on the clipboard"
             )
-        await asyncio.to_thread(self._injector.delete_chars, len(target))
-        await asyncio.to_thread(self._injector.type_text, rewritten)
+        with self._enter_refused():
+            await asyncio.to_thread(self._injector.delete_chars, len(target))
+            await asyncio.to_thread(self._injector.type_text, rewritten)
         self._remember_typed(rewritten)
         await self._show_hotkey_overlay("inserted", detail="⌁ kept", timeout_ms=1500)
         return rewritten
@@ -2142,6 +2525,24 @@ class Daemon:
         had = self._peek_pending_rewrite() is not None
         self._pending_rewrite = None
         return had
+
+    def _snippet(self, name: str) -> Optional[str]:
+        """The text saved under a spoken name: a [snippets] entry, else a
+        macro you named via `voice-keyboard learned`. None when unknown.
+        Names match without case or trailing punctuation ("My email.")."""
+        key = name.strip().strip(".,!?;:").casefold()
+        if not key:
+            return None
+        for spoken, text in (self._config.get("snippets") or {}).items():
+            if str(spoken).strip().strip(".,!?;:").casefold() == key:
+                return expand_placeholders(str(text))
+        return dictionary.macro_text(name)
+
+    @staticmethod
+    def _snippet_gap(before: str, snippet: str) -> str:
+        if not before or before[-1:].isspace() or snippet[:1] in ".,;:!?)":
+            return ""
+        return " "
 
     async def _run_macro(self, text: str) -> str:
         """Procedural memory: type a user-named macro verbatim. The body
@@ -2188,15 +2589,8 @@ class Daemon:
         await self._show_hotkey_overlay("processing", detail=f"⌁ {question[:40]}")
         answer = await asyncio.to_thread(llm_client.answer, question, context)
         if str(self._config.get("ask", {}).get("mode", "say")).lower() == "type":
-            injector = self._injector
-            has_flag = hasattr(injector, "suppress_enter")
-            if has_flag:
-                injector.suppress_enter = True
-            try:
-                await asyncio.to_thread(injector.type_text, answer)
-            finally:
-                if has_flag:
-                    injector.suppress_enter = False
+            with self._enter_refused():
+                await asyncio.to_thread(self._injector.type_text, answer)
             self._remember_typed(answer, register="ask")
         else:
             await self._run_tts(answer)
@@ -2232,10 +2626,13 @@ class Daemon:
         return bool(current and current.identity and current.identity != focus.identity)
 
     async def _type_text(self, text: str) -> None:
-        """IPC `type`: inject text directly (used by `voice-keyboard recall`)."""
+        """IPC `type`: inject text directly (used by `voice-keyboard recall`).
+        Into a terminal a newline becomes a space: Enter is pressed only by
+        a hand, or explicitly with the `key` command."""
         if self._recording:
             raise RuntimeError("cannot type while recording")
-        await asyncio.to_thread(self._injector.type_text, text)
+        async with self._enter_refused_in_a_terminal():
+            await asyncio.to_thread(self._injector.type_text, text)
 
     async def _press_keys(self, names: list) -> None:
         """IPC `key`: press a key chord (e.g. ctrl+t, alt+Tab, Return). Used by

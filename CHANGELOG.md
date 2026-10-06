@@ -7,8 +7,145 @@ on `main` cuts the GitHub release automatically.
 
 ## [Unreleased]
 
+The landing page becomes a real text field, and the engine it runs is
+proven to be the daemon's.
+
 ### Added
 
+- **A `javascript` register.** Map your editor to it in `[registers.map]`:
+  "triple equals" `===`, "not equals" `!==`, "and and" `&&`, "or or"
+  `||`, "arrow" `=>`, "plus equals" `+=`, and a name glues its call
+  (`console.log(`).
+- **Code registers read closer to code.** In `shell`, "dash dash rm"
+  types `--rm`, `=` and `:` glue both sides (`FOO=bar`, `8080:80`), a dot
+  knows a path from an extension (`cd ..`, `./run.sh`, `find . -name`,
+  `file.txt`), a path after a command or a flag is its own argument
+  (`tail -f /var/log`), and "plus x", "greater than", "and and" type
+  `+x`, `>`, `&&`.
+  In `python`, "none", "true" and "false" type `None`, `True` and
+  `False`, a quote glues to its string prefix (`f"hello"`), two-word
+  operators fold ("double equals" `==`, "not equals" `!=`, "less than"
+  `<`, "plus equals" `+=`, "less than equals" `<=`), builtin exceptions
+  are names ("raise value error" `raise ValueError`, "except key error"
+  `except KeyError`), and after `->` a
+  callable is a type (`-> str:`). A dash or half an operator still held
+  when the dictation ends is typed as said, never dropped.
+- **Stutters are dropped.** "the the meeting" types "The meeting", "I I
+  think" types "I think", "the um the plan" types "The plan" — only for
+  words a speaker restarts on, never a repeat a sentence means ("had had",
+  "told you you were", "log in in the morning"), never across a pause the
+  recognizer closed, and never in code.
+- **Numbers that name things.** After a numbered noun (room, page,
+  chapter, floor, gate, flight, step, version, …) a number is digits:
+  "room four oh two" `room 402`, "page twenty five" `page 25`, "version
+  three point one point four" `version 3.1.4`; a single word folds on its
+  own stop ("page five." `page 5.`), and a count stays words ("page two
+  of three"). "q three" types `Q3`,
+  "two point five megabytes" `2.5 MB`, and EOD, KPI, OKR, UI, UX, QA, SDK,
+  CLI and friends are capitals.
+- **"five o'clock" types `5 o'clock`, and a time after "at" is a time:**
+  "meet at three thirty" types `meet at 3:30`, "at twelve oh five" `at
+  12:05`. A bare hour ("at three") and a count ("at three thirty people")
+  stay words.
+- **Years read as years.** "nineteen eighty four" types `1984`, "nineteen
+  oh five" `1905`, "twenty twenty six" `2026`. "Twenty twenty vision" and
+  "nineteen people" stay words, and so does a count ("nineteen forty
+  people"). A date takes its year with a comma:
+  "june fifth nineteen ninety nine" → `June 5, 1999`.
+- **Big money reads like money.** "three point two billion dollars" types
+  `$3.2 billion`, "two million euros" types `€2 million`, and a price
+  shows its cents ("one point five dollars" → `$1.50`), and "a hundred
+  and fifty dollars" types `$150`.
+- **Spoken links keep their path.** "example dot com slash docs slash
+  intro dot html" types `example.com/docs/intro.html`. A path only follows
+  a whole domain, never an email address.
+- **More symbols by name.** "asterisk", "hash sign", "less
+  than sign", "greater than sign" and "caret sign". A word after `#` or `@`
+  is never capitalized, so tags and mentions stay as said.
+- **Line breaks in chat apps are Shift+Enter.** In Slack, Discord, Teams,
+  Signal, Telegram, WhatsApp, Element, Mattermost and others, Enter sends —
+  so a spoken "new line", a list or a multi-line snippet no longer sends
+  half a message. All three platforms; add apps with `[registers] chat_apps`.
+- **`voice-keyboard try [register:] <words…>`.** Prints what the keyboard
+  would type for those words through your config's grammar — no microphone
+  or daemon; `|` marks a pause between utterances, a leading `python:` (or
+  any register) picks the register, and caret commands and instructions are
+  noted. With no words it reads one dictation per line: an interactive
+  prompt, or a batch piped in.
+- **Polish per app (`[polish.map]`).** Map an app to a style — `slack =
+  "casual"`, `thunderbird = "a clear, polite email"` — and each prose
+  dictation of four words or more there is rewritten in it through `[llm]`,
+  like an automatic "VK, make that …". Never in terminals, code or password
+  fields, never after focus moved; a failure leaves the text as dictated;
+  with `rewrite_pending` it waits for "keep it".
+- **Snippet placeholders.** `{date}`, `{isodate}`, `{time}` and `{weekday}` in a
+  `[snippets]` entry fill in when it is typed: `"stamp" = "Updated {date}"`.
+- **`voice-keyboard doctor`.** Checks what stands between you and dictation —
+  config, the speech provider's API key (a cloud provider without one fails
+  every dictation), microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
+  access, the clipboard tool that types accents and emoji, the AT-SPI focus
+  probe — and prints the fix for each problem. Exits non-zero on a failure.
+- **Spoken commands in Spanish, French and German.** `[flow] language =
+  "es" | "fr" | "de"` adds that language's punctuation and layout
+  commands to the English set — "punto", "coma", "abre interrogación"
+  (`¿`), "nueva línea", "borra eso"; "virgule", "point d'interrogation",
+  "à la ligne", "efface ça"; "Komma", "Fragezeichen", "neue Zeile",
+  "streich das". Listed by `voice-keyboard commands`. French puts a narrow
+  no-break space before `? ! : ;`; German quotes are „…“.
+- **`voice-keyboard learned add <spoken> = <written>`.** Teach a word now,
+  without waiting for the miner: `learned add hyper furion = HyperFurion`.
+  A one-word written form also becomes a hotword for the recognizer.
+- **"Quote … unquote".** "She said quote ship it unquote" types
+  `She said "ship it"`; "end quote" closes too. Only with words between,
+  so "his quote unquote friend" stays prose, and only within one utterance.
+- **"Correct monday to friday".** Said on its own, it swaps the last
+  "monday" typed in this dictation for "friday" — whole words, any case,
+  across punctuation, capitals kept — and the pair is a correction the
+  learner can mine, like "spell that". With nothing to correct, or said
+  mid-sentence, it is typed as words.
+- **Spoken headings and to-dos.** "New heading", "new subheading" and
+  "new checkbox" type `# `, `## ` and `- [ ] ` on a line of their own —
+  markdown, and live headings and to-dos in Notion and Obsidian.
+- **`voice-keyboard commands [filter]`**: everything you can say — commands,
+  punctuation, emoji, caret commands, formatters, wake-word channels and
+  your own vocabulary and snippets — built from the live grammar with your
+  config merged in, so it never drifts from what the engine does.
+- **"Cap that", "uppercase that", "lowercase that".** Said on their own,
+  they recase the last utterance in place — no model, no selection.
+  Mid-sentence ("let's cap that at ten") they stay words.
+- **"Select that".** Selects what you just said — one `shift+left` per
+  character of the last utterance — so the next words replace it, or a
+  rewrite ("VK, make that formal") works on it. Refused when nothing was
+  said yet, past 400 characters, across emoji, and in a terminal.
+- **"Undo that", "redo that", "paste that".** Caret commands, said on their
+  own like the others: `ctrl+z`, `ctrl+shift+z` (`ctrl+y` on Windows),
+  `ctrl+v`, and `cmd` on a Mac; "undo that twice" repeats. Refused in a
+  terminal, where a paste can carry a line break that runs the line.
+- **Spoken emoji.** "Ship it emoji rocket" types `Ship it 🚀`: 27 built in
+  (thumbs up, fire, party, check mark, laughing, eyes, …), each one code
+  point so a Backspace removes exactly one. `[flow.vocabulary]` remaps or
+  adds more; "emoji" alone and the bare names stay words.
+- **A lowercase recognizer's "i" is a capital in prose.** Streaming models
+  that write everything lowercase typed "i think i'm"; prose now types
+  "I think I'm" (also I'll, I'd, I've). Spelled words are left alone.
+  Days and months are capitals too ("Monday", "Friday's", "October"),
+  though never "may" or "march", which are verbs.
+  So are common initialisms ("ok" → OK, PDF, ASAP, FYI, URL, API, …),
+  never ones that are also words ("us", "it").
+- **Amounts and times in prose.** Prose still keeps spoken numbers as words
+  ("no one knows"), but a unit right after one makes the reading certain:
+  "twenty five percent" → `25%`, "five dollars" → `$5`, "three thirty pm"
+  → `3:30 PM`, "five dollars and fifty cents" → `$5.50` (euros and yen too: `€5.50`, `¥2,000`; amounts
+  over a thousand get separators: `$100,000`), and a recognizer's
+  "25 percent" → `25%`. Dates too: "october sixth" → `October 6`, "june twenty
+  first" → `June 21` (an ordinal day only, so "in june twenty people came"
+  stays words; never "may" or "march"). Phone numbers: seven or more digits read one by one
+  ("five five five one two three four") type `555-1234`, ten type
+  `415-555-1212`; a short count ("one two three go") stays words. "Which one am I"
+  stays words; a run already typed as words is never rewritten.
+- **Spoken numbered lists.** "Steps colon new number build new number test"
+  types `Steps:` / `1. Build` / `2. Test`. The count survives a scratch
+  (scratching item 2 gives its number back) and restarts at a new paragraph.
 - **`voice-keyboard stats`**: per-dictation latency, from speech onset to
   first transcript, first keystroke and settled screen. It reports p50/p95
   over the last 200 dictations. `[flow] latency_log` also writes a
@@ -26,6 +163,232 @@ on `main` cuts the GitHub release automatically.
     readline keys on Linux and Windows Terminal/PSReadLine keys on Windows.
   - Safety: a command fires only as an utterance of its own and never
     presses Enter. With hold-to-talk it waits until the hotkey is released.
+
+- **Spoken bullets.** "Shopping list colon new bullet milk new bullet
+  eggs" types a list: `Shopping list:` then `- Milk` and `- Eggs` on lines
+  of their own. Right after a line break no extra one is added; in a
+  terminal or a code register it types nothing. ("Bullet point" stays a
+  noun phrase: "the first bullet point is about cost" is prose.)
+- **Spoken case formatters (`[flow] formatters = "code"`).** In code and
+  terminal registers — where "no space" or "all caps" is never prose;
+  `"everywhere"` opts prose in. "snake case user id"
+  types `user_id`, "camel case get user name" `getUserName`, "pascal case
+  http client" `HttpClient`; kebab, constant, dot and title case, "all
+  caps" and "no space" too. A formatter takes the words after it up to a
+  pause, punctuation or another command; in the python and shell
+  registers an operator word, a keyword or a spoken callable ends it
+  too, so "for snake case row count in range ten colon" compiles to `for
+  row_count in range(10):`. Title case keeps "of", "the" and friends
+  lowercase. Both engines, ten corpus cases.
+- **Say an email or a web address (`[flow] addresses`).** "liam at
+  example dot com" types `liam@example.com`; "docs dot python dot org"
+  types `docs.python.org`; "liam dot hennigan at gmail dot com" and
+  "example dot co dot uk" work too. Only a run that ends in a known
+  top-level domain becomes an address, so "meet at the office" and "the
+  dot product" stay prose; an address is never auto-capitalized at a
+  sentence start. While a run could still grow it waits at the live
+  tail; a lone word never does. Prose and terminal registers, both
+  engines, nine corpus cases (one streamed). On by default.
+- **"Scratch that" reaches back.** Stop, notice the mistake, press the
+  hotkey and say "scratch that": the previous dictation is taken back.
+  Only when the caret is surely still right after it — the same app and
+  register, within 30 seconds, no focus change, nothing complex to
+  backspace over; otherwise the overlay says why and nothing is touched.
+  The recognizer's "scratched that" works too. (The landing page's "undo
+  that" and "strike that" are gone: "I can't undo that decision" is a
+  sentence, not a command.) A scratch needs to know which app has focus,
+  and takes the live preview back before counting.
+- **`[snippets]` — text you type by name.** `"my email" =
+  "you@example.com"` in config, then "VK, my email" types it — alone, or
+  at the end of a dictation ("send the invoice to VK, my email"), where
+  it now lands after your words; before, a name there was sent to
+  `[llm]` as a rewrite of the sentence. Learned macros work the same
+  way. Names match without case or trailing punctuation; newlines in the
+  text are kept.
+- **Self-corrections, tidied (`[flow] corrections = "llm"`).** "Send it
+  Tuesday, no wait, Wednesday" types "Send it Wednesday." A grammar
+  can't know what a correction replaces, so a dictation with a cue ("no
+  wait", "I mean", "sorry", "actually", "or rather", a stuttered "the
+  the") goes to `[llm]` at stop — under a rule the daemon checks: the
+  answer may only DELETE words. Every word it keeps must be one you said,
+  in order; an answer that adds, swaps or respells a word, or deletes
+  more than 60 % of the dictation, is thrown away and your text stays as
+  dictated. The screen repairs itself in place. Dictations without a cue
+  are never sent, nor a cue that opens the sentence ("Sorry for the
+  delay") or one with line breaks; prose fields only; a recording that
+  continues a sentence keeps its lowercase start. Off by default; `voice-keyboard
+  setup` asks.
+- **Rewrite any selection, in any app.** Highlight text, say "VK, make
+  this shorter" (or fix the grammar, translate, make it friendlier) and
+  the answer from `[llm]` is typed over the selection; the app's undo
+  restores the original. The selection is read where the platform can
+  say for sure what typing would replace: on Linux from the focused,
+  editable widget through AT-SPI, by a separate probe that runs only when
+  you ask (the focus probe at every recording start still never reads
+  screen text; never the PRIMARY selection, which can belong to another
+  window), on Windows by copying from the focused app with the clipboard
+  restored. Never in
+  a terminal or a password field; a single-line selection never gains an
+  Enter; over 4000 characters is refused out loud rather than rewriting
+  something else. A multi-line selection is refused (typing its line
+  breaks would press Enter, which sends a chat message); on Windows an
+  editor's copy of the whole caret line (VS Code does that when nothing
+  is selected) counts as no selection. With nothing selected, an
+  instruction alone still rewrites your previous dictation.
+- **Hesitations never reach the page (`[flow] fillers`).** Streaming
+  recognizers write down "um" and "uh"; they are now dropped from what is
+  typed, with the commas that bracket them: "Um, so we should, uh, ship
+  it." types "So we should ship it." A sentence end the recognizer hung
+  on a filler survives; a pause before "Um, and …" lets the word after
+  the hesitation decide. Only sounds are on the list (um, umm, uh, uhh,
+  uhm, erm) — never words that carry meaning; `fillers = []` keeps them.
+  A word ending in a comma waits at the live tail for one more word, so
+  the comma and the hesitation freeze together. Both engines, eleven
+  corpus cases.
+- **`[flow] rejoin` — stop, think, press the hotkey again.** A recording
+  that starts within 30 seconds of the last one, in the same app and the
+  same prose register, continues its text: a space before the first word,
+  and a capital only if the last one ended a sentence. Until now the
+  second recording was glued to the first ("Hello world.Next"). Terminals
+  and code registers never get a leading space (a shell may read one as
+  "keep out of history"); a focus change or a nav command resets it. On
+  by default; `rejoin = false` restores a fresh caret every time. The
+  landing page mirrors it.
+- **"VK, run …" on the landing page.** The `[intent]` channel is live in
+  the demo: a request after the wake word types one command line at the
+  caret and the board's Enter key rings instead of going down — the
+  consent story, on screen. The page has no model, so it answers the
+  daemon's own few-shot examples and a few everyday requests from a
+  table, and types anything else as a comment line, saying so. A "try
+  saying" chip plays it in the shell tab; the scripted demo includes it.
+  The status line now also says what a joined pause did ("project. And"
+  → "project and").
+- **"Spell that NGINX".** A recognizer that hears spelled letters as one
+  word writes it in capitals; after "spell" or "spell that" such a token
+  ("NGINX", "K8S") now counts as the letters, spelled. Both engines.
+- **The page keeps a period you paused on revisable.** `pauses.py` is
+  ported too: with the page's utterance-per-pause recognizer, "I think.
+  We should wait" is exactly the case the daemon's pause rules exist for,
+  and the page now runs them (`pause_review = "rules"`; the `[llm]`
+  review needs the daemon). The parity corpus gains thirteen pause cases,
+  two of them streamed on the clock.
+- **Hands-free navigation on macOS.** The Quartz injector can press
+  chords now (modifier keys down, the key posted with their flags, release
+  in reverse), so `[nav]` works there: option+arrows by word, command+
+  arrows to the ends of a line or the document, `cmd+a`, `option+
+  backspace`; in Terminal.app, iTerm2 and Ghostty the readline word
+  motions go as `Esc b` / `Esc f` / `Esc d`, which readline takes as Meta
+  whether or not Option is set to send it. The landing page presses the
+  visitor's own platform's keys — a Mac sees `option+←`, Windows Terminal
+  `ctrl+←`.
+- **`voice-keyboard setup` asks about hands-free navigation** (off by
+  default), after Kai and the history question, and says what it does and
+  that Enter is never pressed.
+- **"Try saying" on the landing page.** Five chips under the mic name what
+  to say ("scratch that", "spell that n g i n x", "select previous word",
+  "delete previous word", "VK, make that formal"); while you dictate, the
+  one you just said lights the moment the engine acts on it, and while
+  nothing is recording a tap plays that one thing as a short scripted
+  session.
+- **The landing page reads well to a screen reader**: the text field no
+  longer announces every keystroke of a molten repair; each dictation is
+  announced once, when it lands. The comparison table gains a row for
+  caret commands by voice.
+- **The landing page types into a real text field.** The focused window is
+  a document with a caret and a selection (per register: the editor's and
+  the shell's), and every keystroke the 3D board presses lands in it — so
+  "spell that n g i n x" backspaces over the misheard word, and a caret
+  command said on its own ("select previous word", "go to start of line",
+  "delete previous word") waits for the text to land, presses the real
+  chord on the board (`shift+ctrl+←` in the editor, `ctrl+w` in the
+  shell), moves the caret, and the next words type over the selection —
+  in the daemon's order. The board grew to a 75% layout (an F-row, home /
+  end / page keys, an arrow cluster) so it has the keys to press. Enter
+  still cannot go down.
+- **One engine per recording on the page.** Each utterance the recognizer
+  closes is a final segment of the same engine, as in the daemon: "scratch
+  that" after a pause rewinds the previous utterance, and the stability
+  window, the fence, and navigation barriers behave identically. The
+  scripted demo is now one continuous recording per register.
+- **A parity corpus** (`scripts/flow_corpus.py` → `tests/flow_corpus.json`):
+  67 dictations run through the Python `FlowEngine`, recorded, and
+  replayed through the page's port under `node --test docs/js/test` — same
+  screens after every segment, same navigation actions, same final text,
+  corrections and scratch counts. Ten of them stream: timed interims,
+  finals and ticks on a clock, so the stability window, the adaptive
+  horizon (now ported too), the holdback expiry and the non-ASCII eager
+  commit agree over time, not just at stop. A new `landing` CI job runs
+  it; `tests/test_flow_corpus.py` keeps the file current on the Python
+  side and fails on any "committed items changed under reparse".
+
+### Fixed
+
+- **The CLI starts ~130 ms faster.** Every `voice-keyboard` command (the
+  GNOME shortcut runs `voice-keyboard toggle` per press) imported the speech
+  clients, and with them `requests` and `websockets`, just to validate the
+  config; the provider tables now live in a plain module. 190 → 60 ms.
+- **Safety: Enter is refused wherever a terminal can't be ruled out.** A
+  session whose focus could not be identified, or a terminal app mapped to
+  another register in `[registers.map]`, now refuses Enter on every path
+  (a spoken "new line", a heading, a snippet's line break) as terminals
+  always did. Every model rewrite — "VK, make that …", a held rewrite, a
+  per-app polish — is typed with Enter refused (in a chat a line break
+  sends), and a polish that adds line breaks is rejected. "Keep it" applies
+  a held rewrite only in the app it was made for. Terminals and code never
+  get emoji or narrow no-break spaces (they would be pasted). On Windows a
+  terminal mapped to another register is never sent the copy key (SIGINT).
+  Rejoining needs an identified app.
+- **Caret and recase commands, from review.** Words after "select that"
+  continue from before the selected utterance (its capital, spacing and list
+  number), and the selection now includes its leading space or line break.
+  Recasing that would change the length ("straße" → "STRASSE") is refused
+  instead of skewing "scratch that". Undo, redo and paste need focus that is
+  surely not a terminal, whatever `[registers.map]` says. A recognizer's
+  period on a command ("Undo that.") no longer holds it until the next
+  words. "Select that" stops if the hold-to-talk keys go down mid-way; the
+  overlay says why a command was refused; and the page and the daemon agree
+  on which characters are unsafe to backspace over (any combining mark).
+
+- **Safety: "new line" in a terminal no longer presses Enter.** The
+  grammar rendered a spoken line break as `\n` in every register, and in
+  a terminal the injector types `\n` as the Enter key — so "rm dash rf
+  build new line" ran the command. Terminal and shell registers now
+  render a spoken line break as nothing, and the daemon arms the
+  injector's Enter refusal for the whole of a terminal session (every
+  path: keycodes, newlines, clipboard paste), released at teardown; the
+  intent and ask paths restore that state instead of clearing it. The
+  paths that type outside a recording — `voice-keyboard type` (and so
+  `recall`) and `voice-keyboard transform` — probe the focused app and
+  refuse Enter there too when it is a terminal; an integrator that means
+  Enter presses it with `voice-keyboard key`. Only a hand sends, as the
+  landing page always said.
+- **Python register: calls read like Python.** An opening paren or
+  bracket right after a name glues to it — "def get user open paren"
+  types `def get_user(`, "items open bracket zero close bracket" types
+  `items[0]` — while keywords and operators keep their space (`x = (a +
+  b)`, `if (x)`). "print open paren x close paren" no longer types
+  `print((x)`: a spoken open paren right after a callable that already
+  opened one is absorbed. Spoken calls nest, and a colon closes every
+  open one: "for i in range len xs colon" types `for i in range(len(xs)):`.
+- **Flow: words committed one at a time never merge later.** "open" let
+  go by the holdback timer, then "quote" committed on its own, read back
+  as the phrase `"` on the next reparse — the fence only guarded the
+  latest commit. The grammar now parses everything behind the fence item
+  by item (the engine hands it each committed item's end), so no phrase,
+  number run, or spelled run can cross a commit boundary; the two fixes
+  below are special cases of this rule.
+- **Flow: a word duplicated at stop.** When a dictation contained a spoken
+  number that was folded to digits ("twenty three" → `23`) or a `literal`
+  phrase, finalizing re-committed the last word: a terminal got
+  `23 failed tests tests`. The grammar re-read the committed tokens
+  differently once they sat behind the fence (number runs could not start
+  there; a bare `literal` read back as two words). Both now reproduce the
+  committed items exactly, and the engine's "committed items changed under
+  reparse" warning is a test failure in the new parity corpus.
+- **Flow: a verb that closed a segment stays a word.** "select" said alone,
+  then "previous word" after a pause, could be re-read as one navigation
+  command at stop. A command is now decided against the segment it started
+  in, so a split command is typed as the words it was.
 
 ## [2.3.0] — 2026-10
 

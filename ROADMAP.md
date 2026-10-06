@@ -3,6 +3,30 @@
 Where HyperFurion VK goes from here. This is direction, not a schedule —
 items land when they are ready, and each one is shippable on its own.
 
+> **Status 2026-10 (unreleased):** the spoken grammar grew into an editor —
+> "correct monday to friday", "select that", "cap that", "undo/redo/paste
+> that", quotes, numbered lists, headings and to-dos — and prose writes
+> amounts, times, dates, years, links and phone numbers the way you would
+> (25%, $1.50, $3.2 billion, 3:30 PM, June 5, 1999, example.com/docs,
+> 555-1234), and drops stutters ("the the"). In chat apps a spoken line
+> break is Shift+Enter, so it never sends half a message. Rung 3 reaches past code: Spanish,
+> French and German command sets. Rung 4 meets polish: `[polish.map]`
+> restyles dictation per app through your own model, guarded so a bad
+> answer never replaces your words. Correctness is fuzzed now: random
+> dictations through the engine (the commit fence must hold) and through
+> both engines (the page must match the daemon screen for screen) run in
+> CI. `voice-keyboard doctor`, `try` and `commands` make the whole thing
+> discoverable without reading this file.
+>
+> **Status 2026-10 (2.3 → next):** hands-free navigation (`[nav]`) and
+> spell-to-fix landed in the daemon, and the landing page became a
+> working instance of the whole engine: a port of `voice_keyboard/flow/`
+> types into a real text field and presses the real chords on a 3D
+> board, and a parity corpus (`tests/flow_corpus.json`) replayed through
+> both engines in CI makes "the same engine" a tested claim rather than
+> a promise. The page is the reference rendering of molten dictation
+> for rung 7's protocol work.
+>
 > **Status 2026-10 (2.2.0):** Windows is a first-class platform — native
 > tray app, overlay, Kai orb, one-line installer, CI on real Windows — and
 > rung 1's widget probe reads Windows too (the caret position and classic

@@ -14,7 +14,11 @@ runs **fully offline with a local model**, and it **never presses Enter — only
 you do.**
 
 ▶ **See it work:** **<https://liamghennigan.github.io/HyperFurion-VK/>** — the
-landing page dictates itself, live, in your browser.
+landing page is a working instance: an open-source speech model runs in
+your browser, the words land in a real text field, and a 3D keyboard
+presses every key — the spelling fixes, the caret commands, never Enter.
+Its engine is a port of the daemon's, and CI replays the same corpus
+through both (`tests/flow_corpus.json`).
 
 <!-- TODO(demo): drop a 30–45s screen capture here once recorded — it is the
      single most shareable asset. See launch/demo-shot-list.md for the script.
@@ -31,7 +35,7 @@ landing page dictates itself, live, in your browser.
 Run it as yourself: no `sudo`, no administrator. (On Linux it asks for your
 password only for the system steps: audio libraries and keyboard access.)
 It installs for your user, then walks you through the settings: speech
-provider and keys, the hotkey, the language, Kai. If a
+provider and keys, the hotkey, the language, Kai, hands-free navigation. If a
 [llama.cpp](https://github.com/ggml-org/llama.cpp) server (`llama-server`) is
 already running on your computer, setup finds it and asks whether to make
 its model your default language model (rewrites, Kai's terminal commands,
@@ -70,6 +74,11 @@ for you if you don't have it. Press **Ctrl+Alt+V** in any app. See
   **Enter is always yours.** Nothing is captured until you press to talk.
 - **Private by default.** Run it 100% offline with a local model; zero
   analytics; your keys stay on your machine.
+- **An editor you can talk to.** "Correct monday to friday", "select that",
+  "cap that", "undo that", quotes, lists, headings and to-dos — and prose
+  that writes 25%, $5.50, 3:30 PM and October 6 the way you would. Commands
+  in English, Spanish, French and German; `voice-keyboard commands` lists
+  them all, `voice-keyboard try` shows what any phrase would type.
 - **A voice assistant in the keyboard** — "Kai" (hold Right Ctrl, click the
   orb, or the opt-in wake word), model-agnostic and local-first.
 
@@ -109,6 +118,7 @@ routes the just-typed text through an LLM and repairs it on screen.
 
 - **Start or stop dictation:** press `Ctrl+Alt+V`, or run `voice-keyboard`
   / `voice-keyboard toggle`.
+- **Not working?** `voice-keyboard doctor` checks everything and names the fix.
 - **Hold-to-talk:** hold `Ctrl+Alt+V`; release it to stop.
 - **Watch words appear as you speak:** on by default with a streaming
   provider — see [Flow](#flow--molten-dictation). Say "scratch that",
@@ -120,9 +130,17 @@ routes the just-typed text through an LLM and repairs it on screen.
   TODO in this repo"` — one line lands at your prompt, Enter stays yours
   (enable the voice trigger with `[intent] enabled`).
 - **Teach it your vocabulary:** `voice-keyboard learned` reviews corrections
-  mined from the opt-in ledger; accept what is right.
+  mined from the opt-in ledger; accept what is right. Or add a word now:
+  `voice-keyboard learned add hyper furion = HyperFurion` (a one-word
+  written form also becomes a hotword the recognizer leans toward).
+- **Polish per app:** `[polish.map]` maps an app to a style (`slack =
+  "casual"`, `thunderbird = "a clear, polite email"`); each prose dictation
+  of four words or more there is rewritten in that style through `[llm]`.
 - **Hold rewrites for approval:** `[flow] rewrite_pending = true`, then
   "keep it" / "scratch that" (or `voice-keyboard keep` / `discard`).
+- **Something not working?** `voice-keyboard doctor` checks the config,
+  microphone, daemon, typing permissions, clipboard tool and focus probe,
+  and prints the fix for each problem it finds.
 - **Check whether the daemon is recording:** `voice-keyboard status`.
 - **Check whether the daemon is running:**
   `systemctl --user status voice-keyboard-daemon`.
@@ -563,16 +581,41 @@ recognizer's periods.
 
 ### The spoken grammar
 
+Commands and punctuation are English by default; `[flow] language = "es"`,
+`"fr"` or `"de"` adds that language's set on top ("punto", "abre
+interrogación" → `¿`, "virgule", "à la ligne", "Komma", "neue Zeile",
+"borra eso" / "efface ça" / "streich das"). Numbers, dates and units stay
+English.
+
 | You say | You get |
 | --- | --- |
-| `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text) |
-| `new line` / `new paragraph` | `\n` / `\n\n` |
+| `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |
+| `new line` / `new paragraph` | `\n` / `\n\n` — nothing in a terminal or shell, where a line break is Enter and would run the line |
+| `quote ship it unquote`, `quote … end quote` | `"ship it"` — only with words between ("his quote unquote friend" stays prose), within one utterance |
+| `correct monday to friday` (said on its own) | the last "monday" in this dictation becomes "Friday", capitals kept — and the pair goes to `voice-keyboard learned`; with nothing to correct, it is typed as words |
+| `cap that`, `uppercase that`, `lowercase that` (said on their own) | the last utterance in Title Case, UPPER or lower, fixed in place |
+| `new bullet` | `- ` on a new line (right there after a line break); nothing in a terminal or in code |
+| `new heading`, `new subheading`, `new checkbox` | `# `, `## `, `- [ ] ` on a new line — markdown, and live headings and to-dos in Notion and Obsidian; nothing in a terminal or in code |
+| `new number` | `1. `, then `2. `, … on a new line; a new paragraph starts the count again; nothing in a terminal or in code |
+| `emoji rocket`, `emoji thumbs up`, `emoji fire`, … | 🚀 👍 🔥 — 27 built in (`DEFAULT_EMOJI` in `flow/grammar.py`); `[flow.vocabulary]` adds more |
 | `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
 | `literal period` | the word "period" |
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
+| `twenty five percent`, `five dollars`, `three thirty pm` (prose) | `25%`, `$5` (and "… and fifty cents" → `$5.50`; euros `€`, yen `¥`; `$100,000`; "one point five dollars" → `$1.50`; "three point two billion dollars" → `$3.2 billion`; "a hundred and fifty dollars" → `$150`), `3:30 PM`; `october sixth` → `October 6`; seven or ten digits read one by one → `555-1234`, `415-555-1212` — prose keeps other numbers as words; a unit right after makes the reading certain |
+| `nineteen eighty four`, `june fifth nineteen ninety nine` (prose) | `1984`, `June 5, 1999` — a 20xx year needs all three words ("twenty twenty six" → `2026`; "twenty twenty vision" stays words), and a count noun after keeps it words ("nineteen forty people") |
+| `at three thirty`, `five o'clock` (prose) | `at 3:30`, `5 o'clock` — a bare hour stays a word ("at three") |
+| `room four oh two`, `page twenty five`, `version three point one point four`, `q three`, `two point five megabytes` (prose) | `room 402`, `page 25`, `version 3.1.4`, `Q3`, `2.5 MB` — a number after a noun that names (room, page, chapter, floor, gate, flight, step, version, …) |
+| `example dot com slash docs` | `example.com/docs` — a path only follows a whole domain |
+| "the the meeting", "I I think" (prose) | "The meeting", "I think" — a stutter on a word speakers restart on; never a repeat a sentence means ("had had", "told you you were") |
 | `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
-| `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits |
+| `VK, my email` (alone, or at the end: "send it to VK, my email") | types the text saved under that name in `[snippets]` (or a macro you named via `voice-keyboard learned`), exactly, after your words; `{date}`, `{isodate}`, `{time}`, `{weekday}` in a snippet fill in when typed |
+| `VK, make this shorter` with text **selected** (alone) | rewrites the selection in any app via `[llm]` and types the answer over it; your app's undo brings the original back |
+| `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |
+| `snake case user id`, `camel case get user name`, `pascal case http client` (in code and terminal registers; `[flow] formatters = "everywhere"` for prose too) | `user_id`, `getUserName`, `HttpClient` — also `kebab case`, `constant case`, `dot case`, `title case`, `all caps`, `no space`; the words up to a pause, punctuation or another command (in code, an operator word, a keyword or a callable ends the run too: "for snake case row count in range ten colon" → `for row_count in range(10):`) |
+| `liam at example dot com`, `docs dot python dot org` | `liam@example.com`, `docs.python.org` — never auto-capitalized; only runs ending in a known top-level domain (`[flow] addresses`) |
+| "um", "uh" and the like | nothing — hesitation sounds the recognizer writes down are dropped, with the commas around them (`[flow] fillers`) |
+| "Tuesday, no wait, Wednesday" | "Wednesday" — with `[flow] corrections = "llm"`, a dictation with a correction cue is tidied by `[llm]` at stop; the answer may only delete words |
 
 Every phrase is remappable and removable in config (`[flow.commands]`,
 `[flow.punctuation]`), `[flow.vocabulary]` expands your own phrases
@@ -582,21 +625,45 @@ correction (and hotword) candidate. It is never applied on its own: one
 spelled word is not a rule ("their" → "there"). `spelling = false` under
 `[flow]` turns spelling off.
 
+**Stop, think, go again.** A recording that starts within 30 seconds of
+the last one, in the same app and the same prose register, continues its
+text — a space before the first word, a capital only after a sentence
+end — instead of gluing itself to it. Terminals and code registers never
+get a leading space. `[flow] rejoin = false` turns it off.
+
+**Rewrite any selection.** Highlight text in any editor, browser field or
+chat box, press the hotkey and say only the instruction — "VK, make this
+shorter", "VK, fix the grammar", "VK, translate to German". The selection
+and the instruction go to `[llm]`, and the answer is typed over the
+selection (typing replaces a selection everywhere); the app's own undo
+restores the original. One paragraph at a time: a multi-line selection is
+refused, because typing its line breaks would press Enter. On Linux the selection is read from the focused
+widget through accessibility, and only when you ask — the probe that runs
+at every recording never reads what is on screen, and the PRIMARY
+selection, which can belong to another window, is never used — and on
+Windows it is copied from the focused app with your clipboard put back. Terminals and password fields never
+take part, a single-line selection never gains an Enter (in a chat box
+that would send it), and up to 4000 characters are read. Not on macOS
+yet; there, an instruction alone rewrites your previous dictation, as it
+does everywhere when nothing is selected.
+
 ### Hands-free navigation
 
 Off by default: `enabled = true` under `[nav]`. Say a command as an
 utterance of its own, with a pause before and after. In the middle of a
 sentence, "delete the previous word" is just typed as words.
 
-| You say | Editors (Linux and Windows) | Terminals: Linux / Windows |
+| You say | Editors: Linux and Windows / macOS | Terminals: Linux / macOS / Windows |
 | --- | --- | --- |
-| `go left` / `go right [N] [words]` | arrows, `ctrl+←/→` | arrows, `alt+b/f` / `ctrl+←/→` |
+| `go left` / `go right [N] [words]` | arrows, `ctrl+←/→` / `option+←/→` | arrows, `alt+b/f` / `Esc b`, `Esc f` / `ctrl+←/→` |
 | `go up` / `go down [N] lines` | arrows | refused (that's shell history: say `press up`) |
-| `go to start` / `end of line` | `home` / `end` | `ctrl+a` / `ctrl+e`, or `home` / `end` |
-| `go to start` / `end of document` | `ctrl+home` / `ctrl+end` | — |
-| `select previous` / `next [N] words`, `select all`, `select line` | `shift` + the motion, `ctrl+a` | refused: a terminal has no selection to extend |
-| `delete previous` / `next [N] words`, `delete line` | `ctrl+backspace` / `ctrl+delete` | `ctrl+w` / `alt+d`, or `ctrl+backspace` / `ctrl+delete` |
+| `go to start` / `end of line` | `home` / `end`, or `cmd+←/→` | `ctrl+a` / `ctrl+e`, or `home` / `end` on Windows |
+| `go to start` / `end of document` | `ctrl+home` / `ctrl+end`, or `cmd+↑/↓` | — |
+| `select previous` / `next [N] words`, `select all`, `select line` | `shift` + the motion, `ctrl+a` / `cmd+a` | refused: a terminal has no selection to extend |
+| `delete previous` / `next [N] words`, `delete line` | `ctrl+backspace` / `ctrl+delete`, or `option+backspace` / `option+delete` | `ctrl+w` / `alt+d` (`Esc d` on macOS), or `ctrl+backspace` / `ctrl+delete` on Windows |
 | `press tab`, `press escape twice`, `press page down` | that key | that key |
+| `select that` | `shift+left` once per character of what you just said (up to 400; never across emoji) — then dictate over it, or say "VK, make that formal" | refused: a terminal has no selection |
+| `undo that`, `redo that`, `paste that` (`twice`, `three times`) | `ctrl+z` / `ctrl+shift+z` (`ctrl+y` on Windows) / `ctrl+v`; `cmd` on a Mac | refused: a paste can carry a line break, which runs the line |
 
 - Text you dictated before the command is on screen before the keys are
   pressed. After the keys, dictation starts a new segment: repairs and
@@ -613,8 +680,10 @@ sentence, "delete the previous word" is just typed as words.
   rejected, as is an unknown key name.
 - Remap or disable a command per kind of app with `[nav.keys.editor]` and
   `[nav.keys.terminal]`, for example `"move:word:left" = "ctrl+left"`.
-- Not on macOS yet: there are no key chords on that backend, so commands
-  stay words.
+- On macOS the chords go through Quartz like typed text does; in a
+  terminal the readline word motions are sent as `Esc b` / `Esc f` so
+  they work whether or not Option is set to send Meta. Accessibility
+  permission covers it (the same one typing needs).
 
 ### Context registers
 
@@ -626,13 +695,21 @@ Quartz on macOS, Win32 on Windows — and picks a register:
 | `prose` (default) | smart capitalization and punctuation spacing |
 | `terminal` | no auto-caps, numbers as digits, pastes with `Ctrl+Shift+V` |
 | `verbatim` | grammar off; words exactly as recognized |
-| `python` | compiles speech: "for i in range ten colon" → `for i in range(10):` |
-| `shell` | compiles speech: "pipe grep dash i error" → `| grep -i error` |
+| `python` | compiles speech: "for i in range ten colon" → `for i in range(10):`, "for i in range len xs colon" → `for i in range(len(xs)):`, "if a double equals b colon" → `if a == b:` (also `!=`, `<`, `>`, `+=`, `<=`), "if x is not none colon" → `if x is not None:`, "raise value error" → `raise ValueError`, "print open paren f quote hi unquote close paren" → `print(f"hi")`, "arrow str colon" → `-> str:` |
+| `javascript` | compiles speech: "const add equals open paren a comma b close paren arrow a plus b" → `const add = (a, b) => a + b`, "x triple equals null and and y not equals z" → `x === null && y !== z`, "a or or b" → `a || b`, "console dot log open paren" → `console.log(` |
+| `shell` | compiles speech: "pipe grep dash i error" → `| grep -i error`, "docker run dash dash rm dash p eight zero eight zero colon eighty" → `docker run --rm -p 8080:80`, "cd dot dot slash src and and ls" → `cd ../src && ls`, "find dot dash name star dot py" → `find . -name *.py`, "chmod plus x dot slash run dot sh" → `chmod +x ./run.sh`, "echo hi greater than out dot txt" → `echo hi > out.txt` |
 
 Known terminals (kitty, alacritty, foot, konsole, GNOME Terminal, wezterm,
 Windows Terminal, iTerm2, …) map to `terminal` automatically; override or
 extend per app in `[registers.map]` (that is also where you opt an editor
-into `python` or `shell`). If focus moves to a different app
+into `python` or `shell`). A line break is never typed where a terminal
+can't be ruled out: in a known terminal (whatever register you map it
+to), and wherever the focused app couldn't be identified — there "new
+line" types a space. If that happens everywhere on Linux, the AT-SPI
+bindings are missing; `voice-keyboard doctor` says so. In chat apps where Enter sends (Slack, Discord,
+Teams, Signal, Telegram, WhatsApp, Element, Mattermost, …) a line break is
+typed as Shift+Enter, so "new line" never sends half a message; add others
+with `[registers] chat_apps`. (A chat in a browser tab looks like the browser.) If focus moves to a different app
 mid-dictation, typing freezes immediately and the transcript lands on the
 clipboard instead — dictation never types into the wrong window. On Linux
 the probe also sees the focused *widget*: a password field always forces
@@ -734,6 +811,15 @@ warning as before.
   second-most-recent entry. Off by default.
 - `voice-keyboard status` now reports provider, register, flow state,
   focused app, and the last error.
+- `voice-keyboard try [register:] <words…>` prints what the keyboard would
+  type for those words with your config — no microphone needed; `|` is a
+  pause (`try see you monday | correct monday to friday`), and
+  `try python: x equals five` picks a register. With no words it reads one
+  dictation per line: a prompt to play at, or a batch from a pipe
+  (`voice-keyboard try < phrases.txt`).
+- `voice-keyboard commands [filter]` prints everything you can say, built
+  from the same tables the engine uses with your config merged in —
+  `voice-keyboard commands percent` shows just the matching lines.
 - `voice-keyboard stats` shows latency percentiles (p50/p95/max) over the
   last 200 dictations:
   - speech → first transcript (the recognizer);
@@ -1293,7 +1379,17 @@ python -m pytest -q
 ruff check .
 bash -n install.sh
 bash -n packaging/install-hyperfurion-vk.sh
+node --test docs/js/test/*.test.mjs   # the landing page's engine port
 ```
+
+The landing page under `docs/` runs a JavaScript port of
+`voice_keyboard/flow/` (`docs/js/flow.js`, `nav.js`, `spelling.js`).
+`scripts/flow_corpus.py` runs 60-odd dictations — finals, and timed
+streams of interims and ticks — through the Python `FlowEngine` and
+writes `tests/flow_corpus.json`; the Node tests replay the file through
+the port and expect the same screens after every step, the same actions
+and the same final text. Change the engine, rerun the script, and the
+diff shows what changed — in both languages.
 
 CI runs the suite on Linux (Python 3.11–3.13) and on Windows — where
 `tests/test_windows_live.py` types into a real edit box and drives the

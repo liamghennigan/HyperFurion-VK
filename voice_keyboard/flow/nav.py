@@ -3,12 +3,17 @@
     go left three words        select previous word       delete next word
     go to end of line          select all / select line   delete line
     move up two lines          press tab / press escape twice
+    undo that / redo that      paste that (editors only)
+    select that                (what you just said: shift+left per character)
 
 `parse_nav` reads one command at a token index (pure, deterministic — the
 grammar's prefix property holds). `chords_for` turns a command into the
 key chords for the platform and the kind of app: editors and prose fields
-share one map on Linux and Windows; terminals differ (readline on Linux:
-alt+b / ctrl+a / ctrl+w; Windows Terminal, conhost and PSReadLine take
+share one map on Linux and Windows, and macOS has its own (option+arrows
+by word, command+arrows to the ends of a line or the document); terminals
+differ (readline on Linux: alt+b / ctrl+a / ctrl+w; on macOS the word
+motions go as Esc b / Esc f, which readline reads as Meta whether or not
+Option is set to send it; Windows Terminal, conhost and PSReadLine take
 ctrl+left / home / ctrl+backspace, and ctrl+a would select all there).
 Selection is refused in terminals — there is no text selection to extend.
 
@@ -26,11 +31,18 @@ from voice_keyboard.flow.numbers import _TENS, _UNITS
 logger = logging.getLogger(__name__)
 
 MAX_COUNT = 20
+# "select that" presses shift+left once per character of the last
+# utterance; longer than this is refused rather than held down for ages.
+MAX_SELECT_THAT = 400
 PENDING = "pending"
 
 _STRIP = ".,!?;:"
 
-VERBS = {"go": "move", "move": "move", "select": "select", "delete": "delete", "press": "press"}
+VERBS = {
+    "go": "move", "move": "move", "select": "select", "delete": "delete", "press": "press",
+    "undo": "edit", "redo": "edit", "paste": "edit",
+}
+_THAT = {"that", "it", "this"}
 
 # spoken direction -> (direction, needs an explicit unit)
 _DIRECTIONS = {
@@ -71,7 +83,7 @@ _FORBIDDEN_CHORDS = ({"ctrl", "j"}, {"ctrl", "m"}, {"ctrl", "o"})
 # Key names every backend's press_combo knows (Linux uinput and Windows
 # SendInput); single characters resolve on both too.
 KNOWN_KEYS = {
-    "ctrl", "control", "shift", "alt", "super", "meta", "win", "cmd",
+    "ctrl", "control", "shift", "alt", "option", "super", "meta", "win", "cmd", "command",
     "tab", "esc", "escape", "space", "backspace", "delete", "del", "insert",
     "up", "down", "left", "right", "home", "end", "pageup", "pagedown",
     *(f"f{n}" for n in range(1, 13)),
@@ -118,6 +130,10 @@ def parse_nav(cores: list[str], index: int, *, decided: bool):
     try:
         if verb == "press":
             return _parse_press(cores, index + 1, at, optional, decided)
+        if verb == "edit":
+            # "undo", "undo that", "undo that twice", "paste it"
+            cursor = index + 1 + (optional(index + 1) in _THAT)
+            return _repeat(f"edit:{cores[index]}", cursor, optional, decided, len(cores))
         return _parse_motion(verb, index + 1, at, optional, decided, len(cores))
     except _NeedMore:
         return None if decided else PENDING
@@ -148,23 +164,30 @@ def _parse_press(cores, cursor, at, optional, decided):
         cursor += 1
     else:
         return None
-    action = f"press:{key}"
+    return _repeat(f"press:{key}", cursor, optional, decided, len(cores))
+
+
+def _repeat(action, cursor, optional, decided, total):
+    """The command's optional repeat: "twice", "three", "three times"."""
     word = optional(cursor)
     if word in _REPEAT_WORDS:
         return action, _REPEAT_WORDS[word], cursor + 1
     count = _count_of(word) if word is not None else None
     if count is None:
-        return _finish(action, 1, cursor, len(cores), decided, more=True)
+        return _finish(action, 1, cursor, total, decided, more=True)
     cursor += 1
     if optional(cursor) in _TIMES:
         return action, count, cursor + 1
-    return _finish(action, count, cursor, len(cores), decided, more=True)
+    return _finish(action, count, cursor, total, decided, more=True)
 
 
 def _parse_motion(verb, cursor, at, optional, decided, total):
     word = at(cursor)
 
     # select all / select (this) line / delete (the) line
+    if verb == "select" and word == "that":
+        # The engine counts the characters of the last utterance.
+        return "select:that", 1, cursor + 1
     if verb == "select" and word == "all":
         return "select:all", 1, cursor + 1
     if verb in ("select", "delete"):
@@ -245,10 +268,15 @@ EDITOR: dict[str, Optional[list[list[str]]]] = {
     **{f"move:{key}": [chord] for key, chord in _EDITOR_MOVES.items()},
     **{f"select:{key}": [["shift", *chord]] for key, chord in _EDITOR_MOVES.items()},
     "select:all": [["ctrl", "a"]],
+    "select:that": [["shift", "left"]],
     "select:line:here": [["home"], ["shift", "end"]],
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
     "delete:line:here": [["home"], ["shift", "end"], ["backspace"]],
+    # Editors only: a terminal has no undo to speak of, and a paste can
+    # carry a line break — which runs the line.
+    "edit:undo": [["ctrl", "z"]], "edit:redo": [["ctrl", "shift", "z"]],
+    "edit:paste": [["ctrl", "v"]],
 }
 
 _NO_SELECTION = {key: None for key in EDITOR if key.startswith("select:")}
@@ -276,6 +304,36 @@ WINDOWS_TERMINAL: dict[str, Optional[list[list[str]]]] = {
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
     "delete:line:here": None,
+}
+
+# macOS editors and text fields: words by option+arrow, line ends by
+# command+arrow, the document by command+up/down; shift extends.
+_MAC_MOVES = {
+    "char:left": ["left"], "char:right": ["right"],
+    "word:left": ["alt", "left"], "word:right": ["alt", "right"],
+    "line:up": ["up"], "line:down": ["down"],
+    "line:start": ["cmd", "left"], "line:end": ["cmd", "right"],
+    "doc:start": ["cmd", "up"], "doc:end": ["cmd", "down"],
+}
+MAC_EDITOR: dict[str, Optional[list[list[str]]]] = {
+    **{f"move:{key}": [chord] for key, chord in _MAC_MOVES.items()},
+    **{f"select:{key}": [["shift", *chord]] for key, chord in _MAC_MOVES.items()},
+    "select:all": [["cmd", "a"]],
+    "select:that": [["shift", "left"]],
+    "select:line:here": [["cmd", "left"], ["shift", "cmd", "right"]],
+    "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
+    "delete:word:left": [["alt", "backspace"]], "delete:word:right": [["alt", "delete"]],
+    "delete:line:here": [["cmd", "left"], ["shift", "cmd", "right"], ["backspace"]],
+    "edit:undo": [["cmd", "z"]], "edit:redo": [["shift", "cmd", "z"]], "edit:paste": [["cmd", "v"]],
+}
+
+# Terminal.app, iTerm2, Ghostty, Warp: readline as on Linux, except that
+# the Meta chords go as an Escape prefix — readline reads "Esc b" as
+# backward-word whether or not Option is set to send Meta.
+MAC_TERMINAL: dict[str, Optional[list[list[str]]]] = {
+    **LINUX_TERMINAL,
+    "move:word:left": [["escape"], ["b"]], "move:word:right": [["escape"], ["f"]],
+    "delete:word:right": [["escape"], ["d"]],
 }
 
 # Commands that leave a selection or a gap: the next dictated word replaces
@@ -316,9 +374,15 @@ def keymap(*, terminal: bool, platform: str = sys.platform, overrides: Optional[
     are refused. `overrides` is the [nav.keys.terminal] or
     [nav.keys.editor] table."""
     if terminal:
-        table = dict(WINDOWS_TERMINAL if platform == "win32" else LINUX_TERMINAL)
+        table = dict(
+            WINDOWS_TERMINAL if platform == "win32"
+            else MAC_TERMINAL if platform == "darwin"
+            else LINUX_TERMINAL
+        )
     else:
-        table = dict(EDITOR)
+        table = dict(MAC_EDITOR if platform == "darwin" else EDITOR)
+        if platform == "win32":
+            table["edit:redo"] = [["ctrl", "y"]]  # Word, Notepad, Office: ctrl+shift+z does nothing
     for action, value in (overrides or {}).items():
         try:
             table[str(action)] = parse_override(value)
@@ -340,5 +404,10 @@ def chords_for(action: str, count: int, table: dict) -> Optional[list[list[str]]
         return None
     if any(_forbidden(chord) for chord in sequence):
         return None
+    if action == "select:that":
+        # one press per character; nothing to select, or too much, is refused
+        if not 1 <= count <= MAX_SELECT_THAT:
+            return None
+        return [list(chord) for _ in range(count) for chord in sequence]
     repeat = 1 if action in ("select:all",) or action.endswith(":here") else count
     return [list(chord) for _ in range(max(1, min(MAX_COUNT, repeat))) for chord in sequence]

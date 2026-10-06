@@ -34,7 +34,7 @@ class TestPythonRegister:
     def test_dot_and_underscore_and_equals(self) -> None:
         assert (
             _compile("self dot audio underscore thread equals true", PYTHON)
-            == "self.audio_thread = true"
+            == "self.audio_thread = True"
         )
 
     def test_callable_stays_honestly_open(self) -> None:
@@ -106,3 +106,11 @@ class TestRegisterPlumbing:
         cfg["registers"]["default"] = "python"
         cfg["registers"]["map"] = {"kitty": "shell"}
         validate_config(cfg)
+
+
+def test_formatter_stops_cover_every_compiled_operator_word() -> None:
+    from voice_keyboard.flow.code import _PYTHON_CALLABLES, _PYTHON_WORD_GLYPHS, _SHELL_WORD_GLYPHS
+    from voice_keyboard.flow.grammar import CODE_FORMATTER_STOPS, FORMATTER_STOPS
+
+    assert set(_PYTHON_WORD_GLYPHS) | set(_SHELL_WORD_GLYPHS) <= FORMATTER_STOPS
+    assert set(_PYTHON_CALLABLES) <= CODE_FORMATTER_STOPS

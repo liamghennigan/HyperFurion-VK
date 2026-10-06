@@ -121,6 +121,11 @@ auto_stop_ms = 0
 # Spoken cardinals -> digits ("twenty three" -> 23).
 # "auto" = terminal register only, "always", or "off".
 numbers = "auto"
+# Spoken commands and punctuation in another language too, on top of the
+# English set: "es" (punto, coma, nueva línea, borra eso, ¿ ¡), "fr"
+# (point, virgule, à la ligne, efface ça) or "de" (Punkt, Komma, neue
+# Zeile, streich das). Numbers, dates and units stay English.
+language = "en"
 # Opt-in local dictation ledger for `voice-keyboard history` / `recall`.
 # Entries: ~/.local/state/voice-keyboard/history.jsonl (mode 600).
 history = false
@@ -135,6 +140,37 @@ personal_dictionary = true
 # swaps the last word for the spelled one; "spell ..." types it. Each
 # swap is offered as a `voice-keyboard learned` candidate.
 spelling = true
+# Spoken addresses: "liam at example dot com" types liam@example.com and
+# "docs dot python dot org" types docs.python.org. Only a run that ends in
+# a known top-level domain becomes one; "meet at the office" stays prose.
+addresses = true
+# Spoken case formatters for code and names: "snake case user id" ->
+# user_id, "camel case get user name" -> getUserName; also pascal, kebab,
+# constant, dot and title case, "all caps", "no space". A formatter takes
+# the words after it up to a pause, punctuation or another command.
+# "code" = in code and terminal registers only, where they are never
+# prose ("there is no space left" stays a sentence); "everywhere"; "off".
+formatters = "code"
+# Hesitation sounds the recognizer writes down are dropped from what is
+# typed: "um, so we should, uh, ship it" -> "So we should, ship it".
+# Only sounds, never words that carry meaning. [] keeps them all.
+fillers = ["um", "umm", "uh", "uhh", "uhm", "erm"]
+# Self-corrections: "send it Tuesday, no wait, Wednesday" -> "Send it
+# Wednesday". "llm" sends a dictation that has a correction cue ("no
+# wait", "I mean", "sorry", "actually", a stuttered "the the") to [llm]
+# to delete the false start, and the screen repairs itself at stop. The
+# answer may only DELETE words — every word it keeps must be one you
+# said, in order — or it is ignored and your text stays as dictated.
+# Dictations without a cue are never sent. Prose fields only. "off".
+corrections = "off"
+# Stop, think, press the hotkey again: a recording that starts within 30
+# seconds of the last one, in the same app and the same prose register,
+# continues its text — a space before the first word, and a capital only
+# if the last one ended a sentence. Terminals and code registers never
+# get a leading space; a caret command or a focus change ends it. When
+# the focused app cannot be told (Wayland hides it), the time window
+# alone decides. false = every recording starts at a fresh caret.
+rejoin = true
 # Punctuation where you paused. Streaming recognizers (xai, hyperfurion)
 # end a sentence at every pause — "I think. We should wait." — so a
 # period you paused after stays revisable until the next words decide it.
@@ -169,7 +205,7 @@ wake_word = "vk"
 [registers]
 # How dictation renders per app: prose (smart caps + punctuation),
 # terminal (verbatim-ish, numbers as digits, ctrl+shift+v paste),
-# verbatim (grammar off), python / shell (semantic registers that COMPILE
+# verbatim (grammar off), python / shell / javascript (semantic registers that COMPILE
 # speech: "for i in range ten colon" -> `for i in range(10):`,
 # "pipe grep dash i error" -> `| grep -i error`).
 # Password fields always force verbatim and are never remembered.
@@ -177,6 +213,11 @@ default = "prose"
 # Probe the focused app at recording start (AT-SPI on Linux, Quartz on
 # macOS, Win32 on Windows) to pick the register automatically.
 probe = true
+
+# Chat apps (Slack, Discord, Teams, Signal, Telegram, WhatsApp, Element,
+# Mattermost, …) type a spoken line break as Shift+Enter, because Enter
+# sends there. Add your own; a chat in a browser tab can't be told apart.
+# chat_apps = ["mychat"]
 
 [registers.map]
 # App -> register overrides, merged over the built-in terminal list.
@@ -281,6 +322,23 @@ enabled = false
 verbs = ["ask", "explain", "answer"]
 mode = "say"
 
+[snippets]
+# Text you type by name. Say "VK, my email" on its own, or at the end of a
+# dictation ("send the invoice to VK, my email"), and it is typed exactly.
+# "my email" = "you@example.com"
+# "sign off" = "Thanks,\nLiam"
+# {date}, {isodate}, {time} and {weekday} fill in when typed:
+# "stamp" = "Updated {date} at {time}"
+
+[polish.map]
+# Per-app style, applied by [llm] after a prose dictation of four words
+# or more in that app (as if you said "VK, make that …"). The app name is
+# what `voice-keyboard status` shows; never in terminals, code or password
+# fields; on any failure the text stays as dictated. Pairs well with
+# [flow] rewrite_pending = true, which holds each polish for "keep it".
+# slack = "casual and friendly, keep it short"
+# thunderbird = "a clear, polite email"
+
 [recall]
 # Total recall: search everything you dictated ([flow] history ledger).
 # Keyword search needs no setup; set base_url + model to an
@@ -335,8 +393,10 @@ verbs = ["run", "command", "execute"]
 #   press tab · press escape twice · press page down
 # A command fires only when it is a whole utterance of its own (a pause
 # before and after); mid-sentence, "delete the previous word" is just
-# words. Terminals get readline keys on Linux (alt+b, ctrl+a, ctrl+w) and
-# Windows Terminal/PSReadLine keys on Windows; selection is refused there.
+# words. Terminals get readline keys on Linux and macOS (alt+b or Esc b,
+# ctrl+a, ctrl+w) and Windows Terminal/PSReadLine keys on Windows;
+# selection is refused there. macOS editors get option+arrows for words
+# and command+arrows for line and document ends.
 # Enter is never pressed. With hold-to-talk, keys fire after you release.
 enabled = false
 

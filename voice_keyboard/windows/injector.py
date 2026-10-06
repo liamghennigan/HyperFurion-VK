@@ -165,6 +165,8 @@ class WinTextInjector:
         # The intent channel types commands but must never run them: while
         # set, no newline in the text can become an Enter keystroke.
         self.suppress_enter = False
+        # A chat app: a line break is Shift+Enter (plain Enter sends).
+        self.shift_newline = False
         self._warned_short_send = False
 
     def start(self) -> None:
@@ -194,6 +196,19 @@ class WinTextInjector:
             text = strip_line_breaks(text)
         else:
             text = text.replace("\r\n", "\n").replace("\r", "\n")
+        if self.shift_newline and "\n" in text:
+            first, *rest = text.split("\n")
+            self.type_text(first)
+            for part in rest:
+                vk_shift = KEY_NAMES["shift"][0]
+                self._send(self._release_held_modifiers() + [
+                    self._key_event(vk_shift, False, up=False),
+                    self._key_event(VK_RETURN, False, up=False),
+                    self._key_event(VK_RETURN, False, up=True),
+                    self._key_event(vk_shift, False, up=True),
+                ])
+                self.type_text(part)
+            return
         strokes: list[Keystroke] = []
         for ch in text:
             if ch == "\n":

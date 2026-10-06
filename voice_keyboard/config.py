@@ -8,8 +8,13 @@ from typing import Optional
 import tomllib
 
 from voice_keyboard import paths
-from voice_keyboard.stt import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS
-from voice_keyboard.tts import DEFAULT_TTS_MODELS, DEFAULT_TTS_VOICES, SUPPORTED_TTS_PROVIDERS
+from voice_keyboard.providers import (
+    DEFAULT_STT_MODELS,
+    DEFAULT_TTS_MODELS,
+    DEFAULT_TTS_VOICES,
+    SUPPORTED_STT_PROVIDERS,
+    SUPPORTED_TTS_PROVIDERS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +114,9 @@ DEFAULT_CONFIG: dict = {
         "auto_stop_ms": 0,
         # Spoken cardinals -> digits: auto = terminal register only.
         "numbers": "auto",
+        # Spoken commands and punctuation in another language too: "es",
+        # "fr" or "de" add "punto"/"virgule"/"neue Zeile"… to the English set.
+        "language": "en",
         # Opt-in local dictation ledger (history/recall).
         "history": False,
         # Also append per-dictation latency numbers (no text) to
@@ -121,6 +129,25 @@ DEFAULT_CONFIG: dict = {
         # "spell that n g i n x" replaces the last word with the spelled
         # one ("spell ..." types it); each becomes a `learned` candidate.
         "spelling": True,
+        # "liam at example dot com" -> liam@example.com, "docs dot python
+        # dot org" -> docs.python.org (only runs that end in a known
+        # top-level domain; "meet at the office" stays prose).
+        "addresses": True,
+        # "snake case user id" -> user_id, "camel case get user name" ->
+        # getUserName; pascal, kebab, constant, title, dot, all caps, no
+        # space. "code" = in code and terminal registers only (where "no
+        # space" is never prose); "everywhere"; "off".
+        "formatters": "code",
+        # Hesitation sounds dropped from what is typed. [] keeps them all.
+        "fillers": ["um", "umm", "uh", "uhh", "uhm", "erm"],
+        # Self-corrections ("Tuesday, no wait, Wednesday"): "llm" asks
+        # [llm] to delete the false start when a dictation has a correction
+        # cue; the answer may only delete words, or it is ignored. "off".
+        "corrections": "off",
+        # A recording that starts within 30 s of the last one, in the same
+        # app and the same prose register, continues its text: a space
+        # before the first word, a capital only after a sentence end.
+        "rejoin": True,
         # Punctuation where you paused: streaming recognizers end a sentence
         # at every pause. auto = rules, plus an [llm] review of the unclear
         # pauses when [llm] is usable; llm / rules / off (keep the
@@ -227,6 +254,14 @@ DEFAULT_CONFIG: dict = {
         "verbs": ["ask", "explain", "answer"],
         "mode": "say",
     },
+    # Text you type by name: "VK, my email" types it — alone, or at the
+    # end of a dictation ("send the invoice to VK, my email"). Spoken name
+    # -> text, typed exactly (newlines included).
+    "snippets": {},
+    # Polish per app: after a prose dictation in a mapped app, [llm]
+    # rewrites it in that style, the way "VK, make that …" would. Off
+    # until an app is mapped; never in terminals, code or secret fields.
+    "polish": {"map": {}},
     "recall": {
         # Total recall: search everything you ever dictated (the opt-in
         # [flow] history ledger). Keyword search works with no setup;
@@ -292,7 +327,7 @@ DEFAULT_CONFIG: dict = {
     },
 }
 
-VALID_REGISTERS = {"prose", "terminal", "verbatim", "python", "shell"}
+VALID_REGISTERS = {"prose", "terminal", "verbatim", "python", "shell", "javascript"}
 _FLOW_BOOL_KEYS = (
     "enabled",
     "live",
@@ -302,6 +337,8 @@ _FLOW_BOOL_KEYS = (
     "latency_log",
     "personal_dictionary",
     "spelling",
+    "addresses",
+    "rejoin",
     "rewrite_pending",
 )
 _FLOW_INT_KEYS = (
@@ -591,6 +628,20 @@ def validate_config(config: dict) -> None:
     _validate_flow_config(config)
     _validate_intent_config(config)
     _validate_nav_config(config)
+    snippets = config.get("snippets", {})
+    if not isinstance(snippets, dict):
+        raise RuntimeError("snippets must be a [snippets] table of name = \"text\"")
+    for name, text in snippets.items():
+        if not str(name).strip() or not isinstance(text, str) or not text:
+            raise RuntimeError(f"snippets.{name!r}: a spoken name and the text to type")
+    chat_apps = (config.get("registers", {}) or {}).get("chat_apps", [])
+    if not isinstance(chat_apps, list) or not all(isinstance(a, str) and a.strip() for a in chat_apps):
+        raise RuntimeError('registers.chat_apps must be a list of app names, e.g. ["mychat"]')
+    polish_map = (config.get("polish", {}) or {}).get("map", {})
+    if not isinstance(polish_map, dict) or not all(
+        isinstance(v, str) and v.strip() for v in polish_map.values()
+    ):
+        raise RuntimeError('polish.map must be a table of app = "style", e.g. slack = "casual"')
     _validate_ambient_config(config)
     _validate_verb_channel(config, "ask")
     _validate_verb_channel(config, "recall")
@@ -738,6 +789,11 @@ def _validate_nav_config(config: dict) -> None:
 
 def _validate_flow_config(config: dict) -> None:
     flow_cfg = config.get("flow", {})
+    fillers = flow_cfg.get("fillers", DEFAULT_CONFIG["flow"]["fillers"])
+    if not isinstance(fillers, list) or not all(
+        isinstance(f, str) and f.strip() and " " not in f.strip() for f in fillers
+    ):
+        raise RuntimeError("flow.fillers must be a list of single words")
     for key in _FLOW_BOOL_KEYS:
         value = flow_cfg.get(key, DEFAULT_CONFIG["flow"][key])
         if not isinstance(value, bool):
@@ -751,8 +807,16 @@ def _validate_flow_config(config: dict) -> None:
         raise RuntimeError("flow.auto_stop_ms must be a non-negative integer (0 = off)")
     if str(flow_cfg.get("live_rest", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.live_rest must be one of: auto, always, off")
+    from voice_keyboard.flow.languages import LANGUAGES
+
+    if str(flow_cfg.get("language", "en")).lower() not in LANGUAGES:
+        raise RuntimeError("flow.language must be one of: " + ", ".join(LANGUAGES))
     if str(flow_cfg.get("numbers", "auto")).lower() not in {"auto", "always", "off"}:
         raise RuntimeError("flow.numbers must be one of: auto, always, off")
+    if str(flow_cfg.get("formatters", "code")).lower() not in {"code", "everywhere", "off"}:
+        raise RuntimeError("flow.formatters must be one of: code, everywhere, off")
+    if str(flow_cfg.get("corrections", "off")).lower() not in {"llm", "off"}:
+        raise RuntimeError("flow.corrections must be one of: llm, off")
     if str(flow_cfg.get("pause_review", "auto")).lower() not in {"auto", "llm", "rules", "off"}:
         raise RuntimeError("flow.pause_review must be one of: auto, llm, rules, off")
     vocabulary = flow_cfg.get("vocabulary", {})

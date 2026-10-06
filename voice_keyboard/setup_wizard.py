@@ -413,6 +413,12 @@ class Wizard:
         if lang != now:
             self.set("stt", "language", lang, f"Language: {lang}")
             self.set("tts", "language", lang)
+            from voice_keyboard.flow.languages import LANGUAGES
+
+            # spoken commands in that language too, where there is a set
+            pack = lang if lang in LANGUAGES else "en"
+            if pack != str(current.get("flow", {}).get("language", "en")):
+                self.set("flow", "language", pack, f"Spoken commands: {pack} (+ English)")
 
     def step_extras(self, current: dict) -> None:
         self.out("")
@@ -425,6 +431,21 @@ class Wizard:
         history = self.confirm("Keep a private local history of what you dictate?", history_now)
         if history != history_now:
             self.set("flow", "history", history, f"Dictation history: {'on' if history else 'off'}")
+        nav_now = bool(current.get("nav", {}).get("enabled", False))
+        self.out('    Hands-free navigation: say "select previous word", "go to end of line"')
+        self.out("    or \"delete the line\" on its own and the keys are pressed for you.")
+        self.out("    Enter is never one of them. Mid-sentence, the words are just typed.")
+        nav = self.confirm("Move the caret by voice?", nav_now)
+        if nav != nav_now:
+            self.set("nav", "enabled", nav, f"Hands-free navigation: {'on' if nav else 'off'}")
+        fix_now = str(current.get("flow", {}).get("corrections", "off")).lower() == "llm"
+        self.out('    Self-corrections: "send it Tuesday, no wait, Wednesday" becomes')
+        self.out('    "Send it Wednesday". Only dictations with a correction cue go to your')
+        self.out("    language model, and it may only delete words, never add or change one.")
+        fix = self.confirm("Tidy self-corrections with your language model?", fix_now)
+        if fix != fix_now:
+            self.set("flow", "corrections", "llm" if fix else "off",
+                     f"Self-corrections: {'tidied by the language model' if fix else 'kept as dictated'}")
 
     # --------------------------------------------------------------- save
 
@@ -473,6 +494,9 @@ class Wizard:
         self.out("")
         if is_usable(self.path):
             self.out("Setup complete.")
+            self.out("Say \"scratch that\", \"new line\" or \"correct monday to friday\" while you dictate;")
+            self.out("`voice-keyboard commands` lists everything you can say;")
+            self.out("`voice-keyboard doctor` checks the microphone, typing and the daemon.")
         else:
             self.out("Saved, but HyperFurion VK can't start yet: it still needs a speech provider.")
             self.out("Run `voice-keyboard setup` again, or `voice-keyboard login` for the hosted service.")

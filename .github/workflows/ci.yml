@@ -2,7 +2,8 @@ name: CI
 
 # Tests on every push and pull request: the daemon on Linux (every
 # supported Python) and on real Windows (where the live Win32 tests type
-# into a real edit box), the hosted relay, and a lint pass.
+# into a real edit box), the landing page's engine port against the
+# daemon's, the hosted relay, and a lint pass.
 
 on:
   push:
@@ -69,6 +70,25 @@ jobs:
       - run: packaging/build-downloads.sh dist
       - run: sh dist/HyperFurion-VK-Setup.run --help | grep -q "Install (or upgrade)"
       - run: head -1 dist/HyperFurion-VK-Setup.cmd | grep -q "^<# :"
+
+  landing:
+    # The landing page is a working instance: its engine (docs/js/flow.js)
+    # is a port of voice_keyboard/flow/, and tests/flow_corpus.json —
+    # written by the Python engine — is replayed through the port.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test docs/js/test/*.test.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Differential fuzzing: random dictations through both engines.
+      - run: python scripts/flow_fuzz_parity.py 300
+        env:
+          PYTHONPATH: .
 
   relay:
     runs-on: ubuntu-latest

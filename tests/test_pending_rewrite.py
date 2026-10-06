@@ -8,6 +8,8 @@ from unittest import mock
 
 import pytest
 
+from voice_keyboard.focusprobe import FocusInfo
+
 from voice_keyboard.config import _default_config_with_paths
 from voice_keyboard.daemon import Daemon
 
@@ -25,6 +27,14 @@ def inline_to_thread(monkeypatch: pytest.MonkeyPatch):
         return func(*args, **kwargs)
 
     monkeypatch.setattr(asyncio, "to_thread", _to_thread)
+
+
+GEDIT = FocusInfo(app="gedit", role="text")
+
+
+@pytest.fixture(autouse=True)
+def focused_in_gedit(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("voice_keyboard.daemon.probe_focus", lambda: GEDIT)
 
 
 @pytest.fixture(autouse=True)
@@ -110,6 +120,7 @@ class TestKeepAndDiscard:
             "text": "The polished sentence.",
             "target": "the old sentence",
             "expires": time.monotonic() + 60,
+            "identity": GEDIT.identity,
         }
         return daemon
 
@@ -121,6 +132,13 @@ class TestKeepAndDiscard:
         assert daemon._injector.typed == ["The polished sentence."]
         assert daemon._pending_rewrite is None
         assert daemon._last_typed == "The polished sentence."
+
+    def test_keep_in_another_app_refuses_and_leaves_the_screen_alone(self, monkeypatch) -> None:
+        daemon = self._held()
+        monkeypatch.setattr("voice_keyboard.daemon.probe_focus", lambda: FocusInfo(app="slack", role="text"))
+        with pytest.raises(RuntimeError, match="another app"):
+            asyncio.run(daemon._keep_pending())
+        assert daemon._injector.deleted == 0 and daemon._injector.typed == []
 
     def test_keep_without_pending_raises(self) -> None:
         daemon = _daemon(pending=True)
@@ -155,6 +173,7 @@ class TestVoiceApproval:
             "text": "The polished sentence.",
             "target": "the old sentence",
             "expires": time.monotonic() + 60,
+            "identity": GEDIT.identity,
         }
         return daemon
 

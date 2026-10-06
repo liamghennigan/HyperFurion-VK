@@ -1,9 +1,9 @@
 """Spelled-out words: "spell that n g i n x", "spell capital k eight s".
 
 Recognizers hand spelled letters back in several shapes — single-letter
-tokens ("N G I N X"), one hyphenated token ("N-G-I-N-X"), NATO words
-("november golf ...") — and a letter can be marked upper case with
-"capital". `letters_at` reads one letter (or a hyphenated run) at a
+tokens ("N G I N X"), one hyphenated token ("N-G-I-N-X"), one capitalized
+token ("NGINX"), NATO words ("november golf ...") — and a letter can be
+marked upper case with "capital". `letters_at` reads one letter (or a hyphenated run) at a
 token index; the grammar strings them together.
 
 Pure functions, no state: the grammar's parse is deterministic, and this
@@ -69,6 +69,11 @@ def letters_at(tokens: list[str], index: int) -> tuple[str, int]:
         spelled = [_one(part) for part in parts]
         if len(parts) > 1 and all(spelled):
             return "".join(spelled), 1  # type: ignore[arg-type]
+    # A recognizer that heard the letters as one word writes it in capitals
+    # ("NGINX", "K8S"): those are the letters, spelled.
+    raw = tokens[index].strip(_STRIP)
+    if len(raw) >= 2 and raw.isascii() and raw.isalnum() and raw.isupper():
+        return raw.lower(), 1
     return "", 0
 
 

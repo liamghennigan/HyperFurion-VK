@@ -64,7 +64,11 @@ def _focus_is_unsafe(registers: Optional[dict] = None) -> str:
         config_map=cfg.get("map") or {},
         default=str(cfg.get("default", "prose")),
     )
-    return NOTE_SKIPPED if register in (TERMINAL, SHELL) else ""
+    if register in (TERMINAL, SHELL):
+        return NOTE_SKIPPED
+    # A terminal mapped to another register is still a terminal: ctrl+c
+    # there is SIGINT, whatever [registers.map] says.
+    return NOTE_SKIPPED if register_for_app(focus.app, focus.role) is TERMINAL else ""
 
 
 _win = None

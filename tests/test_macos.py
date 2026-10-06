@@ -99,6 +99,63 @@ class TestUnicodeChunking:
         assert hasattr(MacTextInjector(), "suppress_enter")
 
 
+class TestChords:
+    def _quartz(self):
+        quartz = ModuleType("Quartz")
+        quartz.kCGHIDEventTap = 0
+        quartz.posted = []
+        quartz.CGEventCreateKeyboardEvent = mock.Mock(side_effect=lambda _s, code, down: {"code": code, "down": down})
+        quartz.CGEventSetFlags = mock.Mock(side_effect=lambda ev, flags: ev.__setitem__("flags", flags))
+        quartz.CGEventPost = mock.Mock(side_effect=lambda _tap, ev: quartz.posted.append(dict(ev)))
+        return quartz
+
+    def test_chord_presses_modifiers_then_the_key_with_their_flags(self) -> None:
+        quartz = self._quartz()
+        inj = MacTextInjector()
+        with mock.patch.dict(sys.modules, {"Quartz": quartz}):
+            inj.start()
+            inj.press_combo(["shift", "alt", "left"])
+        shift, alt, left = 56, 58, 123
+        assert [(e["code"], e["down"]) for e in quartz.posted] == [
+            (shift, True), (alt, True), (left, True), (left, False), (alt, False), (shift, False),
+        ]
+        assert quartz.posted[2]["flags"] == 0x20000 | 0x80000  # the key carries both modifiers
+        assert quartz.posted[3]["flags"] == 0x20000 | 0x80000  # so does its release
+        assert quartz.posted[0]["flags"] == 0x20000
+        assert quartz.posted[4]["flags"] == 0x20000  # alt's own key-up no longer carries alt
+        assert quartz.posted[-1]["flags"] == 0  # shift releases last, flags clear
+
+    def test_command_chords_and_escape_sequences(self) -> None:
+        quartz = self._quartz()
+        inj = MacTextInjector()
+        with mock.patch.dict(sys.modules, {"Quartz": quartz}):
+            inj.start()
+            inj.press_combo(["cmd", "a"])
+            inj.press_combo(["escape"])
+            inj.press_combo(["b"])
+        codes = [(e["code"], e["down"]) for e in quartz.posted]
+        assert codes[:4] == [(55, True), (0, True), (0, False), (55, False)]
+        assert quartz.posted[1]["flags"] == 0x100000
+        assert codes[4:] == [(53, True), (53, False), (11, True), (11, False)]
+
+    def test_unknown_key_is_refused_before_anything_is_posted(self) -> None:
+        quartz = self._quartz()
+        inj = MacTextInjector()
+        with mock.patch.dict(sys.modules, {"Quartz": quartz}):
+            inj.start()
+            with pytest.raises(ValueError, match="unknown key"):
+                inj.press_combo(["ctrl", "notakey"])
+        assert quartz.posted == []
+
+    def test_requires_start(self) -> None:
+        with pytest.raises(RuntimeError, match="not started"):
+            MacTextInjector().press_combo(["left"])
+
+    def test_nav_is_enabled_on_the_mac_backend(self) -> None:
+        # The daemon turns [nav] on only where the injector can press chords.
+        assert callable(getattr(MacTextInjector(), "press_combo", None))
+
+
 class TestMacHotkeySpec:
     def test_parses_the_default_combo(self) -> None:
         spec = MacHotkeySpec("control+alt+v")

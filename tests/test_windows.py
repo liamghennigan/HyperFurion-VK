@@ -250,6 +250,25 @@ class TestWinInjectorText:
         units = [e[1] for e in _down_up(user32.events)]
         assert "".join(map(chr, units)) == "git status rm -rf / "
 
+    def test_chat_apps_get_shift_return_for_a_line_break(self) -> None:
+        from voice_keyboard.windows.injector import KEY_NAMES
+
+        user32 = FakeUser32()
+        inj = _injector(user32)
+        inj.shift_newline = True
+        inj.type_text("hi\nthere")
+        shift = KEY_NAMES["shift"][0]
+        vks = [(e[0], bool(e[2] & KEYEVENTF_KEYUP)) for e in user32.events if e[0] in (shift, VK_RETURN)]
+        assert vks == [(shift, False), (VK_RETURN, False), (VK_RETURN, True), (shift, True)]
+
+    def test_suppress_enter_beats_shift_newline(self) -> None:
+        user32 = FakeUser32()
+        inj = _injector(user32)
+        inj.shift_newline = True
+        inj.suppress_enter = True
+        inj.type_text("a\nb")
+        assert VK_RETURN not in [e[0] for e in user32.events]
+
     def test_astral_char_is_a_surrogate_pair(self) -> None:
         user32 = FakeUser32()
         _injector(user32).type_text("🎙")

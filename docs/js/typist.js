@@ -1,8 +1,12 @@
 // ═══ TYPIST — flow snapshots become key presses ════════════════════════════
-// Holds the text the window actually shows and diffs every molten snapshot
-// against it: backspace to the divergence point, retype the tail — the
-// daemon's repair, made visible on the board. The queue is replaced, never
-// appended, so the board can never race ahead of the truth.
+// Holds the text it has typed into the focused window since it last took
+// its bearings, and diffs every molten snapshot against it: backspace to
+// the divergence point, retype the tail — the daemon's InjectionWorker,
+// made visible on the board. Each press lands in the window's buffer at
+// the caret, exactly as a keystroke would. The queue is replaced, never
+// appended, so the board can never race ahead of the truth. After a
+// navigation command moves the caret, release() forgets the typed text:
+// what is behind the caret is no longer ours to repair.
 import { bus } from "./bus.js";
 import { state } from "./state.js";
 import { Keyboard } from "./keyboard.js";
@@ -11,7 +15,7 @@ import { toPresses } from "./layout.js";
 
 export const Typist = (() => {
   let shown = "", frozenLen = 0, target = { frozen: "", molten: "" }, heat = "molten";
-  let pendingCommit = null, lastSet = 0, pendingSnap = null, snapT = 0;
+  let lastSet = 0, pendingSnap = null, snapT = 0;
   let settlers = [];
 
   const prefix = (a, b) => {
@@ -53,8 +57,9 @@ export const Typist = (() => {
     paint();
   }
   function apply(p) {
-    if (p.kind === "bs") shown = shown.slice(0, -1);
-    else shown += p.ch;
+    const buf = Window.buffer();
+    if (p.kind === "bs") { shown = shown.slice(0, -1); buf.backspace(); }
+    else { shown += p.ch; buf.insert(p.ch); }
     state.typedChars++;
     bus.emit("type:char", { ch: p.ch, kind: p.kind });
     if (state.mark) {
@@ -64,8 +69,7 @@ export const Typist = (() => {
         const ms = Math.max(0, ts - m);
         state.latency.push(ms);
         if (state.latency.length > 8) state.latency.shift();
-        const sorted = [...state.latency].sort((a, b) => a - b);
-        Window.setLatency(ms, sorted[sorted.length >> 1]);
+        Window.setLatency(ms);
       });
     }
     checkFreeze();
@@ -78,24 +82,8 @@ export const Typist = (() => {
   }
   function paint() { Window.renderLine(shown, frozenLen, { heat }); }
 
-  // ── commit: the line lands once the board has finished typing it ───────
-  function commit(text) {
-    flushPending();              // a deferred snapshot must never retype a committed line
-    pendingCommit = text;
-    tryFinish();
-    return text;
-  }
-  function tryFinish() {
-    if (pendingCommit === null || Keyboard.queued()) return;
-    const text = pendingCommit; pendingCommit = null;
-    Window.commitLine(shown || text);
-    shown = ""; frozenLen = 0; target = { frozen: "", molten: "" };
-    Window.instr("");
-    paint();
-    bus.emit("type:commit", { text });
-  }
+  // resolves when the queue has drained (or the deadline passes)
   function settled(maxMs = 4000) {
-    // resolves when the queue has drained (or the deadline passes)
     if (!Keyboard.queued()) return Promise.resolve();
     return new Promise((res) => {
       const t = setTimeout(() => { settlers = settlers.filter((s) => s !== fin); res(); }, maxMs);
@@ -104,22 +92,23 @@ export const Typist = (() => {
     });
   }
   bus.on("queue:empty", () => {
-    tryFinish();
     const s = settlers; settlers = [];
     for (const f of s) f();
   });
 
-  function retract() {
-    Window.retract();
-    Keyboard.burst("Backspace", 24);
-  }
-  function reset() {
+  // the caret moved (a navigation command, a new app): the text typed so
+  // far stays on screen, but it is not ours any more
+  function release() {
     if (snapT) { clearTimeout(snapT); snapT = 0; }
     pendingSnap = null;
-    Keyboard.clearQueue();
-    shown = ""; frozenLen = 0; target = { frozen: "", molten: "" }; pendingCommit = null;
+    shown = ""; frozenLen = 0; target = { frozen: "", molten: "" };
     Window.instr("");
+  }
+  // a new dictation begins: nothing typed yet, nothing queued
+  function reset() {
+    Keyboard.clearQueue();
+    release();
     paint();
   }
-  return { setTarget, commit, retract, reset, settled, shown: () => shown };
+  return { setTarget, release, reset, settled, shown: () => shown, flushPending };
 })();

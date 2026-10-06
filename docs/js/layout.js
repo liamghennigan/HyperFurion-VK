@@ -1,45 +1,75 @@
-// ═══ LAYOUT — a 60% ANSI board, and how text becomes key presses ══════════
-// 61 keys, every row 15 units wide. Legends are words, not glyphs (the
-// self-hosted mono font is subsetted). c = KeyboardEvent.code, l = legend
-// (and the unshifted character when it is one), s = shifted character,
-// w = width in units, r = role (mod | edit | consent), sub = small legend.
+// ═══ LAYOUT — a 75% board, and how text becomes key presses ══════════════
+// 82 keys in six rows, every row 16 units wide: the 60% core, an F-row,
+// a right-hand column (del · home · end · pgup · pgdn) and an arrow
+// cluster — the keys hands-free navigation presses. Legends are words,
+// not glyphs (the self-hosted mono font is subsetted). c = KeyboardEvent
+// .code, l = legend (and the unshifted character when it is one),
+// s = shifted character, w = width in units, r = role (mod | edit |
+// consent), sub = small legend, gap = empty units between key groups.
 const K = (c, l, s, extra = {}) => ({ c, l, s, ...extra });
 const letter = (ch) => K("Key" + ch.toUpperCase(), ch, ch.toUpperCase());
+const mod = (c, l, w = 1, extra = {}) => K(c, l, null, { w, r: "mod", ...extra });
+const fkeys = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => mod("F" + (from + i), "f" + (from + i), 1, { opt: 1 }));
+const GAP = { gap: 0.5 };
 
-export const LAYOUT_60 = [
+export const LAYOUT_75 = [
+  [mod("Escape", "esc", 1, { opt: 1 }), GAP, ...fkeys(1, 4), GAP, ...fkeys(5, 8), GAP, ...fkeys(9, 12), GAP,
+   K("Delete", "del", null, { r: "edit" })],
   [K("Backquote", "`", "~"), K("Digit1", "1", "!"), K("Digit2", "2", "@"), K("Digit3", "3", "#"),
    K("Digit4", "4", "$"), K("Digit5", "5", "%"), K("Digit6", "6", "^"), K("Digit7", "7", "&"),
    K("Digit8", "8", "*"), K("Digit9", "9", "("), K("Digit0", "0", ")"), K("Minus", "-", "_"),
-   K("Equal", "=", "+"), K("Backspace", "back", null, { w: 2, r: "edit" })],
-  [K("Tab", "tab", null, { w: 1.5, r: "mod" }), ..."qwertyuiop".split("").map(letter),
-   K("BracketLeft", "[", "{"), K("BracketRight", "]", "}"), K("Backslash", "\\", "|", { w: 1.5 })],
-  [K("CapsLock", "caps", null, { w: 1.75, r: "mod" }), ..."asdfghjkl".split("").map(letter),
+   K("Equal", "=", "+"), K("Backspace", "back", null, { w: 2, r: "edit" }), mod("Home", "home")],
+  [mod("Tab", "tab", 1.5), ..."qwertyuiop".split("").map(letter),
+   K("BracketLeft", "[", "{"), K("BracketRight", "]", "}"), K("Backslash", "\\", "|", { w: 1.5 }), mod("End", "end")],
+  [mod("CapsLock", "caps", 1.75), ..."asdfghjkl".split("").map(letter),
    K("Semicolon", ";", ":"), K("Quote", "'", '"'),
-   K("Enter", "enter", null, { w: 2.25, r: "consent", sub: "yours" })],
-  [K("ShiftLeft", "shift", null, { w: 2.25, r: "mod" }), ..."zxcvbnm".split("").map(letter),
+   K("Enter", "enter", null, { w: 2.25, r: "consent", sub: "yours" }), mod("PageUp", "pgup")],
+  [mod("ShiftLeft", "shift", 2.25), ..."zxcvbnm".split("").map(letter),
    K("Comma", ",", "<"), K("Period", ".", ">"), K("Slash", "/", "?"),
-   K("ShiftRight", "shift", null, { w: 2.75, r: "mod" })],
-  [K("ControlLeft", "ctrl", null, { w: 1.25, r: "mod" }), K("MetaLeft", "super", null, { w: 1.25, r: "mod", opt: 1 }),
-   K("AltLeft", "alt", null, { w: 1.25, r: "mod" }), K("Space", "", " ", { w: 6.25 }),
-   K("AltRight", "alt", null, { w: 1.25, r: "mod", opt: 1 }), K("Fn", "fn", null, { w: 1.25, r: "mod", opt: 1 }),
-   K("ContextMenu", "menu", null, { w: 1.25, r: "mod", opt: 1 }),
-   K("ControlRight", "ctrl", null, { w: 1.25, r: "mod", sub: "kai" })],
+   mod("ShiftRight", "shift", 1.75), mod("ArrowUp", "up"), mod("PageDown", "pgdn")],
+  [mod("ControlLeft", "ctrl", 1.25), mod("MetaLeft", "super", 1.25, { opt: 1 }),
+   mod("AltLeft", "alt", 1.25), K("Space", "", " ", { w: 6.25 }),
+   mod("AltRight", "alt", 1, { opt: 1 }), mod("Fn", "fn", 1, { opt: 1 }),
+   mod("ControlRight", "ctrl", 1, { sub: "kai" }),
+   mod("ArrowLeft", "left"), mod("ArrowDown", "down"), mod("ArrowRight", "right")],
 ];
+export const LAYOUT_60 = LAYOUT_75;  // the name older modules import
+export const UNITS_WIDE = 16;
 
 // char -> { code, shift }
 export const CHAR_MAP = (() => {
   const m = new Map();
-  for (const row of LAYOUT_60) for (const k of row) {
+  for (const row of LAYOUT_75) for (const k of row) {
+    if (k.gap) continue;
     if (k.l.length === 1) m.set(k.l, { code: k.c, shift: false });
     if (k.s && k.s.length === 1) m.set(k.s, { code: k.c, shift: k.c !== "Space" });
   }
   m.set(" ", { code: "Space", shift: false });
+  m.set("\t", { code: "Tab", shift: false });
   return m;
 })();
 export const codeFor = (ch) => { const m = CHAR_MAP.get(ch); return m ? m.code : null; };
 
+// the daemon's key names (nav.py / injector KEY_NAMES) -> KeyboardEvent.code
+export const KEY_CODES = {
+  ctrl: "ControlLeft", control: "ControlLeft", shift: "ShiftLeft", alt: "AltLeft", option: "AltLeft",
+  super: "MetaLeft", meta: "MetaLeft", win: "MetaLeft", cmd: "MetaLeft", command: "MetaLeft",
+  tab: "Tab", esc: "Escape", escape: "Escape", space: "Space", backspace: "Backspace",
+  delete: "Delete", del: "Delete", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft",
+  right: "ArrowRight", home: "Home", end: "End", pageup: "PageUp", pagedown: "PageDown",
+  enter: "Enter", return: "Enter",
+};
+export function codeForKeyName(name) {
+  const n = String(name).toLowerCase();
+  if (KEY_CODES[n]) return KEY_CODES[n];
+  if (/^f([1-9]|1[0-2])$/.test(n)) return n.toUpperCase();
+  if (n.length === 1) return codeFor(n);
+  return null;
+}
+export const MODIFIER_NAMES = new Set(["ctrl", "control", "shift", "alt", "option", "super", "meta", "win", "cmd", "command"]);
+
 // ops: [{kind:"bs"} | {kind:"ch", ch}] -> presses the board can drain.
-// A press: { code, kind: ch|bs|hold|release, ch, heat, ghost }
+// A press: { code, kind: ch|bs|hold|release|key, ch, heat, ghost }
 //   hold/release wrap a Shift chord (consecutive capitals share one hold);
 //   "\n" never presses Enter (ghost:"newline" — the window inserts the break);
 //   anything the board has no key for is what the daemon pastes on Linux
@@ -68,5 +98,19 @@ export function toPresses(ops, { heat = "molten" } = {}) {
     out.push({ code: m.code, kind: "ch", ch, heat });
   }
   setShift(false);
+  return out;
+}
+
+// a navigation chord -> presses: hold the modifiers, tap the key, let go.
+// Enter is refused here as well as on the board: a chord naming it taps
+// nothing (the board only rings the key).
+export function chordToPresses(names, { heat = "nav", onDown = null } = {}) {
+  const mods = names.filter((n) => MODIFIER_NAMES.has(String(n).toLowerCase()));
+  const key = names.find((n) => !MODIFIER_NAMES.has(String(n).toLowerCase()));
+  const out = [];
+  for (const m of mods) out.push({ code: codeForKeyName(m), kind: "hold" });
+  const code = key ? codeForKeyName(key) : null;
+  out.push({ code: code === "Enter" ? null : code, kind: "key", key, heat, onDown, ghost: code === "Enter" ? "enter" : null });
+  for (const m of [...mods].reverse()) out.push({ code: codeForKeyName(m), kind: "release" });
   return out;
 }

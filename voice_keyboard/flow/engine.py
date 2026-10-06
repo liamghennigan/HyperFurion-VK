@@ -41,12 +41,13 @@ from typing import Optional
 from voice_keyboard.flow import pauses
 from voice_keyboard.flow.grammar import Grammar, Item
 from voice_keyboard.flow.nav import FRESH_FIELD, GLUED
+from voice_keyboard.flow.code import flush_code
 from voice_keyboard.flow.registers import (
     Register,
     RenderState,
-    initial_state,
     render_items,
 )
+from voice_keyboard.flow.registers import initial_state as _fresh_state
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,31 @@ class FinalResult:
     action: Optional["NavAction"] = None
     # Text typed in earlier segments, before navigation moved the caret.
     typed_before: str = ""
+    # "scratch that" said with nothing in this recording to take back: it
+    # reaches for the previous dictation (the daemon decides if it can).
+    reach_back: int = 0
+
+
+_PRONOUN_I = re.compile(r"i(?:['’](?:m|ll|d|ve))?", re.IGNORECASE)
+
+
+def _phrase_pattern(phrase: str) -> "re.Pattern[str]":
+    """The spoken words of `phrase` as typed text: case-insensitive, whole
+    words, any punctuation or spacing between them."""
+    words = [re.escape(word) for word in phrase.split()]
+    # never inside a word ("don’t"), never across a line break or list marker
+    return re.compile(
+        r"(?<![\w'’])" + r"(?:[^\w\n]|_)+".join(words) + r"(?![\w'’])", re.IGNORECASE
+    )
+
+
+def recase(text: str, mode: str) -> str:
+    """"title": each word's first character a capital; "upper"; "lower"."""
+    if mode == "upper":
+        return text.upper()
+    if mode == "lower":
+        return text.lower()
+    return re.sub(r"(^|\s)(\S)", lambda m: m.group(1) + m.group(2).upper(), text)
 
 
 @dataclass(frozen=True)
@@ -127,11 +153,11 @@ class PauseQuery:
 
 # The last word of the committed render, its trailing punctuation, and
 # trailing whitespace: "... hello wrold." -> ("wrold", ".", "").
-_LAST_WORD = re.compile(r"(\S+?)([.,!?;:)\]}\"'»”’]*)(\s*)\Z")
+_LAST_WORD = re.compile(r"(\S+?)([\u202f.,!?;:)\]}\"'»”’“]*)(\s*)\Z")
 
 # Actions that rewrite committed text: they wait for a final transcript,
 # never a stability guess, so a misheard partial can't fire them.
-_FINAL_ONLY = ("respell", "key")
+_FINAL_ONLY = ("respell", "key", "recase", "correct")
 
 
 def risky_backspace(text: str) -> bool:
@@ -139,7 +165,7 @@ def risky_backspace(text: str) -> bool:
     focused app groups grapheme clusters (astral plane, combining marks,
     ZWJ sequences)."""
     return any(
-        ord(ch) > 0xFFFF or unicodedata.combining(ch) or ch in "‍️︎"
+        ord(ch) > 0xFFFF or unicodedata.category(ch).startswith("M") or ch in "‍️︎"
         for ch in text
     )
 
@@ -150,6 +176,8 @@ class FlowEngine:
         config: FlowConfig,
         grammar: Grammar,
         register: Register,
+        *,
+        initial_state: Optional[RenderState] = None,
     ):
         self._cfg = config
         self._grammar = grammar
@@ -164,7 +192,9 @@ class FlowEngine:
         self._committed_tokens = 0
         self._committed_items = 0
         self._committed_render = ""
-        self._render_state: RenderState = initial_state(register)
+        # A recording that continues text already at the caret starts with
+        # that text's spacing and capitalization carried in.
+        self._render_state: RenderState = initial_state or _fresh_state(register)
         self._final_tokens = 0
         self._snapshots: list[_Snapshot] = [
             _Snapshot(render_len=0, render_state=self._render_state)
@@ -176,11 +206,15 @@ class FlowEngine:
         self._lower_seen: set[str] = set()
         self._instruction = ""
         self._scratches = 0
+        self._reach_back = 0
         self._corrections: list[tuple[str, str]] = []
         # Token counts at each final: segment boundaries for navigation.
         self._segment_bounds: set[int] = {0}
         self._barrier: Optional[NavAction] = None
         self._last_action: Optional[NavAction] = None  # last command pressed
+        # The fold state before the utterance "select that" covers: the
+        # words that replace it continue from there.
+        self._select_state: Optional[RenderState] = None
         self._typed_before = ""
         self._finalizing = False
         self._rev_depth = 0.0  # adaptive: observed ASR revision depth, decaying
@@ -240,7 +274,11 @@ class FlowEngine:
     def on_tick(self, now: float) -> None:
         """Time-based commits between transcript updates, plus holdback
         expiry so a trailing half-phrase can't stall dictation forever."""
-        if self._pending_from is not None and not self._pending_is_instruction():
+        if (
+            self._pending_from is not None
+            and not self._pending_is_instruction()
+            and not self._pending_is_quote()
+        ):
             oldest = self._meta[self._pending_from].first_seen
             if now - oldest >= 2 * self._cfg.stability_ms / 1000.0:
                 self._flush_pending = True
@@ -267,10 +305,13 @@ class FlowEngine:
         barrier (the daemon resumes with complete_action)."""
         while self._barrier is None and self._committed_items < len(self._items):
             self._commit_item(self._items[self._committed_items])
+        if self._barrier is None:
+            self._settle_hold()
         return FinalResult(
             text=self._committed_render,
             instruction=self._instruction if self._barrier is None else "",
             scratches=self._scratches,
+            reach_back=self._reach_back,
             corrections=tuple(self._corrections),
             action=self._barrier,
             typed_before=self._typed_before,
@@ -301,7 +342,11 @@ class FlowEngine:
         state = self._render_state
         if action.action in FRESH_FIELD:
             # Tab / Escape / a page away: likely a different field.
-            state = initial_state(self._register)
+            state = _fresh_state(self._register)
+        elif action.action == "select:that" and self._select_state is not None:
+            # The selection is the whole utterance, its leading space or
+            # line break included: what replaces it picks up from before.
+            state = self._select_state
         elif action.action.startswith(GLUED) or action.action.endswith(":start"):
             # The next word fills a selection or a gap, or starts a line:
             # no leading space.
@@ -404,6 +449,19 @@ class FlowEngine:
                 preview.append(Item(kind="word", text=item.text, span=item.span))
         return preview
 
+    def _pending_is_quote(self) -> bool:
+        """A "quote" waiting for its "unquote": it waits for the utterance to
+        close, never for the holdback expiry — committed as a word, it could
+        not become an opening quotation mark when the closer came."""
+        if self._pending_from is None:
+            return False
+        # anywhere in the held tail: a number run before it holds from its
+        # own start ("one quote ...")
+        waits = {"quote", *self._grammar.waits_for_final}
+        return any(
+            token.casefold().strip(".,!?;:") in waits for token in self._tokens[self._pending_from:]
+        )
+
     def _pending_is_instruction(self) -> bool:
         if self._pending_from is None or self._pending_from >= len(self._tokens):
             return False
@@ -449,6 +507,17 @@ class FlowEngine:
             return pauses.PauseDecision(".", False, ""), True  # nothing followed
         right = self._tokens[index]
         item = self._item_at(index)
+        if item is not None and item.kind == "filler":
+            # "project. Um, and how": the word after the hesitation decides.
+            nxt = index + 1
+            while nxt < len(self._tokens):
+                following = self._item_at(nxt)
+                if following is None or following.kind != "filler":
+                    break
+                nxt += 1
+            if nxt >= len(self._tokens) or self._item_at(nxt) is None:
+                return pauses.keep(right), False
+            right, item = self._tokens[nxt], self._item_at(nxt)
         if item is not None and item.span[0] < index:
             # One phrase spans the pause ("hyper. Furion" = "HyperFurion").
             return pauses.PauseDecision("", False, pauses.core(right)), True
@@ -508,6 +577,8 @@ class FlowEngine:
             flush=self._flush_pending,
             frozen=self._committed_tokens,
             settled=self._final_tokens,
+            bounds=tuple(sorted(self._segment_bounds)),
+            commits=tuple(item.span[1] for item in self._items[:self._committed_items]),
         )
         if result.items[:self._committed_items] != self._items[:self._committed_items]:
             # Deterministic parsing plus the frozen fence should make this
@@ -515,6 +586,12 @@ class FlowEngine:
             logger.warning("flow: committed items changed under reparse")
         self._items = result.items
         self._pending_from = result.pending_from
+        # "Undo that." / "Cap that." / "Scratch that.": a recognizer's period
+        # on a command is not a sentence pause to review — never hold it.
+        for index in [i for i, pause in self._pauses.items() if pause.decision is None]:
+            item = self._item_at(index - 1)
+            if item is not None and item.kind in ("key", "recase", "scratch"):
+                del self._pauses[index]
 
     def _effective_required_stability(self) -> int:
         if not self._cfg.adaptive:
@@ -571,6 +648,11 @@ class FlowEngine:
 
     def _commit_item(self, item: Item) -> None:
         start, end = item.span
+        if item.kind in ("scratch", "respell", "key", "recase", "correct"):
+            # An edit or a key acts on what is on screen: a word a code
+            # compiler still holds ("x equals not", "git add dot") is typed
+            # first, never after the key or past the edit.
+            self._settle_hold()
         for index, pause in self._pauses.items():
             if pause.decision is None and start < index <= end:
                 # Forced out by the molten-length valve: what shows, stays.
@@ -590,6 +672,10 @@ class FlowEngine:
             self._committed_render += delta
         elif item.kind == "key":
             self._commit_key(item)
+        elif item.kind == "recase":
+            self._commit_recase(item)
+        elif item.kind == "correct":
+            self._commit_correct(item)
         elif item.kind == "instruction":
             if item.text:
                 self._instruction = item.text
@@ -609,6 +695,8 @@ class FlowEngine:
                 target = snapshot
                 break
         if target is None:
+            if not self._committed_render and not self._typed_before:
+                self._reach_back += 1
             return
         removed = self._committed_render[target.render_len:]
         if risky_backspace(removed):
@@ -628,7 +716,8 @@ class FlowEngine:
         mid-sentence it was dictation after all, and types as words."""
         start, end = item.span
         if start in self._segment_bounds and end in self._segment_bounds:
-            self._barrier = NavAction(action=item.text, count=item.count)
+            count = self._last_utterance_length() if item.text == "select:that" else item.count
+            self._barrier = NavAction(action=item.text, count=count)
             return
         words = [
             Item(kind="word", text=token, span=(index, index + 1))
@@ -636,6 +725,100 @@ class FlowEngine:
         ]
         delta, self._render_state = render_items(words, self._render_state, self._register)
         self._committed_render += delta
+
+    def _type_as_words(self, item: Item) -> None:
+        """A command that turned out to be dictation: its tokens as words."""
+        start, end = item.span
+        words = [
+            Item(kind="word", text=token, span=(index, index + 1))
+            for index, token in enumerate(self._tokens[start:end], start)
+        ]
+        delta, self._render_state = render_items(words, self._render_state, self._register)
+        self._committed_render += delta
+
+    def _commit_correct(self, item: Item) -> None:
+        """"correct monday to friday", said as a whole segment: the last
+        "monday" typed in this recording becomes "friday" (its capitals
+        kept), and the pair is a correction the learner can mine. Said
+        mid-sentence, or with nothing to correct, it was dictation."""
+        start, end = item.span
+        whole = start in self._segment_bounds and end in self._segment_bounds
+        matches = list(_phrase_pattern(item.mode).finditer(self._committed_render)) if whole else []
+        if not matches:
+            self._type_as_words(item)
+            return
+        match = matches[-1]
+        heard = match.group(0)
+        if risky_backspace(self._committed_render[match.start():]):
+            logger.info("flow: not correcting across complex Unicode")
+            return
+        # Y as dictation: spoken punctuation, vocabulary, numbers
+        spoken = self._grammar.parse(item.text.split(), flush=True).items
+        meant, _ = render_items(
+            spoken, replace(_fresh_state(self._register), capitalize_next=False), self._register
+        )
+        meant = meant.strip()
+        if not meant:
+            return
+        if len(heard) > 1 and heard.isupper():
+            meant = meant.upper()
+        elif heard[:1].isupper() and not _PRONOUN_I.fullmatch(heard):
+            meant = meant[:1].upper() + meant[1:]
+        at = match.start()
+        self._committed_render = self._committed_render[:at] + meant + self._committed_render[match.end():]
+        shift = len(meant) - len(heard)
+        self._snapshots = [
+            snap if snap.render_len <= at
+            # a boundary inside the replaced words falls back to its start
+            else _Snapshot(render_len=len(self._committed_render[:at].rstrip()), render_state=snap.render_state)
+            if snap.render_len < at + len(heard)
+            else _Snapshot(render_len=snap.render_len + shift, render_state=snap.render_state)
+            for snap in self._snapshots
+        ]
+        if heard != meant:
+            self._corrections.append((heard, meant))
+
+    def _commit_recase(self, item: Item) -> None:
+        """"cap that" / "uppercase that" / "lowercase that", said as a
+        whole segment, recases the last utterance in place; said
+        mid-sentence it was dictation, and types as words."""
+        start, end = item.span
+        if not (start in self._segment_bounds and end in self._segment_bounds):
+            self._type_as_words(item)
+            return
+        target = None
+        for snapshot in reversed(self._snapshots):
+            if snapshot.render_len < len(self._committed_render):
+                target = snapshot
+                break
+        if target is None:
+            logger.info("flow: nothing to recase")
+            return
+        said = self._committed_render[target.render_len:]
+        recased = recase(said, item.mode)
+        if risky_backspace(said) or len(recased) != len(said):
+            # ("straße" -> "STRASSE" would leave the segment snapshots
+            # pointing into the middle of a word.)
+            logger.info("flow: not recasing: complex Unicode or a change of length")
+            return
+        self._committed_render = self._committed_render[:target.render_len] + recased
+
+    def _last_utterance_length(self) -> int:
+        """Characters "select that" must cover: the last segment typed in
+        this recording, without its leading space. 0 (refused) when there
+        is none, or when shift+left can't count it (complex Unicode)."""
+        target = None
+        for snapshot in reversed(self._snapshots):
+            if snapshot.render_len < len(self._committed_render):
+                target = snapshot
+                break
+        if target is None:
+            return 0
+        said = self._committed_render[target.render_len:]
+        if risky_backspace(said):
+            return 0
+        self._select_state = target.render_state
+        return len(said)
 
     def _apply_respell(self, spelled: str) -> None:
         """"spell that ...": swap the last committed word for the spelled
@@ -654,7 +837,8 @@ class FlowEngine:
             logger.info("flow: nothing to respell")
             return
         token = match.group(1)
-        heard = token.lstrip("\"'([{«“‘")  # an opening quote stays put
+        # an opening mark stays put, and so does a call it ends: "print(value"
+        heard = token[max(token.rfind(c) for c in "([{") + 1:].lstrip("\"'([{«“‘„¿¡")
         start = match.start(1) + len(token) - len(heard)
         if not heard:
             return
@@ -686,10 +870,19 @@ class FlowEngine:
             self._segment_marks.append(mark)
         self._take_snapshots()
 
+    def _settle_hold(self) -> None:
+        """Type what a code compiler still holds (a dash, a dot, the first
+        word of a two-word operator) as said."""
+        tail, self._render_state = flush_code(self._render_state, self._register)
+        self._committed_render += tail
+
     def _take_snapshots(self) -> None:
-        """Snapshot each segment end once all of its words are committed."""
+        """Snapshot each segment end once all of its words are committed.
+        A hold never crosses a segment end: "scratch that" and "select
+        that" count what the segment typed."""
         while self._segment_marks and self._segment_marks[0] <= self._committed_tokens:
             self._segment_marks.pop(0)
+            self._settle_hold()
             if (
                 self._snapshots
                 and self._snapshots[-1].render_len == len(self._committed_render)
