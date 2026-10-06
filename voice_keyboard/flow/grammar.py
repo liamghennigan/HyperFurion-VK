@@ -948,7 +948,7 @@ class Grammar:
                 folded = None if verb else fold_unit(words, unit_core)
                 if folded is not None:
                     last, last_at = unit, end
-                    cents = Grammar._cents(items, end + 1) if folded.startswith("$") and "." not in folded else None
+                    cents = Grammar._cents(items, end + 1) if folded[:1] in "$€" and "." not in folded else None
                     if cents is not None and inside(items[cents[1]]):
                         folded += cents[0]  # "five dollars and fifty cents" -> "$5.50"
                         last, last_at = items[cents[1]], cents[1]

@@ -159,7 +159,8 @@ function parseNumberRun(words) {
 // Prose keeps spoken numbers as words, except right before a unit that
 // makes the reading certain: "twenty five percent" -> "25%", "five dollars"
 // -> "$5", "three thirty pm" -> "3:30 PM" (numbers.py fold_unit).
-const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "am", "pm", "a.m", "p.m"]);
+const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m"]);
+const CURRENCY = { dollar: "$", dollars: "$", euro: "€", euros: "€", yen: "¥" };  // not "pounds" (weight)
 const MERIDIEM = { am: "AM", "a.m": "AM", pm: "PM", "p.m": "PM" };
 function clock(words) {
   if (!words.length || !(words[0] in UNITS) || UNITS[words[0]] < 1 || UNITS[words[0]] > 12) return null;
@@ -178,7 +179,10 @@ export function foldUnit(words, unit) {
   else if (words.includes("point") || parseCardinal(words) !== null) amount = parseNumberRun(words);
   else return null;
   if (amount === null) return null;
-  return unit === "percent" ? amount + "%" : "$" + amount;
+  if (unit === "percent") return amount + "%";
+  let [whole, frac] = amount.split(".");
+  if (whole.length > 3) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");  // "$1,500", "¥2,000"
+  return CURRENCY[unit] + whole + (frac !== undefined ? "." + frac : "");
 }
 // "october sixth" -> "October 6": a month, then an ordinal day (numbers.py
 // parse_day); never "may"/"march" (verbs), never a cardinal ("in june
@@ -290,7 +294,7 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       let folded = verb ? null : foldUnit(words, uc);
       if (folded !== null) {
         let last = unit, lastAt = end;
-        const cents = folded.startsWith("$") && !folded.includes(".") ? centsAt(items, end + 1) : null;
+        const cents = "$€".includes(folded[0]) && !folded.includes(".") ? centsAt(items, end + 1) : null;
         if (cents && inside(items[cents[1]])) { folded += cents[0]; last = items[cents[1]]; lastAt = cents[1]; }  // "$5.50"
         if (uc !== "a.m" && uc !== "p.m") folded += (last.text.match(PUNCT_TAIL) || [""])[0];  // "percent." keeps its period
         out.push({ kind: "word", text: folded, s: it.s, e: last.e });

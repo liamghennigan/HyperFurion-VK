@@ -52,7 +52,8 @@ proven to be the daemon's.
 - **Amounts and times in prose.** Prose still keeps spoken numbers as words
   ("no one knows"), but a unit right after one makes the reading certain:
   "twenty five percent" → `25%`, "five dollars" → `$5`, "three thirty pm"
-  → `3:30 PM`, "five dollars and fifty cents" → `$5.50`, and a recognizer's
+  → `3:30 PM`, "five dollars and fifty cents" → `$5.50` (euros and yen too: `€5.50`, `¥2,000`; amounts
+  over a thousand get separators: `$100,000`), and a recognizer's
   "25 percent" → `25%`. Dates too: "october sixth" → `October 6`, "june twenty
   first" → `June 21` (an ordinal day only, so "in june twenty people came"
   stays words; never "may" or "march"). Phone numbers: seven or more digits read one by one

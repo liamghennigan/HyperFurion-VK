@@ -996,6 +996,72 @@
   ]
  },
  {
+  "name": "euros and yen",
+  "register": "prose",
+  "segments": [
+   "five euros and fifty cents or two thousand yen"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "€5.50 or ¥2,000"
+   ],
+   [
+    "final",
+    "€5.50 or ¥2,000",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a yen for travel stays words",
+  "register": "prose",
+  "segments": [
+   "a yen for travel"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "A yen for travel"
+   ],
+   [
+    "final",
+    "A yen for travel",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "big amounts get thousands separators",
+  "register": "prose",
+  "segments": [
+   "one hundred thousand dollars and 1500 dollars"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "$100,000 and $1,500"
+   ],
+   [
+    "final",
+    "$100,000 and $1,500",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "dollars and something else",
   "register": "prose",
   "segments": [

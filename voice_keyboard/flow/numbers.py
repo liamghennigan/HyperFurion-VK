@@ -163,7 +163,11 @@ def convert_numbers(tokens: list[str], *, min_value: int = 0) -> list[str]:
 # Prose keeps spoken numbers as words, except right before a unit that
 # makes the reading certain: "twenty five percent" -> "25%", "five
 # dollars" -> "$5", "three thirty pm" -> "3:30 PM".
-UNIT_WORDS = frozenset({"percent", "dollar", "dollars", "am", "pm", "a.m", "p.m"})
+UNIT_WORDS = frozenset({
+    "percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m",
+})
+# Currencies written before the amount. Not "pounds" (weight) or "francs".
+CURRENCY = {"dollar": "$", "dollars": "$", "euro": "€", "euros": "€", "yen": "¥"}
 _MERIDIEM = {"am": "AM", "a.m": "AM", "pm": "PM", "p.m": "PM"}
 
 
@@ -209,7 +213,12 @@ def fold_unit(words: list[str], unit: str) -> Optional[str]:
         return None
     if amount is None:
         return None
-    return amount + "%" if unit == "percent" else "$" + amount
+    if unit == "percent":
+        return amount + "%"
+    whole, dot, frac = amount.partition(".")
+    if len(whole) > 3:
+        whole = f"{int(whole):,}"  # "$1,500", "¥2,000"
+    return CURRENCY[unit] + whole + dot + frac
 
 
 # "october sixth" -> "October 6": a month, then an ordinal day. Only an
