@@ -690,7 +690,11 @@ Quartz on macOS, Win32 on Windows — and picks a register:
 Known terminals (kitty, alacritty, foot, konsole, GNOME Terminal, wezterm,
 Windows Terminal, iTerm2, …) map to `terminal` automatically; override or
 extend per app in `[registers.map]` (that is also where you opt an editor
-into `python` or `shell`). If focus moves to a different app
+into `python` or `shell`). A line break is never typed where a terminal
+can't be ruled out: in a known terminal (whatever register you map it
+to), and wherever the focused app couldn't be identified — there "new
+line" types a space. If that happens everywhere on Linux, the AT-SPI
+bindings are missing; `voice-keyboard doctor` says so. If focus moves to a different app
 mid-dictation, typing freezes immediately and the transcript lands on the
 clipboard instead — dictation never types into the wrong window. On Linux
 the probe also sees the focused *widget*: a password field always forces
