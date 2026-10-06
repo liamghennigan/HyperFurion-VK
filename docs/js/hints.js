@@ -23,6 +23,8 @@ export const Hints = (() => {
       { text: "ship it on friday", pause: 900 }, { text: "select previous word", pause: 1100 }, { text: "monday period" }] },
     { kind: "delete", say: "delete previous word", play: [
       { text: "rerun the flaky tests", pause: 900 }, { text: "delete previous word", pause: 1100 }, { text: "suite" }] },
+    { kind: "format", say: "twenty five percent by october sixth", play: [
+      { text: "steps colon new number ship twenty five percent by october sixth new number celebrate emoji rocket" }] },
     { kind: "rewrite", say: settings.wakeWord.toUpperCase() + ", make that formal", play: [
       { text: "i think it works now", pause: 900 }, { text: settings.wakeWord + " make that formal" }] },
     { kind: "intent", say: settings.wakeWord.toUpperCase() + ", run find every todo", register: "shell", play: [
