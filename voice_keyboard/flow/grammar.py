@@ -1143,3 +1143,35 @@ class Grammar:
         # A run entirely behind the fence was decided when it was committed.
         close_run(at_tail=bool(run) and run[0].span[0] >= frozen)
         return result, pending_from
+
+
+def grammar_from_config(
+    config: dict,
+    register,
+    *,
+    vocabulary: Optional[dict] = None,
+    nav: Optional[bool] = None,
+) -> "Grammar":
+    """The Grammar the daemon dictates with, from the full config: one
+    builder for the daemon, `voice-keyboard try` and `commands`, so they
+    cannot drift apart. `vocabulary` replaces [flow.vocabulary] (the daemon
+    merges in the personal dictionary); `nav` overrides [nav] enabled (the
+    daemon also asks whether the injector can press chords)."""
+    flow = config.get("flow", {})
+    return Grammar(
+        enabled=bool(flow.get("grammar", True)) and register.grammar_enabled,
+        commands=flow.get("commands") or {},
+        punctuation=flow.get("punctuation") or {},
+        vocabulary=dict(flow.get("vocabulary") or {}) if vocabulary is None else vocabulary,
+        wake_word=str(flow.get("wake_word", "vk")),
+        numbers=str(flow.get("numbers", "auto")).lower(),
+        numbers_on=register.numbers_on,
+        numbers_min=register.numbers_min,
+        spelling=bool(flow.get("spelling", True)),
+        fillers=flow.get("fillers", DEFAULT_FILLERS),
+        addresses=bool(flow.get("addresses", True)),
+        formatters=str(flow.get("formatters", "code")).lower(),
+        code=bool(register.compiler) or register.terminal,
+        nav=bool(config.get("nav", {}).get("enabled", False)) if nav is None else nav,
+        language=str(flow.get("language", "en")).lower(),
+    )

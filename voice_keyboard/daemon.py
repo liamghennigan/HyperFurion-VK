@@ -19,7 +19,7 @@ from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
 from voice_keyboard.flow import corrections
-from voice_keyboard.flow.grammar import DEFAULT_FILLERS
+from voice_keyboard.flow.grammar import grammar_from_config
 from voice_keyboard.focusprobe import MAX_SELECTION_CHARS
 from voice_keyboard.flow.registers import (
     RenderState,
@@ -978,22 +978,8 @@ class Daemon:
                     vocabulary.setdefault(spoken, replacement)
             except Exception:
                 logger.exception("Could not load the personal dictionary")
-        return Grammar(
-            enabled=bool(flow_cfg.get("grammar", True)) and register.grammar_enabled,
-            commands=flow_cfg.get("commands") or {},
-            punctuation=flow_cfg.get("punctuation") or {},
-            vocabulary=vocabulary,
-            wake_word=str(flow_cfg.get("wake_word", "vk")),
-            numbers=str(flow_cfg.get("numbers", "auto")).lower(),
-            numbers_on=register.numbers_on,
-            numbers_min=register.numbers_min,
-            spelling=bool(flow_cfg.get("spelling", True)),
-            fillers=flow_cfg.get("fillers", DEFAULT_FILLERS),
-            addresses=bool(flow_cfg.get("addresses", True)),
-            formatters=str(flow_cfg.get("formatters", "code")).lower(),
-            code=bool(register.compiler) or register.terminal,
-            nav=self._nav_enabled(),
-            language=str(flow_cfg.get("language", "en")).lower(),
+        return grammar_from_config(
+            self._config, register, vocabulary=vocabulary, nav=self._nav_enabled()
         )
 
     def _nav_enabled(self) -> bool:

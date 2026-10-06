@@ -10,29 +10,8 @@ for testing a command, a snippet name, or a config change.
 """
 
 from voice_keyboard.flow.engine import FlowConfig, FlowEngine
-from voice_keyboard.flow.grammar import DEFAULT_FILLERS, Grammar
+from voice_keyboard.flow.grammar import grammar_from_config
 from voice_keyboard.flow.registers import REGISTERS
-
-
-def grammar_for(config: dict, register) -> Grammar:
-    flow = config.get("flow", {})
-    return Grammar(
-        enabled=bool(flow.get("grammar", True)) and register.grammar_enabled,
-        commands=flow.get("commands") or {},
-        punctuation=flow.get("punctuation") or {},
-        vocabulary=flow.get("vocabulary") or {},
-        wake_word=str(flow.get("wake_word", "vk")),
-        numbers=str(flow.get("numbers", "auto")).lower(),
-        numbers_on=register.numbers_on,
-        numbers_min=register.numbers_min,
-        spelling=bool(flow.get("spelling", True)),
-        fillers=flow.get("fillers", DEFAULT_FILLERS),
-        addresses=bool(flow.get("addresses", True)),
-        formatters=str(flow.get("formatters", "code")).lower(),
-        code=bool(register.compiler) or register.terminal,
-        nav=bool(config.get("nav", {}).get("enabled", False)),
-        language=str(flow.get("language", "en")).lower(),
-    )
 
 
 def run(config: dict, words: list[str]) -> str:
@@ -45,7 +24,7 @@ def run(config: dict, words: list[str]) -> str:
     utterances = [u.strip() for u in " ".join(words).split("|") if u.strip()]
     if not utterances:
         raise ValueError("say something: voice-keyboard try [register:] <words…> [| <words…>]")
-    engine = FlowEngine(FlowConfig(), grammar_for(config, register), register)
+    engine = FlowEngine(FlowConfig(), grammar_from_config(config, register), register)
     notes = []
     said, now = "", 0.0
     for utterance in utterances:

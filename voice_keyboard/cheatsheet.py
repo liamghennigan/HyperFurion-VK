@@ -8,7 +8,8 @@ from what the engine does.
 
 from typing import Optional
 
-from voice_keyboard.flow.grammar import FORMATTERS, Grammar
+from voice_keyboard.flow.grammar import FORMATTERS, grammar_from_config
+from voice_keyboard.flow.registers import REGISTERS
 
 _COMMAND_NOTES = {
     "scratch_that": "take back the last utterance",
@@ -47,15 +48,8 @@ _FOLDS = [
 ]
 
 
-def _grammar(config: dict) -> Grammar:
-    flow = config.get("flow", {})
-    return Grammar(
-        commands=flow.get("commands") or {},
-        punctuation=flow.get("punctuation") or {},
-        vocabulary=flow.get("vocabulary") or {},
-        wake_word=str(flow.get("wake_word", "vk")),
-        language=str(flow.get("language", "en")).lower(),
-    )
+def _grammar(config: dict):
+    return grammar_from_config(config, REGISTERS["prose"])
 
 
 def render(config: dict, query: Optional[str] = None) -> str:
