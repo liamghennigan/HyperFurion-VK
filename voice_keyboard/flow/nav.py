@@ -3,6 +3,7 @@
     go left three words        select previous word       delete next word
     go to end of line          select all / select line   delete line
     move up two lines          press tab / press escape twice
+    undo that / redo that      paste that (editors only)
 
 `parse_nav` reads one command at a token index (pure, deterministic — the
 grammar's prefix property holds). `chords_for` turns a command into the
@@ -33,7 +34,11 @@ PENDING = "pending"
 
 _STRIP = ".,!?;:"
 
-VERBS = {"go": "move", "move": "move", "select": "select", "delete": "delete", "press": "press"}
+VERBS = {
+    "go": "move", "move": "move", "select": "select", "delete": "delete", "press": "press",
+    "undo": "edit", "redo": "edit", "paste": "edit",
+}
+_THAT = {"that", "it", "this"}
 
 # spoken direction -> (direction, needs an explicit unit)
 _DIRECTIONS = {
@@ -121,6 +126,10 @@ def parse_nav(cores: list[str], index: int, *, decided: bool):
     try:
         if verb == "press":
             return _parse_press(cores, index + 1, at, optional, decided)
+        if verb == "edit":
+            # "undo", "undo that", "undo that twice", "paste it"
+            cursor = index + 1 + (optional(index + 1) in _THAT)
+            return _repeat(f"edit:{cores[index]}", cursor, optional, decided, len(cores))
         return _parse_motion(verb, index + 1, at, optional, decided, len(cores))
     except _NeedMore:
         return None if decided else PENDING
@@ -151,17 +160,21 @@ def _parse_press(cores, cursor, at, optional, decided):
         cursor += 1
     else:
         return None
-    action = f"press:{key}"
+    return _repeat(f"press:{key}", cursor, optional, decided, len(cores))
+
+
+def _repeat(action, cursor, optional, decided, total):
+    """The command's optional repeat: "twice", "three", "three times"."""
     word = optional(cursor)
     if word in _REPEAT_WORDS:
         return action, _REPEAT_WORDS[word], cursor + 1
     count = _count_of(word) if word is not None else None
     if count is None:
-        return _finish(action, 1, cursor, len(cores), decided, more=True)
+        return _finish(action, 1, cursor, total, decided, more=True)
     cursor += 1
     if optional(cursor) in _TIMES:
         return action, count, cursor + 1
-    return _finish(action, count, cursor, len(cores), decided, more=True)
+    return _finish(action, count, cursor, total, decided, more=True)
 
 
 def _parse_motion(verb, cursor, at, optional, decided, total):
@@ -252,6 +265,10 @@ EDITOR: dict[str, Optional[list[list[str]]]] = {
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
     "delete:line:here": [["home"], ["shift", "end"], ["backspace"]],
+    # Editors only: a terminal has no undo to speak of, and a paste can
+    # carry a line break — which runs the line.
+    "edit:undo": [["ctrl", "z"]], "edit:redo": [["ctrl", "shift", "z"]],
+    "edit:paste": [["ctrl", "v"]],
 }
 
 _NO_SELECTION = {key: None for key in EDITOR if key.startswith("select:")}
@@ -298,6 +315,7 @@ MAC_EDITOR: dict[str, Optional[list[list[str]]]] = {
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["alt", "backspace"]], "delete:word:right": [["alt", "delete"]],
     "delete:line:here": [["cmd", "left"], ["shift", "cmd", "right"], ["backspace"]],
+    "edit:undo": [["cmd", "z"]], "edit:redo": [["shift", "cmd", "z"]], "edit:paste": [["cmd", "v"]],
 }
 
 # Terminal.app, iTerm2, Ghostty, Warp: readline as on Linux, except that
@@ -354,6 +372,8 @@ def keymap(*, terminal: bool, platform: str = sys.platform, overrides: Optional[
         )
     else:
         table = dict(MAC_EDITOR if platform == "darwin" else EDITOR)
+        if platform == "win32":
+            table["edit:redo"] = [["ctrl", "y"]]  # Word, Notepad, Office: ctrl+shift+z does nothing
     for action, value in (overrides or {}).items():
         try:
             table[str(action)] = parse_override(value)

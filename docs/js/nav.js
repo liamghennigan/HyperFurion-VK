@@ -18,7 +18,9 @@ export const PENDING = "pending";
 
 // plain-object tables are read with own(): a spoken "constructor" is a word
 const own = (table, key) => (Object.hasOwn(table, key) ? table[key] : undefined);
-export const VERBS = { go: "move", move: "move", select: "select", delete: "delete", press: "press" };
+export const VERBS = { go: "move", move: "move", select: "select", delete: "delete", press: "press",
+  undo: "edit", redo: "edit", paste: "edit" };
+const THAT = new Set(["that", "it", "this"]);
 
 const UNITS = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
   nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
@@ -80,6 +82,10 @@ export function parseNav(cores, index, { decided }) {
   const opt = (p) => (p < cores.length ? cores[p] : null);
   try {
     if (verb === "press") return parsePress(cores, index + 1, at, opt, decided);
+    if (verb === "edit") {  // "undo", "undo that", "undo that twice", "paste it"
+      const cursor = index + 1 + (THAT.has(opt(index + 1)) ? 1 : 0);
+      return repeat("edit:" + cores[index], cursor, opt, decided, cores.length);
+    }
     return parseMotion(verb, index + 1, at, opt, decided, cores.length);
   } catch (e) {
     if (e instanceof NeedMore) return decided ? null : PENDING;
@@ -103,14 +109,17 @@ function parsePress(cores, cursor, at, opt, decided) {
   else if (second === null && !decided && hasTwoWordKey(first)) throw new NeedMore();  // "page" may become "page up"
   else if (PRESS_KEYS.has(first)) { key = PRESS_KEYS.get(first); cursor += 1; }
   else return null;
-  const action = "press:" + key;
+  return repeat("press:" + key, cursor, opt, decided, cores.length);
+}
+// the command's optional repeat: "twice", "three", "three times"
+function repeat(action, cursor, opt, decided, total) {
   const word = opt(cursor);
   if (word !== null && own(REPEAT_WORDS, word) !== undefined) return [action, REPEAT_WORDS[word], cursor + 1];
   const count = word !== null ? countOf(word) : null;
-  if (count === null) return finish(action, 1, cursor, cores.length, decided, true);
+  if (count === null) return finish(action, 1, cursor, total, decided, true);
   cursor += 1;
   if (TIMES.has(opt(cursor))) return [action, count, cursor + 1];
-  return finish(action, count, cursor, cores.length, decided, true);
+  return finish(action, count, cursor, total, decided, true);
 }
 
 function parseMotion(verb, cursor, at, opt, decided, total) {
@@ -176,6 +185,8 @@ export const EDITOR = {
   "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
   "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
   "delete:line:here": [["home"], ["shift", "end"], ["backspace"]],
+  // editors only: a terminal has no undo to speak of, and a paste can carry a line break
+  "edit:undo": [["ctrl", "z"]], "edit:redo": [["ctrl", "shift", "z"]], "edit:paste": [["ctrl", "v"]],
 };
 const NO_SELECTION = Object.fromEntries(Object.keys(EDITOR).filter((k) => k.startsWith("select:")).map((k) => [k, null]));
 // readline / zsh emacs keys: bash, zsh, python, psql, …
@@ -219,6 +230,7 @@ export const MAC_EDITOR = {
   "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
   "delete:word:left": [["alt", "backspace"]], "delete:word:right": [["alt", "delete"]],
   "delete:line:here": [["cmd", "left"], ["shift", "cmd", "right"], ["backspace"]],
+  "edit:undo": [["cmd", "z"]], "edit:redo": [["shift", "cmd", "z"]], "edit:paste": [["cmd", "v"]],
 };
 // Terminal.app, iTerm2, Ghostty: readline as on Linux, the Meta chords as
 // an Escape prefix (readline reads "Esc b" as Meta-b whatever Option does)
@@ -244,7 +256,9 @@ function forbidden(chord) {
 // "windows", or "mac" — the page picks the visitor's
 export function keymap({ terminal, platform = "linux" }) {
   if (terminal) return { ...(platform === "windows" ? WINDOWS_TERMINAL : platform === "mac" ? MAC_TERMINAL : LINUX_TERMINAL) };
-  return { ...(platform === "mac" ? MAC_EDITOR : EDITOR) };
+  const table = { ...(platform === "mac" ? MAC_EDITOR : EDITOR) };
+  if (platform === "windows") table["edit:redo"] = [["ctrl", "y"]];  // Word, Notepad: ctrl+shift+z does nothing
+  return table;
 }
 
 // The full chord sequence for a command (repeated `count` times), or null

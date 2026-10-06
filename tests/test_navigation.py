@@ -80,10 +80,12 @@ class TestParse:
 
 
 class TestKeymaps:
-    def test_editor_is_the_same_on_linux_and_windows(self) -> None:
-        assert nav.keymap(terminal=False, platform="linux") == nav.keymap(
-            terminal=False, platform="win32"
-        )
+    def test_editor_is_the_same_on_linux_and_windows_but_redo(self) -> None:
+        linux = nav.keymap(terminal=False, platform="linux")
+        windows = nav.keymap(terminal=False, platform="win32")
+        assert windows.pop("edit:redo") == [["ctrl", "y"]]
+        linux.pop("edit:redo")
+        assert linux == windows
 
     @pytest.mark.parametrize(
         "platform, action, expected",
@@ -488,3 +490,18 @@ class TestDaemonRegressions:
         injector = RecordingInjector()
         self._run(events, injector, held=lambda: True)
         assert injector.combos == []
+
+
+def test_undo_redo_paste_are_editor_commands():
+    from voice_keyboard.flow.nav import chords_for, keymap, parse_nav
+
+    assert parse_nav(["undo", "that"], 0, decided=True) == ("edit:undo", 1, 2)
+    assert parse_nav(["redo", "it", "twice"], 0, decided=True) == ("edit:redo", 2, 3)
+    assert parse_nav(["paste"], 0, decided=True) == ("edit:paste", 1, 1)
+    assert chords_for("edit:undo", 1, keymap(terminal=False, platform="linux")) == [["ctrl", "z"]]
+    assert chords_for("edit:redo", 1, keymap(terminal=False, platform="win32")) == [["ctrl", "y"]]
+    assert chords_for("edit:paste", 1, keymap(terminal=False, platform="darwin")) == [["cmd", "v"]]
+    # A terminal has no undo, and a paste can carry a line break: refused.
+    for platform in ("linux", "win32", "darwin"):
+        for action in ("edit:undo", "edit:redo", "edit:paste"):
+            assert chords_for(action, 1, keymap(terminal=True, platform=platform)) is None

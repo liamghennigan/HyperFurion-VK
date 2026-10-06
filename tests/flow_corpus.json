@@ -2320,6 +2320,105 @@
   ]
  },
  {
+  "name": "undo that is a command alone",
+  "register": "prose",
+  "segments": [
+   "fix it",
+   "undo that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Fix it"
+   ],
+   [
+    "action",
+    "edit:undo",
+    1,
+    "Fix it"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "Fix it",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "paste it then more words",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "paste it",
+   "done"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "action",
+    "edit:paste",
+    1,
+    "One two"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " done"
+   ],
+   [
+    "final",
+    " done",
+    "One two",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "undo and paste inside a sentence stay words",
+  "register": "prose",
+  "segments": [
+   "undo the merge and paste the link"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Undo the merge and paste the link"
+   ],
+   [
+    "final",
+    "Undo the merge and paste the link",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "several commands",
   "register": "prose",
   "segments": [

@@ -9,6 +9,10 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **"Undo that", "redo that", "paste that".** Caret commands, said on their
+  own like the others: `ctrl+z`, `ctrl+shift+z` (`ctrl+y` on Windows),
+  `ctrl+v`, and `cmd` on a Mac; "undo that twice" repeats. Refused in a
+  terminal, where a paste can carry a line break that runs the line.
 - **Spoken emoji.** "Ship it emoji rocket" types `Ship it 🚀`: 27 built in
   (thumbs up, fire, party, check mark, laughing, eyes, …), each one code
   point so a Backspace removes exactly one. `[flow.vocabulary]` remaps or

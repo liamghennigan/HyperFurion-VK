@@ -42,7 +42,17 @@ test("the visitor's platform picks the keys", () => {
   assert.deepEqual(chordsFor("move:word:left", 1, keymap({ terminal: true, platform: "mac" })), [["escape"], ["b"]]);
   assert.deepEqual(chordsFor("move:word:left", 1, keymap({ terminal: true, platform: "windows" })), [["ctrl", "left"]]);
   assert.equal(chordsFor("delete:line:here", 1, keymap({ terminal: true, platform: "windows" })), null);
-  assert.deepEqual(keymap({ terminal: false, platform: "windows" }), EDITOR);
+  assert.deepEqual(keymap({ terminal: false, platform: "windows" }), { ...EDITOR, "edit:redo": [["ctrl", "y"]] });
+});
+test("undo, redo and paste: editors only", () => {
+  assert.deepEqual(parse("undo that"), ["edit:undo", 1, 2]);
+  assert.deepEqual(parse("redo it twice"), ["edit:redo", 2, 3]);
+  assert.deepEqual(parse("paste"), ["edit:paste", 1, 1]);
+  assert.equal(parse("undo that", false), PENDING);  // "undo that twice" may follow
+  assert.deepEqual(chordsFor("edit:undo", 2, EDITOR), [["ctrl", "z"], ["ctrl", "z"]]);
+  assert.deepEqual(chordsFor("edit:paste", 1, keymap({ terminal: false, platform: "mac" })), [["cmd", "v"]]);
+  for (const platform of ["linux", "windows", "mac"]) for (const a of ["edit:undo", "edit:redo", "edit:paste"])
+    assert.equal(chordsFor(a, 1, keymap({ terminal: true, platform })), null, platform + " " + a);
 });
 test("no table ever presses Enter", () => {
   const tables = [EDITOR, LINUX_TERMINAL, MAC_EDITOR, MAC_TERMINAL, WINDOWS_TERMINAL];
