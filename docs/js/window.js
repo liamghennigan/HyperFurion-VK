@@ -71,13 +71,22 @@ export const Window = (() => {
       const a = cuts[i], z = cuts[i + 1];
       if (a === caret) frag.appendChild(caretEl());
       if (z <= a) continue;
-      const span = document.createElement("span");
       let cls = "text";
       if (sel && a >= sel[0] && z <= sel[1]) cls = "sel";
       else if (a >= ms && z <= caret && paintArgs.moltenLen) cls = "molten" + (paintArgs.heat === "repair" ? " repair" : "");
-      span.className = cls;
-      span.textContent = text.slice(a, z);
-      frag.appendChild(span);
+      // a terminal shows a prompt on every line the human sent
+      const parts = register().terminal ? text.slice(a, z).split("\n") : [text.slice(a, z)];
+      parts.forEach((part, k) => {
+        if (k > 0) {
+          frag.appendChild(document.createTextNode("\n"));
+          const pr = document.createElement("span"); pr.className = "prompt"; frag.appendChild(pr);
+        }
+        if (!part) return;
+        const span = document.createElement("span");
+        span.className = cls;
+        span.textContent = part;
+        frag.appendChild(span);
+      });
     }
     if (caret === text.length) frag.appendChild(caretEl());
     const ph = document.createElement("span"); ph.className = "placeholder"; ph.textContent = "tap the mic and speak"; frag.appendChild(ph);

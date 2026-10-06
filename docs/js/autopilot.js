@@ -5,7 +5,8 @@
 // utterances with a pause between — a mis-heard word that repairs itself,
 // "scratch that", a word fixed by spelling it, a caret moved by voice and
 // the text typed over the selection; then a shell command edited with
-// readline's own keys; then the python register compiling speech. The
+// readline's own keys and a command drafted by "VK, run …" with Enter
+// left to a hand; then the python register compiling speech. The
 // window's engine badge says "scripted" the whole time, and any real
 // interaction (the mic, Esc, a tab) stops it. It never starts on its own.
 import { $, reduced } from "./env.js";
@@ -31,7 +32,9 @@ export const Autopilot = (() => {
     { register: "shell", utterances: [
       { text: "pytest dash x tests slash test underscore flow dot py", pause: 1200 },
       { text: "delete previous word", pause: 1300 },
-      { text: "tests slash test underscore nav dot py", pause: 900 },
+      { text: "tests slash test underscore nav dot py", pause: 1100 },
+      { press: "enter", pause: 900 },
+      { text: "vk run find every todo in this repo", pause: 1400 },
     ] },
     { register: "python", utterances: [
       { text: "for i in range ten colon", pause: 600 },

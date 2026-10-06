@@ -8,6 +8,7 @@
 import { $, reduced } from "./env.js";
 import { bus } from "./bus.js";
 import { settings } from "./settings.js";
+import { Window } from "./window.js";
 import { Dictation } from "./dictation.js";
 
 export const Hints = (() => {
@@ -24,6 +25,8 @@ export const Hints = (() => {
       { text: "rerun the flaky tests", pause: 900 }, { text: "delete previous word", pause: 1100 }, { text: "suite" }] },
     { kind: "rewrite", say: settings.wakeWord.toUpperCase() + ", make that formal", play: [
       { text: "i think it works now", pause: 900 }, { text: settings.wakeWord + " make that formal" }] },
+    { kind: "intent", say: settings.wakeWord.toUpperCase() + ", run find every todo", register: "shell", play: [
+      { text: settings.wakeWord + " run find every todo in this repo" }] },
   ];
   const chips = new Map();
   const lead = document.createElement("span");
@@ -36,6 +39,7 @@ export const Hints = (() => {
     b.addEventListener("click", () => {
       if (Dictation.recording) return;
       bus.emit("simulate:hint", { kind: h.kind });
+      if (h.register) Window.setRegister(h.register, { silent: true });  // a command belongs at a prompt
       Dictation.simulate({ utterances: h.play });
     });
     strip.appendChild(b);

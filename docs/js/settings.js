@@ -16,6 +16,9 @@ export const settings = {
   // [flow] pause_review: the daemon's default "auto" is rules plus an [llm]
   // review of the unclear pauses; the page has no model, so: rules
   pauseReview: "rules",
+  // [intent]: "vk, run …" types ONE command line and never presses Enter —
+  // off by default in the daemon, on here so the consent story is live
+  intent: { enabled: true, verbs: ["run", "command", "execute"] },
   lang: (navigator.language || "en-US"),
   // [tts]
   tts: { rate: 1, pitch: 1, voice: null },

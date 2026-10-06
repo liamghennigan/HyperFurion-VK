@@ -65,6 +65,15 @@ proven to be the daemon's.
   "keep out of history"); a focus change or a nav command resets it. On
   by default; `rejoin = false` restores a fresh caret every time. The
   landing page mirrors it.
+- **"VK, run …" on the landing page.** The `[intent]` channel is live in
+  the demo: a request after the wake word types one command line at the
+  caret and the board's Enter key rings instead of going down — the
+  consent story, on screen. The page has no model, so it answers the
+  daemon's own few-shot examples and a few everyday requests from a
+  table, and types anything else as a comment line, saying so. A "try
+  saying" chip plays it in the shell tab; the scripted demo includes it.
+  The status line now also says what a joined pause did ("project. And"
+  → "project and").
 - **"Spell that NGINX".** A recognizer that hears spelled letters as one
   word writes it in capitals; after "spell" or "spell that" such a token
   ("NGINX", "K8S") now counts as the letters, spelled. Both engines.

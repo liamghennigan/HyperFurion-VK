@@ -520,6 +520,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   const pauseMode = (cfg && cfg.pauseReview === "off") || !(cfg && cfg.pauseReview) ? "off" : "rules";
   const pauseMap = new Map();   // index of the first token after a pause -> {decision, provisional}
   const lowerSeen = new Set();  // words seen lowercase mid-sentence
+  const pauseLog = [];          // each pause the rules changed: [before, after], for the status line
 
   // ── inputs ─────────────────────────────────────────────────────────────
   function update(raw, now, { final = false } = {}) {
@@ -601,6 +602,15 @@ export function moltenLine({ register, cfg, state } = {}) {
     commitReady(now);
     return null;
   }
+  // the human did something at the keyboard (pressed Enter, clicked): the
+  // text typed so far is no longer ours — a fresh segment starts at the
+  // caret, as after a navigation command, on a fresh line
+  function detach() {
+    typedBefore += committedRender;
+    committedRender = "";
+    renderState = initialState(reg);
+    snapshots = [{ len: 0, st: renderState }];
+  }
   // the page's one liberty: a wake-word instruction that closes an
   // utterance is taken there (the daemon waits for the stop). Returns the
   // instruction, consuming its tokens, or "".
@@ -627,7 +637,8 @@ export function moltenLine({ register, cfg, state } = {}) {
     let instr = "";
     if (pendingIsInstruction()) instr = tokens.slice(pendingFrom + 1).join(" ") || " ";
     const captionTail = viewTokens().slice(committedTokens).join(" ");
-    return { frozen: committedRender, molten, instr: instr.trim(), repair: lastRepair, action: barrier, caption: captionTail };
+    return { frozen: committedRender, molten, instr: instr.trim(), repair: lastRepair, action: barrier, caption: captionTail,
+             pauseLog };
   }
 
   // ── internal ───────────────────────────────────────────────────────────
@@ -683,7 +694,13 @@ export function moltenLine({ register, cfg, state } = {}) {
       if (!pauses.same(d, pause.provisional)) { pause.provisional = d; changed = true; }
       const m = meta[index];
       const settled = index < finalTokens || m.stable >= 1 || now - m.since >= PAUSE_SETTLE_MS;
-      if (settled) pause.decision = d;  // rules mode: the rules decide every pause
+      if (settled) {
+        pause.decision = d;  // rules mode: the rules decide every pause
+        if (d.punct !== ".") {
+          const [l, r] = pauses.apply(tokens[index - 1], tokens[index], d);
+          pauseLog.push([tokens[index - 1] + " " + tokens[index], l + " " + r]);
+        }
+      }
     }
     if (changed) reparse();
   }
@@ -790,7 +807,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   }
 
   return {
-    update, tick, finalize, completeAction, takeInstruction, rewrite, result,
+    update, tick, finalize, completeAction, takeInstruction, rewrite, result, detach,
     flush: (now = 0) => finalize(tokens.join(" "), now),
     peek: view,
     pendingAction: () => barrier,

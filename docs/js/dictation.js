@@ -22,6 +22,7 @@ import { Typist } from "./typist.js";
 import { Keyboard } from "./keyboard.js";
 import { moltenLine, compileScript, pageRewrite, continuationState } from "./flow.js";
 import { keymap, chordsFor, label as navLabel } from "./nav.js";
+import { intentRequest, pageCommand } from "./intent.js";
 
 export const Dictation = (() => {
   const SIM_LINES = [
@@ -46,7 +47,7 @@ export const Dictation = (() => {
   // continues that text (a space, a capital only after a sentence end)
   let landing = null;         // { register, tail, when }
   const REJOIN_MS = 30000;
-  let seen = { scratches: 0, corrections: 0 };  // for the hints strip
+  let seen = { scratches: 0, corrections: 0, pauses: 0 };  // for the hints strip and the status line
   Object.defineProperty(D, "engine", { get: () => engine });
 
   const liveFlow = () => settings.flowLive && settings.interim;
@@ -92,7 +93,7 @@ export const Dictation = (() => {
     const state0 = rejoinState();
     line = moltenLine({ register: Window.register(), cfg: live ? { ...settings, stabilityMs: Infinity } : settings, state: state0 });
     rawFinal = ""; rawInterim = ""; guard = false; busy = false;
-    seen = { scratches: 0, corrections: 0 };
+    seen = { scratches: 0, corrections: 0, pauses: 0 };
     state.lastError = "";
     if (state0) log("continuing the last dictation · a space first" + (state0.capNext ? ", then a capital" : ""), "dim");
   }
@@ -101,6 +102,22 @@ export const Dictation = (() => {
     if (!r) return;
     if (r.scratches > seen.scratches) { seen.scratches = r.scratches; bus.emit("flow:did", { kind: "scratch" }); }
     if (r.corrections && r.corrections.length > seen.corrections) { seen.corrections = r.corrections.length; bus.emit("flow:did", { kind: "spell" }); }
+    if (r.pauseLog && r.pauseLog.length > seen.pauses) {
+      // a period the recognizer put at a pause, revised by the next words
+      const [before, after] = r.pauseLog[r.pauseLog.length - 1];
+      seen.pauses = r.pauseLog.length;
+      log("⌁ the pause decided: “" + before + "” → “" + after + "”", "dim");
+      bus.emit("flow:did", { kind: "pause" });
+    }
+  }
+  // the instruction lanes the daemon routes by verb: "run …" is the
+  // [intent] channel (ONE command line, Enter refused); anything else is a
+  // rewrite of the just-typed text
+  function instruct(instr) {
+    const request = settings.intent && settings.intent.enabled ? intentRequest(instr, settings.intent.verbs) : null;
+    if (request !== null) { bus.emit("flow:did", { kind: "intent" }); return draftCommand(request); }
+    bus.emit("flow:did", { kind: "rewrite" });
+    return rewriteInPlace(instr);
   }
   const raw = () => (rawFinal + " " + rawInterim).trim();
   function paint(r) {
@@ -114,9 +131,10 @@ export const Dictation = (() => {
       Typist.setTarget({ frozen: rawFinal, molten: settings.interim ? rawInterim : "" });
       return;
     }
-    paint(line.update(raw(), performance.now()));
+    const r = line.update(raw(), performance.now());
+    paint(r); noticed(r);
   }
-  function tick() { if (line && liveFlow()) paint(line.tick(performance.now())); }
+  function tick() { if (line && liveFlow()) { const r = line.tick(performance.now()); paint(r); noticed(r); } }
   // a final closes an utterance: it becomes a final segment of the engine —
   // the stability window is satisfied, "scratch that" and "spell that" act,
   // a lone navigation command becomes a barrier, a wake-word instruction
@@ -130,7 +148,7 @@ export const Dictation = (() => {
     paint(line.update(raw(), performance.now(), { final: true }));
     noticed(line.result());
     const instr = line.takeInstruction();
-    if (instr) { bus.emit("flow:did", { kind: "rewrite" }); rewriteInPlace(instr); }
+    if (instr) instruct(instr);
     Window.panes();
   }
   function armAutoStop() {
@@ -175,6 +193,46 @@ export const Dictation = (() => {
     l.completeAction(performance.now(), { pressed });
     busy = false;
     Typist.setTarget(l.peek());
+  }
+
+  // ── the human's own keys ────────────────────────────────────────────────
+  // The one thing the keyboard never does: pressing Enter. In the scripted
+  // demo the human is scripted too, and says so. The key rings in the
+  // visitor's color, the field gets its line break, and the engine lets go
+  // of the text above — the caret is somewhere new now.
+  async function humanPress(key) {
+    if (key !== "enter") return;
+    busy = true;
+    await Typist.settled();
+    Keyboard.press("Enter", { heat: "user" });
+    Window.buffer().insert("\n");
+    Typist.release();
+    if (line) line.detach();
+    Window.moved();
+    log("⏎ pressed — by the demo, as you would", "consent");
+    busy = false;
+  }
+
+  // ── "VK, run …": one command line at the caret, and Enter is yours ──────
+  // The daemon sends the request to your [llm] and types its one line with
+  // Enter refused in the injector. The page's stand-in answers a table
+  // (intent.js) and types the line the same way; the board's Enter key can
+  // only ring. In a terminal that is a drafted command at the prompt.
+  async function draftCommand(request) {
+    const l = line;
+    const { command, known } = pageCommand(request);
+    busy = true;
+    await Typist.settled();
+    await wait(300);
+    const before = Typist.shown() ? l.committed() : "";  // nothing of ours at the caret: a fresh line
+    const text = before + (before && !/\s$/.test(before) ? " " : "") + command;
+    l.rewrite(text);
+    Typist.setTarget({ frozen: text, molten: "" });
+    await Typist.settled();
+    Keyboard.press("Enter", { heat: "nav" });   // lit, never pressed: the refusal, on screen
+    log("⌁ typed — Enter is yours" + (known ? "" : " · the page has no model: the daemon asks your [llm]"), "consent");
+    busy = false;
+    if (l === line) Typist.setTarget(l.peek());
   }
 
   // ── the wake word: rewrite the just-typed text in place ─────────────────
@@ -440,9 +498,9 @@ export const Dictation = (() => {
       if (pressed) Typist.release();
       r = l.completeAction(performance.now(), { pressed });
     }
-    if (r.instruction && r.text) {
+    if (r.instruction && (r.text || intentRequest(r.instruction, (settings.intent || {}).verbs))) {
       busy = false;
-      line = l; await rewriteInPlace(r.instruction); line = null;
+      line = l; await instruct(r.instruction); line = null;
       r = { ...r, text: l.committed() };
     } else if (r.instruction) {
       log("nothing typed yet to rewrite · dictate first, then the wake word", "dim");
@@ -515,6 +573,7 @@ export const Dictation = (() => {
     Typist.reset();
     const stopped = () => !token.live;
     for (const u of utterances) {
+      if (u.press) { await humanPress(u.press); await wait(u.pause || 700); if (stopped()) return; continue; }
       const compiled = compileScript(u.text, { revise: u.revise || null });
       if (reduced || !liveFlow()) { closeUtterance(compiled.final); continue; }
       let t0 = performance.now();
