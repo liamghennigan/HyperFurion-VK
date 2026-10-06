@@ -282,6 +282,33 @@ def parse_day(words: list[str]) -> Optional[int]:
 PHONE_MIN_DIGITS = 7
 
 
+def fold_year(words: list[str]) -> Optional[str]:
+    """A year read in pairs: "nineteen eighty four" -> "1984", "nineteen oh
+    five" -> "1905", "twenty twenty six" -> "2026". A 20xx year needs all
+    three words and stops at 2039 ("twenty twenty" vision, "twenty fifty
+    people" stay words)."""
+    words = [w.casefold() for w in words]
+    if len(words) not in (2, 3) or words[0] not in ("nineteen", "twenty"):
+        return None
+    century = 19 if words[0] == "nineteen" else 20
+    rest = words[1:]
+    if rest[0] == "oh":
+        if len(rest) != 2 or _DIGITS.get(rest[1], 0) == 0:
+            return None
+        year = _DIGITS[rest[1]]
+    elif rest[0] in _TENS:
+        year = _TENS[rest[0]]
+        if len(rest) == 2:
+            if _DIGITS.get(rest[1], 0) == 0:
+                return None
+            year += _DIGITS[rest[1]]
+    else:
+        return None
+    if century == 20 and (len(words) != 3 or year > 39):
+        return None
+    return f"{century}{year:02d}"
+
+
 def fold_digits(words: list[str]) -> Optional[str]:
     """Seven or more digits read one by one -> a number: "five five five
     one two three four" -> "555-1234", ten -> "555-123-4567", other

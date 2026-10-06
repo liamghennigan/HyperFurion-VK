@@ -28,6 +28,7 @@ from voice_keyboard.flow.numbers import (
     UNIT_WORDS,
     convert_numbers,
     fold_digits,
+    fold_year,
     fold_unit,
     month_days,
     parse_cardinal,
@@ -1037,7 +1038,20 @@ class Grammar:
             ):
                 return result, item.span[0]  # a number read digit by digit may still grow
 
-            digits = fold_digits(words)
+            closer = items[end] if end < size and items[end].kind == "word" else None
+            if (
+                closer is not None and inside(closer) and not _clean(closer.text)
+                and closer.text.lstrip(_PUNCT_STRIP) == closer.text
+                and (year := fold_year(words + [_core(closer.text)])) is not None
+            ):
+                # "nineteen eighty four." — the year's last word carries the stop
+                year += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]
+                result.append(Item(kind="word", text=year, span=(item.span[0], closer.span[1])))
+                index = end + 1
+                continue
+            if end == size and molten(item.span[0]) and len(words) <= 2 and words[0] in ("nineteen", "twenty"):
+                return result, item.span[0]  # a year may still be being read ("nineteen ninety …")
+            digits = fold_digits(words) or fold_year(words)
             if digits is not None:
                 result.append(Item(kind="word", text=digits, span=(item.span[0], items[end - 1].span[1])))
             else:

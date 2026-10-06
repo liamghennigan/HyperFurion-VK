@@ -360,6 +360,33 @@
   ]
  },
  {
+  "name": "years read in pairs",
+  "register": "prose",
+  "segments": [
+   "born in nineteen eighty four, moved in nineteen oh five",
+   "back in twenty twenty six with twenty twenty vision and nineteen people"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Born in 1984, moved in 1905"
+   ],
+   [
+    "screen",
+    "Born in 1984, moved in 1905 back in 2026 with twenty twenty vision and nineteen people"
+   ],
+   [
+    "final",
+    "Born in 1984, moved in 1905 back in 2026 with twenty twenty vision and nineteen people",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a price shows its cents",
   "register": "prose",
   "segments": [

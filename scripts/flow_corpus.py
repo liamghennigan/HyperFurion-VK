@@ -57,6 +57,7 @@ CASES = [
     ("a nested call across segments", "python", ["for i in range", "len xs colon"], {}),
     ("shell compiles flags", "shell", ["pipe grep dash i error"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
+    ("years read in pairs", "prose", ["born in nineteen eighty four, moved in nineteen oh five", "back in twenty twenty six with twenty twenty vision and nineteen people"], {}),
     ("a price shows its cents", "prose", ["it costs one point five dollars or two point two five euros"], {}),
     ("a scale stays a word after the figure", "prose", ["we raised three point two billion dollars", "from five million users and two million, dollars"], {}),
     ("a domain goes on as a path", "prose", ["see example dot com slash docs slash intro dot html today", "mail sam at example dot com slash later"], {}),
