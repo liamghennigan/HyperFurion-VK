@@ -14,6 +14,14 @@ across a clipboard-pasted run). Commits are monotonic: the only way
 committed text shrinks is the user's own "scratch that", which rewinds to
 a segment snapshot.
 
+A navigation command ("select previous word") is a barrier: it fires only
+when it is a whole final segment of its own — said with a pause before
+and after — and then everything before it must be on screen before its
+keys are pressed. The engine stops committing at the barrier; the daemon
+converges the screen, presses the keys, and calls `complete_action()`,
+which starts a fresh segment: the caret has moved, so nothing before the
+command can be repaired or scratched any more.
+
 One exception to "final commits at once": the period a provider puts where
 the speaker paused (flow/pauses.py). That word waits, molten, until the
 words after the pause decide whether the sentence really ended there.
@@ -25,12 +33,14 @@ the screen toward it.
 
 import logging
 import math
+import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from voice_keyboard.flow import pauses
 from voice_keyboard.flow.grammar import Grammar, Item
+from voice_keyboard.flow.nav import FRESH_FIELD, GLUED
 from voice_keyboard.flow.registers import (
     Register,
     RenderState,
@@ -65,9 +75,23 @@ class FlowConfig:
 
 @dataclass(frozen=True)
 class FinalResult:
-    text: str          # full post-grammar text that should be on screen
+    text: str          # post-grammar text that should be on screen (since
+    # the last navigation command, if any: see typed_before)
     instruction: str   # wake-word instruction ("" if none)
     scratches: int     # segments discarded by "scratch that"
+    # (heard, meant) for each "spell that ..." that replaced a word.
+    corrections: tuple[tuple[str, str], ...] = ()
+    # A navigation command waiting at a barrier: `text` is what must be on
+    # screen before its keys; call complete_action() after pressing them.
+    action: Optional["NavAction"] = None
+    # Text typed in earlier segments, before navigation moved the caret.
+    typed_before: str = ""
+
+
+@dataclass(frozen=True)
+class NavAction:
+    action: str   # e.g. "select:word:left", "press:tab"
+    count: int = 1
 
 
 @dataclass
@@ -99,6 +123,15 @@ class PauseQuery:
     index: int
     before: str
     after: str
+
+
+# The last word of the committed render, its trailing punctuation, and
+# trailing whitespace: "... hello wrold." -> ("wrold", ".", "").
+_LAST_WORD = re.compile(r"(\S+?)([.,!?;:)\]}\"'»”’]*)(\s*)\Z")
+
+# Actions that rewrite committed text: they wait for a final transcript,
+# never a stability guess, so a misheard partial can't fire them.
+_FINAL_ONLY = ("respell", "key")
 
 
 def risky_backspace(text: str) -> bool:
@@ -143,6 +176,13 @@ class FlowEngine:
         self._lower_seen: set[str] = set()
         self._instruction = ""
         self._scratches = 0
+        self._corrections: list[tuple[str, str]] = []
+        # Token counts at each final: segment boundaries for navigation.
+        self._segment_bounds: set[int] = {0}
+        self._barrier: Optional[NavAction] = None
+        self._last_action: Optional[NavAction] = None  # last command pressed
+        self._typed_before = ""
+        self._finalizing = False
         self._rev_depth = 0.0  # adaptive: observed ASR revision depth, decaying
 
     # ------------------------------------------------------------- inputs
@@ -187,6 +227,7 @@ class FlowEngine:
                 self._lower_seen.add(pauses.core(self._tokens[index]))
         if is_final:
             self._final_tokens = max(self._final_tokens, len(self._tokens))
+            self._segment_bounds.add(len(self._tokens))
             self._note_pause()
 
         self._rev_depth *= 0.98
@@ -218,17 +259,65 @@ class FlowEngine:
             if pause.decision is None:
                 pause.decision = self._rule_decision(index)[0]
         self._reparse()
-        for item in list(self._items[self._committed_items:]):
-            self._commit_item(item)
+        self._finalizing = True
+        return self._commit_rest()
+
+    def _commit_rest(self) -> FinalResult:
+        """At finalize: commit everything, stopping at a navigation
+        barrier (the daemon resumes with complete_action)."""
+        while self._barrier is None and self._committed_items < len(self._items):
+            self._commit_item(self._items[self._committed_items])
         return FinalResult(
             text=self._committed_render,
-            instruction=self._instruction,
+            instruction=self._instruction if self._barrier is None else "",
             scratches=self._scratches,
+            corrections=tuple(self._corrections),
+            action=self._barrier,
+            typed_before=self._typed_before,
         )
+
+    def pending_action(self) -> Optional[NavAction]:
+        """The navigation command waiting for the screen to catch up."""
+        return self._barrier
+
+    def complete_action(self, now: float, *, pressed: bool = True) -> Optional[FinalResult]:
+        """The daemon pressed the barrier's keys — or refused them
+        (pressed=False: the caret never moved, so nothing changes). Either
+        way dictation resumes; after a press it starts a fresh segment.
+        When finalizing, returns the next result (which may stop at
+        another barrier)."""
+        action = self._barrier
+        if action is None:
+            return self._commit_rest() if self._finalizing else None
+        self._barrier = None
+        if not pressed:
+            if self._finalizing:
+                return self._commit_rest()
+            self._commit_ready(now)
+            return None
+        self._last_action = action
+        self._typed_before += self._committed_render
+        self._committed_render = ""
+        state = self._render_state
+        if action.action in FRESH_FIELD:
+            # Tab / Escape / a page away: likely a different field.
+            state = initial_state(self._register)
+        elif action.action.startswith(GLUED) or action.action.endswith(":start"):
+            # The next word fills a selection or a gap, or starts a line:
+            # no leading space.
+            state = replace(state, glue_next=True)
+        self._render_state = state
+        self._snapshots = [_Snapshot(render_len=0, render_state=state)]
+        if self._finalizing:
+            return self._commit_rest()
+        self._commit_ready(now)
+        return None
 
     # ------------------------------------------------------------ outputs
 
     def desired_text(self) -> str:
+        if self._barrier is not None:
+            return self._committed_render  # converge, then press the keys
         preview, _ = render_items(
             self._preview_items(), self._render_state, self._register
         )
@@ -307,11 +396,13 @@ class FlowEngine:
     # ----------------------------------------------------------- internal
 
     def _preview_items(self) -> list[Item]:
-        return [
-            item
-            for item in self._items[self._committed_items:]
-            if item.kind in ("word", "punct", "break")
-        ]
+        preview: list[Item] = []
+        for item in self._items[self._committed_items:]:
+            if item.kind in ("word", "punct", "break"):
+                preview.append(item)
+            elif item.kind == "respell" and item.mode == "insert":
+                preview.append(Item(kind="word", text=item.text, span=item.span))
+        return preview
 
     def _pending_is_instruction(self) -> bool:
         if self._pending_from is None or self._pending_from >= len(self._tokens):
@@ -416,6 +507,7 @@ class FlowEngine:
             self._view_tokens(),
             flush=self._flush_pending,
             frozen=self._committed_tokens,
+            settled=self._final_tokens,
         )
         if result.items[:self._committed_items] != self._items[:self._committed_items]:
             # Deterministic parsing plus the frozen fence should make this
@@ -433,7 +525,7 @@ class FlowEngine:
         horizon_s = self._cfg.stability_ms / 1000.0
         required = self._effective_required_stability()
 
-        while self._committed_items < len(self._items):
+        while self._barrier is None and self._committed_items < len(self._items):
             item = self._items[self._committed_items]
             start, end = item.span
             if item.kind == "instruction":
@@ -442,6 +534,8 @@ class FlowEngine:
             if self._holds_pause(start, end):
                 break  # the words after the pause will decide its period
             committable = end <= self._final_tokens
+            if not committable and item.kind in _FINAL_ONLY:
+                break
             if not committable:
                 metas = self._meta[start:end]
                 committable = all(
@@ -464,8 +558,9 @@ class FlowEngine:
         # Safety valve: an endlessly-revising provider must not grow the
         # repairable tail without bound.
         while (
-            self._committed_items < len(self._items)
-            and self._items[self._committed_items].kind != "instruction"
+            self._barrier is None
+            and self._committed_items < len(self._items)
+            and self._items[self._committed_items].kind not in ("instruction",) + _FINAL_ONLY
         ):
             preview, _ = render_items(
                 self._preview_items(), self._render_state, self._register
@@ -484,6 +579,17 @@ class FlowEngine:
                 )
         if item.kind == "scratch":
             self._apply_scratch()
+        elif item.kind == "respell" and item.mode == "replace":
+            self._apply_respell(item.text)
+        elif item.kind == "respell":
+            delta, self._render_state = render_items(
+                [Item(kind="word", text=item.text, span=item.span)],
+                self._render_state,
+                self._register,
+            )
+            self._committed_render += delta
+        elif item.kind == "key":
+            self._commit_key(item)
         elif item.kind == "instruction":
             if item.text:
                 self._instruction = item.text
@@ -516,6 +622,63 @@ class FlowEngine:
         while self._snapshots and self._snapshots[-1].render_len > target.render_len:
             self._snapshots.pop()
         self._scratches += 1
+
+    def _commit_key(self, item: Item) -> None:
+        """A navigation command fires only as a whole final segment; said
+        mid-sentence it was dictation after all, and types as words."""
+        start, end = item.span
+        if start in self._segment_bounds and end in self._segment_bounds:
+            self._barrier = NavAction(action=item.text, count=item.count)
+            return
+        words = [
+            Item(kind="word", text=token, span=(index, index + 1))
+            for index, token in enumerate(self._tokens[start:end], start)
+        ]
+        delta, self._render_state = render_items(words, self._render_state, self._register)
+        self._committed_render += delta
+
+    def _apply_respell(self, spelled: str) -> None:
+        """"spell that ...": swap the last committed word for the spelled
+        one, keeping its trailing punctuation and its capital."""
+        match = _LAST_WORD.search(self._committed_render)
+        if match is None:
+            last = self._last_action
+            if last is not None and last.action.startswith("select:"):
+                # Right after "select previous word": the spelled word is
+                # typed over the selection.
+                delta, self._render_state = render_items(
+                    [Item(kind="word", text=spelled)], self._render_state, self._register
+                )
+                self._committed_render += delta
+                return
+            logger.info("flow: nothing to respell")
+            return
+        token = match.group(1)
+        heard = token.lstrip("\"'([{«“‘")  # an opening quote stays put
+        start = match.start(1) + len(token) - len(heard)
+        if not heard:
+            return
+        if risky_backspace(self._committed_render[start:]):
+            logger.warning("flow: refusing to respell across complex Unicode")
+            return
+        if heard[:1].isupper() and spelled.islower():
+            spelled = spelled[:1].upper() + spelled[1:]
+        self._committed_render = (
+            self._committed_render[:start] + spelled + match.group(2) + match.group(3)
+        )
+        # Segment snapshots after the word shift with it, so "scratch that"
+        # still rewinds to the same boundaries.
+        shift = len(spelled) - len(heard)
+        self._snapshots = [
+            snap
+            if snap.render_len <= start
+            else _Snapshot(
+                render_len=snap.render_len + shift, render_state=snap.render_state
+            )
+            for snap in self._snapshots
+        ]
+        if heard != spelled:
+            self._corrections.append((heard, spelled))
 
     def _mark_segment_boundary(self) -> None:
         mark = len(self._tokens)

@@ -23,6 +23,7 @@ class Register:
     numbers_min: int = 10          # single-word conversion threshold
     paste_chord_shift: bool = False  # terminals paste with ctrl+shift+v
     compiler: str = ""             # semantic compiler key (flow/code.py)
+    terminal: bool = False         # navigation uses the terminal's keys
 
 
 PROSE = Register(name="prose", smart_caps=True, numbers_on=False)
@@ -32,6 +33,7 @@ TERMINAL = Register(
     numbers_on=True,
     numbers_min=0,
     paste_chord_shift=True,
+    terminal=True,
 )
 VERBATIM = Register(name="verbatim", smart_caps=False, grammar_enabled=False)
 PYTHON = Register(
@@ -48,6 +50,7 @@ SHELL = Register(
     numbers_min=0,
     paste_chord_shift=True,
     compiler="shell",
+    terminal=True,
 )
 
 REGISTERS = {r.name: r for r in (PROSE, TERMINAL, VERBATIM, PYTHON, SHELL)}

@@ -7,19 +7,20 @@ import threading
 import time
 from typing import Optional
 
-from voice_keyboard import clipboard, dictionary, history, recall
+from voice_keyboard import clipboard, dictionary, history, latency, recall
 from voice_keyboard.ambient import AmbientGate
 from voice_keyboard.assistant import Brain, create_brain
 from voice_keyboard.audio_capture import AudioCapture
 from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
-from voice_keyboard.flow.engine import risky_backspace
+from voice_keyboard.flow import nav
+from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
 from voice_keyboard.flow.registers import (
     Register,
     register_for_app,
     resolve_register,
 )
-from voice_keyboard.flow.vad import SilenceGate, chunk_rms, vu_bar
+from voice_keyboard.flow.vad import OnsetDetector, SilenceGate, chunk_rms, vu_bar
 from voice_keyboard.flow.worker import common_prefix_len
 from voice_keyboard.focusprobe import FocusInfo, probe_focus
 from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty_binding
@@ -48,6 +49,9 @@ from voice_keyboard.tts import TTSClient, create_tts_client
 logger = logging.getLogger(__name__)
 
 FLOW_TICK_S = 0.25
+# At stop, how long a navigation command waits for the hotkey's modifiers
+# to be released before it is refused.
+NAV_RELEASE_WAIT_S = 1.5
 # Pause reviews ([flow] pause_review): one call's limit, and how long the
 # stop path waits for the last ones before the rules decide.
 PAUSE_REVIEW_CALL_S = 5.0
@@ -150,6 +154,16 @@ class Daemon:
         # Molten diffs: a rewrite held for approval ([flow] rewrite_pending).
         self._pending_rewrite: Optional[dict] = None
         self._last_scratches = 0
+        # Hands-free navigation ([nav]): this session's chord table, and
+        # the task pressing a command's keys mid-dictation.
+        self._nav_keys: dict = {}
+        self._nav_task: Optional[asyncio.Task] = None
+        # Per-utterance latency for `voice-keyboard stats`.
+        self._timer: Optional[latency.UtteranceTimer] = None
+        self._onset: Optional[OnsetDetector] = None
+        self._latency = latency.LatencyLog(
+            persist=bool(self._config.get("flow", {}).get("latency_log", False))
+        )
         # Speculative TTS: (text, audio) for the last stable selection.
         self._tts_cache: Optional[tuple[str, bytes]] = None
         self._prefetch_watcher: Optional[SelectionWatcher] = None
@@ -799,6 +813,15 @@ class Daemon:
                 elif command == "status":
                     response = self._status_response()
 
+                elif command == "stats":
+                    records = self._latency.records()
+                    response = {
+                        "status": "ok",
+                        "summary": self._latency.summary(),
+                        "count": len(records),
+                        "last": records[-1] if records else None,
+                    }
+
                 else:
                     response = {"status": "error", "message": f"unknown command: {command}"}
 
@@ -873,13 +896,15 @@ class Daemon:
             logger.warning("Config changed but did not validate; keeping old: %s", exc)
             return
         for section in (
-            "flow", "registers", "llm", "intent", "ambient", "ask", "recall", "assistant"
+            "flow", "registers", "llm", "intent", "ambient", "ask", "recall", "assistant",
+            "nav",
         ):
             self._config[section] = fresh.get(section, {})
         # Rebuild the brain so [assistant] edits (brain, can_act, agent_id,
         # privacy) take effect at the next turn without a restart. The
         # assistant HOTKEY still needs a restart — it owns a listener.
         self._brain = create_brain(self._config)
+        self._latency.persist = bool(self._config["flow"].get("latency_log", False))
         logger.info("Reloaded flow/registers/llm/intent/ambient/ask/recall/assistant config")
 
     # ------------------------------------------------------- flow session
@@ -903,7 +928,16 @@ class Daemon:
             numbers=str(flow_cfg.get("numbers", "auto")).lower(),
             numbers_on=register.numbers_on,
             numbers_min=register.numbers_min,
+            spelling=bool(flow_cfg.get("spelling", True)),
+            nav=self._nav_enabled(),
         )
+
+    def _nav_enabled(self) -> bool:
+        """[nav] is on and this platform's injector can press chords
+        (macOS's cannot yet: the commands stay words there)."""
+        if not bool(self._config.get("nav", {}).get("enabled", False)):
+            return False
+        return callable(getattr(self._injector, "press_combo", None))
 
     def _flow_config_obj(self, pause_review: str = "off") -> FlowConfig:
         flow_cfg = self._config.get("flow", {})
@@ -1001,6 +1035,11 @@ class Daemon:
             default=str(registers_cfg.get("default", "prose")),
         )
         self._session_register = register
+        kind = "terminal" if register.terminal else "editor"
+        self._nav_keys = nav.keymap(
+            terminal=register.terminal,
+            overrides=(self._config.get("nav", {}).get("keys", {}) or {}).get(kind),
+        )
         if hasattr(self._injector, "paste_chord_shift"):
             self._injector.paste_chord_shift = register.paste_chord_shift
 
@@ -1042,7 +1081,14 @@ class Daemon:
         live = bool(flow_cfg.get("live", True)) and bool(
             getattr(self._stt_client, "supports_streaming", False)
         )
-        self._flow_worker = InjectionWorker(self._injector) if live else None
+        self._flow_worker = (
+            InjectionWorker(
+                self._injector,
+                on_first_output=lambda: self._mark_latency("first_key"),
+            )
+            if live
+            else None
+        )
         logger.info(
             "Flow session: register=%s app=%r live=%s pause_review=%s",
             register.name,
@@ -1052,6 +1098,9 @@ class Daemon:
         )
 
     async def _teardown_flow_session(self) -> None:
+        if self._nav_task is not None:
+            self._nav_task.cancel()
+            self._nav_task = None
         for task in list(self._pause_tasks):
             task.cancel()
         self._pause_tasks.clear()
@@ -1085,8 +1134,123 @@ class Daemon:
                 if worker is not None:
                     worker.set_target(engine.desired_text())
                     self._push_live_caption(engine)
+                    self._maybe_run_nav(engine, worker)
         except asyncio.CancelledError:
             pass
+
+    def _maybe_run_nav(self, engine: FlowEngine, worker: InjectionWorker) -> None:
+        """Start pressing a navigation command's keys once the engine holds
+        one — unless the hold-to-talk keys are still down (the chord would
+        combine with them); then it fires at the next tick, or at stop."""
+        if engine.pending_action() is None:
+            return
+        if self._nav_task is not None and not self._nav_task.done():
+            return
+        if self._hotkey_combo_held():
+            return
+        self._nav_task = asyncio.create_task(self._run_nav_live(engine, worker))
+
+    def _hotkey_combo_held(self) -> bool:
+        """The hold-to-talk keys, or any of the binding's modifiers, are
+        still down: a chord now would combine with them."""
+        listener = self._hotkey_listener
+        for name in ("combo_held", "modifiers_held"):
+            held = getattr(listener, name, None)
+            try:
+                if callable(held) and held():
+                    return True
+            except Exception:
+                pass
+        return False
+
+    async def _wait_hotkey_released(self, timeout: float = NAV_RELEASE_WAIT_S) -> bool:
+        deadline = time.perf_counter() + timeout
+        while self._hotkey_combo_held():
+            if time.perf_counter() >= deadline:
+                return False
+            await asyncio.sleep(0.02)
+        return True
+
+    async def _run_nav_live(self, engine: FlowEngine, worker: InjectionWorker) -> None:
+        action = engine.pending_action()
+        if action is None:
+            return
+        target = engine.desired_text()
+        typed = await worker.drain(timeout=self._drain_timeout(target))
+        if engine is not self._flow_engine or engine.pending_action() is not action:
+            return  # the dictation ended (stop handles the rest) or moved on
+        if typed != target and not worker.abandoned:
+            return  # not on screen yet: never press keys mid-typing; retry next tick
+        pressed = await self._press_nav(action, abandoned=worker.abandoned)
+        engine.complete_action(time.monotonic(), pressed=pressed)
+        if pressed:
+            worker.reset()  # the caret moved: the text behind it is not ours
+        worker.set_target(engine.desired_text())
+
+    async def _press_nav(self, action: NavAction, *, abandoned: bool = False) -> bool:
+        """Press a navigation command's chords; False when refused (this
+        kind of app has no binding, focus moved, or typing failed)."""
+        if abandoned or self._focus_lost:
+            logger.info("nav: not pressing %s — focus moved or typing failed", action.action)
+            return False
+        chords = nav.chords_for(action.action, action.count, self._nav_keys)
+        if chords is None:
+            logger.info("nav: %s has no binding in this app", action.action)
+            await self._show_hotkey_overlay(
+                "error",
+                detail=f"Can't {action.action.split(':')[0]} that here",
+                timeout_ms=1800,
+            )
+            return False
+        label = action.action.replace(":", " ").replace("move ", "")
+        if action.count > 1:
+            label += f" ×{action.count}"
+        # Show what fired — without holding the keys back for the overlay.
+        asyncio.get_running_loop().create_task(
+            self._show_hotkey_overlay("listening", detail=f"⌁ {label}", timeout_ms=900)
+        )
+        try:
+            for chord in chords:
+                await asyncio.to_thread(self._injector.press_combo, chord)
+        except Exception as exc:
+            logger.warning("nav: pressing %s failed: %s", action.action, exc)
+            return False
+        logger.info("nav: %s x%d", action.action, action.count)
+        return True
+
+    async def _await_nav_task(self) -> None:
+        """Let a command already pressing its keys finish first, so stop
+        never presses it twice."""
+        task, self._nav_task = self._nav_task, None
+        if task is not None and not task.done():
+            try:
+                await task
+            except Exception:
+                logger.exception("nav: live command failed")
+
+    async def _finish_nav_at_stop(
+        self, engine: FlowEngine, result: FinalResult, worker: Optional[InjectionWorker]
+    ) -> FinalResult:
+        """Stop reached navigation commands not yet pressed: put each
+        segment on screen, press its keys, and move on to the next."""
+        while result.action is not None:
+            if worker is not None:
+                worker.set_target(result.text)
+                typed = await worker.drain(timeout=self._drain_timeout(result.text))
+                # Keys pressed before the text lands would act mid-word.
+                abandoned = worker.abandoned or typed != result.text
+            else:
+                abandoned = self._focus_lost
+                if result.text and not abandoned:
+                    await asyncio.to_thread(self._injector.type_text, result.text)
+            if not abandoned and not await self._wait_hotkey_released():
+                logger.info("nav: hotkey modifiers still held; not pressing")
+                abandoned = True
+            pressed = await self._press_nav(result.action, abandoned=abandoned)
+            result = engine.complete_action(time.monotonic(), pressed=pressed)
+            if worker is not None and pressed:
+                worker.reset()
+        return result
 
     def _start_pause_reviews(self, engine: FlowEngine, *, final: bool = False) -> None:
         reviewer = self._pause_reviewer
@@ -1184,6 +1348,9 @@ class Daemon:
     async def _start_recording(self) -> None:
         if self._recording:
             return
+        self._timer = latency.UtteranceTimer()
+        self._timer.mark("start")
+        self._onset = OnsetDetector()
         self._maybe_reload_flow_config()
         validate_config(self._config)
 
@@ -1277,6 +1444,7 @@ class Daemon:
             return ""
 
         self._recording = False
+        self._mark_latency("stop")
 
         # Let any in-flight PyAudio read complete before closing the stream.
         # Closing a PortAudio stream from another thread while read() is active
@@ -1365,22 +1533,33 @@ class Daemon:
             final = merged
             if final:
                 await asyncio.to_thread(self._injector.type_text, final)
+                self._mark_latency("first_key")
                 logger.info("Injected %d characters", len(final))
             else:
                 logger.info("No transcript received")
+            self._record_latency(final)
             self._remember_typed(final)
             return final
 
         await self._settle_pause_reviews(engine, merged)
+        await self._await_nav_task()
         result = engine.finalize(merged, now=time.monotonic())
-        final = result.text
-        self._last_scratches = result.scratches
         worker = self._flow_worker
         try:
+            if result.action is not None:
+                result = await self._finish_nav_at_stop(engine, result, worker)
+            final = result.text
+            self._last_scratches = result.scratches
+            self._note_spellings(result.corrections)
             if worker is not None:
                 final = await self._finish_live(worker, final, result.instruction)
             else:
                 final = await self._finish_classic(final, result.instruction)
+            segment = final
+            if result.typed_before:
+                # Earlier segments, before navigation moved the caret.
+                gap = "" if final[:1].isspace() else " "
+                final = (result.typed_before + gap + final).strip()
         finally:
             await self._teardown_flow_session()
 
@@ -1388,7 +1567,12 @@ class Daemon:
             logger.info("Inserted %d characters", len(final))
         else:
             logger.info("No transcript received")
+        self._record_latency(final)
         self._remember_typed(final)
+        if result.typed_before and not self._session_secret:
+            # Only the text after the last command is where the caret left
+            # it: a later transform/keep may backspace over that, nothing more.
+            self._last_typed = segment
         return final
 
     async def _finish_live(
@@ -1410,6 +1594,7 @@ class Daemon:
 
         worker.set_target(final)
         typed = await worker.drain(timeout=self._drain_timeout(final))
+        self._mark_latency("settled")
         if typed != final:
             logger.warning(
                 "Live injection finished at %d/%d characters", len(typed), len(final)
@@ -1460,6 +1645,8 @@ class Daemon:
                     logger.info("Focus changed; transcript is on the clipboard")
                     return ""
             await asyncio.to_thread(self._injector.type_text, final)
+            self._mark_latency("first_key")
+            self._mark_latency("settled")
         return final
 
     async def _transform_previous_or_report(self, instruction: str) -> str:
@@ -1500,6 +1687,36 @@ class Daemon:
         except Exception:
             accepted = []
         return ", ".join(accepted[:24])
+
+    def _note_spellings(self, corrections) -> None:
+        """Each "spell that ..." becomes a `voice-keyboard learned`
+        candidate — offered, never applied until accepted."""
+        if not corrections or self._session_secret:
+            return
+        if not self._config.get("flow", {}).get("personal_dictionary", True):
+            return
+        for heard, meant in corrections:
+            try:
+                dictionary.record_spelling(heard, meant)
+            except Exception:
+                logger.exception("Could not record a spelled correction")
+
+    def _mark_latency(self, name: str) -> None:
+        if self._timer is not None:
+            self._timer.mark(name)
+
+    def _record_latency(self, final: str) -> None:
+        """Close this dictation's timer into the latency ring (never for a
+        secret field, or a session that typed nothing)."""
+        timer, self._timer = self._timer, None
+        if timer is None or not final or self._session_secret:
+            return
+        timer.mark("settled")
+        self._latency.record(
+            timer,
+            app=self._session_focus.app if self._session_focus else "",
+            register=self._session_register.name,
+        )
 
     def _remember_typed(self, final: str, *, register: str = "") -> None:
         if not final:
@@ -2060,6 +2277,8 @@ class Daemon:
         if not self._heard_signal and chunk.strip(b"\x00"):
             self._heard_signal = True
         level = chunk_rms(chunk)
+        if self._onset is not None and self._onset.feed(level):
+            self._mark_latency("onset")
         self._levels.append(level)
         del self._levels[:-8]
         gate = self._silence_gate
@@ -2155,6 +2374,8 @@ class Daemon:
             logger.exception("Error receiving STT events")
 
     def _feed_flow(self, *, is_final: bool) -> None:
+        if self._final_text or self._interim_text:
+            self._mark_latency("first_partial")
         engine = self._flow_engine
         if engine is None:
             return
@@ -2169,6 +2390,7 @@ class Daemon:
         worker = self._flow_worker
         if worker is not None:
             worker.set_target(engine.desired_text())
+            self._maybe_run_nav(engine, worker)
 
     # ---------------------------------------------------------- remote mic
 

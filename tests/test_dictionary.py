@@ -121,7 +121,9 @@ class TestMineHotwords:
 class TestDictionaryFile:
     def test_missing_file_loads_empty(self) -> None:
         data = dictionary.load_dictionary()
-        assert data == {"overrides": {}, "hotwords": [], "rejected": [], "macros": {}}
+        assert data == {
+            "overrides": {}, "hotwords": [], "rejected": [], "macros": {}, "spelled": {}
+        }
 
     def test_corrupt_file_loads_empty(self) -> None:
         path = dictionary.dictionary_path()
@@ -132,6 +134,7 @@ class TestDictionaryFile:
             "hotwords": [],
             "rejected": [],
             "macros": {},
+            "spelled": {},
         }
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")

@@ -124,10 +124,17 @@ numbers = "auto"
 # Opt-in local dictation ledger for `voice-keyboard history` / `recall`.
 # Entries: ~/.local/state/voice-keyboard/history.jsonl (mode 600).
 history = false
+# Also log per-dictation latency numbers (never text) to latency.jsonl
+# next to history. `voice-keyboard stats` works either way.
+latency_log = false
 # Merge corrections you accepted via `voice-keyboard learned` into the
 # grammar vocabulary. Dormant until you accept something; your explicit
 # [flow.vocabulary] entries always win.
 personal_dictionary = true
+# "spell that n g i n x" (or NATO: "november golf ...", "capital k")
+# swaps the last word for the spelled one; "spell ..." types it. Each
+# swap is offered as a `voice-keyboard learned` candidate.
+spelling = true
 # Punctuation where you paused. Streaming recognizers (xai, hyperfurion)
 # end a sentence at every pause — "I think. We should wait." — so a
 # period you paused after stays revisable until the next words decide it.
@@ -319,6 +326,27 @@ address_word = ""
 enabled = false
 # The instruction's first word that routes to the intent channel.
 verbs = ["run", "command", "execute"]
+
+[nav]
+# Hands-free navigation by voice, in editors and terminals alike:
+#   go left / go right [N] [words|characters]   go up / go down [N] lines
+#   go to start / end of line (or document)     select previous / next [N] words
+#   select all · select line · delete line       delete previous / next [N] words
+#   press tab · press escape twice · press page down
+# A command fires only when it is a whole utterance of its own (a pause
+# before and after); mid-sentence, "delete the previous word" is just
+# words. Terminals get readline keys on Linux (alt+b, ctrl+a, ctrl+w) and
+# Windows Terminal/PSReadLine keys on Windows; selection is refused there.
+# Enter is never pressed. With hold-to-talk, keys fire after you release.
+enabled = false
+
+[nav.keys.editor]
+# Override a command's chords; "" disables it. A list is a sequence.
+# "move:word:left" = "ctrl+left"
+# "select:line:here" = ["home", "shift+end"]
+
+[nav.keys.terminal]
+# "move:word:left" = "ctrl+left"    # if your shell binds it
 
 [wake]
 # Summon Kai hands-free by saying her name. A tiny LOCAL openWakeWord model

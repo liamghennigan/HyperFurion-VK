@@ -3,7 +3,8 @@
 Every re-dictation shortly after a previous attempt is a labeled pair —
 what the engine heard vs what the user meant. `voice-keyboard learned`
 mines the history ledger for those pairs; NOTHING applies until the user
-accepts an entry. Accepted overrides merge into the grammar vocabulary at
+accepts an entry. Saying "spell that ..." offers its swap as a candidate
+too, without the ledger. Accepted overrides merge into the grammar vocabulary at
 the next recording start ([flow] personal_dictionary); accepted hotwords
 feed the STT biasing context. Everything lives in
 ~/.local/state/voice-keyboard/dictionary.json (mode 600, same posture as
@@ -39,7 +40,7 @@ def dictionary_path() -> Path:
 
 
 def _empty() -> dict:
-    return {"overrides": {}, "hotwords": [], "rejected": [], "macros": {}}
+    return {"overrides": {}, "hotwords": [], "rejected": [], "macros": {}, "spelled": {}}
 
 
 def load_dictionary() -> dict:
@@ -55,6 +56,7 @@ def load_dictionary() -> dict:
     hotwords = data.get("hotwords")
     rejected = data.get("rejected")
     macros = data.get("macros")
+    spelled = data.get("spelled")
     return {
         "overrides": {
             str(k): str(v)
@@ -75,6 +77,14 @@ def load_dictionary() -> dict:
             if isinstance(k, str) and isinstance(v, str)
         }
         if isinstance(macros, dict)
+        else {},
+        # candidate_key(heard, meant) -> times spelled
+        "spelled": {
+            str(k): int(v)
+            for k, v in (spelled or {}).items()
+            if isinstance(k, str) and " -> " in k and isinstance(v, int)
+        }
+        if isinstance(spelled, dict)
         else {},
     }
 
@@ -148,6 +158,31 @@ def _tokens(text: str) -> list[str]:
 
 def candidate_key(heard: str, meant: str) -> str:
     return f"{heard} -> {meant}"
+
+
+def record_spelling(heard: str, meant: str) -> None:
+    """A "spell that ..." swap: remember it as a correction candidate.
+
+    Not applied — a spelled word is explicit about THIS occurrence, not
+    every future one ("their" -> "there" must not become a rule). It shows
+    up in `voice-keyboard learned` for the user to accept."""
+    heard = heard.strip(".,!?;:").casefold()
+    meant = meant.strip()
+    if not heard or not meant or heard == meant.casefold() or " -> " in heard:
+        return
+    data = load_dictionary()
+    key = candidate_key(heard, meant)
+    data["spelled"][key] = data["spelled"].get(key, 0) + 1
+    save_dictionary(data)
+
+
+def spelled_candidates(data: dict) -> list[tuple[str, str, int]]:
+    """Spelled swaps as (heard, meant, count), most-spelled first."""
+    pairs = []
+    for key, count in data.get("spelled", {}).items():
+        heard, _, meant = key.partition(" -> ")
+        pairs.append((heard, meant, count))
+    return sorted(pairs, key=lambda pair: (-pair[2], pair[0]))
 
 
 def mine_corrections(entries: list[dict]) -> list[tuple[str, str, int]]:
@@ -234,9 +269,13 @@ def open_candidates(entries: list[dict]) -> list[tuple[str, str, int]]:
     data = load_dictionary()
     accepted = {k.casefold() for k in data["overrides"]}
     rejected = set(data["rejected"])
+    merged: dict[tuple[str, str], int] = {}
+    # Spelled swaps first: the user was explicit about those.
+    for heard, meant, count in spelled_candidates(data) + mine_corrections(entries):
+        merged[(heard, meant)] = merged.get((heard, meant), 0) + count
     return [
         (heard, meant, count)
-        for heard, meant, count in mine_corrections(entries)
+        for (heard, meant), count in merged.items()
         if heard.casefold() not in accepted
         and candidate_key(heard, meant) not in rejected
     ]
@@ -246,8 +285,13 @@ def open_hotword_candidates(entries: list[dict]) -> list[tuple[str, int]]:
     data = load_dictionary()
     known = {w.casefold() for w in data["hotwords"]}
     rejected = set(data["rejected"])
+    spelled: dict[str, int] = {}
+    for _heard, meant, count in spelled_candidates(data):
+        if len(meant) >= 3:
+            spelled[meant] = spelled.get(meant, 0) + count
+    mined = [(token, count) for token, count in mine_hotwords(entries) if token not in spelled]
     return [
         (token, count)
-        for token, count in mine_hotwords(entries)
+        for token, count in list(spelled.items()) + mined
         if token.casefold() not in known and candidate_key("hotword", token) not in rejected
     ]

@@ -300,6 +300,23 @@ class HotkeyListener:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
 
+    def combo_held(self) -> bool:
+        """True while the binding's keys are physically down (a hold-to-talk
+        in progress): an injected chord now would combine with them."""
+        with self._lock:
+            return bool(self._spec.is_pressed(self._pressed))
+
+    def modifiers_held(self) -> bool:
+        """True while any of the binding's modifiers is still down — e.g.
+        the trigger released before Ctrl. An injected chord would pick it
+        up (Linux has no way to release another device's keys)."""
+        with self._lock:
+            pressed = set(self._pressed)
+            spec = self._spec
+        if any(set(group) & pressed for group in getattr(spec, "modifier_groups", [])):
+            return True
+        return bool(getattr(spec, "is_bare", False) and spec.trigger_code in pressed)
+
     def _make_spec(self, key: str):
         """The Linux (evdev) spec. macOS/Windows backends override this."""
         return HotkeySpec(key, allow_bare=self._allow_bare)

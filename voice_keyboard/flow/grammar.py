@@ -2,9 +2,10 @@
 
 Turns raw transcript tokens into render items — words, punctuation glyphs,
 line breaks — plus action items the engine executes ("scratch that", a
-wake-word instruction). Parsing is a deterministic left-to-right scan with
-bounded lookahead, so parsing a token prefix yields a prefix of the items:
-the engine relies on this to keep committed output frozen.
+wake-word instruction, "spell that n g i n x", "select previous word").
+Parsing is a deterministic left-to-right scan with bounded lookahead, so
+parsing a token prefix yields a prefix of the items: the engine relies on
+this to keep committed output frozen.
 
 Everything is data-driven: command phrases, the punctuation table, and the
 user vocabulary all come from config and can be remapped or disabled.
@@ -13,7 +14,15 @@ user vocabulary all come from config and can be remapped or disabled.
 from dataclasses import dataclass
 from typing import Optional
 
+from voice_keyboard.flow.nav import PENDING as NAV_PENDING
+from voice_keyboard.flow.nav import VERBS as NAV_VERBS
+from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import NUMBER_WORDS, convert_numbers
+from voice_keyboard.flow.spelling import (
+    MAX_SPELLED_LETTERS,
+    could_be_capital,
+    letters_at,
+)
 
 _PUNCT_STRIP = ".,!?;:"
 
@@ -23,11 +32,13 @@ MAX_PHRASE_TOKENS = 4
 
 @dataclass(frozen=True)
 class Item:
-    kind: str                    # word | punct | break | scratch | instruction
+    kind: str  # word | punct | break | scratch | instruction | respell | key
     text: str = ""               # word text, punct glyph, break chars, instruction
-    mode: str = "none"           # punct spacing: left | right | both | none
+    mode: str = "none"           # punct spacing: left | right | both | none;
+    # respell: replace (the previous word) | insert
     sentence_end: bool = False
     span: tuple[int, int] = (0, 0)  # [start, end) raw-token indices
+    count: int = 1               # key: how many times (go left THREE words)
 
 
 @dataclass(frozen=True)
@@ -85,6 +96,11 @@ DEFAULT_PUNCTUATION: dict[str, tuple[str, str, bool]] = {
 
 _BREAKS = {"new_line": "\n", "new_paragraph": "\n\n"}
 
+SPELL_WORD = "spell"
+# Spelled symbols that are also everyday words.
+_AMBIGUOUS = {"a", "i", "one", "two", "four", "eight"}
+_PENDING = "pending"
+
 
 def _core(token: str) -> str:
     return token.casefold().strip(_PUNCT_STRIP)
@@ -106,8 +122,12 @@ class Grammar:
         numbers: str = "auto",
         numbers_on: bool = False,
         numbers_min: int = 10,
+        spelling: bool = True,
+        nav: bool = False,
     ):
         self.enabled = enabled
+        self._spelling = spelling
+        self._nav = nav
         self._wake = (wake_word or "").strip().casefold()
         numbers = numbers if numbers in {"auto", "always", "off"} else "auto"
         self._numbers_on = numbers == "always" or (numbers == "auto" and numbers_on)
@@ -201,6 +221,7 @@ class Grammar:
         *,
         flush: bool = False,
         frozen: int = 0,
+        settled: int = 0,
     ) -> ParseResult:
         """Parse raw tokens into items.
 
@@ -213,6 +234,10 @@ class Grammar:
         it. Tokens before it were already committed under some parse, and
         fencing guarantees this parse reproduces those items exactly even
         if later tokens would retroactively complete a longer phrase.
+
+        `settled` is how many tokens the provider has finalized. A spelled
+        run or a navigation command starting inside them is decided there:
+        it never waits for, or grows into, the next segment.
         """
         if not self.enabled:
             items = [
@@ -247,6 +272,38 @@ class Grammar:
                 )
                 index = len(tokens)
                 break
+
+            if self._spelling and core == SPELL_WORD:
+                limit, decided = self._limit(index, len(tokens), frozen, settled, flush)
+                head = index + (2 if cores[index + 1:index + 2] == ["that"] else 1)
+                if index >= frozen and head >= limit:
+                    # "spell that" ended its segment: the letters may come
+                    # after a pause, in the next one.
+                    limit, decided = len(tokens), flush
+                spelled = self._parse_spelling(
+                    tokens[:limit], cores[:limit], index, decided
+                )
+                if spelled == _PENDING:
+                    pending_from = index
+                    break
+                if spelled is not None:
+                    item, index = spelled  # type: ignore[misc]
+                    items.append(item)
+                    continue
+
+            if self._nav and core in NAV_VERBS:
+                limit, decided = self._limit(index, len(tokens), frozen, settled, flush)
+                command = parse_nav(cores[:limit], index, decided=decided)
+                if command == NAV_PENDING:
+                    pending_from = index
+                    break
+                if command is not None:
+                    action, count, end = command  # type: ignore[misc]
+                    items.append(
+                        Item(kind="key", text=action, count=count, span=(index, end))
+                    )
+                    index = end
+                    continue
 
             entry, consumed = self._match_phrase(cores, index, fence)
             if (
@@ -325,6 +382,65 @@ class Grammar:
                 pending_from = number_pending
 
         return ParseResult(items=items, pending_from=pending_from)
+
+    @staticmethod
+    def _limit(
+        index: int, total: int, frozen: int, settled: int, flush: bool
+    ) -> tuple[int, bool]:
+        """How far an open-ended command at `index` may read, and whether
+        its end is decided: behind the committed fence or inside a final
+        segment it may not cross that boundary and never waits."""
+        if index < frozen:
+            return frozen, True
+        if index < settled:
+            return settled, True
+        return total, flush
+
+    def _parse_spelling(
+        self, tokens: list[str], cores: list[str], index: int, flush: bool
+    ):
+        """"spell that <letters>" (replace the previous word) or "spell
+        <letters>" (type the spelled word) at `index`.
+
+        Returns (item, next index); _PENDING while the letter run touches
+        the tail and might keep growing; None when this "spell" is just a
+        word (an insert needs two letters, so "cast a spell" and "spell
+        a ..." stay prose)."""
+        start = index + 1
+        mode = "insert"
+        if start < len(tokens) and cores[start] == "that":
+            mode = "replace"
+            start += 1
+        if start >= len(tokens):
+            return None if flush else _PENDING
+        pieces: list[tuple[str, int]] = []  # (letters, tokens used)
+        cursor = start
+        ended_on_word = False
+        while cursor < len(tokens) and sum(len(p) for p, _ in pieces) < MAX_SPELLED_LETTERS:
+            letters, used = letters_at(tokens, cursor)
+            if not used:
+                if (
+                    not flush
+                    and cursor == len(tokens) - 1
+                    and could_be_capital(tokens[cursor])
+                ):
+                    return _PENDING
+                ended_on_word = True
+                break
+            pieces.append((letters, used))
+            cursor += used
+        if cursor >= len(tokens) and not flush:
+            return _PENDING  # the next update may spell more letters
+        if ended_on_word:
+            # A real word follows: trailing "a" / "I" / "one" are likely
+            # that sentence's words, not letters ("... x a good one").
+            while len(pieces) > 1 and cores[cursor - pieces[-1][1]] in _AMBIGUOUS:
+                cursor -= pieces.pop()[1]
+        word = "".join(letters for letters, _ in pieces)
+        if len(word) < (1 if mode == "replace" else 2):
+            return None
+        word = word[:MAX_SPELLED_LETTERS]
+        return Item(kind="respell", text=word, mode=mode, span=(index, cursor)), cursor
 
     def _fold_numbers(
         self,

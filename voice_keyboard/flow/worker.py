@@ -17,6 +17,7 @@ error path.
 
 import asyncio
 import logging
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,17 @@ def common_prefix_len(a: str, b: str) -> int:
 
 
 class InjectionWorker:
-    def __init__(self, injector, *, burst_chars: int = 32):
+    def __init__(
+        self,
+        injector,
+        *,
+        burst_chars: int = 32,
+        on_first_output: Optional[Callable[[], None]] = None,
+    ):
         self._injector = injector
         self._burst = max(1, burst_chars)
+        # Called once, after the first characters land (latency timing).
+        self._on_first_output = on_first_output
         self.screen = ""
         self._desired = ""
         self._dirty = asyncio.Event()
@@ -55,6 +64,12 @@ class InjectionWorker:
         self._desired = text
         self._idle.clear()
         self._dirty.set()
+
+    def reset(self) -> None:
+        """Forget what was typed: the caret moved (navigation), so the text
+        behind it is no longer ours to repair. Call only when idle."""
+        self.screen = ""
+        self._desired = ""
 
     def abandon(self) -> None:
         """Freeze the screen as-is: no further typing or deleting."""
@@ -102,6 +117,12 @@ class InjectionWorker:
                         chunk = target[len(self.screen):len(self.screen) + self._burst]
                         await asyncio.to_thread(self._injector.type_text, chunk)
                         self.screen += chunk
+                        if self._on_first_output is not None:
+                            callback, self._on_first_output = self._on_first_output, None
+                            try:
+                                callback()
+                            except Exception:  # timing must never freeze typing
+                                logger.exception("flow: first-output callback failed")
                 if not self._dirty.is_set():
                     self._idle.set()
                 if self._abandoned:

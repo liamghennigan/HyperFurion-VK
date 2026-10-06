@@ -197,6 +197,38 @@ class TestSendInput:
         assert edit_box.text == "replaced"
 
 
+class TestNavigation:
+    """The [nav] editor chords, pressed by the real SendInput backend into
+    a real EDIT control: what "select previous word" and "go to start of
+    line" do in a Windows app."""
+
+    def _press(self, injector, action: str, count: int = 1) -> None:
+        from voice_keyboard.flow import nav
+
+        for chord in nav.chords_for(action, count, nav.keymap(terminal=False)):
+            injector.press_combo(chord)
+
+    def test_select_previous_word_then_dictate(self, edit_box, injector) -> None:
+        edit_box.text = "hello wrold"
+        edit_box.run_while_pumping(lambda: (
+            injector.press_combo(["ctrl", "end"]),
+            self._press(injector, "select:word:left"),
+            injector.type_text("world"),
+        ))
+        assert edit_box.text == "hello world"
+
+    def test_line_start_and_word_moves(self, edit_box, injector) -> None:
+        edit_box.text = "one two three"
+        edit_box.run_while_pumping(lambda: (
+            injector.press_combo(["ctrl", "end"]),
+            self._press(injector, "move:line:start"),
+            injector.type_text("> "),
+            self._press(injector, "move:word:right", 2),
+            injector.type_text("and "),
+        ))
+        assert edit_box.text == "> one two and three"
+
+
 class TestClipboard:
     def test_round_trip_and_restore(self, saved_clipboard) -> None:
         clip = saved_clipboard
