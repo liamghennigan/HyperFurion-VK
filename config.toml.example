@@ -131,6 +131,10 @@ latency_log = false
 # grammar vocabulary. Dormant until you accept something; your explicit
 # [flow.vocabulary] entries always win.
 personal_dictionary = true
+# "spell that n g i n x" (or NATO: "november golf ...", "capital k")
+# swaps the last word for the spelled one; "spell ..." types it. Each
+# swap is offered as a `voice-keyboard learned` candidate.
+spelling = true
 # Punctuation where you paused. Streaming recognizers (xai, hyperfurion)
 # end a sentence at every pause — "I think. We should wait." — so a
 # period you paused after stays revisable until the next words decide it.

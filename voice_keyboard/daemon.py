@@ -919,6 +919,7 @@ class Daemon:
             numbers=str(flow_cfg.get("numbers", "auto")).lower(),
             numbers_on=register.numbers_on,
             numbers_min=register.numbers_min,
+            spelling=bool(flow_cfg.get("spelling", True)),
         )
 
     def _flow_config_obj(self, pause_review: str = "off") -> FlowConfig:
@@ -1404,6 +1405,7 @@ class Daemon:
         result = engine.finalize(merged, now=time.monotonic())
         final = result.text
         self._last_scratches = result.scratches
+        self._note_spellings(result.corrections)
         worker = self._flow_worker
         try:
             if worker is not None:
@@ -1533,6 +1535,19 @@ class Daemon:
         except Exception:
             accepted = []
         return ", ".join(accepted[:24])
+
+    def _note_spellings(self, corrections) -> None:
+        """Each "spell that ..." becomes a `voice-keyboard learned`
+        candidate — offered, never applied until accepted."""
+        if not corrections or self._session_secret:
+            return
+        if not self._config.get("flow", {}).get("personal_dictionary", True):
+            return
+        for heard, meant in corrections:
+            try:
+                dictionary.record_spelling(heard, meant)
+            except Exception:
+                logger.exception("Could not record a spelled correction")
 
     def _mark_latency(self, name: str) -> None:
         if self._timer is not None:

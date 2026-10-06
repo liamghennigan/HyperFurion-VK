@@ -575,7 +575,10 @@ def _run_learned(extra_args: list[str]) -> None:
             or candidates or hotword_candidates or macro_candidates
         ):
             if entries:
-                print("No candidates yet — they appear after you re-dictate a line.")
+                print(
+                    "No candidates yet — they appear after you re-dictate a"
+                    ' line, or say "spell that ..." to fix a word.'
+                )
             else:
                 print(
                     "Nothing to mine. Enable the ledger with `history = true`"

@@ -2,7 +2,7 @@
 
 Turns raw transcript tokens into render items — words, punctuation glyphs,
 line breaks — plus action items the engine executes ("scratch that", a
-wake-word instruction). Parsing is a deterministic left-to-right scan with
+wake-word instruction, "spell that n g i n x"). Parsing is a deterministic left-to-right scan with
 bounded lookahead, so parsing a token prefix yields a prefix of the items:
 the engine relies on this to keep committed output frozen.
 
@@ -14,6 +14,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 from voice_keyboard.flow.numbers import NUMBER_WORDS, convert_numbers
+from voice_keyboard.flow.spelling import (
+    MAX_SPELLED_LETTERS,
+    could_be_capital,
+    letters_at,
+)
 
 _PUNCT_STRIP = ".,!?;:"
 
@@ -23,9 +28,10 @@ MAX_PHRASE_TOKENS = 4
 
 @dataclass(frozen=True)
 class Item:
-    kind: str                    # word | punct | break | scratch | instruction
+    kind: str                    # word | punct | break | scratch | instruction | respell
     text: str = ""               # word text, punct glyph, break chars, instruction
-    mode: str = "none"           # punct spacing: left | right | both | none
+    mode: str = "none"           # punct spacing: left | right | both | none;
+    # respell: replace (the previous word) | insert
     sentence_end: bool = False
     span: tuple[int, int] = (0, 0)  # [start, end) raw-token indices
 
@@ -85,6 +91,9 @@ DEFAULT_PUNCTUATION: dict[str, tuple[str, str, bool]] = {
 
 _BREAKS = {"new_line": "\n", "new_paragraph": "\n\n"}
 
+SPELL_WORD = "spell"
+_PENDING = "pending"
+
 
 def _core(token: str) -> str:
     return token.casefold().strip(_PUNCT_STRIP)
@@ -106,8 +115,10 @@ class Grammar:
         numbers: str = "auto",
         numbers_on: bool = False,
         numbers_min: int = 10,
+        spelling: bool = True,
     ):
         self.enabled = enabled
+        self._spelling = spelling
         self._wake = (wake_word or "").strip().casefold()
         numbers = numbers if numbers in {"auto", "always", "off"} else "auto"
         self._numbers_on = numbers == "always" or (numbers == "auto" and numbers_on)
@@ -248,6 +259,21 @@ class Grammar:
                 index = len(tokens)
                 break
 
+            if self._spelling and core == SPELL_WORD:
+                # Behind the fence the run is already decided: it may not
+                # grow past the fence, and it never waits.
+                limit = frozen if index < frozen else len(tokens)
+                spelled = self._parse_spelling(
+                    tokens[:limit], cores[:limit], index, flush or index < frozen
+                )
+                if spelled == _PENDING:
+                    pending_from = index
+                    break
+                if spelled is not None:
+                    item, index = spelled  # type: ignore[misc]
+                    items.append(item)
+                    continue
+
             entry, consumed = self._match_phrase(cores, index, fence)
             if (
                 entry is None
@@ -325,6 +351,44 @@ class Grammar:
                 pending_from = number_pending
 
         return ParseResult(items=items, pending_from=pending_from)
+
+    def _parse_spelling(
+        self, tokens: list[str], cores: list[str], index: int, flush: bool
+    ):
+        """"spell that <letters>" (replace the previous word) or "spell
+        <letters>" (type the spelled word) at `index`.
+
+        Returns (item, next index); _PENDING while the letter run touches
+        the tail and might keep growing; None when this "spell" is just a
+        word (an insert needs two letters, so "cast a spell" and "spell
+        a ..." stay prose)."""
+        start = index + 1
+        mode = "insert"
+        if start < len(tokens) and cores[start] == "that":
+            mode = "replace"
+            start += 1
+        if start >= len(tokens):
+            return None if flush else _PENDING
+        word = ""
+        cursor = start
+        while cursor < len(tokens) and len(word) < MAX_SPELLED_LETTERS:
+            letters, used = letters_at(tokens, cursor)
+            if not used:
+                if (
+                    not flush
+                    and cursor == len(tokens) - 1
+                    and could_be_capital(tokens[cursor])
+                ):
+                    return _PENDING
+                break
+            word += letters
+            cursor += used
+        if cursor >= len(tokens) and not flush:
+            return _PENDING  # the next update may spell more letters
+        if len(word) < (1 if mode == "replace" else 2):
+            return None
+        word = word[:MAX_SPELLED_LETTERS]
+        return Item(kind="respell", text=word, mode=mode, span=(index, cursor)), cursor
 
     def _fold_numbers(
         self,

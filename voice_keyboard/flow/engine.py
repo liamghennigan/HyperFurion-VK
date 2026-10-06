@@ -25,6 +25,7 @@ the screen toward it.
 
 import logging
 import math
+import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Optional
@@ -68,6 +69,8 @@ class FinalResult:
     text: str          # full post-grammar text that should be on screen
     instruction: str   # wake-word instruction ("" if none)
     scratches: int     # segments discarded by "scratch that"
+    # (heard, meant) for each "spell that ..." that replaced a word.
+    corrections: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -99,6 +102,15 @@ class PauseQuery:
     index: int
     before: str
     after: str
+
+
+# The last word of the committed render, its trailing punctuation, and
+# trailing whitespace: "... hello wrold." -> ("wrold", ".", "").
+_LAST_WORD = re.compile(r"(\S+?)([.,!?;:)\]}\"'»”’]*)(\s*)\Z")
+
+# Actions that rewrite committed text: they wait for a final transcript,
+# never a stability guess, so a misheard partial can't fire them.
+_FINAL_ONLY = ("respell",)
 
 
 def risky_backspace(text: str) -> bool:
@@ -143,6 +155,7 @@ class FlowEngine:
         self._lower_seen: set[str] = set()
         self._instruction = ""
         self._scratches = 0
+        self._corrections: list[tuple[str, str]] = []
         self._rev_depth = 0.0  # adaptive: observed ASR revision depth, decaying
 
     # ------------------------------------------------------------- inputs
@@ -224,6 +237,7 @@ class FlowEngine:
             text=self._committed_render,
             instruction=self._instruction,
             scratches=self._scratches,
+            corrections=tuple(self._corrections),
         )
 
     # ------------------------------------------------------------ outputs
@@ -307,11 +321,13 @@ class FlowEngine:
     # ----------------------------------------------------------- internal
 
     def _preview_items(self) -> list[Item]:
-        return [
-            item
-            for item in self._items[self._committed_items:]
-            if item.kind in ("word", "punct", "break")
-        ]
+        preview: list[Item] = []
+        for item in self._items[self._committed_items:]:
+            if item.kind in ("word", "punct", "break"):
+                preview.append(item)
+            elif item.kind == "respell" and item.mode == "insert":
+                preview.append(Item(kind="word", text=item.text, span=item.span))
+        return preview
 
     def _pending_is_instruction(self) -> bool:
         if self._pending_from is None or self._pending_from >= len(self._tokens):
@@ -442,6 +458,8 @@ class FlowEngine:
             if self._holds_pause(start, end):
                 break  # the words after the pause will decide its period
             committable = end <= self._final_tokens
+            if not committable and item.kind in _FINAL_ONLY:
+                break
             if not committable:
                 metas = self._meta[start:end]
                 committable = all(
@@ -484,6 +502,15 @@ class FlowEngine:
                 )
         if item.kind == "scratch":
             self._apply_scratch()
+        elif item.kind == "respell" and item.mode == "replace":
+            self._apply_respell(item.text)
+        elif item.kind == "respell":
+            delta, self._render_state = render_items(
+                [Item(kind="word", text=item.text, span=item.span)],
+                self._render_state,
+                self._register,
+            )
+            self._committed_render += delta
         elif item.kind == "instruction":
             if item.text:
                 self._instruction = item.text
@@ -516,6 +543,40 @@ class FlowEngine:
         while self._snapshots and self._snapshots[-1].render_len > target.render_len:
             self._snapshots.pop()
         self._scratches += 1
+
+    def _apply_respell(self, spelled: str) -> None:
+        """"spell that ...": swap the last committed word for the spelled
+        one, keeping its trailing punctuation and its capital."""
+        match = _LAST_WORD.search(self._committed_render)
+        if match is None:
+            logger.info("flow: nothing to respell")
+            return
+        token = match.group(1)
+        heard = token.lstrip("\"'([{«“‘")  # an opening quote stays put
+        start = match.start(1) + len(token) - len(heard)
+        if not heard:
+            return
+        if risky_backspace(self._committed_render[start:]):
+            logger.warning("flow: refusing to respell across complex Unicode")
+            return
+        if heard[:1].isupper() and spelled.islower():
+            spelled = spelled[:1].upper() + spelled[1:]
+        self._committed_render = (
+            self._committed_render[:start] + spelled + match.group(2) + match.group(3)
+        )
+        # Segment snapshots after the word shift with it, so "scratch that"
+        # still rewinds to the same boundaries.
+        shift = len(spelled) - len(heard)
+        self._snapshots = [
+            snap
+            if snap.render_len <= start
+            else _Snapshot(
+                render_len=snap.render_len + shift, render_state=snap.render_state
+            )
+            for snap in self._snapshots
+        ]
+        if heard != spelled:
+            self._corrections.append((heard, spelled))
 
     def _mark_segment_boundary(self) -> None:
         mark = len(self._tokens)
