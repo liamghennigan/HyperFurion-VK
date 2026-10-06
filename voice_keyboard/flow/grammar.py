@@ -346,6 +346,12 @@ class Grammar:
             (len(p) for p in self._phrases), default=1
         )
 
+    @property
+    def waits_for_final(self) -> frozenset:
+        """Words decided only once the next word is final ("punto"): the
+        engine never expires their hold."""
+        return frozenset(self._guards)
+
     def phrases(self) -> list[tuple[str, str, object]]:
         """Every spoken phrase this grammar knows, after config merges:
         (phrase, kind, payload) with kind "command" | "punct" | "vocab"."""

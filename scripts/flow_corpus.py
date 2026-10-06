@@ -367,6 +367,7 @@ def make_engine(register_name: str, opts: dict) -> FlowEngine:
         fillers=opts.get("fillers", DEFAULT_FILLERS),
         formatters=opts.get("formatters", "code"),
         code=bool(register.compiler) or register.terminal,
+        language=opts.get("language", "en"),
     )
     config = FlowConfig(pause_review=opts.get("pause_review", "off"))
     return FlowEngine(config, grammar, register, initial_state=initial)

@@ -22,7 +22,9 @@ VOCAB = (
     "percent dollars and fifty cents pm am i quote unquote end said period comma new line "
     "bullet number heading scratch that spell n g x correct to cap uppercase select undo "
     "go left word emoji rocket point hundred thousand euros june first second graders "
-    "literal snake case user id dot com at example um"
+    "literal snake case user id dot com at example um "
+    # language-pack words, used when a seed picks es / fr / de
+    "punto coma de en a y final point virgule à la ligne vue punkt komma neue zeile um"
 ).split()
 
 
@@ -62,7 +64,8 @@ def test_random_dictations_keep_the_fence(chunk: int, caplog: pytest.LogCaptureF
         for seed in SEEDS[chunk::4]:
             rng = random.Random(seed)
             register = rng.choice(("prose", "prose", "prose", "terminal", "python"))
-            opts = {"nav": rng.random() < 0.5, "pause_review": rng.choice(("off", "rules"))}
+            opts = {"nav": rng.random() < 0.5, "pause_review": rng.choice(("off", "rules")),
+                    "language": rng.choice(("en", "en", "es", "fr", "de"))}
             caplog.clear()
             _dictate(rng, register, opts)
             changed = [r for r in caplog.records if "committed items changed" in r.getMessage()]

@@ -454,8 +454,9 @@ class FlowEngine:
             return False
         # anywhere in the held tail: a number run before it holds from its
         # own start ("one quote ...")
+        waits = {"quote", *self._grammar.waits_for_final}
         return any(
-            token.casefold().strip(".,!?;:") == "quote" for token in self._tokens[self._pending_from:]
+            token.casefold().strip(".,!?;:") in waits for token in self._tokens[self._pending_from:]
         )
 
     def _pending_is_instruction(self) -> bool:
