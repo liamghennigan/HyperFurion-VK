@@ -1300,6 +1300,38 @@
   ]
  },
  {
+  "name": "numbered nouns, quarters, sizes",
+  "register": "prose",
+  "segments": [
+   "send the q three report by eod, it's two point five megabytes",
+   "meet in room four oh two on page twenty five. version three point one point four",
+   "the room was nice and the q is long"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Send the Q3 report by EOD, it's 2.5 MB"
+   ],
+   [
+    "screen",
+    "Send the Q3 report by EOD, it's 2.5 MB meet in room 402 on page 25. Version 3.1.4"
+   ],
+   [
+    "screen",
+    "Send the Q3 report by EOD, it's 2.5 MB meet in room 402 on page 25. Version 3.1.4 the room was nice and the q is long"
+   ],
+   [
+    "final",
+    "Send the Q3 report by EOD, it's 2.5 MB meet in room 402 on page 25. Version 3.1.4 the room was nice and the q is long",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "o'clock",
   "register": "prose",
   "segments": [

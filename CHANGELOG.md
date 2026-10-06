@@ -35,6 +35,12 @@ proven to be the daemon's.
   words a speaker restarts on, never a repeat a sentence means ("had had",
   "told you you were", "log in in the morning"), never across a pause the
   recognizer closed, and never in code.
+- **Numbers that name things.** After a numbered noun (room, page,
+  chapter, floor, gate, flight, step, version, …) a number is digits:
+  "room four oh two" `room 402`, "page twenty five" `page 25`, "version
+  three point one point four" `version 3.1.4`. "q three" types `Q3`,
+  "two point five megabytes" `2.5 MB`, and EOD, KPI, ROI, UI, UX, QA, SDK,
+  CLI and friends are capitals.
 - **"five o'clock" types `5 o'clock`, and a time after "at" is a time:**
   "meet at three thirty" types `meet at 3:30`, "at twelve oh five" `at
   12:05`. A bare hour ("at three") and a count ("at three thirty people")

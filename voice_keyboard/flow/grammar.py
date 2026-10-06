@@ -30,6 +30,8 @@ from voice_keyboard.flow.numbers import (
     UNIT_WORDS,
     convert_numbers,
     fold_clock,
+    fold_numbered,
+    NUMBERED_NOUNS,
     fold_digits,
     fold_year,
     fold_unit,
@@ -271,6 +273,7 @@ DATE_MONTHS_SET = frozenset(DATE_MONTHS)
 STUTTER_WORDS = frozenset(
     "the a an i to and we my of for at with i'm it's i'll we're they".split()
 )
+_QUARTERS = {"one": 1, "two": 2, "three": 3, "four": 4}
 _LEADING_WORD = re.compile(r"[a-z]+")
 
 
@@ -977,7 +980,28 @@ class Grammar:
                 item.text[:1] in "0123456789"
                 or (lowered := item.text.casefold().strip(_PUNCT_STRIP)) in NUMBER_WORDS
                 or lowered in DATE_MONTHS_SET
+                or lowered == "q"
             ):
+                result.append(item)
+                index += 1
+                continue
+            if lowered == "q":
+                # "q three" -> "Q3": a quarter, one to four
+                quarter = items[index + 1] if index + 1 < size and items[index + 1].kind == "word" else None
+                committed_q = item.span[0] < frozen
+                q_limit = (item_end(item.span[0]) if item_end is not None else frozen) if committed_q else None
+                if quarter is None and _clean(item.text) and not committed_q and molten(item.span[0]) and index + 1 == size:
+                    return result, item.span[0]  # the quarter may come next
+                if (
+                    quarter is not None and _clean(item.text) and _core(quarter.text) in _QUARTERS
+                    and quarter.text.lstrip(_PUNCT_STRIP) == quarter.text
+                    and (q_limit is None or quarter.span[1] <= q_limit)
+                ):
+                    suffix = quarter.text[len(quarter.text.rstrip(_PUNCT_STRIP)):]
+                    result.append(Item(kind="word", text=f"Q{_QUARTERS[_core(quarter.text)]}{suffix}",
+                                       mode="verbatim", span=(item.span[0], quarter.span[1])))
+                    index += 2
+                    continue
                 result.append(item)
                 index += 1
                 continue
@@ -1139,7 +1163,28 @@ class Grammar:
                         after.text.casefold()) and _LEADING_WORD.match(after.text.casefold()).group(0) in NUMBER_WORDS
                 ):
                     at_time = None  # a count ("at three thirty people") or half a time
+            numbered = None
+            if (
+                year is None and at_time is None and prev is not None and prev.kind == "word"
+                and prev.text.casefold() in NUMBERED_NOUNS
+            ):
+                # "room four oh two" -> "room 402"; the last word may carry the stop
+                closer = items[end] if end < size and items[end].kind == "word" and inside(items[end]) else None
+                if (
+                    closer is not None and not _clean(closer.text)
+                    and closer.text.lstrip(_PUNCT_STRIP) == closer.text
+                    and (label := fold_numbered(words + [_core(closer.text)])) is not None
+                ):
+                    label += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]
+                    result.append(Item(kind="word", text=label, span=(item.span[0], closer.span[1])))
+                    index = end + 1
+                    continue
+                if end == size and molten(item.span[0]):
+                    return result, item.span[0]  # the number may still grow
+                numbered = fold_numbered(words)
             digits = fold_digits(words)
+            if digits is None and numbered is not None:
+                digits = numbered
             if digits is None and at_time is not None:
                 digits = at_time
             if digits is None and year is not None:

@@ -18,7 +18,7 @@ SEEDS = range(400)
 
 # Words that start commands, folds, quotes and lists, mixed with plain ones.
 VOCAB = (
-    "the the a we ship it on friday monday october sixth twenty five nineteen eighty at thirty one two three four seven oh "
+    "the the a we ship it on friday monday october sixth twenty five nineteen eighty at thirty room q megabytes one two three four seven oh "
     "percent dollars and fifty cents pm am i quote unquote end said period comma new line "
     "bullet number heading scratch that spell n g x correct to cap uppercase select undo "
     "go left word emoji rocket point hundred thousand euros june first second graders "

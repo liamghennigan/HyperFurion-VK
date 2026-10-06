@@ -175,7 +175,19 @@ def convert_numbers(tokens: list[str], *, min_value: int = 0) -> list[str]:
 UNIT_WORDS = frozenset({
     "percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m",
     "o'clock", "o\u2019clock",
+    "kilobyte", "kilobytes", "megabyte", "megabytes", "gigabyte", "gigabytes", "terabyte", "terabytes",
 })
+# "two point five megabytes" -> "2.5 MB"
+BYTE_UNITS = {
+    "kilobyte": "KB", "kilobytes": "KB", "megabyte": "MB", "megabytes": "MB",
+    "gigabyte": "GB", "gigabytes": "GB", "terabyte": "TB", "terabytes": "TB",
+}
+# A noun a number names, not counts: "room four oh two" -> "room 402",
+# "page twenty five" -> "page 25", "version three point one" -> "version 3.1".
+NUMBERED_NOUNS = frozenset(
+    "room page chapter floor gate flight step suite apartment section level platform track exit "
+    "route episode season verse figure version release build ticket lesson phase grade".split()
+)
 # Currencies written before the amount. Not "pounds" (weight) or "francs".
 CURRENCY = {"dollar": "$", "dollars": "$", "euro": "€", "euros": "€", "yen": "¥"}
 # "three point two billion dollars" -> "$3.2 billion": a scale word between
@@ -199,6 +211,28 @@ def _clock(words: list[str]) -> Optional[str]:
     if minutes is None or not 10 <= minutes <= 59 or words[1] == "and":
         return None
     return f"{hour}:{minutes:02d}"
+
+
+def fold_numbered(words: list[str]) -> Optional[str]:
+    """The number after a numbered noun: "four oh two" -> "402", "twenty
+    five" -> "25", "three point one point four" -> "3.1.4"; None unless
+    every part reads."""
+    parts: list[list[str]] = [[]]
+    for word in (w.casefold() for w in words):
+        if word == "point":
+            parts.append([])
+        else:
+            parts[-1].append(word)
+    out = []
+    for part in parts:
+        if len(part) >= 2 and all(w in _DIGITS or w == "oh" for w in part) and part[0] != "oh":
+            out.append("".join(str(_DIGITS.get(w, 0)) for w in part))
+            continue
+        value = _parse_cardinal(part) if part else None
+        if value is None:
+            return None
+        out.append(str(value))
+    return ".".join(out)
 
 
 def fold_clock(words: list[str]) -> Optional[str]:
@@ -238,6 +272,8 @@ def fold_unit(words: list[str], unit: str, *, scale: bool = False) -> Optional[s
         return None
     if unit == "percent":
         return amount + "%"
+    if unit in BYTE_UNITS:
+        return f"{amount} {BYTE_UNITS[unit]}"
     whole, dot, frac = amount.partition(".")
     if len(whole) > 3 and not whole.startswith("0"):
         whole = f"{int(whole):,}"  # "$1,500", "¥2,000"

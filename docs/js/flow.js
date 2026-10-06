@@ -19,7 +19,8 @@ const PUNCT_STRIP = /[.,!?;:]+$/;
 const PROPER_WORDS = new Set(("monday tuesday wednesday thursday friday saturday sunday january february " +
   "april june july august september october november december").split(" "));
 // initialisms a lowercase recognizer writes small; never ones that are words ("us", "it")
-const ACRONYMS = new Set("ok tv usa uk faq pdf url api ai ceo eta asap fyi diy gps html css json sql usb".split(" "));
+const ACRONYMS = new Set(("ok tv usa uk faq pdf url api ai ceo eta asap fyi diy gps html css json sql usb " +
+  "eod eow kpi roi okr ui ux qa sdk cli crm saas pto").split(" "));
 const PRONOUN_I = /^i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*$/;
 const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "").replace(/^[.,!?;:]+/, "");  // both ends, as grammar.py _core
 
@@ -165,7 +166,15 @@ function parseNumberRun(words) {
 // Prose keeps spoken numbers as words, except right before a unit that
 // makes the reading certain: "twenty five percent" -> "25%", "five dollars"
 // -> "$5", "three thirty pm" -> "3:30 PM" (numbers.py fold_unit).
-const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m", "o'clock", "o\u2019clock"]);
+const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m", "o'clock", "o\u2019clock",
+  "kilobyte", "kilobytes", "megabyte", "megabytes", "gigabyte", "gigabytes", "terabyte", "terabytes"]);
+// "two point five megabytes" -> "2.5 MB" (numbers.py BYTE_UNITS)
+const BYTE_UNITS = { kilobyte: "KB", kilobytes: "KB", megabyte: "MB", megabytes: "MB",
+  gigabyte: "GB", gigabytes: "GB", terabyte: "TB", terabytes: "TB" };
+// a noun a number names, not counts (numbers.py NUMBERED_NOUNS): "room four oh two" -> "room 402"
+const NUMBERED_NOUNS = new Set(("room page chapter floor gate flight step suite apartment section level platform track exit " +
+  "route episode season verse figure version release build ticket lesson phase grade").split(" "));
+const QUARTERS = { one: 1, two: 2, three: 3, four: 4 };  // "q three" -> "Q3"
 const SCALE_WORDS = new Set(["million", "billion", "trillion"]);  // "$3.2 billion"
 const CURRENCY = { dollar: "$", dollars: "$", euro: "€", euros: "€", yen: "¥" };  // not "pounds" (weight)
 const MERIDIEM = { am: "AM", "a.m": "AM", pm: "PM", "p.m": "PM" };
@@ -188,10 +197,27 @@ export function foldUnit(words, unit, scale = false) {
   else return null;
   if (amount === null) return null;
   if (unit === "percent") return amount + "%";
+  if (Object.hasOwn(BYTE_UNITS, unit)) return amount + " " + BYTE_UNITS[unit];
   let [whole, frac] = amount.split(".");
   if (whole.length > 3 && !whole.startsWith("0")) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");  // "$1,500", "¥2,000"
   if (frac !== undefined && frac.length === 1 && !scale && "$€".includes(CURRENCY[unit])) frac += "0";  // "$1.50", but "$3.2 billion"
   return CURRENCY[unit] + whole + (frac !== undefined ? "." + frac : "");
+}
+// "four oh two" -> "402", "twenty five" -> "25", "three point one point
+// four" -> "3.1.4" (numbers.py fold_numbered); null unless every part reads
+export function foldNumbered(words) {
+  const parts = [[]];
+  for (const w of words.map((x) => x.toLowerCase())) { if (w === "point") parts.push([]); else parts[parts.length - 1].push(w); }
+  const out = [];
+  for (const part of parts) {
+    if (part.length >= 2 && part.every((w) => Object.hasOwn(DIGITS, w) || w === "oh") && part[0] !== "oh") {
+      out.push(part.map((w) => (Object.hasOwn(DIGITS, w) ? DIGITS[w] : 0)).join("")); continue;
+    }
+    const v = part.length ? parseCardinal(part) : null;
+    if (v === null) return null;
+    out.push(String(v));
+  }
+  return out.join(".");
 }
 // "october sixth" -> "October 6": a month, then an ordinal day (numbers.py
 // parse_day); never "may"/"march" (verbs), never a cardinal ("in june
@@ -298,6 +324,17 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
     const it = items[i];
     const committed = it.s < frozen;
     const limit = committed ? itemEnd(it.s) : null;
+    if (it.kind === "word" && core(it.text) === "q") {  // "q three" -> "Q3": a quarter, one to four
+      const quarter = i + 1 < n && items[i + 1].kind === "word" ? items[i + 1] : null;
+      if (!quarter && clean(it.text) && !committed && molten(it.s) && i + 1 === n) return { items: out, pendingFrom: it.s };
+      if (quarter && clean(it.text) && Object.hasOwn(QUARTERS, core(quarter.text)) && !PUNCT_HEAD.test(quarter.text) &&
+          (limit === null || quarter.e <= limit)) {
+        out.push({ kind: "word", text: "Q" + QUARTERS[core(quarter.text)] + (quarter.text.match(PUNCT_TAIL) || [""])[0],
+                   mode: "verbatim", s: it.s, e: quarter.e });
+        i += 2; continue;
+      }
+      out.push(it); i += 1; continue;
+    }
     const inside = (x) => limit === null || x.e <= limit;
     const date = it.kind === "word" ? dateAt(items, i, !committed) : null;  // a committed date was decided when typed
     if (date && !committed && date[1] === n - 1 && molten(items[date[1]].s)) return { items: out, pendingFrom: it.s };  // the next word says date or noun
@@ -403,7 +440,22 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
         if (NOT_A_YEAR_AFTER.has(core(after.text)) || (!clean(after.text) && lead && NUMBER_WORDS.has(lead[0]))) atTime = null;  // a count, or half a time
       }
     }
+    let numbered = null;
+    if (year === null && atTime === null && prev && prev.kind === "word" && NUMBERED_NOUNS.has(prev.text.toLowerCase())) {
+      // "room four oh two" -> "room 402"; the last word may carry the stop
+      const closer = end < n && items[end].kind === "word" && inside(items[end]) ? items[end] : null;
+      if (closer && !clean(closer.text) && !PUNCT_HEAD.test(closer.text)) {
+        const label = foldNumbered([...words, core(closer.text)]);
+        if (label !== null) {
+          out.push({ kind: "word", text: label + (closer.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: closer.e });
+          i = end + 1; continue;
+        }
+      }
+      if (end === n && molten(it.s)) return { items: out, pendingFrom: it.s };  // the number may still grow
+      numbered = foldNumbered(words);
+    }
     let digits = foldDigits(words);
+    if (digits === null && numbered !== null) digits = numbered;
     if (digits === null && atTime !== null) digits = atTime;
     if (digits === null && year !== null) { digits = year; yearComma(i, it.s, items[end - 1].e); }
     if (digits !== null) out.push({ kind: "word", text: digits, s: it.s, e: items[end - 1].e });
