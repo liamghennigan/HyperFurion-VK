@@ -90,6 +90,8 @@ CASES = [
     ("no stutter across a segment end", "prose", ["I talked to the.", "the meeting was fine"], {}),
     ("numbered nouns, quarters, sizes", "prose", ["send the q three report by eod, it's two point five megabytes", "meet in room four oh two on page twenty five. version three point one point four", "the room was nice and the q is long"], {}),
     ("a hundred before a unit", "prose", ["about a hundred and fifty dollars, a hundred percent, a thousand euros and a hundred people"], {}),
+    ("numbered nouns: stops, glue and halves", "prose", ["room four oh two. version two point five. page one hundred and five.", "room five twenty. page five. season one, episode two. step one is to", "see page five and six and page five and then"], {}),
+    ("numbered nouns: verbs, pronouns, counts", "prose", ["we need to build one more and can you page one of the engineers", "the lesson one learns, the floor ten people stood on, page two of three, q one twenty"], {}),
     ("o'clock", "prose", ["meet at five o'clock, or six o\u2019clock. it's ten o'clock"], {}),
     ("a price shows its cents", "prose", ["it costs one point five dollars or two point two five euros"], {}),
     ("a scale stays a word after the figure", "prose", ["we raised three point two billion dollars", "from five million users and two million, dollars"], {}),

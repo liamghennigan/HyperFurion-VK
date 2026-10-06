@@ -273,6 +273,9 @@ DATE_MONTHS_SET = frozenset(DATE_MONTHS)
 STUTTER_WORDS = frozenset(
     "the a an i to and we my of for at with i'm it's i'll we're they".split()
 )
+# After a numbered noun, these say the number was a count: "page two of
+# three", "build one more", "the floor ten people stood on".
+NOT_A_NUMBER_AFTER = NOT_A_YEAR_AFTER | {"of", "more", "thing", "things", "another", "less"}
 _QUARTERS = {"one": 1, "two": 2, "three": 3, "four": 4}
 _LEADING_WORD = re.compile(r"[a-z]+")
 
@@ -993,8 +996,10 @@ class Grammar:
                 q_limit = (item_end(item.span[0]) if item_end is not None else frozen) if committed_q else None
                 if quarter is None and _clean(item.text) and not committed_q and molten(item.span[0]) and index + 1 == size:
                     return result, item.span[0]  # the quarter may come next
+                beyond = items[index + 2] if index + 2 < size and items[index + 2].kind == "word" else None
                 if (
                     quarter is not None and _clean(item.text) and _core(quarter.text) in _QUARTERS
+                    and not (beyond is not None and _clean(quarter.text) and _core(beyond.text) in NUMBER_WORDS)
                     and quarter.text.lstrip(_PUNCT_STRIP) == quarter.text
                     and (q_limit is None or quarter.span[1] <= q_limit)
                 ):
@@ -1047,6 +1052,18 @@ class Grammar:
             if end == index and item.kind == "word" and _clean(item.text) and item.text[:1] in "0123456789":
                 end = index + 1
             if end == index:
+                before_noun = next((it for it in reversed(result) if it.kind != "filler"), None)
+                if (
+                    before_noun is not None and before_noun.kind == "word"
+                    and before_noun.text.casefold() in NUMBERED_NOUNS and not _clean(item.text)
+                    and item.text.lstrip(_PUNCT_STRIP) == item.text
+                    and (label := fold_numbered([_core(item.text)])) is not None
+                ):
+                    # "page five.", "season one, episode two."
+                    result.append(Item(kind="word", text=label + item.text[len(item.text.rstrip(_PUNCT_STRIP)):],
+                                       span=item.span))
+                    index += 1
+                    continue
                 result.append(item)
                 index += 1
                 continue
@@ -1177,20 +1194,46 @@ class Grammar:
                 year is None and at_time is None and prev is not None and prev.kind == "word"
                 and prev.text.casefold() in NUMBERED_NOUNS
             ):
-                # "room four oh two" -> "room 402"; the last word may carry the stop
-                closer = items[end] if end < size and items[end].kind == "word" and inside(items[end]) else None
+                # "room four oh two" -> "room 402"; the last word may carry
+                # the stop, after glue the run trimmed ("four oh two.")
+                at, tail = end, []
+                if (
+                    at < size and items[at].kind == "word" and _clean(items[at].text)
+                    and _core(items[at].text) in ("oh", "point", "and") and inside(items[at])
+                ):
+                    at, tail = at + 1, [_core(items[at].text)]
+                closer = items[at] if at < size and items[at].kind == "word" and inside(items[at]) else None
                 if (
                     closer is not None and not _clean(closer.text)
                     and closer.text.lstrip(_PUNCT_STRIP) == closer.text
-                    and (label := fold_numbered(words + [_core(closer.text)])) is not None
+                    and (label := fold_numbered(words + tail + [_core(closer.text)])) is not None
                 ):
                     label += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]
                     result.append(Item(kind="word", text=label, span=(item.span[0], closer.span[1])))
-                    index = end + 1
+                    index = at + 1
                     continue
-                if end == size and molten(item.span[0]):
-                    return result, item.span[0]  # the number may still grow
-                numbered = fold_numbered(words)
+                if at == size and molten(item.span[0]):
+                    return result, item.span[0]  # the number may still grow, or the next word says
+                after = items[end] if end < size and items[end].kind == "word" else None
+                lead = _LEADING_WORD.match(after.text.casefold()) if after is not None else None
+                if lead and lead.group(0) in ("and", "point") and lead.group(0) == after.text.casefold():
+                    # "page five and then" folds; "page five and six" is half a number
+                    following = items[end + 1] if end + 1 < size and items[end + 1].kind == "word" else None
+                    glue_lead = _LEADING_WORD.match(following.text.casefold()) if following is not None else None
+                    lead = glue_lead if glue_lead and glue_lead.group(0) in NUMBER_WORDS | {"oh"} else None
+                if len(words) == 1:
+                    # one word ("page five", "the lesson one learns") folds
+                    # only on its own stop, above — decided by itself, so it
+                    # reads back the same once committed
+                    pass
+                elif committed:
+                    numbered = fold_numbered(words)  # a multi-word item was folded when typed
+                elif tail[:1] in (["oh"], ["point"]) or (lead and lead.group(0) in NUMBER_WORDS | {"oh"}):
+                    pass  # half a number never folds ("room five twenty.", "one oh")
+                elif after is not None and _core(after.text) in NOT_A_NUMBER_AFTER:
+                    pass  # a count: "the floor ten people", "page twenty of thirty"
+                else:
+                    numbered = fold_numbered(words)
             digits = fold_digits(words)
             if digits is None and numbered is not None:
                 digits = numbered

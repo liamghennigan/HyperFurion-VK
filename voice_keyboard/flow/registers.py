@@ -106,7 +106,7 @@ PROPER_WORDS = frozenset(
 # Never ones that are also words ("us", "it", "am", "it's").
 ACRONYMS = frozenset(
     "ok tv usa uk faq pdf url api ai ceo eta asap fyi diy gps html css json sql usb "
-    "eod eow kpi roi okr ui ux qa sdk cli crm saas pto".split()
+    "eod eow kpi okr ui ux qa sdk cli crm pto".split()
 )
 _PRONOUN_I = re.compile(r"i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*")
 

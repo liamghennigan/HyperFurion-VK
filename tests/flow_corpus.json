@@ -1354,6 +1354,65 @@
   ]
  },
  {
+  "name": "numbered nouns: stops, glue and halves",
+  "register": "prose",
+  "segments": [
+   "room four oh two. version two point five. page one hundred and five.",
+   "room five twenty. page five. season one, episode two. step one is to",
+   "see page five and six and page five and then"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Room 402. Version 2.5. Page 105."
+   ],
+   [
+    "screen",
+    "Room 402. Version 2.5. Page 105. Room five twenty. Page 5. Season 1, episode 2. Step one is to"
+   ],
+   [
+    "screen",
+    "Room 402. Version 2.5. Page 105. Room five twenty. Page 5. Season 1, episode 2. Step one is to see page five and six and page five and then"
+   ],
+   [
+    "final",
+    "Room 402. Version 2.5. Page 105. Room five twenty. Page 5. Season 1, episode 2. Step one is to see page five and six and page five and then",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbered nouns: verbs, pronouns, counts",
+  "register": "prose",
+  "segments": [
+   "we need to build one more and can you page one of the engineers",
+   "the lesson one learns, the floor ten people stood on, page two of three, q one twenty"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We need to build one more and can you page one of the engineers"
+   ],
+   [
+    "screen",
+    "We need to build one more and can you page one of the engineers the lesson one learns, the floor ten people stood on, page two of three, q one twenty"
+   ],
+   [
+    "final",
+    "We need to build one more and can you page one of the engineers the lesson one learns, the floor ten people stood on, page two of three, q one twenty",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "o'clock",
   "register": "prose",
   "segments": [

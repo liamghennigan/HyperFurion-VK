@@ -20,7 +20,7 @@ const PROPER_WORDS = new Set(("monday tuesday wednesday thursday friday saturday
   "april june july august september october november december").split(" "));
 // initialisms a lowercase recognizer writes small; never ones that are words ("us", "it")
 const ACRONYMS = new Set(("ok tv usa uk faq pdf url api ai ceo eta asap fyi diy gps html css json sql usb " +
-  "eod eow kpi roi okr ui ux qa sdk cli crm saas pto").split(" "));
+  "eod eow kpi okr ui ux qa sdk cli crm pto").split(" "));
 const PRONOUN_I = /^i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*$/;
 const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "").replace(/^[.,!?;:]+/, "");  // both ends, as grammar.py _core
 
@@ -172,8 +172,8 @@ const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "euro", "euros", "ye
 const BYTE_UNITS = { kilobyte: "KB", kilobytes: "KB", megabyte: "MB", megabytes: "MB",
   gigabyte: "GB", gigabytes: "GB", terabyte: "TB", terabytes: "TB" };
 // a noun a number names, not counts (numbers.py NUMBERED_NOUNS): "room four oh two" -> "room 402"
-const NUMBERED_NOUNS = new Set(("room page chapter floor gate flight step suite apartment section level platform track exit " +
-  "route episode season verse figure version release build ticket lesson phase grade").split(" "));
+const NUMBERED_NOUNS = new Set(("room page chapter floor gate flight step suite apartment section platform episode season " +
+  "verse version ticket").split(" "));  // only nouns, never verbs ("build one more")
 const QUARTERS = { one: 1, two: 2, three: 3, four: 4 };  // "q three" -> "Q3"
 const SCALE_WORDS = new Set(["million", "billion", "trillion"]);  // "$3.2 billion"
 const CURRENCY = { dollar: "$", dollars: "$", euro: "€", euros: "€", yen: "¥" };  // not "pounds" (weight)
@@ -278,6 +278,8 @@ function centsAt(items, at) {
 const NOT_A_YEAR_AFTER = new Set(("people persons hours hour minutes minute seconds second page pages times items things " +
   "dollars dollar euros euro yen percent pounds miles feet meters kilometers points words " +
   "users students copies units calories kids years days weeks months").split(" "));
+// after a numbered noun these say the number was a count (grammar.py NOT_A_NUMBER_AFTER)
+const NOT_A_NUMBER_AFTER = new Set([...NOT_A_YEAR_AFTER, "of", "more", "thing", "things", "another", "less"]);
 export function foldYear(words) {
   words = words.map((w) => w.toLowerCase());
   if ((words.length !== 2 && words.length !== 3) || (words[0] !== "nineteen" && words[0] !== "twenty")) return null;
@@ -327,7 +329,9 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
     if (it.kind === "word" && core(it.text) === "q") {  // "q three" -> "Q3": a quarter, one to four
       const quarter = i + 1 < n && items[i + 1].kind === "word" ? items[i + 1] : null;
       if (!quarter && clean(it.text) && !committed && molten(it.s) && i + 1 === n) return { items: out, pendingFrom: it.s };
+      const beyond = i + 2 < n && items[i + 2].kind === "word" ? items[i + 2] : null;
       if (quarter && clean(it.text) && Object.hasOwn(QUARTERS, core(quarter.text)) && !PUNCT_HEAD.test(quarter.text) &&
+          !(beyond && clean(quarter.text) && NUMBER_WORDS.has(core(beyond.text))) &&
           (limit === null || quarter.e <= limit)) {
         out.push({ kind: "word", text: "Q" + QUARTERS[core(quarter.text)] + (quarter.text.match(PUNCT_TAIL) || [""])[0],
                    mode: "verbatim", s: it.s, e: quarter.e });
@@ -352,7 +356,15 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
     if (end > i && core(it.text) === "and") end = i;
     while (end > i && ["and", "point", "oh"].includes(core(items[end - 1].text))) end -= 1;
     if (end === i && it.kind === "word" && clean(it.text) && /^[0-9]/.test(it.text)) end = i + 1;  // "25 percent"
-    if (end === i) { out.push(it); i += 1; continue; }
+    if (end === i) {
+      const beforeNoun = [...out].reverse().find((x) => x.kind !== "filler") || null;
+      if (beforeNoun && beforeNoun.kind === "word" && NUMBERED_NOUNS.has(beforeNoun.text.toLowerCase()) && it.kind === "word" &&
+          !clean(it.text) && !PUNCT_HEAD.test(it.text)) {
+        const label = foldNumbered([core(it.text)]);  // "page five.", "season one, episode two."
+        if (label !== null) { out.push({ kind: "word", text: label + (it.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: it.e }); i += 1; continue; }
+      }
+      out.push(it); i += 1; continue;
+    }
     const before = out.length ? out[out.length - 1] : null;
     if (before && before.kind === "word" && NUMBER_WORDS.has(core(before.text)) && core(before.text) !== "and") {
       out.push(...items.slice(i, end)); i = end; continue;  // the rest of a number with something attached: half a number never folds
@@ -446,17 +458,33 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
     }
     let numbered = null;
     if (year === null && atTime === null && prev && prev.kind === "word" && NUMBERED_NOUNS.has(prev.text.toLowerCase())) {
-      // "room four oh two" -> "room 402"; the last word may carry the stop
-      const closer = end < n && items[end].kind === "word" && inside(items[end]) ? items[end] : null;
+      // "room four oh two" -> "room 402"; the last word may carry the stop, after glue the run trimmed
+      let at = end, tail = [];
+      if (at < n && items[at].kind === "word" && clean(items[at].text) && ["oh", "point", "and"].includes(core(items[at].text)) && inside(items[at])) {
+        tail = [core(items[at].text)]; at += 1;
+      }
+      const closer = at < n && items[at].kind === "word" && inside(items[at]) ? items[at] : null;
       if (closer && !clean(closer.text) && !PUNCT_HEAD.test(closer.text)) {
-        const label = foldNumbered([...words, core(closer.text)]);
+        const label = foldNumbered([...words, ...tail, core(closer.text)]);
         if (label !== null) {
           out.push({ kind: "word", text: label + (closer.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: closer.e });
-          i = end + 1; continue;
+          i = at + 1; continue;
         }
       }
-      if (end === n && molten(it.s)) return { items: out, pendingFrom: it.s };  // the number may still grow
-      numbered = foldNumbered(words);
+      if (at === n && molten(it.s)) return { items: out, pendingFrom: it.s };  // the number may still grow, or the next word says
+      const after = end < n && items[end].kind === "word" ? items[end] : null;
+      const leadOf = (x) => { const m = x ? x.text.toLowerCase().match(/^[a-z]+/) : null; return m ? m[0] : null; };
+      let lead = leadOf(after);
+      if ((lead === "and" || lead === "point") && lead === after.text.toLowerCase()) {
+        // "page five and then" folds; "page five and six" is half a number
+        const nextLead = leadOf(end + 1 < n && items[end + 1].kind === "word" ? items[end + 1] : null);
+        lead = nextLead && (NUMBER_WORDS.has(nextLead) || nextLead === "oh") ? nextLead : null;
+      }
+      if (words.length === 1) { /* one word folds only on its own stop, above: decided by itself */ }
+      else if (committed) numbered = foldNumbered(words);  // a multi-word item was folded when typed
+      else if (tail[0] === "oh" || tail[0] === "point" || (lead && (NUMBER_WORDS.has(lead) || lead === "oh"))) { /* half a number never folds */ }
+      else if (after && NOT_A_NUMBER_AFTER.has(core(after.text))) { /* a count: "the floor ten people" */ }
+      else numbered = foldNumbered(words);
     }
     let digits = foldDigits(words);
     if (digits === null && numbered !== null) digits = numbered;

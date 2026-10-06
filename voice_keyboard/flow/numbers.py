@@ -184,9 +184,11 @@ BYTE_UNITS = {
 }
 # A noun a number names, not counts: "room four oh two" -> "room 402",
 # "page twenty five" -> "page 25", "version three point one" -> "version 3.1".
+# Only nouns, never verbs: "build one more", "release two features",
+# "figure one thing out", "exit one app" stay words.
 NUMBERED_NOUNS = frozenset(
-    "room page chapter floor gate flight step suite apartment section level platform track exit "
-    "route episode season verse figure version release build ticket lesson phase grade".split()
+    "room page chapter floor gate flight step suite apartment section platform episode season "
+    "verse version ticket".split()
 )
 # Currencies written before the amount. Not "pounds" (weight) or "francs".
 CURRENCY = {"dollar": "$", "dollars": "$", "euro": "€", "euros": "€", "yen": "¥"}
