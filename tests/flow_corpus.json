@@ -558,6 +558,50 @@
   ]
  },
  {
+  "name": "dates",
+  "register": "prose",
+  "segments": [
+   "due october sixth or june twenty first, not july thirtieth."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Due October 6 or June 21, not July 30."
+   ],
+   [
+    "final",
+    "Due October 6 or June 21, not July 30.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a month and a cardinal stay words",
+  "register": "prose",
+  "segments": [
+   "in june twenty people came and you may first check"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "In June twenty people came and you may first check"
+   ],
+   [
+    "final",
+    "In June twenty people came and you may first check",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "dollars and cents",
   "register": "prose",
   "segments": [

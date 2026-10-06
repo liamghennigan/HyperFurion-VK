@@ -200,3 +200,33 @@ def fold_unit(words: list[str], unit: str) -> Optional[str]:
     if amount is None:
         return None
     return amount + "%" if unit == "percent" else "$" + amount
+
+
+# "october sixth" -> "October 6": a month, then an ordinal day. Only an
+# ordinal: "in june twenty people came" stays words. Not "may" or
+# "march", which are verbs ("you may first check").
+DATE_MONTHS = (
+    "january february april june july august september october november december".split()
+)
+ORDINALS = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+    "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11,
+    "twelfth": 12, "thirteenth": 13, "fourteenth": 14, "fifteenth": 15,
+    "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+    "twentieth": 20, "thirtieth": 30,
+}
+
+
+def parse_day(words: list[str]) -> Optional[int]:
+    """"sixth" -> 6, "twenty first" -> 21, "thirtieth" -> 30; None unless
+    a day of a month spoken as an ordinal."""
+    words = [w.casefold() for w in words]
+    if len(words) == 1 and words[0] in ORDINALS:
+        return ORDINALS[words[0]]
+    if (
+        len(words) == 2 and words[0] in ("twenty", "thirty")
+        and words[1] in ORDINALS and ORDINALS[words[1]] <= 9
+    ):
+        day = _TENS[words[0]] + ORDINALS[words[1]]
+        return day if day <= 31 else None
+    return None

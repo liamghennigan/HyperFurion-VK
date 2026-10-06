@@ -18,7 +18,9 @@ on `main` cuts the GitHub release automatically.
   ("no one knows"), but a unit right after one makes the reading certain:
   "twenty five percent" → `25%`, "five dollars" → `$5`, "three thirty pm"
   → `3:30 PM`, "five dollars and fifty cents" → `$5.50`, and a recognizer's
-  "25 percent" → `25%`. "Which one am I"
+  "25 percent" → `25%`. Dates too: "october sixth" → `October 6`, "june twenty
+  first" → `June 21` (an ordinal day only, so "in june twenty people came"
+  stays words; never "may" or "march"). "Which one am I"
   stays words; a run already typed as words is never rewritten.
 - **Spoken numbered lists.** "Steps colon new number build new number test"
   types `Steps:` / `1. Build` / `2. Test`. The count survives a scratch

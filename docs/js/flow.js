@@ -170,6 +170,38 @@ export function foldUnit(words, unit) {
   if (amount === null) return null;
   return unit === "percent" ? amount + "%" : "$" + amount;
 }
+// "october sixth" -> "October 6": a month, then an ordinal day (numbers.py
+// parse_day); never "may"/"march" (verbs), never a cardinal ("in june
+// twenty people came" stays words)
+const DATE_MONTHS = new Set("january february april june july august september october november december".split(" "));
+const ORDINALS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9,
+  tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15, sixteenth: 16,
+  seventeenth: 17, eighteenth: 18, nineteenth: 19, twentieth: 20, thirtieth: 30 };
+export function parseDay(words) {
+  words = words.map((w) => w.toLowerCase());
+  if (words.length === 1 && words[0] in ORDINALS) return ORDINALS[words[0]];
+  if (words.length === 2 && (words[0] === "twenty" || words[0] === "thirty") && words[1] in ORDINALS && ORDINALS[words[1]] <= 9) {
+    const day = TENS[words[0]] + ORDINALS[words[1]];
+    return day <= 31 ? day : null;
+  }
+  return null;
+}
+function dateAt(items, at) {
+  const month = items[at].text;
+  if (PUNCT_TAIL.test(month) || !DATE_MONTHS.has(month.toLowerCase())) return null;
+  for (const size of [2, 1]) {
+    const last = at + size;
+    if (last >= items.length || items.slice(at + 1, last + 1).some((x) => x.kind !== "word")) continue;
+    const words = items.slice(at + 1, last + 1).map((x) => x.text);
+    if (words.slice(0, -1).some((w) => PUNCT_TAIL.test(w))) continue;
+    const day = parseDay(words.map(core));
+    if (day !== null) {
+      const suffix = (words[words.length - 1].match(PUNCT_TAIL) || [""])[0];
+      return [month.slice(0, 1).toUpperCase() + month.slice(1) + " " + day + suffix, last];
+    }
+  }
+  return null;
+}
 // "and fifty cents" at `at` -> [".50", index of "cents"], or null
 function centsAt(items, at) {
   if (at >= items.length || items[at].kind !== "word" || items[at].text.toLowerCase() !== "and") return null;
@@ -187,6 +219,11 @@ function foldUnits(items, frozen, itemEnd, pendingFrom) {
   let i = 0;
   while (i < items.length) {
     const it = items[i];
+    const date = it.kind === "word" ? dateAt(items, i) : null;
+    if (date && (it.s >= frozen || items[date[1]].e <= itemEnd(it.s))) {
+      out.push({ kind: "word", text: date[0], s: it.s, e: items[date[1]].e });
+      i = date[1] + 1; continue;
+    }
     let end = i;
     while (end < items.length && bare(items[end])) end += 1;  // "five," ends a thought
     if (end > i && GLUE.has(core(it.text))) end = i + 1;  // glue only joins a number already begun

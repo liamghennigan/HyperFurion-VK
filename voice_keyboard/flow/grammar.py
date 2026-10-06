@@ -19,10 +19,12 @@ from voice_keyboard.flow.nav import VERBS as NAV_VERBS
 from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import (
     NUMBER_WORDS,
+    DATE_MONTHS,
     UNIT_WORDS,
     convert_numbers,
     fold_unit,
     parse_cardinal,
+    parse_day,
 )
 from voice_keyboard.flow.pauses import COMMON_LOWER
 from voice_keyboard.flow.spelling import (
@@ -664,6 +666,26 @@ class Grammar:
         return ParseResult(items=items, pending_from=pending_from)
 
     @staticmethod
+    def _date(items: list[Item], at: int) -> Optional[tuple[str, int]]:
+        """"october sixth" at `at` -> ("October 6", index of the day's last
+        word), or None. The day's trailing punctuation is kept."""
+        month = items[at].text
+        if month.rstrip(".,!?;:") != month or month.casefold() not in DATE_MONTHS:
+            return None
+        for size in (2, 1):
+            last = at + size
+            if last >= len(items) or any(it.kind != "word" for it in items[at + 1:last + 1]):
+                continue
+            words = [it.text for it in items[at + 1:last + 1]]
+            if any(w.rstrip(".,!?;:") != w for w in words[:-1]):
+                continue
+            day = parse_day([_core(w) for w in words])
+            if day is not None:
+                suffix = words[-1][len(words[-1].rstrip(".,!?;:")):]
+                return f"{month[:1].upper()}{month[1:]} {day}{suffix}", last
+        return None
+
+    @staticmethod
     def _cents(items: list[Item], at: int) -> Optional[tuple[str, int]]:
         """"and fifty cents" at `at` -> (".50", index of "cents"), or None."""
         if at >= len(items) or items[at].kind != "word" or items[at].text.casefold() != "and":
@@ -695,6 +717,14 @@ class Grammar:
         index = 0
         while index < len(items):
             item = items[index]
+            date = Grammar._date(items, index) if item.kind == "word" else None
+            if date is not None and (
+                item.span[0] >= frozen
+                or (item_end is not None and items[date[1]].span[1] <= item_end(item.span[0]))
+            ):
+                result.append(Item(kind="word", text=date[0], span=(item.span[0], items[date[1]].span[1])))
+                index = date[1] + 1
+                continue
             end = index
             # number words with nothing attached ("five," ends a thought)
             while (
