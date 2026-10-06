@@ -20,9 +20,11 @@ from voice_keyboard.flow.nav import VERBS as NAV_VERBS
 from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import (
     NUMBER_WORDS,
+    CURRENCY,
     DATE_MONTHS,
     DIGIT_WORDS,
     NOT_A_DAY_AFTER,
+    SCALE_WORDS,
     UNIT_WORDS,
     convert_numbers,
     fold_digits,
@@ -982,6 +984,24 @@ class Grammar:
                 index = end
                 continue
             words = [_core(it.text) for it in items[index:end]]
+
+            scale = items[end] if end < size and items[end].kind == "word" else None
+            if scale is not None and _clean(scale.text) and _core(scale.text) in SCALE_WORDS and inside(scale):
+                if end + 1 == size and not committed and (
+                    molten(scale.span[0]) or (pending_from is not None and scale.span[1] == pending_from)
+                ):
+                    return result, item.span[0]  # "two million" may yet be dollars
+                money = items[end + 1] if end + 1 < size and items[end + 1].kind == "word" else None
+                if (
+                    money is not None and _core(money.text) in CURRENCY and inside(money)
+                    and money.text.lstrip(_PUNCT_STRIP) == money.text
+                ):
+                    folded = fold_unit(words, _core(money.text))
+                    if folded is not None:
+                        folded += " " + _core(scale.text) + money.text[len(money.text.rstrip(_PUNCT_STRIP)):]
+                        result.append(Item(kind="word", text=folded, span=(item.span[0], money.span[1])))
+                        index = end + 2
+                        continue
 
             unit = items[end] if end < size and items[end].kind == "word" else None
             unit_core = _core(unit.text) if unit is not None else ""

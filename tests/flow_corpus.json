@@ -360,6 +360,33 @@
   ]
  },
  {
+  "name": "a scale stays a word after the figure",
+  "register": "prose",
+  "segments": [
+   "we raised three point two billion dollars",
+   "from five million users and two million, dollars"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We raised $3.2 billion"
+   ],
+   [
+    "screen",
+    "We raised $3.2 billion from five million users and two million, dollars"
+   ],
+   [
+    "final",
+    "We raised $3.2 billion from five million users and two million, dollars",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a domain goes on as a path",
   "register": "prose",
   "segments": [

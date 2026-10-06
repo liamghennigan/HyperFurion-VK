@@ -166,6 +166,7 @@ function parseNumberRun(words) {
 // makes the reading certain: "twenty five percent" -> "25%", "five dollars"
 // -> "$5", "three thirty pm" -> "3:30 PM" (numbers.py fold_unit).
 const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "euro", "euros", "yen", "am", "pm", "a.m", "p.m"]);
+const SCALE_WORDS = new Set(["million", "billion", "trillion"]);  // "$3.2 billion"
 const CURRENCY = { dollar: "$", dollars: "$", euro: "€", euros: "€", yen: "¥" };  // not "pounds" (weight)
 const MERIDIEM = { am: "AM", "a.m": "AM", pm: "PM", "p.m": "PM" };
 function clock(words) {
@@ -288,6 +289,19 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       out.push(...items.slice(i, end)); i = end; continue;  // the rest of a number with something attached: half a number never folds
     }
     const words = items.slice(i, end).map((x) => core(x.text));
+    const scale = end < n && items[end].kind === "word" ? items[end] : null;
+    if (scale && clean(scale.text) && SCALE_WORDS.has(core(scale.text)) && inside(scale)) {
+      if (end + 1 === n && !committed && (molten(scale.s) || (pendingFrom !== null && scale.e === pendingFrom)))
+        return { items: out, pendingFrom: it.s };  // "two million" may yet be dollars
+      const money = end + 1 < n && items[end + 1].kind === "word" ? items[end + 1] : null;
+      if (money && Object.hasOwn(CURRENCY, core(money.text)) && inside(money) && !PUNCT_HEAD.test(money.text)) {
+        const folded = foldUnit(words, core(money.text));
+        if (folded !== null) {
+          out.push({ kind: "word", text: folded + " " + core(scale.text) + (money.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: money.e });
+          i = end + 2; continue;
+        }
+      }
+    }
     const unit = end < n && items[end].kind === "word" ? items[end] : null;
     const uc = unit ? core(unit.text) : "";
     if (unit && UNIT_WORDS.has(uc) && inside(unit) && !PUNCT_HEAD.test(unit.text)) {

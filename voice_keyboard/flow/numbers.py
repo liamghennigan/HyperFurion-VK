@@ -177,6 +177,9 @@ UNIT_WORDS = frozenset({
 })
 # Currencies written before the amount. Not "pounds" (weight) or "francs".
 CURRENCY = {"dollar": "$", "dollars": "$", "euro": "€", "euros": "€", "yen": "¥"}
+# "three point two billion dollars" -> "$3.2 billion": a scale word between
+# an amount and its currency stays a word after the figure.
+SCALE_WORDS = frozenset({"million", "billion", "trillion"})
 _MERIDIEM = {"am": "AM", "a.m": "AM", "pm": "PM", "p.m": "PM"}
 
 
