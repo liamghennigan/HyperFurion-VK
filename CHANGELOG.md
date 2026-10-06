@@ -65,12 +65,19 @@ proven to be the daemon's.
   "keep out of history"); a focus change or a nav command resets it. On
   by default; `rejoin = false` restores a fresh caret every time. The
   landing page mirrors it.
+- **`voice-keyboard setup` asks about hands-free navigation** (off by
+  default), after Kai and the history question, and says what it does and
+  that Enter is never pressed.
 - **"Try saying" on the landing page.** Five chips under the mic name what
   to say ("scratch that", "spell that n g i n x", "select previous word",
   "delete previous word", "VK, make that formal"); while you dictate, the
   one you just said lights the moment the engine acts on it, and while
   nothing is recording a tap plays that one thing as a short scripted
   session.
+- **The landing page reads well to a screen reader**: the text field no
+  longer announces every keystroke of a molten repair; each dictation is
+  announced once, when it lands. The comparison table gains a row for
+  caret commands by voice.
 - **The landing page types into a real text field.** The focused window is
   a document with a caret and a selection (per register: the editor's and
   the shell's), and every keystroke the 3D board presses lands in it — so

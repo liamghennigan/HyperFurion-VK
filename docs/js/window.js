@@ -21,6 +21,7 @@ export const Window = (() => {
   const el = {
     title: $("fwin-title"), app: $("fwin-app"), doc: $("fwin-doc"), prompt: $("fwin-prompt"),
     instr: $("fwin-instr"), status: $("fwin-status"), tabs: $("regtabs"), panes: $("register-panes"),
+    announce: $("fwin-announce"),
   };
   const docs = new Map();  // register -> its app's buffer
   let regName = "prose";
@@ -155,6 +156,9 @@ export const Window = (() => {
       });
     });
   }
+  // screen readers hear each dictation once, when it lands — not every
+  // keystroke of the molten repair
+  bus.on("type:text", ({ text }) => { if (el.announce) el.announce.textContent = "typed: " + text; });
   setRegister("prose", { silent: true });
   paintDoc();
   panes();

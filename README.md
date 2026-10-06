@@ -35,7 +35,7 @@ through both (`tests/flow_corpus.json`).
 Run it as yourself: no `sudo`, no administrator. (On Linux it asks for your
 password only for the system steps: audio libraries and keyboard access.)
 It installs for your user, then walks you through the settings: speech
-provider and keys, the hotkey, the language, Kai. If a
+provider and keys, the hotkey, the language, Kai, hands-free navigation. If a
 [llama.cpp](https://github.com/ggml-org/llama.cpp) server (`llama-server`) is
 already running on your computer, setup finds it and asks whether to make
 its model your default language model (rewrites, Kai's terminal commands,

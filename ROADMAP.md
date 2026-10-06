@@ -3,6 +3,15 @@
 Where HyperFurion VK goes from here. This is direction, not a schedule —
 items land when they are ready, and each one is shippable on its own.
 
+> **Status 2026-10 (2.3 → next):** hands-free navigation (`[nav]`) and
+> spell-to-fix landed in the daemon, and the landing page became a
+> working instance of the whole engine: a port of `voice_keyboard/flow/`
+> types into a real text field and presses the real chords on a 3D
+> board, and a parity corpus (`tests/flow_corpus.json`) replayed through
+> both engines in CI makes "the same engine" a tested claim rather than
+> a promise. The page is the reference rendering of molten dictation
+> for rung 7's protocol work.
+>
 > **Status 2026-10 (2.2.0):** Windows is a first-class platform — native
 > tray app, overlay, Kai orb, one-line installer, CI on real Windows — and
 > rung 1's widget probe reads Windows too (the caret position and classic
