@@ -139,6 +139,8 @@ CASES = [
     ("go to end of line keeps spacing", "prose", ["one two", "go to end of line", "three"], {"nav": True}),
     ("go to start of line glues", "prose", ["one", "go to start of line", "two"], {"nav": True}),
     ("undo that is a command alone", "prose", ["fix it", "undo that"], {"nav": True}),
+    ("select that covers the last utterance", "prose", ["one", "two three", "select that", "four"], {"nav": True}),
+    ("select that with nothing said selects nothing", "prose", ["select that"], {"nav": True}),
     ("paste it then more words", "prose", ["one two", "paste it", "done"], {"nav": True}),
     ("undo and paste inside a sentence stay words", "prose", ["undo the merge and paste the link"], {"nav": True}),
     ("several commands", "prose", ["alpha", "go left", "beta", "press tab", "gamma"], {"nav": True}),

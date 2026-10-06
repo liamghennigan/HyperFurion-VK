@@ -652,7 +652,8 @@ class FlowEngine:
         mid-sentence it was dictation after all, and types as words."""
         start, end = item.span
         if start in self._segment_bounds and end in self._segment_bounds:
-            self._barrier = NavAction(action=item.text, count=item.count)
+            count = self._last_utterance_length() if item.text == "select:that" else item.count
+            self._barrier = NavAction(action=item.text, count=count)
             return
         words = [
             Item(kind="word", text=token, span=(index, index + 1))
@@ -660,6 +661,20 @@ class FlowEngine:
         ]
         delta, self._render_state = render_items(words, self._render_state, self._register)
         self._committed_render += delta
+
+    def _last_utterance_length(self) -> int:
+        """Characters "select that" must cover: the last segment typed in
+        this recording, without its leading space. 0 (refused) when there
+        is none, or when shift+left can't count it (complex Unicode)."""
+        target = None
+        for snapshot in reversed(self._snapshots):
+            if snapshot.render_len < len(self._committed_render):
+                target = snapshot
+                break
+        if target is None:
+            return 0
+        said = self._committed_render[target.render_len:].lstrip(" ")
+        return 0 if risky_backspace(said) else len(said)
 
     def _apply_respell(self, spelled: str) -> None:
         """"spell that ...": swap the last committed word for the spelled

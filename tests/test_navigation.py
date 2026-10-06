@@ -505,3 +505,14 @@ def test_undo_redo_paste_are_editor_commands():
     for platform in ("linux", "win32", "darwin"):
         for action in ("edit:undo", "edit:redo", "edit:paste"):
             assert chords_for(action, 1, keymap(terminal=True, platform=platform)) is None
+
+
+def test_select_that_presses_one_shift_left_per_character():
+    from voice_keyboard.flow.nav import MAX_SELECT_THAT, chords_for, keymap, parse_nav
+
+    assert parse_nav(["select", "that"], 0, decided=False) == ("select:that", 1, 2)
+    editor = keymap(terminal=False, platform="linux")
+    assert chords_for("select:that", 3, editor) == [["shift", "left"]] * 3
+    assert chords_for("select:that", 0, editor) is None  # nothing said yet
+    assert chords_for("select:that", MAX_SELECT_THAT + 1, editor) is None
+    assert chords_for("select:that", 3, keymap(terminal=True, platform="linux")) is None

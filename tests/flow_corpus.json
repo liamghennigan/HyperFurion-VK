@@ -2355,6 +2355,81 @@
   ]
  },
  {
+  "name": "select that covers the last utterance",
+  "register": "prose",
+  "segments": [
+   "one",
+   "two three",
+   "select that",
+   "four"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "action",
+    "select:that",
+    9,
+    "One two three"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "four"
+   ],
+   [
+    "final",
+    "four",
+    "One two three",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that with nothing said selects nothing",
+  "register": "prose",
+  "segments": [
+   "select that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "action",
+    "select:that",
+    0,
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "paste it then more words",
   "register": "prose",
   "segments": [

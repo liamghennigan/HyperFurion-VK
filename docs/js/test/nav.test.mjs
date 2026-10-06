@@ -67,3 +67,10 @@ test("labels read like the overlay", () => {
   assert.equal(label("select:word:left", 2), "select word left ×2");
   assert.equal(label("move:line:end", 1), "line end");
 });
+test("select that: one shift+left per character, refused at zero, too many, or a terminal", () => {
+  assert.deepEqual(parse("select that", false), ["select:that", 1, 2]);
+  assert.deepEqual(chordsFor("select:that", 3, EDITOR), [["shift", "left"], ["shift", "left"], ["shift", "left"]]);
+  assert.equal(chordsFor("select:that", 0, EDITOR), null);
+  assert.equal(chordsFor("select:that", 401, EDITOR), null);
+  assert.equal(chordsFor("select:that", 3, LINUX_TERMINAL), null);
+});

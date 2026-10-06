@@ -1106,6 +1106,16 @@ export function moltenLine({ register, cfg, state } = {}) {
     const r = render(list, reg, renderState);
     committedRender += r.text; renderState = r.st;
   }
+  // characters "select that" must cover: the last segment typed in this
+  // recording, without its leading space; 0 (refused) when there is none
+  // or shift+left can't count it (engine.py _last_utterance_length)
+  function lastUtteranceLength() {
+    let target = null;
+    for (let i = snapshots.length - 1; i >= 0; i--) if (snapshots[i].len < committedRender.length) { target = snapshots[i]; break; }
+    if (!target) return 0;
+    const said = committedRender.slice(target.len).replace(/^ +/, "");
+    return riskyBackspace(said) ? 0 : said.length;
+  }
   function applyScratch() {
     let target = null;
     for (let i = snapshots.length - 1; i >= 0; i--) if (snapshots[i].len < committedRender.length) { target = snapshots[i]; break; }
@@ -1119,7 +1129,10 @@ export function moltenLine({ register, cfg, state } = {}) {
   // a navigation command fires only as a whole final segment; said
   // mid-sentence it was dictation after all, and types as words
   function commitKey(it) {
-    if (segmentBounds.has(it.s) && segmentBounds.has(it.e)) { barrier = { action: it.text, count: it.count }; return; }
+    if (segmentBounds.has(it.s) && segmentBounds.has(it.e)) {
+      barrier = { action: it.text, count: it.text === "select:that" ? lastUtteranceLength() : it.count };
+      return;
+    }
     append(tokens.slice(it.s, it.e).map((t, k) => ({ kind: "word", text: t, s: it.s + k, e: it.s + k + 1 })));
   }
   // "spell that …": swap the last committed word for the spelled one,

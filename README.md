@@ -633,6 +633,7 @@ sentence, "delete the previous word" is just typed as words.
 | `select previous` / `next [N] words`, `select all`, `select line` | `shift` + the motion, `ctrl+a` / `cmd+a` | refused: a terminal has no selection to extend |
 | `delete previous` / `next [N] words`, `delete line` | `ctrl+backspace` / `ctrl+delete`, or `option+backspace` / `option+delete` | `ctrl+w` / `alt+d` (`Esc d` on macOS), or `ctrl+backspace` / `ctrl+delete` on Windows |
 | `press tab`, `press escape twice`, `press page down` | that key | that key |
+| `select that` | `shift+left` once per character of what you just said (up to 400; never across emoji) — then dictate over it, or say "VK, make that formal" | refused: a terminal has no selection |
 | `undo that`, `redo that`, `paste that` (`twice`, `three times`) | `ctrl+z` / `ctrl+shift+z` (`ctrl+y` on Windows) / `ctrl+v`; `cmd` on a Mac | refused: a paste can carry a line break, which runs the line |
 
 - Text you dictated before the command is on screen before the keys are

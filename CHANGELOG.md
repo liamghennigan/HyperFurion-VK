@@ -9,6 +9,10 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **"Select that".** Selects what you just said — one `shift+left` per
+  character of the last utterance — so the next words replace it, or a
+  rewrite ("VK, make that formal") works on it. Refused when nothing was
+  said yet, past 400 characters, across emoji, and in a terminal.
 - **"Undo that", "redo that", "paste that".** Caret commands, said on their
   own like the others: `ctrl+z`, `ctrl+shift+z` (`ctrl+y` on Windows),
   `ctrl+v`, and `cmd` on a Mac; "undo that twice" repeats. Refused in a

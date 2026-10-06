@@ -4,6 +4,7 @@
     go to end of line          select all / select line   delete line
     move up two lines          press tab / press escape twice
     undo that / redo that      paste that (editors only)
+    select that                (what you just said: shift+left per character)
 
 `parse_nav` reads one command at a token index (pure, deterministic — the
 grammar's prefix property holds). `chords_for` turns a command into the
@@ -30,6 +31,9 @@ from voice_keyboard.flow.numbers import _TENS, _UNITS
 logger = logging.getLogger(__name__)
 
 MAX_COUNT = 20
+# "select that" presses shift+left once per character of the last
+# utterance; longer than this is refused rather than held down for ages.
+MAX_SELECT_THAT = 400
 PENDING = "pending"
 
 _STRIP = ".,!?;:"
@@ -181,6 +185,9 @@ def _parse_motion(verb, cursor, at, optional, decided, total):
     word = at(cursor)
 
     # select all / select (this) line / delete (the) line
+    if verb == "select" and word == "that":
+        # The engine counts the characters of the last utterance.
+        return "select:that", 1, cursor + 1
     if verb == "select" and word == "all":
         return "select:all", 1, cursor + 1
     if verb in ("select", "delete"):
@@ -261,6 +268,7 @@ EDITOR: dict[str, Optional[list[list[str]]]] = {
     **{f"move:{key}": [chord] for key, chord in _EDITOR_MOVES.items()},
     **{f"select:{key}": [["shift", *chord]] for key, chord in _EDITOR_MOVES.items()},
     "select:all": [["ctrl", "a"]],
+    "select:that": [["shift", "left"]],
     "select:line:here": [["home"], ["shift", "end"]],
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
@@ -311,6 +319,7 @@ MAC_EDITOR: dict[str, Optional[list[list[str]]]] = {
     **{f"move:{key}": [chord] for key, chord in _MAC_MOVES.items()},
     **{f"select:{key}": [["shift", *chord]] for key, chord in _MAC_MOVES.items()},
     "select:all": [["cmd", "a"]],
+    "select:that": [["shift", "left"]],
     "select:line:here": [["cmd", "left"], ["shift", "cmd", "right"]],
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["alt", "backspace"]], "delete:word:right": [["alt", "delete"]],
@@ -395,5 +404,10 @@ def chords_for(action: str, count: int, table: dict) -> Optional[list[list[str]]
         return None
     if any(_forbidden(chord) for chord in sequence):
         return None
+    if action == "select:that":
+        # one press per character; nothing to select, or too much, is refused
+        if not 1 <= count <= MAX_SELECT_THAT:
+            return None
+        return [list(chord) for _ in range(count) for chord in sequence]
     repeat = 1 if action in ("select:all",) or action.endswith(":here") else count
     return [list(chord) for _ in range(max(1, min(MAX_COUNT, repeat))) for chord in sequence]

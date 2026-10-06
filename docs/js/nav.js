@@ -14,6 +14,7 @@
 // produces it, and nothing in these tables may name it.
 
 export const MAX_COUNT = 20;
+export const MAX_SELECT_THAT = 400;  // "select that": one shift+left per character, refused beyond
 export const PENDING = "pending";
 
 // plain-object tables are read with own(): a spoken "constructor" is a word
@@ -125,6 +126,7 @@ function repeat(action, cursor, opt, decided, total) {
 function parseMotion(verb, cursor, at, opt, decided, total) {
   let word = at(cursor);
   // select all / select (this) line / delete (the) line
+  if (verb === "select" && word === "that") return ["select:that", 1, cursor + 1];  // the engine counts the last utterance
   if (verb === "select" && word === "all") return ["select:all", 1, cursor + 1];
   if (verb === "select" || verb === "delete") {
     const probe = cursor + (["this", "the", "current"].includes(word) ? 1 : 0);
@@ -181,6 +183,7 @@ export const EDITOR = {
   ...Object.fromEntries(Object.entries(EDITOR_MOVES).map(([k, c]) => ["move:" + k, [c]])),
   ...Object.fromEntries(Object.entries(EDITOR_MOVES).map(([k, c]) => ["select:" + k, [["shift", ...c]]])),
   "select:all": [["ctrl", "a"]],
+  "select:that": [["shift", "left"]],
   "select:line:here": [["home"], ["shift", "end"]],
   "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
   "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
@@ -226,6 +229,7 @@ export const MAC_EDITOR = {
   ...Object.fromEntries(Object.entries(MAC_MOVES).map(([k, c]) => ["move:" + k, [c]])),
   ...Object.fromEntries(Object.entries(MAC_MOVES).map(([k, c]) => ["select:" + k, [["shift", ...c]]])),
   "select:all": [["cmd", "a"]],
+  "select:that": [["shift", "left"]],
   "select:line:here": [["cmd", "left"], ["shift", "cmd", "right"]],
   "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
   "delete:word:left": [["alt", "backspace"]], "delete:word:right": [["alt", "delete"]],
@@ -270,6 +274,10 @@ export function chordsFor(action, count, table) {
   else sequence = own(table, action);
   if (!sequence) return null;
   if (sequence.some(forbidden)) return null;
+  if (action === "select:that") {  // one press per character; nothing, or too much, is refused
+    if (count < 1 || count > MAX_SELECT_THAT) return null;
+    return Array.from({ length: count }, () => [...sequence[0]]);
+  }
   const repeat = action === "select:all" || action.endsWith(":here") ? 1 : count;
   const out = [];
   for (let i = 0; i < Math.max(1, Math.min(MAX_COUNT, repeat)); i++) for (const c of sequence) out.push([...c]);
