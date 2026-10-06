@@ -14,7 +14,8 @@ proven to be the daemon's.
 
 - **Years read as years.** "nineteen eighty four" types `1984`, "nineteen
   oh five" `1905`, "twenty twenty six" `2026`. "Twenty twenty vision" and
-  "nineteen people" stay words.
+  "nineteen people" stay words. A date takes its year with a comma:
+  "june fifth nineteen ninety nine" → `June 5, 1999`.
 - **Big money reads like money.** "three point two billion dollars" types
   `$3.2 billion`, "two million euros" types `€2 million`, and a price
   shows its cents ("one point five dollars" → `$1.50`).

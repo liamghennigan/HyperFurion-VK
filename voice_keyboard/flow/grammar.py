@@ -929,6 +929,12 @@ class Grammar:
             return tail_open and at >= frozen and at >= settled
 
         index = 0
+        after_date = -1  # the index right after a date with nothing attached ("June 5")
+
+        def year_comma(at: int, span: tuple[int, int]) -> None:
+            if at == after_date:  # "June 5, 1999"
+                result.append(Item(kind="punct", text=",", mode="left", span=span))
+
         while index < size:
             item = items[index]
             # Fast path: most words can start no fold at all.
@@ -954,6 +960,7 @@ class Grammar:
             if date is not None and inside(items[date[1]]):
                 result.append(Item(kind="word", text=date[0], span=(item.span[0], items[date[1]].span[1])))
                 index = date[1] + 1
+                after_date = index if _clean(items[date[1]].text) else -1
                 continue
 
             # The run: number words with nothing attached ("five," ends a
@@ -1046,12 +1053,15 @@ class Grammar:
             ):
                 # "nineteen eighty four." — the year's last word carries the stop
                 year += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]
+                year_comma(index, (item.span[0], closer.span[1]))
                 result.append(Item(kind="word", text=year, span=(item.span[0], closer.span[1])))
                 index = end + 1
                 continue
             if end == size and molten(item.span[0]) and len(words) <= 2 and words[0] in ("nineteen", "twenty"):
                 return result, item.span[0]  # a year may still be being read ("nineteen ninety …")
-            digits = fold_digits(words) or fold_year(words)
+            digits = fold_digits(words)
+            if digits is None and (digits := fold_year(words)) is not None:
+                year_comma(index, (item.span[0], items[end - 1].span[1]))
             if digits is not None:
                 result.append(Item(kind="word", text=digits, span=(item.span[0], items[end - 1].span[1])))
             else:

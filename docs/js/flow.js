@@ -287,6 +287,8 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
   const n = items.length;
   const molten = (at) => !flush && at >= frozen && at >= settled;
   let i = 0;
+  let afterDate = -1;  // the index right after a date with nothing attached ("June 5")
+  const yearComma = (at, s, e) => { if (at === afterDate) out.push({ kind: "punct", text: ",", mode: "left", sentenceEnd: false, s, e }); };
   while (i < n) {
     const it = items[i];
     const committed = it.s < frozen;
@@ -296,7 +298,7 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
     if (date && !committed && date[1] === n - 1 && molten(items[date[1]].s)) return { items: out, pendingFrom: it.s };  // the next word says date or noun
     if (date && inside(items[date[1]])) {
       out.push({ kind: "word", text: date[0], s: it.s, e: items[date[1]].e });
-      i = date[1] + 1; continue;
+      i = date[1] + 1; afterDate = clean(items[date[1]].text) ? i : -1; continue;
     }
     // the run: clean number words, never starting on "and"/"oh", never ending on glue, never crossing the fence
     let end = i;
@@ -351,13 +353,15 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
     if (closer && inside(closer) && !clean(closer.text) && !PUNCT_HEAD.test(closer.text)) {
       const year = foldYear([...words, core(closer.text)]);
       if (year !== null) {  // "nineteen eighty four." — the year's last word carries the stop
+        yearComma(i, it.s, closer.e);
         out.push({ kind: "word", text: year + (closer.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: closer.e });
         i = end + 1; continue;
       }
     }
     if (end === n && molten(it.s) && words.length <= 2 && (words[0] === "nineteen" || words[0] === "twenty"))
       return { items: out, pendingFrom: it.s };  // a year may still be being read ("nineteen ninety …")
-    const digits = foldDigits(words) ?? foldYear(words);
+    let digits = foldDigits(words);
+    if (digits === null && (digits = foldYear(words)) !== null) yearComma(i, it.s, items[end - 1].e);
     if (digits !== null) out.push({ kind: "word", text: digits, s: it.s, e: items[end - 1].e });
     else out.push(...items.slice(i, end));  // a run that did not fold stays words, all of it
     i = end;

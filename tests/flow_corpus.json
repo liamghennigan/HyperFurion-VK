@@ -387,6 +387,38 @@
   ]
  },
  {
+  "name": "a date and its year",
+  "register": "prose",
+  "segments": [
+   "on june fifth nineteen ninety nine we met",
+   "and on october sixth, twenty twenty six",
+   "june fifth nineteen people came"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "On June 5, 1999 we met"
+   ],
+   [
+    "screen",
+    "On June 5, 1999 we met and on October 6, 2026"
+   ],
+   [
+    "screen",
+    "On June 5, 1999 we met and on October 6, 2026 June 5 nineteen people came"
+   ],
+   [
+    "final",
+    "On June 5, 1999 we met and on October 6, 2026 June 5 nineteen people came",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a price shows its cents",
   "register": "prose",
   "segments": [
