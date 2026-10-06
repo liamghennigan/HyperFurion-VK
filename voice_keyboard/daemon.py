@@ -1014,13 +1014,7 @@ class Daemon:
                 except Exception:
                     focus = None
             self._session_focus = focus
-            registers_cfg = self._config.get("registers", {})
-            self._session_register = register_for_app(
-                focus.app if focus else "",
-                focus.role if focus else "",
-                config_map=registers_cfg.get("map", {}) or {},
-                default=str(registers_cfg.get("default", "prose")),
-            )
+            self._session_register = self._register_for(focus)
             self._flow_engine = None
             self._flow_worker = None
             # A hands-free question ends itself on silence; a hold ends on
@@ -1048,13 +1042,7 @@ class Daemon:
                 focus = None
         self._session_focus = focus
 
-        registers_cfg = self._config.get("registers", {})
-        register = register_for_app(
-            focus.app if focus else "",
-            focus.role if focus else "",
-            config_map=registers_cfg.get("map", {}) or {},
-            default=str(registers_cfg.get("default", "prose")),
-        )
+        register = self._register_for(focus)
         self._session_register = register
         kind = "terminal" if register.terminal else "editor"
         self._nav_keys = nav.keymap(
@@ -1817,6 +1805,30 @@ class Daemon:
 
     # -------------------------------------------------------- transforms
 
+    def _register_for(self, focus) -> Register:
+        """The register for a focused app, per [registers]."""
+        registers_cfg = self._config.get("registers", {})
+        return register_for_app(
+            focus.app if focus else "",
+            focus.role if focus else "",
+            config_map=registers_cfg.get("map", {}) or {},
+            default=str(registers_cfg.get("default", "prose")),
+        )
+
+    @contextlib.contextmanager
+    def _enter_refused(self):
+        """Refuse Enter on every injector path while typing, then put the
+        previous state back (a terminal session keeps its own refusal)."""
+        injector = self._injector
+        before = getattr(injector, "suppress_enter", None)
+        if before is not None:
+            injector.suppress_enter = True
+        try:
+            yield
+        finally:
+            if before is not None:
+                injector.suppress_enter = before
+
     @contextlib.asynccontextmanager
     async def _enter_refused_in_a_terminal(self):
         """Outside a recording session — typing for `voice-keyboard type`,
@@ -1828,14 +1840,7 @@ class Daemon:
         terminal = False
         if before is not None and self._config.get("registers", {}).get("probe", True):
             focus = await asyncio.to_thread(probe_focus)
-            registers_cfg = self._config.get("registers", {})
-            register = register_for_app(
-                focus.app if focus else "",
-                focus.role if focus else "",
-                config_map=registers_cfg.get("map", {}) or {},
-                default=str(registers_cfg.get("default", "prose")),
-            )
-            terminal = register.terminal
+            terminal = self._register_for(focus).terminal
         if terminal:
             injector.suppress_enter = True
         try:
@@ -2124,16 +2129,8 @@ class Daemon:
         """Type a command at the caret with Enter refused on every injector
         path. The single chokepoint for 'draft an action, never run it' —
         used by the intent channel AND the assistant's hands."""
-        injector = self._injector
-        has_flag = hasattr(injector, "suppress_enter")
-        before = bool(getattr(injector, "suppress_enter", False))
-        if has_flag:
-            injector.suppress_enter = True
-        try:
-            await asyncio.to_thread(injector.type_text, command)
-        finally:
-            if has_flag:
-                injector.suppress_enter = before  # a terminal session keeps refusing
+        with self._enter_refused():
+            await asyncio.to_thread(self._injector.type_text, command)
 
     # --------------------------------------------------------- the mind
 
@@ -2471,16 +2468,8 @@ class Daemon:
         await self._show_hotkey_overlay("processing", detail=f"⌁ {question[:40]}")
         answer = await asyncio.to_thread(llm_client.answer, question, context)
         if str(self._config.get("ask", {}).get("mode", "say")).lower() == "type":
-            injector = self._injector
-            has_flag = hasattr(injector, "suppress_enter")
-            before = bool(getattr(injector, "suppress_enter", False))
-            if has_flag:
-                injector.suppress_enter = True
-            try:
-                await asyncio.to_thread(injector.type_text, answer)
-            finally:
-                if has_flag:
-                    injector.suppress_enter = before
+            with self._enter_refused():
+                await asyncio.to_thread(self._injector.type_text, answer)
             self._remember_typed(answer, register="ask")
         else:
             await self._run_tts(answer)
