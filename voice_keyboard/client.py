@@ -871,7 +871,7 @@ def main() -> None:
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
             "keep", "discard", "ask", "find", "converse", "summon",
-            "login", "quit", "devices", "setup", "stats", "commands", "doctor",
+            "login", "quit", "devices", "setup", "stats", "commands", "doctor", "try",
         ],
         help="Command to send to daemon (default: toggle)",
     )
@@ -883,7 +883,7 @@ def main() -> None:
             " | intent <request...> | ask <question...> | find <query...>"
             " | learned [accept N | reject N | hotword N | macro N <name> |"
             " add <spoken> = <written> | forget <spoken>] | stats [--json]"
-            " | commands [filter]"
+            " | commands [filter] | try [register:] <words…>"
         ),
     )
     parser.add_argument(
@@ -941,6 +941,16 @@ def main() -> None:
 
     if args.command == "devices":
         _run_devices()
+        return
+
+    if args.command == "try":
+        from voice_keyboard import trial
+
+        try:
+            print(trial.run(config, args.args))
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            sys.exit(2)
         return
 
     if args.command == "commands":

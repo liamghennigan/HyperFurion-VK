@@ -792,6 +792,10 @@ warning as before.
   second-most-recent entry. Off by default.
 - `voice-keyboard status` now reports provider, register, flow state,
   focused app, and the last error.
+- `voice-keyboard try [register:] <words…>` prints what the keyboard would
+  type for those words with your config — no microphone needed; `|` is a
+  pause (`try see you monday | correct monday to friday`), and
+  `try python: x equals five` picks a register.
 - `voice-keyboard commands [filter]` prints everything you can say, built
   from the same tables the engine uses with your config merged in —
   `voice-keyboard commands percent` shows just the matching lines.

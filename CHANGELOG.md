@@ -12,6 +12,11 @@ proven to be the daemon's.
 
 ### Added
 
+- **`voice-keyboard try [register:] <words…>`.** Prints what the keyboard
+  would type for those words through your config's grammar — no microphone
+  or daemon; `|` marks a pause between utterances, a leading `python:` (or
+  any register) picks the register, and caret commands and instructions are
+  noted.
 - **Polish per app (`[polish.map]`).** Map an app to a style — `slack =
   "casual"`, `thunderbird = "a clear, polite email"` — and each prose
   dictation of four words or more there is rewritten in it through `[llm]`,
