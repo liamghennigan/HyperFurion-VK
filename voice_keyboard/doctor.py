@@ -160,6 +160,13 @@ def check_speech(config: dict) -> Finding:
     base = str(config.get("providers", {}).get(provider, {}).get("base_url", "") or "")
     local = any(host in base for host in ("localhost", "127.0.0.1", "[::1]"))
     where = "local, nothing leaves the machine" if local else "cloud"
+    if not local:
+        from voice_keyboard.stt import _provider_api_key
+
+        if not _provider_api_key(config, provider):
+            fix = ("voice-keyboard login" if provider == "hyperfurion"
+                   else f"set [providers.{provider}] api_key, or run `voice-keyboard setup`")
+            return Finding(FAIL, "speech", f"{provider} ({where}) has no API key: every dictation would fail", fix)
     return Finding(OK, "speech", f"{provider} ({where})")
 
 

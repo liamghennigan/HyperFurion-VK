@@ -54,3 +54,17 @@ def test_llm_features_without_llm_fail(monkeypatch) -> None:
     assert doctor.check_llm({"flow": {}}).status == doctor.OK
     monkeypatch.setattr(llm, "llm_ready", lambda config: True)
     assert doctor.check_llm({"flow": {"corrections": "llm"}}).detail == "ready for self-corrections"
+
+
+def test_a_cloud_provider_without_a_key_is_a_failure() -> None:
+    finding = doctor.check_speech({"stt": {"provider": "deepgram"}, "providers": {"deepgram": {"api_key": ""}}})
+    assert finding.status == doctor.FAIL and "[providers.deepgram] api_key" in finding.fix
+    assert doctor.check_speech({"stt": {"provider": "hyperfurion"}}).fix == "voice-keyboard login"
+    keyed = doctor.check_speech({"stt": {"provider": "deepgram"}, "providers": {"deepgram": {"api_key": "k"}}})
+    assert keyed.status == doctor.OK
+
+
+def test_a_local_server_needs_no_key() -> None:
+    config = {"stt": {"provider": "openai"}, "providers": {"openai": {"base_url": "http://localhost:8000/v1"}}}
+    finding = doctor.check_speech(config)
+    assert finding.status == doctor.OK and "local" in finding.detail

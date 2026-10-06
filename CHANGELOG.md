@@ -70,7 +70,8 @@ proven to be the daemon's.
 - **Snippet placeholders.** `{date}`, `{isodate}`, `{time}` and `{weekday}` in a
   `[snippets]` entry fill in when it is typed: `"stamp" = "Updated {date}"`.
 - **`voice-keyboard doctor`.** Checks what stands between you and dictation —
-  config, microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
+  config, the speech provider's API key (a cloud provider without one fails
+  every dictation), microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
   access, the clipboard tool that types accents and emoji, the AT-SPI focus
   probe — and prints the fix for each problem. Exits non-zero on a failure.
 - **Spoken commands in Spanish, French and German.** `[flow] language =
