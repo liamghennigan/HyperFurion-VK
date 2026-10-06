@@ -1,7 +1,9 @@
 import asyncio
 import contextlib
+import datetime
 import json
 import logging
+import re
 import signal
 import sys
 import threading
@@ -78,6 +80,23 @@ CAPTION_MAX_CHARS = 46
 PENDING_REWRITE_TTL_S = 120.0
 
 
+
+
+_PLACEHOLDER = re.compile(r"\{(date|isodate|time|weekday)\}")
+
+
+def expand_placeholders(text: str, now: Optional[datetime.datetime] = None) -> str:
+    """A [snippets] entry's {date} (October 6, 2026), {isodate}
+    (2026-10-06), {time} (14:05) and {weekday} (Tuesday), filled in when
+    it is typed. Any other braces are typed as written."""
+    now = now or datetime.datetime.now()
+    values = {
+        "date": f"{now:%B} {now.day}, {now.year}",
+        "isodate": f"{now:%Y-%m-%d}",
+        "time": f"{now:%H:%M}",
+        "weekday": f"{now:%A}",
+    }
+    return _PLACEHOLDER.sub(lambda m: values[m.group(1)], text)
 
 def _surely_not_a_terminal(focus) -> bool:
     """Focus was identified, and it is neither a known terminal app nor a
@@ -2444,7 +2463,7 @@ class Daemon:
             return None
         for spoken, text in (self._config.get("snippets") or {}).items():
             if str(spoken).strip().strip(".,!?;:").casefold() == key:
-                return str(text)
+                return expand_placeholders(str(text))
         return dictionary.macro_text(name)
 
     @staticmethod

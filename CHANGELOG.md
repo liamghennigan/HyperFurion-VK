@@ -12,6 +12,8 @@ proven to be the daemon's.
 
 ### Added
 
+- **Snippet placeholders.** `{date}`, `{isodate}`, `{time}` and `{weekday}` in a
+  `[snippets]` entry fill in when it is typed: `"stamp" = "Updated {date}"`.
 - **`voice-keyboard doctor`.** Checks what stands between you and dictation —
   config, microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
   access, the clipboard tool that types accents and emoji, the AT-SPI focus

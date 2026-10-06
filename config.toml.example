@@ -322,6 +322,8 @@ mode = "say"
 # dictation ("send the invoice to VK, my email"), and it is typed exactly.
 # "my email" = "you@example.com"
 # "sign off" = "Thanks,\nLiam"
+# {date}, {isodate}, {time} and {weekday} fill in when typed:
+# "stamp" = "Updated {date} at {time}"
 
 [recall]
 # Total recall: search everything you dictated ([flow] history ledger).

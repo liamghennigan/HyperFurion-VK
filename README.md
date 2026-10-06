@@ -594,7 +594,7 @@ English.
 | `twenty three` (terminal register, or `numbers = "always"`) | `23` — also decimals ("three point one four") and digit runs ("one two seven" → `127`) |
 | `twenty five percent`, `five dollars`, `three thirty pm` (prose) | `25%`, `$5` (and "… and fifty cents" → `$5.50`; euros `€`, yen `¥`; `$100,000`), `3:30 PM`; `october sixth` → `October 6`; seven or ten digits read one by one → `555-1234`, `415-555-1212` — prose keeps other numbers as words; a unit right after makes the reading certain |
 | `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
-| `VK, my email` (alone, or at the end: "send it to VK, my email") | types the text saved under that name in `[snippets]` (or a macro you named via `voice-keyboard learned`), exactly, after your words |
+| `VK, my email` (alone, or at the end: "send it to VK, my email") | types the text saved under that name in `[snippets]` (or a macro you named via `voice-keyboard learned`), exactly, after your words; `{date}`, `{isodate}`, `{time}`, `{weekday}` in a snippet fill in when typed |
 | `VK, make this shorter` with text **selected** (alone) | rewrites the selection in any app via `[llm]` and types the answer over it; your app's undo brings the original back |
 | `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |

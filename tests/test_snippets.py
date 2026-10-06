@@ -85,3 +85,15 @@ def test_config_validation() -> None:
         config["snippets"] = bad
         with pytest.raises(RuntimeError, match="snippets"):
             validate_config(config)
+
+
+def test_placeholders_fill_in_when_typed() -> None:
+    import datetime
+
+    from voice_keyboard.daemon import expand_placeholders
+
+    when = datetime.datetime(2026, 10, 6, 14, 5)
+    text = "{weekday}, {date} ({isodate}) at {time}; {name} stays"
+    assert expand_placeholders(text, when) == "Tuesday, October 6, 2026 (2026-10-06) at 14:05; {name} stays"
+    final, screen, _ = _dictate("vk stamp", {"stamp": "on {isodate}"})
+    assert screen == final and final.startswith("on 20")
