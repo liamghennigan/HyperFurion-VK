@@ -225,7 +225,7 @@ def fold_unit(words: list[str], unit: str) -> Optional[str]:
     if unit == "percent":
         return amount + "%"
     whole, dot, frac = amount.partition(".")
-    if len(whole) > 3:
+    if len(whole) > 3 and not whole.startswith("0"):
         whole = f"{int(whole):,}"  # "$1,500", "¥2,000"
     return CURRENCY[unit] + whole + dot + frac
 

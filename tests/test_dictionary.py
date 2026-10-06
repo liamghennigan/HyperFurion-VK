@@ -231,3 +231,11 @@ def test_add_word_sets_the_override_and_a_hotword(tmp_path, monkeypatch) -> None
     assert dictionary.add_word("hyper furion", "HyperFurion") == ("hyper furion", False)
     assert dictionary.add_word("vee kay", "HyperFurion VK") == ("vee kay", False)
     assert dictionary.hotwords() == ["HyperFurion"]
+
+
+def test_add_word_keys_match_what_the_grammar_hears(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    from voice_keyboard import dictionary
+
+    assert dictionary.add_word("okay, google", "OK Google")[0] == "okay google"
+    assert dictionary.add_word("e.g.", "for example")[0] == "e.g"

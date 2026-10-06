@@ -644,13 +644,16 @@ def _run_learned(extra_args: list[str]) -> None:
     elif action == "forget" and len(extra_args) > 1:
         spoken = " ".join(extra_args[1:]).casefold()
         removed = [k for k in data["overrides"] if k.casefold() == spoken]
+        written = {data["overrides"][k].casefold() for k in removed}
         for key in removed:
             del data["overrides"][key]
-        data["hotwords"] = [w for w in data["hotwords"] if w.casefold() != spoken]
+        # the hotword `learned add` made for it goes too
+        data["hotwords"] = [w for w in data["hotwords"] if w.casefold() not in written | {spoken}]
         had_macro = data["macros"].pop(spoken, None) is not None
         dictionary.save_dictionary(data)
         found = bool(removed) or had_macro
-        print(f"forgot: {extra_args[1]}" if found else f"not found: {extra_args[1]}")
+        said = " ".join(extra_args[1:])
+        print(f"forgot: {said}" if found else f"not found: {said}")
     else:
         print(
             "usage: voice-keyboard learned"
@@ -913,6 +916,8 @@ def main() -> None:
         path = paths.config_dir() / "config.toml"
         try:
             loaded = load_config(path)
+            if args.socket:
+                loaded["daemon"]["socket_path"] = args.socket
         except Exception:
             loaded = None
         findings = doctor.run(path, loaded)

@@ -26,7 +26,8 @@ _ES_PUNCT = {
 # wraps away from the word, and one Backspace removes it).
 _NNBSP = "\u202f"
 _FR_PUNCT = {
-    "point": (".", "left", True), "virgule": (",", "left", False),
+    "point": (".", "left", True), "point final": (".", "left", True),
+    "virgule": (",", "left", False),
     "deux points": (_NNBSP + ":", "left", False), "point virgule": (_NNBSP + ";", "left", False),
     "point d'interrogation": (_NNBSP + "?", "left", True),
     "point d'exclamation": (_NNBSP + "!", "left", True),
@@ -71,7 +72,25 @@ LANGUAGE_PACKS: dict[str, dict] = {
             "scratch_that": ("streich das", "lösch das", "losch das"),
         },
         "punctuation": _DE_PUNCT,
+        # "um" is German ("um drei Uhr"), not the English hesitation
+        "not_fillers": ("um",),
     },
 }
 
 LANGUAGES = tuple(LANGUAGE_PACKS)
+
+
+# A bare one-word mark is ordinary speech next to these words: "a punto de
+# salir", "en punto", "punto de vista"; "à point", "point de vue", "ne …
+# point"; "um Punkt zwei", "auf den Punkt". It waits for the word after it
+# to be final, so the call never flips once typed; between two number
+# words it is a decimal point, never a period ("three point five").
+PUNCT_GUARDS: dict[str, dict[str, frozenset]] = {
+    "punto": {"before": frozenset({"a", "en", "el", "un", "este", "ese", "mi", "tu", "su"}),
+              "after": frozenset({"de", "del", "y"})},
+    "point": {"before": frozenset({"à", "a", "ne", "pas", "le", "un", "ce", "mon", "ton", "son", "au"}),
+              "after": frozenset({"de", "d'", "du", "des", "virgule"})},
+    "punkt": {"before": frozenset({"um", "den", "der", "dem", "auf", "ein", "einen", "diesen", "am"}),
+              "after": frozenset({"für", "fur", "zwei", "drei", "vier", "fünf", "funf", "sechs",
+                                  "sieben", "acht", "neun", "zehn", "elf", "zwölf", "zwolf"})},
+}

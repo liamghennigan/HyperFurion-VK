@@ -103,7 +103,8 @@ def add_word(spoken: str, written: str) -> tuple[str, bool]:
     now types `written`, and a one-word `written` also becomes a hotword
     the recognizer is biased toward. Returns (the spoken key, whether a
     hotword was added)."""
-    key = " ".join(spoken.split()).casefold()
+    # as the grammar hears it: casefolded, punctuation off each word
+    key = " ".join(w.strip(".,!?;:") for w in spoken.split() if w.strip(".,!?;:")).casefold()
     written = written.strip()
     if not key or not written:
         raise ValueError("both the spoken words and the written form are needed")

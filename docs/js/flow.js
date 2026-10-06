@@ -181,7 +181,7 @@ export function foldUnit(words, unit) {
   if (amount === null) return null;
   if (unit === "percent") return amount + "%";
   let [whole, frac] = amount.split(".");
-  if (whole.length > 3) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");  // "$1,500", "¥2,000"
+  if (whole.length > 3 && !whole.startsWith("0")) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");  // "$1,500", "¥2,000"
   return CURRENCY[unit] + whole + (frac !== undefined ? "." + frac : "");
 }
 // "october sixth" -> "October 6": a month, then an ordinal day (numbers.py
@@ -914,7 +914,7 @@ export function riskyBackspace(text) {
 // barrier; the page converges the window, presses the keys on the board,
 // and calls completeAction(), which starts a fresh segment: the caret has
 // moved, so nothing before the command can be repaired or scratched.
-const LAST_WORD = /(\S+?)([.,!?;:)\]}"'»”’]*)(\s*)$/;
+const LAST_WORD = /(\S+?)([\u202f.,!?;:)\]}"'»”’“]*)(\s*)$/;
 const FINAL_ONLY = new Set(["respell", "key", "recase", "correct"]);  // rewrite committed text: never on a stability guess
 // a pause's next word counts as settled after surviving an update or this long
 const PAUSE_SETTLE_MS = 600;
@@ -1279,7 +1279,7 @@ export function moltenLine({ register, cfg, state } = {}) {
       return;
     }
     const token = m[1];
-    const heard = token.replace(/^["'([{«“‘]+/, "");  // an opening quote stays put
+    const heard = token.replace(/^["'([{«“‘„¿¡]+/, "");  // an opening mark stays put
     const start = m.index + token.length - heard.length;
     if (!heard) return;
     if (riskyBackspace(committedRender.slice(start))) return;

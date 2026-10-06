@@ -71,8 +71,9 @@ def check_daemon(config: dict) -> Finding:
 
         response = IPCClient(config["daemon"]["socket_path"]).send_command("status", timeout=2.0)
     except Exception as exc:
-        return Finding(FAIL, "daemon", f"not reachable ({exc.__class__.__name__})",
-                       "start it: `systemctl --user start voice-keyboard-daemon` (or run voice-keyboard-daemon)")
+        from voice_keyboard.client import _daemon_start_hint
+
+        return Finding(FAIL, "daemon", f"not reachable ({exc.__class__.__name__})", _daemon_start_hint())
     if response.get("status", "ok") != "ok":
         return Finding(FAIL, "daemon", str(response.get("message", "refused")), "restart the daemon")
     stt = response.get("stt_provider", "")
@@ -99,6 +100,13 @@ def _uinput_fix() -> str:
 
         group = grp.getgrnam("input")
     except (ImportError, KeyError):
+        group = None
+    try:
+        device_gid = os.stat("/dev/uinput").st_gid
+    except OSError:
+        device_gid = None
+    if group is None or device_gid != group.gr_gid:
+        # The device isn't the input group's: joining it would not help.
         group = None
     user = os.environ.get("USER", "")
     if group is not None and user and user not in group.gr_mem and group.gr_gid not in os.getgroups():

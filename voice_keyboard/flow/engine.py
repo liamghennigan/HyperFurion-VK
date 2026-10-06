@@ -152,7 +152,7 @@ class PauseQuery:
 
 # The last word of the committed render, its trailing punctuation, and
 # trailing whitespace: "... hello wrold." -> ("wrold", ".", "").
-_LAST_WORD = re.compile(r"(\S+?)([.,!?;:)\]}\"'»”’]*)(\s*)\Z")
+_LAST_WORD = re.compile(r"(\S+?)([\u202f.,!?;:)\]}\"'»”’“]*)(\s*)\Z")
 
 # Actions that rewrite committed text: they wait for a final transcript,
 # never a stability guess, so a misheard partial can't fire them.
@@ -828,7 +828,7 @@ class FlowEngine:
             logger.info("flow: nothing to respell")
             return
         token = match.group(1)
-        heard = token.lstrip("\"'([{«“‘")  # an opening quote stays put
+        heard = token.lstrip("\"'([{«“‘„¿¡")  # an opening mark stays put
         start = match.start(1) + len(token) - len(heard)
         if not heard:
             return

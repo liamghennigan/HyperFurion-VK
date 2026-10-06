@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from voice_keyboard.flow.nav import PENDING as NAV_PENDING
-from voice_keyboard.flow.languages import LANGUAGE_PACKS
+from voice_keyboard.flow.languages import LANGUAGE_PACKS, PUNCT_GUARDS
 from voice_keyboard.flow.nav import VERBS as NAV_VERBS
 from voice_keyboard.flow.nav import parse_nav
 from voice_keyboard.flow.numbers import (
@@ -293,6 +293,8 @@ class Grammar:
         self._spelling = spelling
         self._fillers = frozenset(
             str(f).strip().casefold() for f in (fillers or ()) if str(f).strip()
+        ) - frozenset(
+            LANGUAGE_PACKS.get(str(language or "en").lower(), {}).get("not_fillers", ())
         )
         self._nav = nav
         self._wake = (wake_word or "").strip().casefold()
@@ -303,6 +305,9 @@ class Grammar:
         self._units_on = numbers == "auto" and not self._numbers_on and not code
 
         pack = LANGUAGE_PACKS.get(str(language or "en").lower(), LANGUAGE_PACKS["en"])
+        self._guards = {
+            word: guard for word, guard in PUNCT_GUARDS.items() if word in pack["punctuation"]
+        }
         merged_commands = dict(DEFAULT_COMMANDS)
         for action, phrases in pack["commands"].items():
             merged_commands[action] = merged_commands.get(action, ()) + tuple(phrases)
@@ -675,6 +680,25 @@ class Grammar:
                     continue
 
             entry, consumed = self._match_phrase(cores, index, fence)
+            if entry is not None and consumed == 1 and core in self._guards:
+                # "punto", "point", "Punkt" alone: a mark only where the
+                # words around it don't make it ordinary speech, decided
+                # once the next word is final (or the dictation ends).
+                if index + 1 >= settled and not flush:
+                    pending_from = index
+                    break
+                guard = self._guards[core]
+                before = cores[index - 1] if index > 0 else ""
+                after = cores[index + 1] if index + 1 < len(cores) else ""
+                if (
+                    before in guard["before"]
+                    or after in guard["after"]
+                    or (before in NUMBER_WORDS and after in NUMBER_WORDS)
+                ):
+                    entry = None
+                    items.append(Item(kind="word", text=tokens[index], span=(index, index + 1)))
+                    index += 1
+                    continue
             if (
                 entry is None
                 and not flush

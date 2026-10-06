@@ -413,6 +413,12 @@ class Wizard:
         if lang != now:
             self.set("stt", "language", lang, f"Language: {lang}")
             self.set("tts", "language", lang)
+            from voice_keyboard.flow.languages import LANGUAGES
+
+            # spoken commands in that language too, where there is a set
+            pack = lang if lang in LANGUAGES else "en"
+            if pack != str(current.get("flow", {}).get("language", "en")):
+                self.set("flow", "language", pack, f"Spoken commands: {pack} (+ English)")
 
     def step_extras(self, current: dict) -> None:
         self.out("")
