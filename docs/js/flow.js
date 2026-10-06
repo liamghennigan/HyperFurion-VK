@@ -215,6 +215,16 @@ function centsAt(items, at) {
   const value = parseCardinal(items.slice(at + 1, end).map((x) => core(x.text)));
   return value !== null && value >= 1 && value <= 99 ? ["." + String(value).padStart(2, "0"), end] : null;
 }
+// seven or more digits read one by one -> "555-1234", ten -> "555-123-4567"
+// (numbers.py fold_digits); fewer stay words
+export function foldDigits(words) {
+  words = words.map((w) => w.toLowerCase());
+  if (words.length < 7 || words.some((w) => !(w in DIGITS))) return null;
+  const d = words.map((w) => DIGITS[w]).join("");
+  if (d.length === 7) return d.slice(0, 3) + "-" + d.slice(3);
+  if (d.length === 10) return d.slice(0, 3) + "-" + d.slice(3, 6) + "-" + d.slice(6);
+  return d;
+}
 function foldUnits(items, frozen, itemEnd, pendingFrom) {
   const out = [];
   const bare = (it) => it.kind === "word" && !PUNCT_TAIL.test(it.text) && NUMBER_WORDS.has(core(it.text));
@@ -246,6 +256,11 @@ function foldUnits(items, frozen, itemEnd, pendingFrom) {
           i = end + 1; continue;
         }
       }
+    }
+    const digits = end > i ? foldDigits(items.slice(i, end).map((x) => core(x.text))) : null;
+    if (digits !== null && (it.s >= frozen || items[end - 1].e <= itemEnd(it.s))) {
+      out.push({ kind: "word", text: digits, s: it.s, e: items[end - 1].e });
+      i = end; continue;
     }
     if (end > i && end === items.length && pendingFrom !== null && items[end - 1].e === pendingFrom &&
         it.s >= frozen && !GLUE.has(core(it.text))) return { items: out, pendingFrom: it.s };  // its unit may be what is pending

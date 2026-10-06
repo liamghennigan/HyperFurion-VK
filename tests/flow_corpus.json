@@ -607,6 +607,50 @@
   ]
  },
  {
+  "name": "phone numbers",
+  "register": "prose",
+  "segments": [
+   "call five five five one two three four or four one five five five five one two one two"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call 555-1234 or 415-555-1212"
+   ],
+   [
+    "final",
+    "Call 555-1234 or 415-555-1212",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a short digit count stays words",
+  "register": "prose",
+  "segments": [
+   "one two three go"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One two three go"
+   ],
+   [
+    "final",
+    "One two three go",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "dates",
   "register": "prose",
   "segments": [

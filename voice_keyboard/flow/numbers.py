@@ -230,3 +230,21 @@ def parse_day(words: list[str]) -> Optional[int]:
         day = _TENS[words[0]] + ORDINALS[words[1]]
         return day if day <= 31 else None
     return None
+
+
+PHONE_MIN_DIGITS = 7
+
+
+def fold_digits(words: list[str]) -> Optional[str]:
+    """Seven or more digits read one by one -> a number: "five five five
+    one two three four" -> "555-1234", ten -> "555-123-4567", other
+    lengths joined. Fewer stay words (counting, "one two three go")."""
+    words = [w.casefold() for w in words]
+    if len(words) < PHONE_MIN_DIGITS or any(w not in _DIGITS for w in words):
+        return None
+    digits = "".join(str(_DIGITS[w]) for w in words)
+    if len(digits) == 7:
+        return f"{digits[:3]}-{digits[3:]}"
+    if len(digits) == 10:
+        return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+    return digits

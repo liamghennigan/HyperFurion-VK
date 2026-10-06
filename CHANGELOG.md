@@ -24,7 +24,9 @@ on `main` cuts the GitHub release automatically.
   → `3:30 PM`, "five dollars and fifty cents" → `$5.50`, and a recognizer's
   "25 percent" → `25%`. Dates too: "october sixth" → `October 6`, "june twenty
   first" → `June 21` (an ordinal day only, so "in june twenty people came"
-  stays words; never "may" or "march"). "Which one am I"
+  stays words; never "may" or "march"). Phone numbers: seven or more digits read one by one
+  ("five five five one two three four") type `555-1234`, ten type
+  `415-555-1212`; a short count ("one two three go") stays words. "Which one am I"
   stays words; a run already typed as words is never rewritten.
 - **Spoken numbered lists.** "Steps colon new number build new number test"
   types `Steps:` / `1. Build` / `2. Test`. The count survives a scratch

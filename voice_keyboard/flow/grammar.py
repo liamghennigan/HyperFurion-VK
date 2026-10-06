@@ -22,6 +22,7 @@ from voice_keyboard.flow.numbers import (
     DATE_MONTHS,
     UNIT_WORDS,
     convert_numbers,
+    fold_digits,
     fold_unit,
     parse_cardinal,
     parse_day,
@@ -795,6 +796,14 @@ class Grammar:
                         result.append(Item(kind="word", text=folded, span=(item.span[0], unit.span[1])))
                         index = end + 1
                         continue
+            digits = fold_digits([_core(it.text) for it in items[index:end]]) if end > index else None
+            if digits is not None and (
+                item.span[0] >= frozen
+                or (item_end is not None and items[end - 1].span[1] <= item_end(item.span[0]))
+            ):
+                result.append(Item(kind="word", text=digits, span=(item.span[0], items[end - 1].span[1])))
+                index = end
+                continue
             if (
                 end > index and end == len(items) and pending_from is not None
                 and items[end - 1].span[1] == pending_from and item.span[0] >= frozen

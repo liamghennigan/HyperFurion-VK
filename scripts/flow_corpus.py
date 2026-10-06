@@ -68,6 +68,8 @@ CASES = [
     ("prose dollars", "prose", ["it costs twenty five dollars period"], {}),
     ("emoji", "prose", ["ship it emoji rocket emoji thumbs up.", "nice emoji fire"], {}),
     ("emoji names alone stay words", "prose", ["the emoji was a smile"], {}),
+    ("phone numbers", "prose", ["call five five five one two three four or four one five five five five one two one two"], {}),
+    ("a short digit count stays words", "prose", ["one two three go"], {}),
     ("dates", "prose", ["due october sixth or june twenty first, not july thirtieth."], {}),
     ("a month and a cardinal stay words", "prose", ["in june twenty people came and you may first check"], {}),
     ("dollars and cents", "prose", ["it costs five dollars and fifty cents and twenty dollars and five cents period"], {}),
