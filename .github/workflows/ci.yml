@@ -82,6 +82,13 @@ jobs:
         with:
           node-version: "22"
       - run: node --test docs/js/test/*.test.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Differential fuzzing: random dictations through both engines.
+      - run: python scripts/flow_fuzz_parity.py 300
+        env:
+          PYTHONPATH: .
 
   relay:
     runs-on: ubuntu-latest

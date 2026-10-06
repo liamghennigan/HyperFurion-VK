@@ -8,7 +8,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { moltenLine, REGISTERS, continuationState } from "../flow.js";
 
-const corpus = JSON.parse(readFileSync(fileURLToPath(new URL("../../../tests/flow_corpus.json", import.meta.url)), "utf8"));
+// VK_CORPUS points at another corpus (scripts/flow_fuzz_parity.py writes random ones)
+const corpusPath = process.env.VK_CORPUS || fileURLToPath(new URL("../../../tests/flow_corpus.json", import.meta.url));
+const corpus = JSON.parse(readFileSync(corpusPath, "utf8"));
 
 const S = 1000;  // the corpus clock is in seconds; the page's in ms
 function makeEngine({ register, options }) {
@@ -70,7 +72,7 @@ for (const c of corpus) {
     assert.deepEqual(runCase(c), c.events);
   });
 }
-test("the corpus covers the page's lanes", () => {
+if (!process.env.VK_CORPUS) test("the corpus covers the page's lanes", () => {
   assert.ok(corpus.length >= 40);
   assert.ok(corpus.some((c) => c.steps), "streaming cases");
   assert.ok(corpus.some((c) => c.options.continues), "rejoin cases");
