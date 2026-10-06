@@ -56,6 +56,13 @@ proven to be the daemon's.
 
 ### Added
 
+- **`[snippets]` — text you type by name.** `"my email" =
+  "you@example.com"` in config, then "VK, my email" types it — alone, or
+  at the end of a dictation ("send the invoice to VK, my email"), where
+  it now lands after your words; before, a name there was sent to
+  `[llm]` as a rewrite of the sentence. Learned macros work the same
+  way. Names match without case or trailing punctuation; newlines in the
+  text are kept.
 - **Self-corrections, tidied (`[flow] corrections = "llm"`).** "Send it
   Tuesday, no wait, Wednesday" types "Send it Wednesday." A grammar
   can't know what a correction replaces, so a dictation with a cue ("no

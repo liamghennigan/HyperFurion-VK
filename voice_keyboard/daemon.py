@@ -1620,7 +1620,14 @@ class Daemon:
             )
             final = typed
 
-        if instruction and final and not worker.abandoned:
+        snippet = self._snippet(instruction) if instruction and final else None
+        if snippet is not None and not worker.abandoned:
+            # "send the invoice to VK, my email": the text lands after the
+            # words, not a rewrite of them.
+            target = final + self._snippet_gap(final, snippet) + snippet
+            worker.set_target(target)
+            final = await worker.drain(timeout=self._drain_timeout(target))
+        elif instruction and final and not worker.abandoned:
             try:
                 final = await self._run_transform(instruction, worker=worker)
             except Exception as exc:
@@ -1637,7 +1644,10 @@ class Daemon:
         resolved = await self._maybe_resolve_pending(final, None)
         if resolved is not None:
             return resolved
-        if instruction and final:
+        snippet = self._snippet(instruction) if instruction and final else None
+        if snippet is not None:
+            final = final + self._snippet_gap(final, snippet) + snippet
+        elif instruction and final:
             llm_client = create_llm_client(self._config)
             if llm_client is None:
                 await self._show_hotkey_overlay(
@@ -1675,7 +1685,7 @@ class Daemon:
         recall verb searches the ledger; anything else rewrites the
         previous dictation in place."""
         try:
-            macro = dictionary.macro_text(instruction)
+            macro = self._snippet(instruction)
             if macro is not None:
                 return await self._run_macro(macro)
             if self._intent_request(instruction):
@@ -2291,6 +2301,24 @@ class Daemon:
         had = self._peek_pending_rewrite() is not None
         self._pending_rewrite = None
         return had
+
+    def _snippet(self, name: str) -> Optional[str]:
+        """The text saved under a spoken name: a [snippets] entry, else a
+        macro you named via `voice-keyboard learned`. None when unknown.
+        Names match without case or trailing punctuation ("My email.")."""
+        key = name.strip().strip(".,!?;:").casefold()
+        if not key:
+            return None
+        for spoken, text in (self._config.get("snippets") or {}).items():
+            if str(spoken).strip().strip(".,!?;:").casefold() == key:
+                return str(text)
+        return dictionary.macro_text(name)
+
+    @staticmethod
+    def _snippet_gap(before: str, snippet: str) -> str:
+        if not before or before[-1:].isspace() or snippet[:1] in ".,;:!?)":
+            return ""
+        return " "
 
     async def _run_macro(self, text: str) -> str:
         """Procedural memory: type a user-named macro verbatim. The body

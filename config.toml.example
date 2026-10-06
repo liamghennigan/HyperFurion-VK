@@ -301,6 +301,12 @@ enabled = false
 verbs = ["ask", "explain", "answer"]
 mode = "say"
 
+[snippets]
+# Text you type by name. Say "VK, my email" on its own, or at the end of a
+# dictation ("send the invoice to VK, my email"), and it is typed exactly.
+# "my email" = "you@example.com"
+# "sign off" = "Thanks,\nLiam"
+
 [recall]
 # Total recall: search everything you dictated ([flow] history ledger).
 # Keyword search needs no setup; set base_url + model to an

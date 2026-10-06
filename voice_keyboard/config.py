@@ -237,6 +237,10 @@ DEFAULT_CONFIG: dict = {
         "verbs": ["ask", "explain", "answer"],
         "mode": "say",
     },
+    # Text you type by name: "VK, my email" types it — alone, or at the
+    # end of a dictation ("send the invoice to VK, my email"). Spoken name
+    # -> text, typed exactly (newlines included).
+    "snippets": {},
     "recall": {
         # Total recall: search everything you ever dictated (the opt-in
         # [flow] history ledger). Keyword search works with no setup;
@@ -602,6 +606,10 @@ def validate_config(config: dict) -> None:
     _validate_flow_config(config)
     _validate_intent_config(config)
     _validate_nav_config(config)
+    snippets = config.get("snippets", {})
+    for name, text in snippets.items():
+        if not str(name).strip() or not isinstance(text, str) or not text:
+            raise RuntimeError(f"snippets.{name!r}: a spoken name and the text to type")
     _validate_ambient_config(config)
     _validate_verb_channel(config, "ask")
     _validate_verb_channel(config, "recall")
