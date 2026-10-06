@@ -266,9 +266,10 @@ DATE_MONTHS_SET = frozenset(DATE_MONTHS)
 
 
 # Words a speaker restarts on ("the the", "I I"). Never ones a sentence
-# can say twice ("had had", "that that", "is is").
+# can say twice ("had had", "that that", "is is", "told you you were",
+# "log in in the morning", "turn it on on monday").
 STUTTER_WORDS = frozenset(
-    "the a an i to and we you my in of for on at with i'm it's i'll we're they".split()
+    "the a an i to and we my of for at with i'm it's i'll we're they".split()
 )
 _LEADING_WORD = re.compile(r"[a-z]+")
 
@@ -610,16 +611,23 @@ class Grammar:
                 index += 1
                 continue
 
-            if (
-                self._stutters and index > 0 and core in STUTTER_WORDS
-                and tokens[index - 1].casefold() == tokens[index].casefold()
-                and _clean(tokens[index]) and items and items[-1].span == (index - 1, index)
-                and items[-1].kind in ("word", "filler")
-            ):
-                # "the the meeting", "I I think": the repeat renders nothing
-                items.append(Item(kind="filler", span=(index, index + 1)))
-                index += 1
-                continue
+            if self._stutters and core in STUTTER_WORDS and _clean(tokens[index]):
+                # "the the meeting", "I I think", "the um the plan": the
+                # repeat renders nothing — never across a segment end, where
+                # a pause may yet decide the first one ended a sentence
+                back = len(items) - 1
+                while back >= 0 and items[back].kind == "filler":
+                    back -= 1
+                before = items[back] if back >= 0 else None
+                if (
+                    before is not None and before.kind == "word"
+                    and before.span[1] - before.span[0] == 1
+                    and tokens[before.span[0]].casefold() == tokens[index].casefold()
+                    and not any(before.span[0] < bound <= index for bound in bounds)
+                ):
+                    items.append(Item(kind="filler", span=(index, index + 1)))
+                    index += 1
+                    continue
 
             if self._formatters and core in _FORMATTER_FIRST:
                 limit, decided = self._limit(
@@ -1099,7 +1107,8 @@ class Grammar:
                     elif _core(after.text) in NOT_A_YEAR_AFTER:
                         year = None  # a count: "nineteen forty people"
             at_time = None
-            prev = result[-1] if result else None
+            # the word before, past a hesitation or a dropped stutter ("at at")
+            prev = next((it for it in reversed(result) if it.kind != "filler"), None)
             if year is None and prev is not None and prev.kind == "word" and prev.text.casefold() == "at":
                 # "meet at three thirty" -> "at 3:30"; a bare hour stays a word
                 at, tail = end, []
@@ -1115,10 +1124,12 @@ class Grammar:
                     result.append(Item(kind="word", text=stamp, span=(item.span[0], closer.span[1])))
                     index = at + 1
                     continue
-                if at == size and molten(item.span[0]) and len(words) + len(tail) <= 2:
-                    return result, item.span[0]  # "at three" may yet be "at three thirty five"
+                if at == size and molten(item.span[0]) and (len(words) + len(tail) <= 2 or fold_clock(words)):
+                    return result, item.span[0]  # it may grow, or the next word says count
                 at_time = fold_clock(words)
                 after = items[end] if end < size and items[end].kind == "word" and inside(items[end]) else None
+                if after is not None and _core(after.text) in ("o'clock", "o\u2019clock"):
+                    at_time = None  # never "3:30 o'clock"
                 if at_time is not None and after is not None and not committed and (
                     _core(after.text) in NOT_A_YEAR_AFTER or not _clean(after.text) and _LEADING_WORD.match(
                         after.text.casefold()) and _LEADING_WORD.match(after.text.casefold()).group(0) in NUMBER_WORDS

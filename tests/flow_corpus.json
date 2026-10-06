@@ -1229,6 +1229,77 @@
   ]
  },
  {
+  "name": "at, stuttered or before o'clock",
+  "register": "prose",
+  "segments": [
+   "meet at at three thirty, not at three thirty o'clock"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 3:30, not at three thirty o'clock"
+   ],
+   [
+    "final",
+    "Meet at 3:30, not at three thirty o'clock",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a stutter after a hesitation",
+  "register": "prose",
+  "segments": [
+   "the um the plan is to to go and I told you you were right"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The plan is to go and I told you you were right"
+   ],
+   [
+    "final",
+    "The plan is to go and I told you you were right",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "no stutter across a segment end",
+  "register": "prose",
+  "segments": [
+   "I talked to the.",
+   "the meeting was fine"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I talked to the."
+   ],
+   [
+    "screen",
+    "I talked to the. The meeting was fine"
+   ],
+   [
+    "final",
+    "I talked to the. The meeting was fine",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "o'clock",
   "register": "prose",
   "segments": [
@@ -6436,6 +6507,154 @@
    [
     "final",
     "cd the. And then ls",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a stutter never flips a pause",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "I talked to the.",
+    "final"
+   ],
+   [
+    0.3,
+    "I talked to the. The",
+    "interim"
+   ],
+   [
+    0.8,
+    "tick"
+   ],
+   [
+    1.3,
+    "tick"
+   ],
+   [
+    1.8,
+    "tick"
+   ],
+   [
+    2.2,
+    "I talked to the. The meeting was fine.",
+    "final"
+   ]
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I talked to the."
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the"
+   ],
+   [
+    "screen",
+    "I talked to the the meeting was fine."
+   ],
+   [
+    "final",
+    "I talked to the the meeting was fine.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a time after at waits for a count noun",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    0.5,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    1.0,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    1.5,
+    "tick"
+   ],
+   [
+    2.0,
+    "meet at three thirty five",
+    "interim"
+   ],
+   [
+    2.5,
+    "tick"
+   ],
+   [
+    2.8,
+    "meet at three thirty five people came",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at"
+   ],
+   [
+    "screen",
+    "Meet at three thirty five people came"
+   ],
+   [
+    "final",
+    "Meet at three thirty five people came",
     "",
     "",
     0,

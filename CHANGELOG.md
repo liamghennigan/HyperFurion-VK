@@ -31,8 +31,10 @@ proven to be the daemon's.
   callable is a type (`-> str:`). A dash or half an operator still held
   when the dictation ends is typed as said, never dropped.
 - **Stutters are dropped.** "the the meeting" types "The meeting", "I I
-  think" types "I think" — only for words a speaker restarts on, never a
-  repeat a sentence means ("had had", "that that"), and never in code.
+  think" types "I think", "the um the plan" types "The plan" — only for
+  words a speaker restarts on, never a repeat a sentence means ("had had",
+  "told you you were", "log in in the morning"), never across a pause the
+  recognizer closed, and never in code.
 - **"five o'clock" types `5 o'clock`, and a time after "at" is a time:**
   "meet at three thirty" types `meet at 3:30`, "at twelve oh five" `at
   12:05`. A bare hour ("at three") and a count ("at three thirty people")

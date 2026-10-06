@@ -85,6 +85,9 @@ CASES = [
     ("a hashtag is a word", "prose", ["what hashtag should we use"], {}),
     ("a date and its year", "prose", ["on june fifth nineteen ninety nine we met", "and on october sixth, twenty twenty six", "june fifth nineteen people came"], {}),
     ("a time after at", "prose", ["meet at three thirty tomorrow, or at twelve oh five.", "look at three thirty people at three"], {}),
+    ("at, stuttered or before o'clock", "prose", ["meet at at three thirty, not at three thirty o'clock"], {}),
+    ("a stutter after a hesitation", "prose", ["the um the plan is to to go and I told you you were right"], {}),
+    ("no stutter across a segment end", "prose", ["I talked to the.", "the meeting was fine"], {}),
     ("o'clock", "prose", ["meet at five o'clock, or six o\u2019clock. it's ten o'clock"], {}),
     ("a price shows its cents", "prose", ["it costs one point five dollars or two point two five euros"], {}),
     ("a scale stays a word after the figure", "prose", ["we raised three point two billion dollars", "from five million users and two million, dollars"], {}),
@@ -298,6 +301,14 @@ CASES.append(("pauses are a prose thing", "terminal", ["cd the.", "And then ls"]
 # streaming cases: (name, register, steps, options); a step is
 # [t, text, "interim" | "final"] or [t, "tick"]
 STREAMS = [
+    ("a stutter never flips a pause", "prose", [
+        [0.0, "I talked to the.", "final"], [0.3, "I talked to the. The", "interim"],
+        [0.8, "tick"], [1.3, "tick"], [1.8, "tick"],
+        [2.2, "I talked to the. The meeting was fine.", "final"]], {"pause_review": "rules"}),
+    ("a time after at waits for a count noun", "prose", [
+        [0.0, "meet at three thirty five", "interim"], [0.5, "meet at three thirty five", "interim"],
+        [1.0, "meet at three thirty five", "interim"], [1.5, "tick"], [2.0, "meet at three thirty five", "interim"],
+        [2.5, "tick"], [2.8, "meet at three thirty five people came", "final"]], {}),
     ("a phone number read slowly holds until it ends", "prose", [
         [0.0, "call five five five", "interim"], [0.4, "call five five five one two", "interim"], [2.0, "tick"],
         [2.4, "call five five five one two three four", "interim"], [4.2, "tick"],

@@ -380,7 +380,7 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       }
     }
     let atTime = null;
-    const prev = out.length ? out[out.length - 1] : null;
+    const prev = [...out].reverse().find((x) => x.kind !== "filler") || null;  // past a hesitation or a dropped stutter ("at at")
     if (year === null && prev && prev.kind === "word" && prev.text.toLowerCase() === "at") {
       // "meet at three thirty" -> "at 3:30"; a bare hour stays a word
       let at = end, tail = [];
@@ -393,10 +393,11 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
           i = at + 1; continue;
         }
       }
-      if (at === n && molten(it.s) && words.length + tail.length <= 2) return { items: out, pendingFrom: it.s };  // "at three" may yet grow
+      if (at === n && molten(it.s) && (words.length + tail.length <= 2 || (clock(words) || "").includes(":"))) return { items: out, pendingFrom: it.s };  // "at three" may yet grow
       const c = clock(words);
       atTime = c && c.includes(":") ? c : null;
       const after = end < n && items[end].kind === "word" && inside(items[end]) ? items[end] : null;
+      if (after && (core(after.text) === "o'clock" || core(after.text) === "o\u2019clock")) atTime = null;  // never "3:30 o'clock"
       if (atTime !== null && after && !committed) {
         const lead = after.text.toLowerCase().match(/^[a-z]+/);
         if (NOT_A_YEAR_AFTER.has(core(after.text)) || (!clean(after.text) && lead && NUMBER_WORDS.has(lead[0]))) atTime = null;  // a count, or half a time
@@ -609,8 +610,8 @@ function flushCode(st, reg) {
 // never waits for, or grows into, the next segment.
 const SPELL_WORD = "spell";
 // words a speaker restarts on (grammar.py STUTTER_WORDS); never ones a
-// sentence can say twice ("had had", "that that")
-const STUTTER_WORDS = new Set("the a an i to and we you my in of for on at with i'm it's i'll we're they".split(" "));
+// sentence can say twice ("had had", "that that", "you you were", "in in the")
+const STUTTER_WORDS = new Set("the a an i to and we my of for at with i'm it's i'll we're they".split(" "));
 // hesitation sounds a streaming recognizer writes down: dropped ([flow] fillers)
 export const DEFAULT_FILLERS = ["um", "umm", "uh", "uhh", "uhm", "erm"];
 const SENTENCE_STOPS = ".?!";
@@ -772,11 +773,16 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
                    s: i, e: tokens.length });
       break;
     }
-    const prev = items.length ? items[items.length - 1] : null;
-    if (fillers.size && !codeReg && i > 0 && STUTTER_WORDS.has(cores[i]) && tokens[i - 1].toLowerCase() === tokens[i].toLowerCase() &&
-        clean(tokens[i]) && prev && prev.s === i - 1 && prev.e === i && (prev.kind === "word" || prev.kind === "filler")) {
-      items.push({ kind: "filler", s: i, e: i + 1 });  // "the the meeting", "I I think": the repeat renders nothing
-      i += 1; continue;
+    if (fillers.size && !codeReg && STUTTER_WORDS.has(cores[i]) && clean(tokens[i])) {
+      // "the the meeting", "the um the plan": the repeat renders nothing — never across a segment end
+      let back = items.length - 1;
+      while (back >= 0 && items[back].kind === "filler") back -= 1;
+      const before = back >= 0 ? items[back] : null;
+      if (before && before.kind === "word" && before.e - before.s === 1 && tokens[before.s].toLowerCase() === tokens[i].toLowerCase() &&
+          !bounds.some((b) => before.s < b && b <= i)) {
+        items.push({ kind: "filler", s: i, e: i + 1 });
+        i += 1; continue;
+      }
     }
     if (fillers.has(cores[i])) {
       // a hesitation sound renders nothing; a comma attached to it goes too
