@@ -203,6 +203,8 @@ def render_items(
                 out.append(("" if line_start else "\n") + f"{list_number}. ")
             elif item.mode == "bullet":
                 out.append(("" if line_start else "\n") + item.text)
+                if item.text.startswith("#"):
+                    list_number = 0  # a heading starts a new list
             else:
                 out.append(item.text)
                 if "\n\n" in item.text:

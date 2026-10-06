@@ -1689,6 +1689,340 @@
   ]
  },
  {
+  "name": "Correct. as an answer is dictation",
+  "register": "prose",
+  "segments": [
+   "should we go now question mark",
+   "Correct. Go to the store."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Should we go now?"
+   ],
+   [
+    "screen",
+    "Should we go now? Correct. Go to the store."
+   ],
+   [
+    "final",
+    "Should we go now? Correct. Go to the store.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "Correct, as an answer is dictation",
+  "register": "prose",
+  "segments": [
+   "I went home",
+   "Correct, I went to the bank"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I went home"
+   ],
+   [
+    "screen",
+    "I went home Correct, I went to the bank"
+   ],
+   [
+    "final",
+    "I went home Correct, I went to the bank",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quotes pair with their own closer",
+  "register": "prose",
+  "segments": [
+   "my quote unquote friend said quote hi unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "My quote unquote friend said \"hi\""
+   ],
+   [
+    "final",
+    "My quote unquote friend said \"hi\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "two quote unquote idioms stay words",
+  "register": "prose",
+  "segments": [
+   "a quote unquote expert and a quote unquote fan"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "A quote unquote expert and a quote unquote fan"
+   ],
+   [
+    "final",
+    "A quote unquote expert and a quote unquote fan",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter stops at the closer",
+  "register": "python",
+  "segments": [
+   "x equals quote camel case foo bar unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = \"fooBar\""
+   ],
+   [
+    "final",
+    "x = \"fooBar\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct never crosses a line break",
+  "register": "prose",
+  "segments": [
+   "new bullet milk new bullet eggs",
+   "correct milk eggs to bread"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n- Milk\n- Eggs"
+   ],
+   [
+    "screen",
+    "\n- Milk\n- Eggs correct milk eggs to bread"
+   ],
+   [
+    "final",
+    "\n- Milk\n- Eggs correct milk eggs to bread",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "correct then scratch inside the match",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "three",
+   "correct two three to five",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One five"
+   ],
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "final",
+    "One",
+    "",
+    "",
+    1,
+    [
+     [
+      "two three",
+      "five"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct renders the replacement",
+  "register": "prose",
+  "segments": [
+   "see you monday",
+   "correct monday to friday period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See you Monday"
+   ],
+   [
+    "screen",
+    "See you Friday."
+   ],
+   [
+    "final",
+    "See you Friday.",
+    "",
+    "",
+    0,
+    [
+     [
+      "Monday",
+      "Friday."
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct uses vocabulary in the replacement",
+  "register": "prose",
+  "segments": [
+   "we use hyper",
+   "correct hyper to hyper furion"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We use"
+   ],
+   [
+    "screen",
+    "We use HyperFurion"
+   ],
+   [
+    "final",
+    "We use HyperFurion",
+    "",
+    "",
+    0,
+    [
+     [
+      "hyper",
+      "HyperFurion"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct never carries the capital of I",
+  "register": "prose",
+  "segments": [
+   "so I think",
+   "correct i to we"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "So I think"
+   ],
+   [
+    "screen",
+    "So we think"
+   ],
+   [
+    "final",
+    "So we think",
+    "",
+    "",
+    0,
+    [
+     [
+      "I",
+      "we"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct never matches inside a word",
+  "register": "prose",
+  "segments": [
+   "don’t go",
+   "correct don to dan"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Don’t go"
+   ],
+   [
+    "screen",
+    "Don’t go correct don to dan"
+   ],
+   [
+    "final",
+    "Don’t go correct don to dan",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a heading restarts the numbered list",
+  "register": "prose",
+  "segments": [
+   "new number a new number b new heading c new number d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\n1. A\n2. B\n# C\n1. D"
+   ],
+   [
+    "final",
+    "\n1. A\n2. B\n# C\n1. D",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "quote unquote wraps the words between",
   "register": "prose",
   "segments": [
@@ -5188,6 +5522,84 @@
   ]
  },
  {
+  "name": "a quote waits for its utterance to close",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "she said quote ship it",
+    "interim"
+   ],
+   [
+    0.4,
+    "she said quote ship it",
+    "interim"
+   ],
+   [
+    2.2,
+    "tick"
+   ],
+   [
+    2.5,
+    "she said quote ship it unquote",
+    "interim"
+   ],
+   [
+    2.8,
+    "she said quote ship it on quote",
+    "interim"
+   ],
+   [
+    4.5,
+    "tick"
+   ],
+   [
+    5.0,
+    "she said quote ship it unquote",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said"
+   ],
+   [
+    "screen",
+    "She said \"ship it\""
+   ],
+   [
+    "final",
+    "She said \"ship it\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "am waits for the next word",
   "register": "prose",
   "steps": [
@@ -5979,7 +6391,7 @@
    ],
    [
     "screen",
-    "Say open quote"
+    "Say open"
    ],
    [
     "screen",

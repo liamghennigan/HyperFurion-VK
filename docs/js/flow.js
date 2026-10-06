@@ -517,6 +517,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       const c = cores[cursor];
       if (!c || wakeAt(cores, cursor, wake) || fillers.has(c) || (words.length && stops.has(c))) break;
       if (FORMATTERS.has(c + " " + (cores[cursor + 1] || ""))) break;  // the next formatter starts
+      if (c === "unquote" || (c === "end" && cores[cursor + 1] === "quote")) break;  // a quote closes
       if (matchPhrase(cores, cursor, limit - cursor)[0]) break;
       words.push(c);
       stop = (tokens[cursor].match(PUNCT_STRIP) || [""])[0];
@@ -596,14 +597,19 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       i = e; continue;
     }
     if (cores[i] === "quote") {
+      if (cores[i + 1] === "unquote") {  // "his quote unquote friend": both stay words
+        items.push({ kind: "word", text: tokens[i], s: i, e: i + 1 }, { kind: "word", text: tokens[i + 1], s: i + 1, e: i + 2 });
+        i += 2; continue;
+      }
       let end = tokens.length, decided = flush;
       if (i < settled) { decided = true; end = settled; for (const b of bounds) if (b > i) { end = b; break; } }
+      if (!decided) { pendingFrom = i; break; }  // the closer may still come, or go
       let close = null;
       for (let k = i + 2; k < end && !close; k++) {
+        if (cores[k] === "quote") break;  // another quote opens first: this one stays a word
         if (cores[k] === "unquote") close = [k, 1];
         else if (cores[k] === "end" && k + 1 < end && cores[k + 1] === "quote") close = [k, 2];
       }
-      if (!close && !decided) { pendingFrom = i; break; }
       if (close) {
         closeQuote.set(close[0], close[1]);
         items.push({ kind: "punct", text: '"', mode: "right", sentenceEnd: false, s: i, e: i + 1 });
@@ -618,9 +624,12 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       const rest = cores.slice(i + 1, limit);
       let split = null;
       for (let k = 1; k < rest.length - 1; k++) if (rest[k] === "to") { split = k; break; }
-      if (split !== null) {
-        const old = rest.slice(0, split).join(" ");
-        const neu = tokens.slice(i + 2 + split, limit).map((t) => t.replace(PUNCT_STRIP, "").replace(/^[.,!?;:]+/, "")).join(" ").trim();
+      // "Correct. Go to the store.": an answer, not a command — the command
+      // has no punctuation on "correct" or in what it corrects
+      const clean = (t) => !/[.,!?;:]/.test(t[0] || "") && !/[.,!?;:]$/.test(t);
+      if (split !== null && tokens.slice(i, i + 2 + split).every(clean)) {
+        const old = tokens.slice(i + 1, i + 1 + split).map((t) => t.toLowerCase()).join(" ");
+        const neu = tokens.slice(i + 2 + split, limit).join(" ").trim();  // as spoken: the engine renders it
         if (old && neu) { items.push({ kind: "correct", text: neu, mode: old, s: i, e: limit }); i = limit; continue; }
       }
     }
@@ -823,7 +832,7 @@ export function render(items, register, state) {
   for (const it of items) {
     if (it.kind === "break") {
       if (it.mode === "number") { st.listNumber = (st.listNumber || 0) + 1; out.push((st.lineStart ? "" : "\n") + st.listNumber + ". "); }
-      else if (it.mode === "bullet") out.push((st.lineStart ? "" : "\n") + it.text);
+      else if (it.mode === "bullet") { out.push((st.lineStart ? "" : "\n") + it.text); if (it.text.startsWith("#")) st.listNumber = 0; }  // a heading starts a new list
       else { out.push(it.text); if (it.text.includes("\n\n")) st.listNumber = 0; }  // a new paragraph starts a new list
       st.lineStart = it.mode !== "bullet" && it.mode !== "number";
       st.atStart = false; st.glueNext = true; st.capNext = reg.smartCaps;
@@ -853,7 +862,8 @@ export function render(items, register, state) {
 // any punctuation or spacing between them (engine.py _phrase_pattern)
 function phrasePattern(phrase) {
   const words = phrase.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  return new RegExp("(?<![\\p{L}\\p{N}_'])" + words.join("[^\\p{L}\\p{N}]+") + "(?![\\p{L}\\p{N}_'])", "giu");
+  // never inside a word ("don’t"), never across a line break or list marker
+  return new RegExp("(?<![\\p{L}\\p{N}_'’])" + words.join("[^\\p{L}\\p{N}\\n]+") + "(?![\\p{L}\\p{N}_'’])", "giu");
 }
 // "title": each word's first character a capital; "upper"; "lower" (engine.py recase)
 export function recase(text, mode) {
@@ -954,7 +964,10 @@ export function moltenLine({ register, cfg, state } = {}) {
   // time-based commits between provider updates, plus holdback expiry so a
   // trailing half-phrase can't stall dictation forever
   function tick(now) {
-    if (pendingFrom !== null && !pendingIsInstruction()) {
+    // a "quote" waits for its utterance to close, never for the expiry: committed
+    // as a word, it could not become an opening mark when the closer came
+    const quoteWaits = pendingFrom !== null && core(tokens[pendingFrom] || "") === "quote";
+    if (pendingFrom !== null && !pendingIsInstruction() && !quoteWaits) {
       if (now - meta[pendingFrom].since >= 2 * stabMs()) { flushPending = true; reparse(); }
     }
     revDepth *= 0.995;
@@ -1198,12 +1211,16 @@ export function moltenLine({ register, cfg, state } = {}) {
     }
     const m = matches[matches.length - 1], heard = m[0], at = m.index;
     if (riskyBackspace(committedRender.slice(at))) return;
-    let meant = it.text;
+    // Y as dictation: spoken punctuation, vocabulary, numbers
+    const spoken = parse(it.text.split(/\s+/).filter(Boolean), { flush: true, register: reg, cfg }).items;
+    let meant = render(spoken, reg, { ...initialState(reg), capNext: false }).text.trim();
+    if (!meant) return;
     if (heard.length > 1 && heard === heard.toUpperCase() && heard !== heard.toLowerCase()) meant = meant.toUpperCase();
-    else if (/^\p{Lu}/u.test(heard)) meant = meant.slice(0, 1).toUpperCase() + meant.slice(1);
+    else if (/^\p{Lu}/u.test(heard) && !/^i(['’](m|ll|d|ve))?$/i.test(heard)) meant = meant.slice(0, 1).toUpperCase() + meant.slice(1);
     committedRender = committedRender.slice(0, at) + meant + committedRender.slice(at + heard.length);
     const shift = meant.length - heard.length;
-    snapshots = snapshots.map((sn) => (sn.len <= at ? sn : { len: sn.len + shift, st: sn.st }));
+    // a boundary inside the replaced words falls back to its start
+    snapshots = snapshots.map((sn) => (sn.len <= at ? sn : sn.len < at + heard.length ? { len: committedRender.slice(0, at).trimEnd().length, st: sn.st } : { len: sn.len + shift, st: sn.st }));
     if (heard !== meant) corrections.push([heard, meant]);
   }
   // "cap that" / "uppercase that" / "lowercase that" as a whole segment

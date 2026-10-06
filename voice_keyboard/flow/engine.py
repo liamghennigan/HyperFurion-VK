@@ -91,11 +91,17 @@ class FinalResult:
     reach_back: int = 0
 
 
+_PRONOUN_I = re.compile(r"i(?:['’](?:m|ll|d|ve))?", re.IGNORECASE)
+
+
 def _phrase_pattern(phrase: str) -> "re.Pattern[str]":
     """The spoken words of `phrase` as typed text: case-insensitive, whole
     words, any punctuation or spacing between them."""
     words = [re.escape(word) for word in phrase.split()]
-    return re.compile(r"(?<![\w'])" + r"[\W_]+".join(words) + r"(?![\w'])", re.IGNORECASE)
+    # never inside a word ("don’t"), never across a line break or list marker
+    return re.compile(
+        r"(?<![\w'’])" + r"(?:[^\w\n]|_)+".join(words) + r"(?![\w'’])", re.IGNORECASE
+    )
 
 
 def recase(text: str, mode: str) -> str:
@@ -267,7 +273,11 @@ class FlowEngine:
     def on_tick(self, now: float) -> None:
         """Time-based commits between transcript updates, plus holdback
         expiry so a trailing half-phrase can't stall dictation forever."""
-        if self._pending_from is not None and not self._pending_is_instruction():
+        if (
+            self._pending_from is not None
+            and not self._pending_is_instruction()
+            and not self._pending_is_quote()
+        ):
             oldest = self._meta[self._pending_from].first_seen
             if now - oldest >= 2 * self._cfg.stability_ms / 1000.0:
                 self._flush_pending = True
@@ -435,6 +445,14 @@ class FlowEngine:
             elif item.kind == "respell" and item.mode == "insert":
                 preview.append(Item(kind="word", text=item.text, span=item.span))
         return preview
+
+    def _pending_is_quote(self) -> bool:
+        """A "quote" waiting for its "unquote": it waits for the utterance to
+        close, never for the holdback expiry — committed as a word, it could
+        not become an opening quotation mark when the closer came."""
+        if self._pending_from is None or self._pending_from >= len(self._tokens):
+            return False
+        return self._tokens[self._pending_from].casefold().strip(".,!?;:") == "quote"
 
     def _pending_is_instruction(self) -> bool:
         if self._pending_from is None or self._pending_from >= len(self._tokens):
@@ -721,16 +739,26 @@ class FlowEngine:
         if risky_backspace(self._committed_render[match.start():]):
             logger.info("flow: not correcting across complex Unicode")
             return
-        meant = item.text
+        # Y as dictation: spoken punctuation, vocabulary, numbers
+        spoken = self._grammar.parse(item.text.split(), flush=True).items
+        meant, _ = render_items(
+            spoken, replace(_fresh_state(self._register), capitalize_next=False), self._register
+        )
+        meant = meant.strip()
+        if not meant:
+            return
         if len(heard) > 1 and heard.isupper():
             meant = meant.upper()
-        elif heard[:1].isupper():
+        elif heard[:1].isupper() and not _PRONOUN_I.fullmatch(heard):
             meant = meant[:1].upper() + meant[1:]
         at = match.start()
         self._committed_render = self._committed_render[:at] + meant + self._committed_render[match.end():]
         shift = len(meant) - len(heard)
         self._snapshots = [
             snap if snap.render_len <= at
+            # a boundary inside the replaced words falls back to its start
+            else _Snapshot(render_len=len(self._committed_render[:at].rstrip()), render_state=snap.render_state)
+            if snap.render_len < at + len(heard)
             else _Snapshot(render_len=snap.render_len + shift, render_state=snap.render_state)
             for snap in self._snapshots
         ]

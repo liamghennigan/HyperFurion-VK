@@ -237,6 +237,8 @@ def _address_part(core: str) -> bool:
 def _find_unquote(cores: list[str], start: int, end: int) -> Optional[tuple[int, int]]:
     """The first "unquote" or "end quote" in cores[start:end]: (index, length)."""
     for at in range(start, end):
+        if cores[at] == "quote":
+            return None  # another quote opens first: this one stays a word
         if cores[at] == "unquote":
             return at, 1
         if cores[at] == "end" and at + 1 < end and cores[at + 1] == "quote":
@@ -359,6 +361,8 @@ class Grammar:
                 or core in self._fillers
                 or (words and core in self._formatter_stops)
                 or (cores[cursor], cores[cursor + 1] if cursor + 1 < len(cores) else "") in FORMATTERS
+                or core == "unquote"
+                or (core == "end" and cursor + 1 < len(cores) and cores[cursor + 1] == "quote")
             ):
                 break
             entry, _ = self._match_phrase(cores, cursor, limit - cursor)
@@ -579,11 +583,17 @@ class Grammar:
                 index = span[1]
                 continue
             if core == "quote" and self.enabled:
+                if index + 1 < len(cores) and cores[index + 1] == "unquote":
+                    # "his quote unquote friend": both stay words
+                    items.append(Item(kind="word", text=tokens[index], span=(index, index + 1)))
+                    items.append(Item(kind="word", text=tokens[index + 1], span=(index + 1, index + 2)))
+                    index += 2
+                    continue
                 end, decided = self._segment_end(index, len(tokens), settled, flush, bounds)
-                close = _find_unquote(cores, index + 2, end)
-                if close is None and not decided:
-                    pending_from = index
+                if not decided:
+                    pending_from = index  # the closer may still come, or go
                     break
+                close = _find_unquote(cores, index + 2, end)
                 if close is not None:
                     close_quote[close[0]] = close[1]
                     items.append(Item(kind="punct", text='"', mode="right", span=(index, index + 1)))
@@ -601,11 +611,15 @@ class Grammar:
                     break
                 rest = cores[index + 1:limit]
                 split = next((k for k in range(1, len(rest) - 1) if rest[k] == "to"), None)
-                if split is not None:
-                    old = " ".join(rest[:split])
-                    new = " ".join(
-                        t.strip(_PUNCT_STRIP) for t in tokens[index + 2 + split:limit]
-                    ).strip()
+                # "Correct. Go to the store." / "Correct, I went to the bank":
+                # an answer, not a command — the command has no punctuation
+                # on "correct" or in what it corrects.
+                if split is not None and _clean(tokens[index]) and all(
+                    _clean(t) for t in tokens[index + 1:index + 2 + split]
+                ):
+                    old = " ".join(t.lower() for t in tokens[index + 1:index + 1 + split])
+                    # the replacement as spoken: the engine renders it
+                    new = " ".join(tokens[index + 2 + split:limit]).strip()
                     if old and new:
                         items.append(Item(kind="correct", text=new, mode=old, span=(index, limit)))
                         index = limit
