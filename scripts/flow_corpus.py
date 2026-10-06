@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from voice_keyboard.flow.engine import FlowConfig, FlowEngine  # noqa: E402
-from voice_keyboard.flow.grammar import Grammar  # noqa: E402
+from voice_keyboard.flow.grammar import DEFAULT_FILLERS, Grammar  # noqa: E402
 from voice_keyboard.flow.registers import REGISTERS, continuation_state  # noqa: E402
 
 CORPUS = ROOT / "tests" / "flow_corpus.json"
@@ -100,6 +100,18 @@ CASES = [
     ("digit pairs and attached punctuation", "terminal", ["version one two period then four. five six"], {}),
     ("twenty hundred and zero", "terminal", ["twenty hundred then zero then zero zero"], {}),
     ("numbers off", "terminal", ["twenty three"], {"numbers": "off"}),
+    # [flow] fillers: hesitation sounds are dropped, with their commas
+    ("fillers at the start", "prose", ["Um, so we should ship it."], {}),
+    ("fillers bracketed by commas", "prose", ["we should, uh, ship it"], {}),
+    ("a filler's sentence end survives", "prose", ["I think so, um.", "Next one."], {}),
+    ("a filler alone says nothing", "prose", ["Uh.", "Okay then"], {}),
+    ("fillers in a row", "prose", ["well, um, um, yes"], {}),
+    ("a filler-like word is a word", "prose", ["the umbrella is red, uhm, blue"], {}),
+    ("literal keeps a filler", "prose", ["say literal um please"], {}),
+    ("fillers off", "prose", ["we should, uh, ship it"], {"fillers": []}),
+    ("a filler after a pause lets the next word decide", "prose",
+     ["I was thinking about the project.", "Um, and how it works."], {"pause_review": "rules"}),
+    ("a comma word at a segment end keeps its comma", "prose", ["we should,", "uh, ship it"], {}),
     # [flow] rejoin: continuing text an earlier recording left at the caret
     ("rejoin after a sentence end", "prose", ["next sentence"], {"continues": "Hello world."}),
     ("rejoin mid-sentence", "prose", ["and more"], {"continues": "Hello world"}),
@@ -145,6 +157,10 @@ STREAMS = [
     ("a half phrase is held, then let go", "prose", [
         [0.0, "ready open", "interim"], [0.3, "ready open", "interim"], [0.6, "ready open", "interim"],
         [2.0, "tick"], [2.5, "tick"], [3.2, "tick"], [3.6, "ready open", "interim"], [4.0, "ready open quote", "final"]], {}),
+    ("a comma word waits for one more word, then merges with a filler", "prose", [
+        [0.0, "we should,", "interim"], [0.3, "we should,", "interim"], [0.6, "we should, uh,", "interim"],
+        [0.9, "we should, uh, ship", "interim"], [3.0, "tick"], [3.3, "we should, uh, ship it", "interim"],
+        [5.0, "we should, uh, ship it", "final"]], {}),
     ("a held number is let go, then a bigger number follows", "terminal", [
         [0.0, "one", "interim"], [0.3, "one", "interim"], [0.6, "one", "interim"], [3.2, "tick"], [3.4, "tick"],
         [3.6, "one hundred", "interim"], [3.9, "one hundred", "interim"], [4.2, "one hundred", "interim"], [7.0, "tick"],
@@ -194,6 +210,7 @@ def make_engine(register_name: str, opts: dict) -> FlowEngine:
         numbers_min=register.numbers_min,
         spelling=opts.get("spelling", True),
         nav=opts.get("nav", False),
+        fillers=opts.get("fillers", DEFAULT_FILLERS),
     )
     config = FlowConfig(pause_review=opts.get("pause_review", "off"))
     return FlowEngine(config, grammar, register, initial_state=initial)

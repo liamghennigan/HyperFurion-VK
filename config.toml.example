@@ -135,6 +135,10 @@ personal_dictionary = true
 # swaps the last word for the spelled one; "spell ..." types it. Each
 # swap is offered as a `voice-keyboard learned` candidate.
 spelling = true
+# Hesitation sounds the recognizer writes down are dropped from what is
+# typed: "um, so we should, uh, ship it" -> "So we should, ship it".
+# Only sounds, never words that carry meaning. [] keeps them all.
+fillers = ["um", "umm", "uh", "uhh", "uhm", "erm"]
 # Stop, think, press the hotkey again: a recording that starts within 30
 # seconds of the last one, in the same app and the same prose register,
 # continues its text — a space before the first word, and a capital only

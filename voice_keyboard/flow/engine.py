@@ -453,6 +453,17 @@ class FlowEngine:
             return pauses.PauseDecision(".", False, ""), True  # nothing followed
         right = self._tokens[index]
         item = self._item_at(index)
+        if item is not None and item.kind == "filler":
+            # "project. Um, and how": the word after the hesitation decides.
+            nxt = index + 1
+            while nxt < len(self._tokens):
+                following = self._item_at(nxt)
+                if following is None or following.kind != "filler":
+                    break
+                nxt += 1
+            if nxt >= len(self._tokens) or self._item_at(nxt) is None:
+                return pauses.keep(right), False
+            right, item = self._tokens[nxt], self._item_at(nxt)
         if item is not None and item.span[0] < index:
             # One phrase spans the pause ("hyper. Furion" = "HyperFurion").
             return pauses.PauseDecision("", False, pauses.core(right)), True

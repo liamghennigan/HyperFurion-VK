@@ -56,6 +56,16 @@ proven to be the daemon's.
 
 ### Added
 
+- **Hesitations never reach the page (`[flow] fillers`).** Streaming
+  recognizers write down "um" and "uh"; they are now dropped from what is
+  typed, with the commas that bracket them: "Um, so we should, uh, ship
+  it." types "So we should ship it." A sentence end the recognizer hung
+  on a filler survives; a pause before "Um, and …" lets the word after
+  the hesitation decide. Only sounds are on the list (um, umm, uh, uhh,
+  uhm, erm) — never words that carry meaning; `fillers = []` keeps them.
+  A word ending in a comma waits at the live tail for one more word, so
+  the comma and the hesitation freeze together. Both engines, eleven
+  corpus cases.
 - **`[flow] rejoin` — stop, think, press the hotkey again.** A recording
   that starts within 30 seconds of the last one, in the same app and the
   same prose register, continues its text: a space before the first word,

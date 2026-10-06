@@ -121,6 +121,8 @@ DEFAULT_CONFIG: dict = {
         # "spell that n g i n x" replaces the last word with the spelled
         # one ("spell ..." types it); each becomes a `learned` candidate.
         "spelling": True,
+        # Hesitation sounds dropped from what is typed. [] keeps them all.
+        "fillers": ["um", "umm", "uh", "uhh", "uhm", "erm"],
         # A recording that starts within 30 s of the last one, in the same
         # app and the same prose register, continues its text: a space
         # before the first word, a capital only after a sentence end.
@@ -743,6 +745,11 @@ def _validate_nav_config(config: dict) -> None:
 
 def _validate_flow_config(config: dict) -> None:
     flow_cfg = config.get("flow", {})
+    fillers = flow_cfg.get("fillers", DEFAULT_CONFIG["flow"]["fillers"])
+    if not isinstance(fillers, list) or not all(
+        isinstance(f, str) and f.strip() and " " not in f.strip() for f in fillers
+    ):
+        raise RuntimeError("flow.fillers must be a list of single words")
     for key in _FLOW_BOOL_KEYS:
         value = flow_cfg.get(key, DEFAULT_CONFIG["flow"][key])
         if not isinstance(value, bool):

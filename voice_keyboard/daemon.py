@@ -15,6 +15,7 @@ from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
+from voice_keyboard.flow.grammar import DEFAULT_FILLERS
 from voice_keyboard.flow.registers import (
     RenderState,
     continuation_state,
@@ -938,6 +939,7 @@ class Daemon:
             numbers_on=register.numbers_on,
             numbers_min=register.numbers_min,
             spelling=bool(flow_cfg.get("spelling", True)),
+            fillers=flow_cfg.get("fillers", DEFAULT_FILLERS),
             nav=self._nav_enabled(),
         )
 

@@ -577,6 +577,7 @@ recognizer's periods.
 | `VK, make that formal` (end of an utterance, or alone) | rewrites the preceding dictation in place via `[llm]` |
 | `spell that n g i n x` | replaces the last word with the spelled one — letters, NATO words ("november golf"), `capital k`, spoken digits, or one capitalized token when the recognizer merged them ("NGINX") |
 | `spell k eight s` | types the spelled word (`k8s`) |
+| "um", "uh" and the like | nothing — hesitation sounds the recognizer writes down are dropped, with the commas around them (`[flow] fillers`) |
 
 Every phrase is remappable and removable in config (`[flow.commands]`,
 `[flow.punctuation]`), `[flow.vocabulary]` expands your own phrases

@@ -1606,6 +1606,250 @@
   ]
  },
  {
+  "name": "fillers at the start",
+  "register": "prose",
+  "segments": [
+   "Um, so we should ship it."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "So we should ship it."
+   ],
+   [
+    "final",
+    "So we should ship it.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "fillers bracketed by commas",
+  "register": "prose",
+  "segments": [
+   "we should, uh, ship it"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We should ship it"
+   ],
+   [
+    "final",
+    "We should ship it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler's sentence end survives",
+  "register": "prose",
+  "segments": [
+   "I think so, um.",
+   "Next one."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think so."
+   ],
+   [
+    "screen",
+    "I think so. Next one."
+   ],
+   [
+    "final",
+    "I think so. Next one.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler alone says nothing",
+  "register": "prose",
+  "segments": [
+   "Uh.",
+   "Okay then"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Okay then"
+   ],
+   [
+    "final",
+    "Okay then",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "fillers in a row",
+  "register": "prose",
+  "segments": [
+   "well, um, um, yes"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Well yes"
+   ],
+   [
+    "final",
+    "Well yes",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler-like word is a word",
+  "register": "prose",
+  "segments": [
+   "the umbrella is red, uhm, blue"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The umbrella is red blue"
+   ],
+   [
+    "final",
+    "The umbrella is red blue",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "literal keeps a filler",
+  "register": "prose",
+  "segments": [
+   "say literal um please"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say um please"
+   ],
+   [
+    "final",
+    "Say um please",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "fillers off",
+  "register": "prose",
+  "segments": [
+   "we should, uh, ship it"
+  ],
+  "options": {
+   "fillers": []
+  },
+  "events": [
+   [
+    "screen",
+    "We should, uh, ship it"
+   ],
+   [
+    "final",
+    "We should, uh, ship it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a filler after a pause lets the next word decide",
+  "register": "prose",
+  "segments": [
+   "I was thinking about the project.",
+   "Um, and how it works."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "I was thinking about the project."
+   ],
+   [
+    "screen",
+    "I was thinking about the project and how it works."
+   ],
+   [
+    "final",
+    "I was thinking about the project and how it works.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a comma word at a segment end keeps its comma",
+  "register": "prose",
+  "segments": [
+   "we should,",
+   "uh, ship it"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We should,"
+   ],
+   [
+    "screen",
+    "We should, ship it"
+   ],
+   [
+    "final",
+    "We should, ship it",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "rejoin after a sentence end",
   "register": "prose",
   "segments": [
@@ -2390,6 +2634,85 @@
    [
     "final",
     "Ready open quote",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a comma word waits for one more word, then merges with a filler",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "we should,",
+    "interim"
+   ],
+   [
+    0.3,
+    "we should,",
+    "interim"
+   ],
+   [
+    0.6,
+    "we should, uh,",
+    "interim"
+   ],
+   [
+    0.9,
+    "we should, uh, ship",
+    "interim"
+   ],
+   [
+    3.0,
+    "tick"
+   ],
+   [
+    3.3,
+    "we should, uh, ship it",
+    "interim"
+   ],
+   [
+    5.0,
+    "we should, uh, ship it",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "We"
+   ],
+   [
+    "screen",
+    "We"
+   ],
+   [
+    "screen",
+    "We should"
+   ],
+   [
+    "screen",
+    "We should ship"
+   ],
+   [
+    "screen",
+    "We should ship"
+   ],
+   [
+    "screen",
+    "We should ship it"
+   ],
+   [
+    "screen",
+    "We should ship it"
+   ],
+   [
+    "final",
+    "We should ship it",
     "",
     "",
     0,

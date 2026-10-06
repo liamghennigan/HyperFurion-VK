@@ -235,6 +235,19 @@ function compileCode(items, state, { glyphs, callables, dashHold }) {
 // or a navigation command starting inside them is decided there — it
 // never waits for, or grows into, the next segment.
 const SPELL_WORD = "spell";
+// hesitation sounds a streaming recognizer writes down: dropped ([flow] fillers)
+export const DEFAULT_FILLERS = ["um", "umm", "uh", "uhh", "uhm", "erm"];
+const SENTENCE_STOPS = ".?!";
+// a sentence end the recognizer attached to a hesitation ("… so, um.")
+// still ends the sentence — after a word, and only once
+function fillerStop(token, items, s, e) {
+  const tail = (token.match(PUNCT_STRIP) || [""])[0];
+  const stop = [...tail].find((ch) => SENTENCE_STOPS.includes(ch));
+  if (!stop || !items.length) return;
+  const before = [...items].reverse().find((it) => it.kind !== "filler");
+  if (!before || before.kind !== "word" || SENTENCE_STOPS.includes(before.text.slice(-1))) return;
+  items.push({ kind: "punct", text: stop, mode: "left", sentenceEnd: true, s, e });
+}
 const AMBIGUOUS = new Set(["a", "i", "one", "two", "four", "eight"]);  // letters that are also words
 const PENDING = "pending";
 
@@ -246,6 +259,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   }
   const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
   const spelling = !cfg || cfg.spelling !== false;
+  const fillers = new Set(((cfg && cfg.fillers) || DEFAULT_FILLERS).map((f) => String(f).trim().toLowerCase()).filter(Boolean));
   const nav = !!(cfg && cfg.nav);
   const cores = tokens.map(core);
   const items = [];
@@ -286,6 +300,12 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       items.push({ kind: "instruction", text: tokens.slice(i + wk).join(" "),
                    s: i, e: tokens.length });
       break;
+    }
+    if (fillers.has(cores[i])) {
+      // a hesitation sound renders nothing; a comma attached to it goes too
+      items.push({ kind: "filler", s: i, e: i + 1 });
+      fillerStop(tokens[i], items, i, i + 1);
+      i += 1; continue;
     }
     if (spelling && cores[i] === SPELL_WORD) {
       let [limit, decided] = limitAt(i);
@@ -342,7 +362,21 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       }
       i += used; continue;
     }
-    items.push({ kind: "word", text: tokens[i], s: i, e: i + 1 });
+    const token = tokens[i];
+    if (fillers.size && token.endsWith(",")) {
+      // "we should, uh, ship it": the commas were the recognizer's brackets
+      // around the hesitation, and go with it; the word and the filler are
+      // one item, so they freeze together and read back the same
+      const limit = i < frozen ? itemEnd(i) : tokens.length;
+      const after = i + 1;
+      if (after < limit && fillers.has(cores[after])) {
+        items.push({ kind: "word", text: token.slice(0, -1), s: i, e: after + 1 });
+        fillerStop(tokens[after], items, i, after + 1);
+        i = after + 1; continue;
+      }
+      if (after >= tokens.length && i >= frozen && i >= settled && !flush) { pendingFrom = i; break; }  // the next word may be a hesitation
+    }
+    items.push({ kind: "word", text: token, s: i, e: i + 1 });
     i += 1;
   }
   // fold spoken-number runs (held back while still touching the molten tail)
@@ -680,8 +714,15 @@ export function moltenLine({ register, cfg, state } = {}) {
   // the rules' call for the pause before token `index`: [decision, confident]
   function ruleDecisionAt(index) {
     if (index >= tokens.length) return [pauses.decision(".", false, ""), true];  // nothing followed
-    const right = tokens[index];
-    const it = itemAt(index);
+    let right = tokens[index];
+    let it = itemAt(index);
+    if (it && it.kind === "filler") {
+      // "project. Um, and how": the word after the hesitation decides
+      let nxt = index + 1;
+      while (nxt < tokens.length) { const f = itemAt(nxt); if (!f || f.kind !== "filler") break; nxt++; }
+      if (nxt >= tokens.length || !itemAt(nxt)) return [pauses.keep(right), false];
+      right = tokens[nxt]; it = itemAt(nxt);
+    }
     if (it && it.s < index) return [pauses.decision("", false, pauses.core(right)), true];  // one phrase spans the pause
     return pauses.ruleDecision(tokens[index - 1], right, { rightKind: it ? it.kind : "word", lowerSeen });
   }

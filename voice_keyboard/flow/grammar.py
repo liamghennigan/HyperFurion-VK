@@ -32,7 +32,7 @@ MAX_PHRASE_TOKENS = 4
 
 @dataclass(frozen=True)
 class Item:
-    kind: str  # word | punct | break | scratch | instruction | respell | key
+    kind: str  # word | punct | break | scratch | instruction | respell | key | filler
     text: str = ""               # word text, punct glyph, break chars, instruction
     mode: str = "none"           # punct spacing: left | right | both | none;
     # respell: replace (the previous word) | insert
@@ -97,6 +97,12 @@ DEFAULT_PUNCTUATION: dict[str, tuple[str, str, bool]] = {
 _BREAKS = {"new_line": "\n", "new_paragraph": "\n\n"}
 
 SPELL_WORD = "spell"
+
+# Hesitation sounds a streaming recognizer writes down: dropped from what
+# is typed ([flow] fillers). Only sounds — never words that carry meaning
+# ("like", "so", "well", "hmm" in a chat).
+DEFAULT_FILLERS = ("um", "umm", "uh", "uhh", "uhm", "erm")
+_SENTENCE_STOPS = ".?!"
 # Spelled symbols that are also everyday words.
 _AMBIGUOUS = {"a", "i", "one", "two", "four", "eight"}
 _PENDING = "pending"
@@ -124,9 +130,13 @@ class Grammar:
         numbers_min: int = 10,
         spelling: bool = True,
         nav: bool = False,
+        fillers=DEFAULT_FILLERS,
     ):
         self.enabled = enabled
         self._spelling = spelling
+        self._fillers = frozenset(
+            str(f).strip().casefold() for f in (fillers or ()) if str(f).strip()
+        )
         self._nav = nav
         self._wake = (wake_word or "").strip().casefold()
         numbers = numbers if numbers in {"auto", "always", "off"} else "auto"
@@ -173,6 +183,18 @@ class Grammar:
         ".": ("left", True), ",": ("left", False), "!": ("left", True),
         "?": ("left", True), ";": ("left", False), ":": ("left", False),
     }
+
+    @staticmethod
+    def _filler_stop(token: str, items: list[Item], span: tuple[int, int]) -> None:
+        """A sentence end the recognizer attached to a hesitation ("… so,
+        um.") still ends the sentence — after a word, and only once."""
+        stop = next((ch for ch in token[len(token.rstrip(_PUNCT_STRIP)):] if ch in _SENTENCE_STOPS), "")
+        if not stop or not items:
+            return
+        before = next((item for item in reversed(items) if item.kind != "filler"), None)
+        if before is None or before.kind != "word" or before.text[-1:] in _SENTENCE_STOPS:
+            return
+        items.append(Item(kind="punct", text=stop, mode="left", sentence_end=True, span=span))
 
     def _trailing_punct(self, token: str, span: tuple[int, int]) -> list[Item]:
         suffix = token[len(token.rstrip(_PUNCT_STRIP)):]
@@ -293,6 +315,14 @@ class Grammar:
                 index = len(tokens)
                 break
 
+            if core in self._fillers:
+                # A hesitation sound renders nothing; a comma attached to it
+                # goes with it.
+                items.append(Item(kind="filler", span=(index, index + 1)))
+                self._filler_stop(tokens[index], items, (index, index + 1))
+                index += 1
+                continue
+
             if self._spelling and core == SPELL_WORD:
                 limit, decided = self._limit(
                     index, len(tokens), frozen, settled, flush, bounds, item_end
@@ -402,7 +432,24 @@ class Grammar:
                 index += consumed
                 continue
 
-            items.append(Item(kind="word", text=tokens[index], span=(index, index + 1)))
+            token = tokens[index]
+            if self._fillers and token.endswith(",") and index + 1 < len(tokens) + 1:
+                # "we should, uh, ship it": the commas were the recognizer's
+                # brackets around the hesitation, and go with it. The word
+                # and the filler are one item, so they freeze together and
+                # read back the same below the fence.
+                limit = item_end(index) if index < frozen else len(tokens)
+                after = index + 1
+                if after < limit and cores[after] in self._fillers:
+                    span = (index, after + 1)
+                    items.append(Item(kind="word", text=token[:-1], span=span))
+                    self._filler_stop(tokens[after], items, span)
+                    index = after + 1
+                    continue
+                if after >= len(tokens) and index >= frozen and index >= settled and not flush:
+                    pending_from = index  # the next word may be a hesitation
+                    break
+            items.append(Item(kind="word", text=token, span=(index, index + 1)))
             index += 1
 
         if self._numbers_on:
