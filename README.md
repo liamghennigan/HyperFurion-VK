@@ -124,7 +124,9 @@ routes the just-typed text through an LLM and repairs it on screen.
   TODO in this repo"` — one line lands at your prompt, Enter stays yours
   (enable the voice trigger with `[intent] enabled`).
 - **Teach it your vocabulary:** `voice-keyboard learned` reviews corrections
-  mined from the opt-in ledger; accept what is right.
+  mined from the opt-in ledger; accept what is right. Or add a word now:
+  `voice-keyboard learned add hyper furion = HyperFurion` (a one-word
+  written form also becomes a hotword the recognizer leans toward).
 - **Hold rewrites for approval:** `[flow] rewrite_pending = true`, then
   "keep it" / "scratch that" (or `voice-keyboard keep` / `discard`).
 - **Check whether the daemon is recording:** `voice-keyboard status`.

@@ -12,6 +12,9 @@ proven to be the daemon's.
 
 ### Added
 
+- **`voice-keyboard learned add <spoken> = <written>`.** Teach a word now,
+  without waiting for the miner: `learned add hyper furion = HyperFurion`.
+  A one-word written form also becomes a hotword for the recognizer.
 - **"Quote … unquote".** "She said quote ship it unquote" types
   `She said "ship it"`; "end quote" closes too. Only with words between,
   so "his quote unquote friend" stays prose, and only within one utterance.

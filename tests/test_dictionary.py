@@ -218,3 +218,16 @@ class TestGrammarMerge:
         cfg["flow"]["personal_dictionary"] = "yes"
         with pytest.raises(RuntimeError, match="flow.personal_dictionary"):
             validate_config(cfg)
+
+
+def test_add_word_sets_the_override_and_a_hotword(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    from voice_keyboard import dictionary
+
+    assert dictionary.add_word("Hyper  Furion", "HyperFurion") == ("hyper furion", True)
+    assert dictionary.vocabulary_overrides() == {"hyper furion": "HyperFurion"}
+    assert dictionary.hotwords() == ["HyperFurion"]
+    # Again: no second hotword; a phrase written form is no hotword at all.
+    assert dictionary.add_word("hyper furion", "HyperFurion") == ("hyper furion", False)
+    assert dictionary.add_word("vee kay", "HyperFurion VK") == ("vee kay", False)
+    assert dictionary.hotwords() == ["HyperFurion"]

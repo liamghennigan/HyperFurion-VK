@@ -632,6 +632,15 @@ def _run_learned(extra_args: list[str]) -> None:
         data["rejected"].append(dictionary.candidate_key("macro", text))
         dictionary.save_dictionary(data)
         print("macro candidate rejected")
+    elif action == "add" and "=" in extra_args[1:]:
+        at = extra_args.index("=", 1)
+        try:
+            key, hotword = dictionary.add_word(" ".join(extra_args[1:at]), " ".join(extra_args[at + 1:]))
+        except ValueError as exc:
+            print(f"learned add: {exc}", file=sys.stderr)
+            sys.exit(2)
+        written = " ".join(extra_args[at + 1:]).strip()
+        print(f'added: "{key}" -> "{written}"' + (" (and a hotword)" if hotword else ""))
     elif action == "forget" and len(extra_args) > 1:
         spoken = " ".join(extra_args[1:]).casefold()
         removed = [k for k in data["overrides"] if k.casefold() == spoken]
@@ -646,7 +655,8 @@ def _run_learned(extra_args: list[str]) -> None:
         print(
             "usage: voice-keyboard learned"
             " [accept N | reject N | hotword N | reject-hotword N |"
-            " macro N <name> | reject-macro N | forget <spoken>]",
+            " macro N <name> | reject-macro N | add <spoken> = <written> |"
+            " forget <spoken>]",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -869,7 +879,8 @@ def main() -> None:
             "history [count] | recall [n-back] | transform <instruction...>"
             " | intent <request...> | ask <question...> | find <query...>"
             " | learned [accept N | reject N | hotword N | macro N <name> |"
-            " forget <spoken>] | stats [--json] | commands [filter]"
+            " add <spoken> = <written> | forget <spoken>] | stats [--json]"
+            " | commands [filter]"
         ),
     )
     parser.add_argument(
