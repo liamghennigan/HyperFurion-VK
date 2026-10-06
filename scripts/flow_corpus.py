@@ -301,6 +301,13 @@ CASES.append(("pauses are a prose thing", "terminal", ["cd the.", "And then ls"]
 # streaming cases: (name, register, steps, options); a step is
 # [t, text, "interim" | "final"] or [t, "tick"]
 STREAMS = [
+    ("quote unquote freezes as one item", "prose", [
+        [1.2, "comma I is", "interim"], [2.4, "comma I is thirty", "interim"], [4.4, "tick"],
+        [5.6, "comma I is thirty percent", "interim"], [6.6, "tick"],
+        [7.8, "comma point is thirty percent quote", "interim"], [8.3, "tick"],
+        [8.6, "comma point is thirty percent quote unquote", "interim"], [9.1, "tick"],
+        [9.7, "comma point is thirty percent quote unquote one", "interim"],
+        [10.0, "comma point is thirty percent quote and one unquote", "final"]], {}),
     ("a stutter never flips a pause", "prose", [
         [0.0, "I talked to the.", "final"], [0.3, "I talked to the. The", "interim"],
         [0.8, "tick"], [1.3, "tick"], [1.8, "tick"],

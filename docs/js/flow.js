@@ -807,8 +807,9 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       i = e; continue;
     }
     if (cores[i] === "quote") {
-      if (cores[i + 1] === "unquote") {  // "his quote unquote friend": both stay words
-        items.push({ kind: "word", text: tokens[i], s: i, e: i + 1 }, { kind: "word", text: tokens[i + 1], s: i + 1, e: i + 2 });
+      if (cores[i + 1] === "unquote" && !(i < frozen && itemEnd(i) === i + 1)) {
+        // "his quote unquote friend": both stay words, as one item — decided by "unquote", so they freeze together
+        items.push({ kind: "word", text: tokens[i] + " " + tokens[i + 1], s: i, e: i + 2 });
         i += 2; continue;
       }
       let end = tokens.length, decided = flush;

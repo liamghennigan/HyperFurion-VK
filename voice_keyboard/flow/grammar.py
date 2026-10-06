@@ -652,10 +652,14 @@ class Grammar:
                 index = span[1]
                 continue
             if core == "quote" and self.enabled:
-                if index + 1 < len(cores) and cores[index + 1] == "unquote":
-                    # "his quote unquote friend": both stay words
-                    items.append(Item(kind="word", text=tokens[index], span=(index, index + 1)))
-                    items.append(Item(kind="word", text=tokens[index + 1], span=(index + 1, index + 2)))
+                if (
+                    index + 1 < len(cores) and cores[index + 1] == "unquote"
+                    and not (index < frozen and item_end(index) == index + 1)
+                ):
+                    # "his quote unquote friend": both stay words, as one
+                    # item — decided by "unquote", so they freeze together
+                    # (a lone committed "quote" was an opening mark)
+                    items.append(Item(kind="word", text=f"{tokens[index]} {tokens[index + 1]}", span=(index, index + 2)))
                     index += 2
                     continue
                 end, decided = self._segment_end(index, len(tokens), settled, flush, bounds)
