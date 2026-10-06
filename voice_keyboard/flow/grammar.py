@@ -116,6 +116,55 @@ TLDS = frozenset(
     "eu nl se no es it jp in au nz ch at be ly so to cc".split()
 )
 _ADDRESS_GLUE = {"dot": ".", "at": "@"}
+
+# Spoken case formatters: "snake case user id" -> user_id. The formatter
+# takes the plain words after it, up to punctuation, a command, or the end
+# of the utterance (a pause), at most MAX_FORMATTED_WORDS of them.
+FORMATTERS = {
+    ("camel", "case"): "camel", ("pascal", "case"): "pascal", ("snake", "case"): "snake",
+    ("kebab", "case"): "kebab", ("constant", "case"): "constant", ("title", "case"): "title",
+    ("all", "caps"): "caps", ("no", "space"): "smash", ("dot", "case"): "dot",
+}
+_FORMATTER_FIRST = {first for first, _ in FORMATTERS}
+MAX_FORMATTED_WORDS = 8
+# Words the code registers compile into operators (flow/code.py) end a
+# formatted run: "snake case user id equals five" -> user_id = 5.
+FORMATTER_STOPS = frozenset(
+    "equals plus minus times modulo arrow dot pipe star slash".split()
+)
+# In a code register a run also ends at a keyword or a spoken callable:
+# "for snake case row count in range ten" -> for row_count in range(10.
+CODE_FORMATTER_STOPS = FORMATTER_STOPS | frozenset(
+    "in is not and or if elif else for while return import from as with def class "
+    "lambda yield await async try except finally raise pass break continue global "
+    "range print len str int float input enumerate sorted reversed abs min max sum "
+    "type repr".split()
+)
+# Title case keeps these lowercase after the first word.
+_TITLE_SMALL = frozenset("a an and as at but by for in nor of on or the to vs via".split())
+
+
+def format_words(style: str, words: list[str]) -> str:
+    words = [w for w in words if w]
+    if style == "camel":
+        return words[0] + "".join(w[:1].upper() + w[1:] for w in words[1:])
+    if style == "pascal":
+        return "".join(w[:1].upper() + w[1:] for w in words)
+    if style == "snake":
+        return "_".join(words)
+    if style == "kebab":
+        return "-".join(words)
+    if style == "constant":
+        return "_".join(words).upper()
+    if style == "title":
+        return " ".join(
+            w if k and w in _TITLE_SMALL else w[:1].upper() + w[1:] for k, w in enumerate(words)
+        )
+    if style == "caps":
+        return " ".join(words).upper()
+    if style == "dot":
+        return ".".join(words)
+    return "".join(words)  # smash
 # Spelled symbols that are also everyday words.
 _AMBIGUOUS = {"a", "i", "one", "two", "four", "eight"}
 _PENDING = "pending"
@@ -150,9 +199,13 @@ class Grammar:
         nav: bool = False,
         fillers=DEFAULT_FILLERS,
         addresses: bool = True,
+        formatters: bool = True,
+        code: bool = False,
     ):
         self.enabled = enabled
         self._address_on = addresses
+        self._formatters = formatters
+        self._formatter_stops = CODE_FORMATTER_STOPS if code else FORMATTER_STOPS
         self._spelling = spelling
         self._fillers = frozenset(
             str(f).strip().casefold() for f in (fillers or ()) if str(f).strip()
@@ -203,6 +256,44 @@ class Grammar:
         ".": ("left", True), ",": ("left", False), "!": ("left", True),
         "?": ("left", True), ";": ("left", False), ":": ("left", False),
     }
+
+    def _parse_formatter(self, tokens, cores, index: int, limit: int, decided: bool):
+        """"camel case get user name" at `index`: ([items], next index);
+        _PENDING while the words could still continue; None when this is
+        not a formatter ("the camel", "all caps" with no words after)."""
+        if index + 1 >= limit:
+            return None if decided else _PENDING  # "snake" may become "snake case"
+        style = FORMATTERS.get((cores[index], cores[index + 1]))
+        if style is None:
+            return None
+        cursor, words, stop = index + 2, [], ""
+        while cursor < limit and len(words) < MAX_FORMATTED_WORDS:
+            core = cores[cursor]
+            if (
+                not core
+                or self.is_wake_word(tokens[cursor])
+                or core in self._fillers
+                or (words and core in self._formatter_stops)
+                or (cores[cursor], cores[cursor + 1] if cursor + 1 < len(cores) else "") in FORMATTERS
+            ):
+                break
+            entry, _ = self._match_phrase(cores, cursor, limit - cursor)
+            if entry is not None:
+                break
+            words.append(core)
+            token = tokens[cursor]
+            stop = token[len(token.rstrip(_PUNCT_STRIP)):]
+            cursor += 1
+            if stop:
+                break  # "user id," — the comma ends the run
+        if cursor >= limit and not decided and not stop and len(words) < MAX_FORMATTED_WORDS:
+            return _PENDING  # more words may come before the pause
+        if not words:
+            return None
+        span = (index, cursor)
+        out = [Item(kind="word", text=format_words(style, words), mode="verbatim", span=span)]
+        out.extend(self._trailing_punct(tokens[cursor - 1], span))
+        return out, cursor
 
     def _address(self, cores: list[str], index: int, limit: int, *, decided: bool):
         """A spoken domain or email starting at `index`, read no further
@@ -374,6 +465,19 @@ class Grammar:
                 self._filler_stop(tokens[index], items, (index, index + 1))
                 index += 1
                 continue
+
+            if self._formatters and core in _FORMATTER_FIRST:
+                limit, decided = self._limit(
+                    index, len(tokens), frozen, settled, flush, bounds, item_end
+                )
+                formatted = self._parse_formatter(tokens, cores, index, limit, decided)
+                if formatted == _PENDING:
+                    pending_from = index
+                    break
+                if formatted is not None:
+                    new_items, index = formatted  # type: ignore[misc]
+                    items.extend(new_items)
+                    continue
 
             if self._spelling and core == SPELL_WORD:
                 limit, decided = self._limit(

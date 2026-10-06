@@ -114,6 +114,17 @@ CASES = [
     ("a filler after a pause lets the next word decide", "prose",
      ["I was thinking about the project.", "Um, and how it works."], {"pause_review": "rules"}),
     ("a comma word at a segment end keeps its comma", "prose", ["we should,", "uh, ship it"], {}),
+    # spoken case formatters
+    ("snake and camel case", "prose", ["call camel case get user name, then snake case user id."], {}),
+    ("formatters in python", "python", ["for snake case row count in range ten colon"], {}),
+    ("a formatter stops at an operator", "python", ["snake case user id equals five"], {}),
+    ("pascal and constant", "python", ["class pascal case http client", "constant case max retries equals three"], {}),
+    ("title case keeps small words", "prose", ["title case the lord of the rings period"], {}),
+    ("kebab in a shell", "shell", ["git checkout dash b kebab case fix the login bug"], {}),
+    ("all caps and no space", "prose", ["all caps do not merge, then no space data base"], {}),
+    ("a vocabulary phrase wins over a formatter's words", "prose", ["no space hyper furion"], {}),
+    ("a formatter word alone is a word", "prose", ["the camel walked all the way", "no one came"], {}),
+    ("a formatter ends at the pause", "prose", ["snake case user id", "is the key"], {}),
     # spoken addresses
     ("an email", "prose", ["email liam at example dot com please"], {}),
     ("an email starts a sentence in lowercase", "prose", ["liam at gmail dot com.", "next one"], {}),
@@ -227,6 +238,7 @@ def make_engine(register_name: str, opts: dict) -> FlowEngine:
         spelling=opts.get("spelling", True),
         nav=opts.get("nav", False),
         fillers=opts.get("fillers", DEFAULT_FILLERS),
+        code=bool(register.compiler),
     )
     config = FlowConfig(pause_review=opts.get("pause_review", "off"))
     return FlowEngine(config, grammar, register, initial_state=initial)

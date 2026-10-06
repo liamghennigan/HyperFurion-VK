@@ -139,6 +139,11 @@ spelling = true
 # "docs dot python dot org" types docs.python.org. Only a run that ends in
 # a known top-level domain becomes one; "meet at the office" stays prose.
 addresses = true
+# Spoken case formatters for code and names: "snake case user id" ->
+# user_id, "camel case get user name" -> getUserName; also pascal, kebab,
+# constant, dot and title case, "all caps", "no space". A formatter takes
+# the words after it up to a pause, punctuation or another command.
+formatters = true
 # Hesitation sounds the recognizer writes down are dropped from what is
 # typed: "um, so we should, uh, ship it" -> "So we should, ship it".
 # Only sounds, never words that carry meaning. [] keeps them all.

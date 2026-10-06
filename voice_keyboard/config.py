@@ -125,6 +125,9 @@ DEFAULT_CONFIG: dict = {
         # dot org" -> docs.python.org (only runs that end in a known
         # top-level domain; "meet at the office" stays prose).
         "addresses": True,
+        # "snake case user id" -> user_id, "camel case get user name" ->
+        # getUserName; pascal, kebab, constant, title, dot, all caps, no space.
+        "formatters": True,
         # Hesitation sounds dropped from what is typed. [] keeps them all.
         "fillers": ["um", "umm", "uh", "uhh", "uhm", "erm"],
         # Self-corrections ("Tuesday, no wait, Wednesday"): "llm" asks
@@ -321,6 +324,7 @@ _FLOW_BOOL_KEYS = (
     "personal_dictionary",
     "spelling",
     "addresses",
+    "formatters",
     "rejoin",
     "rewrite_pending",
 )

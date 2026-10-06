@@ -943,6 +943,8 @@ class Daemon:
             spelling=bool(flow_cfg.get("spelling", True)),
             fillers=flow_cfg.get("fillers", DEFAULT_FILLERS),
             addresses=bool(flow_cfg.get("addresses", True)),
+            formatters=bool(flow_cfg.get("formatters", True)),
+            code=bool(register.compiler),
             nav=self._nav_enabled(),
         )
 

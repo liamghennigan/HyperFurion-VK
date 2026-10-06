@@ -56,6 +56,15 @@ proven to be the daemon's.
 
 ### Added
 
+- **Spoken case formatters (`[flow] formatters`).** "snake case user id"
+  types `user_id`, "camel case get user name" `getUserName`, "pascal case
+  http client" `HttpClient`; kebab, constant, dot and title case, "all
+  caps" and "no space" too. A formatter takes the words after it up to a
+  pause, punctuation or another command; in the python and shell
+  registers an operator word, a keyword or a spoken callable ends it
+  too, so "for snake case row count in range ten colon" compiles to `for
+  row_count in range(10):`. Title case keeps "of", "the" and friends
+  lowercase. Both engines, ten corpus cases.
 - **Say an email or a web address (`[flow] addresses`).** "liam at
   example dot com" types `liam@example.com`; "docs dot python dot org"
   types `docs.python.org`; "liam dot hennigan at gmail dot com" and

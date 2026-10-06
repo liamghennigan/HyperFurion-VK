@@ -70,3 +70,8 @@ def test_the_daemon_types_without_them(tmp_path, monkeypatch: pytest.MonkeyPatch
 def test_addresses_switch() -> None:
     assert finalize("mail liam at example dot com") == "Mail liam@example.com"
     assert finalize("mail liam at example dot com", addresses=False) == "Mail liam at example dot com"
+
+
+def test_formatters_switch() -> None:
+    assert finalize("call snake case user id") == "Call user_id"
+    assert finalize("call snake case user id", formatters=False) == "Call snake case user id"

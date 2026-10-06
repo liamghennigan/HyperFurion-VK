@@ -269,6 +269,34 @@ function addressAt(cores, index, limit, decided, fillers) {
       best = [parts.map((p, k) => p + (seps[k] || "")).join(""), cursor];
   }
 }
+// spoken case formatters: "snake case user id" -> user_id; the formatter
+// takes the plain words after it up to punctuation, a command or a pause
+const FORMATTERS = new Map([
+  ["camel case", "camel"], ["pascal case", "pascal"], ["snake case", "snake"], ["kebab case", "kebab"],
+  ["constant case", "constant"], ["title case", "title"], ["all caps", "caps"], ["no space", "smash"], ["dot case", "dot"],
+]);
+const FORMATTER_FIRST = new Set([...FORMATTERS.keys()].map((k) => k.split(" ")[0]));
+const MAX_FORMATTED_WORDS = 8;
+// operator words the code registers compile end a run; in a code register
+// so do keywords and spoken callables
+const FORMATTER_STOPS = new Set("equals plus minus times modulo arrow dot pipe star slash".split(" "));
+const CODE_FORMATTER_STOPS = new Set([...FORMATTER_STOPS, ...("in is not and or if elif else for while return import from as with def class " +
+  "lambda yield await async try except finally raise pass break continue global " +
+  "range print len str int float input enumerate sorted reversed abs min max sum type repr").split(" ")]);
+const TITLE_SMALL = new Set("a an and as at but by for in nor of on or the to vs via".split(" "));
+const cap1 = (w) => w.slice(0, 1).toUpperCase() + w.slice(1);
+export function formatWords(style, words) {
+  words = words.filter(Boolean);
+  if (style === "camel") return words[0] + words.slice(1).map(cap1).join("");
+  if (style === "pascal") return words.map(cap1).join("");
+  if (style === "snake") return words.join("_");
+  if (style === "kebab") return words.join("-");
+  if (style === "constant") return words.join("_").toUpperCase();
+  if (style === "title") return words.map((w, k) => (k && TITLE_SMALL.has(w) ? w : cap1(w))).join(" ");
+  if (style === "caps") return words.join(" ").toUpperCase();
+  if (style === "dot") return words.join(".");
+  return words.join("");
+}
 // a sentence end the recognizer attached to a hesitation ("… so, um.")
 // still ends the sentence — after a word, and only once
 function fillerStop(token, items, s, e) {
@@ -291,6 +319,33 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
   const spelling = !cfg || cfg.spelling !== false;
   const addressOn = !cfg || cfg.addresses !== false;
+  const formattersOn = !cfg || cfg.formatters !== false;
+  const stops = reg.compiler ? CODE_FORMATTER_STOPS : FORMATTER_STOPS;
+  // "camel case get user name" at i: [[items], next]; PENDING while the
+  // words could still continue; null when this is not a formatter
+  const parseFormatter = (index, limit, decided) => {
+    if (index + 1 >= limit) return decided ? null : PENDING;  // "snake" may become "snake case"
+    const style = FORMATTERS.get(cores[index] + " " + cores[index + 1]);
+    if (!style) return null;
+    let cursor = index + 2, stop = "";
+    const words = [];
+    while (cursor < limit && words.length < MAX_FORMATTED_WORDS) {
+      const c = cores[cursor];
+      if (!c || wakeAt(cores, cursor, wake) || fillers.has(c) || (words.length && stops.has(c))) break;
+      if (FORMATTERS.has(c + " " + (cores[cursor + 1] || ""))) break;  // the next formatter starts
+      if (matchPhrase(cores, cursor, limit - cursor)[0]) break;
+      words.push(c);
+      stop = (tokens[cursor].match(PUNCT_STRIP) || [""])[0];
+      cursor += 1;
+      if (stop) break;  // "user id," — the comma ends the run
+    }
+    if (cursor >= limit && !decided && !stop && words.length < MAX_FORMATTED_WORDS) return PENDING;
+    if (!words.length) return null;
+    const out = [{ kind: "word", text: formatWords(style, words), mode: "verbatim", s: index, e: cursor }];
+    for (const ch of (tokens[cursor - 1].match(PUNCT_STRIP) || [""])[0]) if (".,!?;:".includes(ch))
+      out.push({ kind: "punct", text: ch, mode: "left", sentenceEnd: ".!?".includes(ch), s: index, e: cursor });
+    return [out, cursor];
+  };
   const fillers = new Set(((cfg && cfg.fillers) || DEFAULT_FILLERS).map((f) => String(f).trim().toLowerCase()).filter(Boolean));
   const nav = !!(cfg && cfg.nav);
   const cores = tokens.map(core);
@@ -338,6 +393,12 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
       items.push({ kind: "filler", s: i, e: i + 1 });
       fillerStop(tokens[i], items, i, i + 1);
       i += 1; continue;
+    }
+    if (formattersOn && FORMATTER_FIRST.has(cores[i])) {
+      const [limit, decided] = limitAt(i);
+      const f = parseFormatter(i, limit, decided);
+      if (f === PENDING) { pendingFrom = i; break; }
+      if (f) { items.push(...f[0]); i = f[1]; continue; }
     }
     if (spelling && cores[i] === SPELL_WORD) {
       let [limit, decided] = limitAt(i);

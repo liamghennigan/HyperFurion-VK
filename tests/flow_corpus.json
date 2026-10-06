@@ -1934,6 +1934,241 @@
   ]
  },
  {
+  "name": "snake and camel case",
+  "register": "prose",
+  "segments": [
+   "call camel case get user name, then snake case user id."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Call getUserName, then user_id."
+   ],
+   [
+    "final",
+    "Call getUserName, then user_id.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "formatters in python",
+  "register": "python",
+  "segments": [
+   "for snake case row count in range ten colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for row_count in range(10):"
+   ],
+   [
+    "final",
+    "for row_count in range(10):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter stops at an operator",
+  "register": "python",
+  "segments": [
+   "snake case user id equals five"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "user_id ="
+   ],
+   [
+    "final",
+    "user_id = 5",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "pascal and constant",
+  "register": "python",
+  "segments": [
+   "class pascal case http client",
+   "constant case max retries equals three"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "class HttpClient"
+   ],
+   [
+    "screen",
+    "class HttpClient MAX_RETRIES ="
+   ],
+   [
+    "final",
+    "class HttpClient MAX_RETRIES = 3",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "title case keeps small words",
+  "register": "prose",
+  "segments": [
+   "title case the lord of the rings period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The Lord of the Rings."
+   ],
+   [
+    "final",
+    "The Lord of the Rings.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "kebab in a shell",
+  "register": "shell",
+  "segments": [
+   "git checkout dash b kebab case fix the login bug"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "git checkout -b fix-the-login-bug"
+   ],
+   [
+    "final",
+    "git checkout -b fix-the-login-bug",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "all caps and no space",
+  "register": "prose",
+  "segments": [
+   "all caps do not merge, then no space data base"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "DO NOT MERGE, then database"
+   ],
+   [
+    "final",
+    "DO NOT MERGE, then database",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a vocabulary phrase wins over a formatter's words",
+  "register": "prose",
+  "segments": [
+   "no space hyper furion"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "No space HyperFurion"
+   ],
+   [
+    "final",
+    "No space HyperFurion",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter word alone is a word",
+  "register": "prose",
+  "segments": [
+   "the camel walked all the way",
+   "no one came"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The camel walked all the way"
+   ],
+   [
+    "screen",
+    "The camel walked all the way no one came"
+   ],
+   [
+    "final",
+    "The camel walked all the way no one came",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a formatter ends at the pause",
+  "register": "prose",
+  "segments": [
+   "snake case user id",
+   "is the key"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "user_id"
+   ],
+   [
+    "screen",
+    "user_id is the key"
+   ],
+   [
+    "final",
+    "user_id is the key",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "an email",
   "register": "prose",
   "segments": [
