@@ -1581,8 +1581,11 @@ class Daemon:
         self._remember_typed(final)
         if result.typed_before and not self._session_secret:
             # Only the text after the last command is where the caret left
-            # it: a later transform/keep may backspace over that, nothing more.
+            # it: a later transform/keep may backspace over that, nothing
+            # more — and the next recording may rejoin that, or nothing.
             self._last_typed = segment
+            if self._landing is not None:
+                self._landing = {**self._landing, "tail": segment[-1:]} if segment else None
         return final
 
     async def _finish_live(

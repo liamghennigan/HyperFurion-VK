@@ -16,6 +16,8 @@
 export const MAX_COUNT = 20;
 export const PENDING = "pending";
 
+// plain-object tables are read with own(): a spoken "constructor" is a word
+const own = (table, key) => (Object.hasOwn(table, key) ? table[key] : undefined);
 export const VERBS = { go: "move", move: "move", select: "select", delete: "delete", press: "press" };
 
 const UNITS = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
@@ -58,12 +60,12 @@ function countOf(core) {
   if (core === "a" || core === "an") return 1;  // "go back a word"
   let value;
   if (/^[0-9]+$/.test(core)) value = parseInt(core, 10);
-  else if (core in UNITS) value = UNITS[core];
-  else if (core in TENS) value = TENS[core];
+  else if (own(UNITS, core) !== undefined) value = UNITS[core];
+  else if (own(TENS, core) !== undefined) value = TENS[core];
   else return null;
   return value >= 1 && value <= MAX_COUNT ? value : null;
 }
-const numberish = (w) => /^[0-9]+$/.test(w) || w in UNITS || w in TENS;
+const numberish = (w) => /^[0-9]+$/.test(w) || own(UNITS, w) !== undefined || own(TENS, w) !== undefined;
 
 // The navigation command starting at `index`, read from `cores`
 // (lowercased, punctuation-stripped tokens; the caller slices them to the
@@ -72,7 +74,7 @@ const numberish = (w) => /^[0-9]+$/.test(w) || w in UNITS || w in TENS;
 // run out where the command could still continue and the tail is not
 // `decided`, or null when this is not a command (the verb is just a word).
 export function parseNav(cores, index, { decided }) {
-  const verb = index < cores.length ? VERBS[cores[index]] : undefined;
+  const verb = index < cores.length ? own(VERBS, cores[index]) : undefined;
   if (!verb) return null;
   const at = (p) => { if (p >= cores.length) throw new NeedMore(); return cores[p]; };
   const opt = (p) => (p < cores.length ? cores[p] : null);
@@ -103,7 +105,7 @@ function parsePress(cores, cursor, at, opt, decided) {
   else return null;
   const action = "press:" + key;
   const word = opt(cursor);
-  if (word !== null && word in REPEAT_WORDS) return [action, REPEAT_WORDS[word], cursor + 1];
+  if (word !== null && own(REPEAT_WORDS, word) !== undefined) return [action, REPEAT_WORDS[word], cursor + 1];
   const count = word !== null ? countOf(word) : null;
   if (count === null) return finish(action, 1, cursor, cores.length, decided, true);
   cursor += 1;
@@ -122,19 +124,19 @@ function parseMotion(verb, cursor, at, opt, decided, total) {
   // go to (the) start/end of (the) line/document
   let probe = cursor + (word === "to" ? 1 : 0);
   if (at(probe) === "the") probe += 1;
-  const edge = EDGES[at(probe)];
+  const edge = own(EDGES, at(probe));
   if (edge !== undefined) {
     if (verb === "delete" || at(probe + 1) !== "of") return null;
     probe += 2;
     if (at(probe) === "the") probe += 1;
-    const unit = EDGE_UNITS[at(probe)];
+    const unit = own(EDGE_UNITS, at(probe));
     if (unit === undefined) return null;
     return [verb + ":" + unit + ":" + edge, 1, probe + 1];
   }
   if (word === "to") return null;
   // go/select/delete (the) <direction> [count] [unit]
   if (word === "the") { cursor += 1; word = at(cursor); }
-  const spoken = DIRECTIONS[word];
+  const spoken = own(DIRECTIONS, word);
   if (spoken === undefined) return null;
   let [direction, needsUnit] = spoken;
   cursor += 1;
@@ -143,7 +145,7 @@ function parseMotion(verb, cursor, at, opt, decided, total) {
   const counted = word !== null ? countOf(word) : null;
   if (counted === null && word !== null && numberish(word)) return null;  // a count out of range: not a command
   if (counted !== null) { count = counted; cursor += 1; word = opt(cursor); }
-  let unit = word !== null ? UNIT_WORDS[word] : undefined;
+  let unit = word !== null ? own(UNIT_WORDS, word) : undefined;
   const explicit = unit !== undefined;
   if (explicit) cursor += 1;
   else if (word === null && !decided && (needsUnit || counted !== null)) throw new NeedMore();  // "select previous" wants a unit
@@ -251,7 +253,7 @@ export function keymap({ terminal, platform = "linux" }) {
 export function chordsFor(action, count, table) {
   let sequence;
   if (action.startsWith("press:")) sequence = [[action.slice(6)]];
-  else sequence = table[action];
+  else sequence = own(table, action);
   if (!sequence) return null;
   if (sequence.some(forbidden)) return null;
   const repeat = action === "select:all" || action.endsWith(":here") ? 1 : count;

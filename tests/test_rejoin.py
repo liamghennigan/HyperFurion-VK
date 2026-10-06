@@ -117,6 +117,32 @@ class TestDaemon:
         injector, _ = self._record_twice("hello world", "and more", elapsed=daemon_module.REJOIN_WINDOW_S + 1)
         assert injector.screen == "Hello worldAnd more"
 
+    def test_a_trailing_caret_command_ends_the_landing(self) -> None:
+        injector = RecordingInjector()
+        fakes = [
+            FakeStreamingSTT([
+                {"type": "transcript.partial", "text": "hello world", "is_final": True},
+                {"type": "transcript.partial", "text": "go to start of line", "is_final": True},
+            ]),
+            FakeStreamingSTT([{"type": "transcript.partial", "text": "next", "is_final": True}]),
+        ]
+        daemon = _make_daemon(fakes[0], injector)
+        daemon._config["nav"]["enabled"] = True
+        daemon._stt_patch = mock.patch("voice_keyboard.daemon.create_stt_client", side_effect=fakes)
+
+        async def run() -> None:
+            with daemon._audio_patch, daemon._stt_patch, daemon._probe_patch:
+                await daemon._start_recording()
+                assert await wait_until(lambda: injector.combos)
+                await daemon._stop_recording()
+                assert daemon._landing is None  # the caret is at the line start, not after the text
+                await daemon._start_recording()
+                assert await wait_until(lambda: injector.screen.endswith("ext"))
+                await daemon._stop_recording()
+
+        asyncio.run(run())
+        assert injector.screen == "Hello worldNext"  # typed at the caret, no leading space
+
     def test_off(self) -> None:
         injector, _ = self._record_twice("hello world", "and more", rejoin=False)
         assert injector.screen == "Hello worldAnd more"

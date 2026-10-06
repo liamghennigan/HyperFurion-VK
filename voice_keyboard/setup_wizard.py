@@ -429,8 +429,6 @@ class Wizard:
         self.out('    Hands-free navigation: say "select previous word", "go to end of line"')
         self.out("    or \"delete the line\" on its own and the keys are pressed for you.")
         self.out("    Enter is never one of them. Mid-sentence, the words are just typed.")
-        if sys.platform == "darwin":
-            self.out("    (Not on macOS yet: the setting is kept for when the chords land.)")
         nav = self.confirm("Move the caret by voice?", nav_now)
         if nav != nav_now:
             self.set("nav", "enabled", nav, f"Hands-free navigation: {'on' if nav else 'off'}")

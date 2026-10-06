@@ -37,7 +37,7 @@ export const Hints = (() => {
     b.type = "button"; b.className = "chip"; b.textContent = "“" + h.say + "”";
     b.title = "play this as a scripted demo";
     b.addEventListener("click", () => {
-      if (Dictation.recording) return;
+      if (Dictation.busy()) return;  // not over a recording, not over the scripted demo
       bus.emit("simulate:hint", { kind: h.kind });
       if (h.register) Window.setRegister(h.register, { silent: true });  // a command belongs at a prompt
       Dictation.simulate({ utterances: h.play });

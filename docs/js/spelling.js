@@ -31,8 +31,8 @@ const strip = (t) => t.toLowerCase().replace(STRIP, "");
 // one spelled symbol from a lowercased, punctuation-stripped token
 function one(core) {
   if (core.length === 1 && /[a-z0-9]/.test(core)) return core;
-  if (core in NATO) return NATO[core];
-  return DIGITS[core] || null;
+  if (Object.hasOwn(NATO, core)) return NATO[core];
+  return Object.hasOwn(DIGITS, core) ? DIGITS[core] : null;
 }
 
 // The letters spelled starting at `index`, and how many tokens they used;
@@ -50,7 +50,7 @@ export function lettersAt(tokens, index) {
   }
   const letter = one(core);
   if (letter !== null) return [letter, 1];
-  if (core.includes("-") && !(core in NATO)) {
+  if (core.includes("-") && !Object.hasOwn(NATO, core)) {
     const parts = core.split("-");
     const spelled = parts.map(one);
     if (parts.length > 1 && spelled.every(Boolean)) return [spelled.join(""), 1];

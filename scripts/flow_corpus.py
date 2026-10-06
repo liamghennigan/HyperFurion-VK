@@ -153,6 +153,9 @@ STREAMS = [
         [0.0, "say open", "interim"], [0.3, "say open", "interim"], [0.6, "say open", "interim"], [3.2, "tick"],
         [3.5, "say open quote", "interim"], [3.8, "say open quote", "interim"], [4.1, "say open quote", "interim"], [6.5, "tick"],
         [7.0, "say open quote hi close quote", "final"]], {}),
+    ("a bare literal stays bare when more words commit", "prose", [
+        [0.0, "say literal", "interim"], [0.5, "say literal", "interim"], [1.0, "say literal", "interim"], [4.0, "tick"],
+        [5.0, "say literal period now", "final"]], {}),
     ("a non ascii word commits early", "prose", [
         [0.0, "café au lait", "interim"], [0.2, "café au lait", "interim"], [0.4, "café au lait", "interim"],
         [0.6, "tick"], [3.0, "café au lait", "final"]], {}),

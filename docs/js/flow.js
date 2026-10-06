@@ -217,7 +217,7 @@ function compileCode(items, state, { glyphs, callables, dashHold }) {
     } else if (it.kind === "word") {
       const c = it.text.toLowerCase();
       if (pending === "dash") { emit("-" + it.text, false); pending = ""; continue; }
-      const g = glyphs[c];
+      const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
       if (g) { emitMode(g[0], g[1]); continue; }
       if (callables.has(c) && pending !== "call") { emit(it.text + "(", false); glueNext = true; pending = "call"; continue; }
       emit(it.text, false);
@@ -257,7 +257,10 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
   // where the committed item holding token `at` ends: below the fence
   // every item is parsed within its own span, so it reads back exactly
   // as it was committed
-  const itemEnd = (at) => { for (const e of commits) if (e > at) return frozen > at ? Math.min(e, frozen) : e; return frozen; };
+  const ends = [];  // where the committed item holding each token ends, computed once
+  for (const e of commits) while (ends.length < Math.min(e, frozen)) ends.push(Math.min(e, frozen));
+  while (ends.length < frozen) ends.push(frozen);
+  const itemEnd = (at) => (at < frozen ? ends[at] : frozen);
   const limitAt = (i) => {
     if (i >= settled && i >= frozen) return [tokens.length, flush];
     let limit = Math.max(settled, frozen);
@@ -326,7 +329,7 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
         // emit the next token verbatim, bypassing the grammar; a "literal"
         // committed bare (its word never came) reads back bare
         const target = i + used;
-        if (target >= tokens.length || (i < frozen && target >= frozen)) {
+        if (target >= tokens.length || (i < frozen && target >= itemEnd(i))) {
           if (i >= frozen && !flush) { pendingFrom = i; break; }
           items.push({ kind: "word", text: tokens[i], s: i, e: i + 1 }); i += 1; continue;
         }

@@ -260,12 +260,16 @@ class Grammar:
         pending_from: Optional[int] = None
         index = 0
 
+        # Where the committed item holding each token ends, computed once.
+        ends: list[int] = []
+        for end in commits:
+            while len(ends) < min(end, frozen):
+                ends.append(min(end, frozen))
+        while len(ends) < frozen:
+            ends.append(frozen)
+
         def item_end(at: int) -> int:
-            """Where the committed item holding token `at` ends."""
-            for end in commits:
-                if end > at:
-                    return min(end, frozen) if frozen > at else end
-            return frozen
+            return ends[at] if at < frozen else frozen
 
         while index < len(tokens):
             core = cores[index]
@@ -290,9 +294,9 @@ class Grammar:
                 break
 
             if self._spelling and core == SPELL_WORD:
-                limit, decided = self._limit(index, len(tokens), frozen, settled, flush, bounds)
-                if index < frozen:
-                    limit = min(limit, item_end(index))
+                limit, decided = self._limit(
+                    index, len(tokens), frozen, settled, flush, bounds, item_end
+                )
                 head = index + (2 if cores[index + 1:index + 2] == ["that"] else 1)
                 if head >= limit:
                     # "spell that" ended its segment: the letters may come
@@ -316,9 +320,9 @@ class Grammar:
                     continue
 
             if self._nav and core in NAV_VERBS:
-                limit, decided = self._limit(index, len(tokens), frozen, settled, flush, bounds)
-                if index < frozen:
-                    limit = min(limit, item_end(index))
+                limit, decided = self._limit(
+                    index, len(tokens), frozen, settled, flush, bounds, item_end
+                )
                 command = parse_nav(cores[:limit], index, decided=decided)
                 if command == NAV_PENDING:
                     pending_from = index
@@ -367,7 +371,7 @@ class Grammar:
                     # "literal" that was committed bare (its word never came
                     # before the fence closed) reads back bare.
                     target = index + consumed
-                    if target >= len(tokens) or (index < frozen and target >= frozen):
+                    if target >= len(tokens) or (index < frozen and target >= item_end(index)):
                         if index >= frozen and not flush:
                             pending_from = index
                             break
@@ -421,12 +425,13 @@ class Grammar:
         settled: int,
         flush: bool,
         bounds: tuple[int, ...] = (),
+        item_end=None,
     ) -> tuple[int, bool]:
         """How far an open-ended command at `index` may read, and whether
         its end is decided: inside the final segments it may not cross the
-        end of the segment it started in (nor the committed fence) and
-        never waits; in the molten tail it reads to the end and waits
-        unless flushing."""
+        end of the segment it started in and never waits; behind the
+        committed fence it reads only its own committed item; in the
+        molten tail it reads to the end and waits unless flushing."""
         if index >= settled and index >= frozen:
             return total, flush
         limit = max(settled, frozen)
@@ -435,7 +440,7 @@ class Grammar:
                 limit = min(limit, bound)
                 break
         if index < frozen:
-            limit = min(limit, frozen)
+            limit = min(limit, item_end(index) if item_end is not None else frozen)
         return limit, True
 
     def _parse_spelling(

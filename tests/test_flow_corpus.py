@@ -64,6 +64,16 @@ class TestReparseBelowTheFence:
         engine.on_transcript("say literal period now", is_final=True, now=1.0)
         assert engine.finalize("say literal period now", now=2.0).text == "Say period now"
 
+    def test_a_bare_literal_stays_bare_when_more_words_commit(self) -> None:
+        engine = FlowEngine(FlowConfig(), Grammar(), PROSE)
+        for now in (0.0, 0.5, 1.0):
+            engine.on_transcript("say literal", is_final=False, now=now)
+        engine.on_tick(now=4.0)  # the held "literal" expires and commits bare
+        assert engine._committed_render == "Say literal"
+        engine.on_transcript("say literal period now", is_final=True, now=5.0)
+        assert engine.desired_text() == "Say literal. Now"
+        assert engine.finalize("say literal period now", now=6.0).text == "Say literal. Now"
+
     def test_a_bare_literal_reads_back_bare(self) -> None:
         engine = FlowEngine(FlowConfig(), Grammar(), PROSE)
         engine.on_transcript("say literal", is_final=True, now=1.0)

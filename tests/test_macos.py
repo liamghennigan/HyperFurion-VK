@@ -120,8 +120,10 @@ class TestChords:
             (shift, True), (alt, True), (left, True), (left, False), (alt, False), (shift, False),
         ]
         assert quartz.posted[2]["flags"] == 0x20000 | 0x80000  # the key carries both modifiers
+        assert quartz.posted[3]["flags"] == 0x20000 | 0x80000  # so does its release
         assert quartz.posted[0]["flags"] == 0x20000
-        assert quartz.posted[-1]["flags"] == 0x20000  # shift releases last, still flagged
+        assert quartz.posted[4]["flags"] == 0x20000  # alt's own key-up no longer carries alt
+        assert quartz.posted[-1]["flags"] == 0  # shift releases last, flags clear
 
     def test_command_chords_and_escape_sequences(self) -> None:
         quartz = self._quartz()

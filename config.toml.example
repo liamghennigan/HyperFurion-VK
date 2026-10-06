@@ -139,7 +139,9 @@ spelling = true
 # seconds of the last one, in the same app and the same prose register,
 # continues its text — a space before the first word, and a capital only
 # if the last one ended a sentence. Terminals and code registers never
-# get a leading space. false = every recording starts at a fresh caret.
+# get a leading space; a caret command or a focus change ends it. When
+# the focused app cannot be told (Wayland hides it), the time window
+# alone decides. false = every recording starts at a fresh caret.
 rejoin = true
 # Punctuation where you paused. Streaming recognizers (xai, hyperfurion)
 # end a sentence at every pause — "I think. We should wait." — so a

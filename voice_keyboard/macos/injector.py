@@ -151,10 +151,12 @@ class MacTextInjector:
             q.CGEventSetFlags(event, flags)
             q.CGEventPost(q.kCGHIDEventTap, event)
         for code in reversed(codes):
+            # A modifier's key-up no longer carries its own flag, as a
+            # hardware flagsChanged event would not.
+            flags &= ~MAC_MODIFIER_FLAGS.get(code, 0)
             event = q.CGEventCreateKeyboardEvent(None, code, False)
             q.CGEventSetFlags(event, flags)
             q.CGEventPost(q.kCGHIDEventTap, event)
-            flags &= ~MAC_MODIFIER_FLAGS.get(code, 0)
         time.sleep(0.005)
 
     def delete_chars(self, count: int) -> None:

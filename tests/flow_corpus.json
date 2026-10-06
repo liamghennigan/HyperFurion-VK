@@ -2598,6 +2598,67 @@
   ]
  },
  {
+  "name": "a bare literal stays bare when more words commit",
+  "register": "prose",
+  "steps": [
+   [
+    0.0,
+    "say literal",
+    "interim"
+   ],
+   [
+    0.5,
+    "say literal",
+    "interim"
+   ],
+   [
+    1.0,
+    "say literal",
+    "interim"
+   ],
+   [
+    4.0,
+    "tick"
+   ],
+   [
+    5.0,
+    "say literal period now",
+    "final"
+   ]
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say"
+   ],
+   [
+    "screen",
+    "Say literal"
+   ],
+   [
+    "screen",
+    "Say literal. Now"
+   ],
+   [
+    "final",
+    "Say literal. Now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a non ascii word commits early",
   "register": "prose",
   "steps": [

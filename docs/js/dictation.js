@@ -188,11 +188,13 @@ export const Dictation = (() => {
     busy = true;
     const l = line;
     const pressed = await pressAction(action);
-    if (l !== line) { busy = false; return; }  // the recording ended; stop() walked the rest
+    // the barrier is completed on the engine that raised it, even when
+    // the recording ended meanwhile — stop() waits on `busy` and must not
+    // find the same command still pending and press it twice
     if (pressed) Typist.release();              // the caret moved: the text behind it is not ours
     l.completeAction(performance.now(), { pressed });
     busy = false;
-    Typist.setTarget(l.peek());
+    if (l === line) Typist.setTarget(l.peek());
   }
 
   // ── the human's own keys ────────────────────────────────────────────────
@@ -246,7 +248,7 @@ export const Dictation = (() => {
     busy = true;
     await Typist.settled();
     await wait(420);
-    if (l !== line && !l.pendingAction) { busy = false; return; }
+    if (l !== line) { busy = false; return; }   // the recording is gone: nothing of it to rewrite
     Typist.setTarget({ frozen: "", molten: rewritten, repair: true });
     log("“" + settings.wakeWord + ", " + instr + "” · rewritten in place (page stand-in for your LLM)", "dim");
     await Typist.settled();
@@ -500,7 +502,8 @@ export const Dictation = (() => {
     }
     if (r.instruction && (r.text || intentRequest(r.instruction, (settings.intent || {}).verbs))) {
       busy = false;
-      line = l; await instruct(r.instruction); line = null;
+      line = l; await instruct(r.instruction);
+      if (line === l) line = null;   // a recording that began meanwhile keeps its engine
       r = { ...r, text: l.committed() };
     } else if (r.instruction) {
       log("nothing typed yet to rewrite · dictate first, then the wake word", "dim");
@@ -510,7 +513,7 @@ export const Dictation = (() => {
     Typist.release();
     Window.paintDoc();
     const whole = (r.typedBefore + (r.text[0] === " " || !r.typedBefore ? "" : " ") + r.text).trim();
-    if (whole) done(whole);
+    if (whole) done(whole, r.text);
     return whole;
   }
   function clipboardLanding(text) {
@@ -600,10 +603,12 @@ export const Dictation = (() => {
     if (scripted && line) { line = null; Typist.reset(); }
   }
 
-  function done(text) {
+  // `atCaret` is the text the caret is actually after — after a trailing
+  // caret command there is none, and the next recording rejoins nothing
+  function done(text, atCaret = text) {
     state.ledger.push({ text, app: Window.focusedName(), when: Date.now() });
     if (state.ledger.length > 20) state.ledger.shift();
-    landing = guard ? null : { register: Window.focusedName(), tail: text.slice(-1), when: Date.now() };
+    landing = guard || !atCaret ? null : { register: Window.focusedName(), tail: atCaret.slice(-1), when: Date.now() };
     bus.emit("type:text", { text });
   }
   bus.on("doc:cleared", () => { landing = null; });
