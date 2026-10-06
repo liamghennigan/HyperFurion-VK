@@ -448,6 +448,28 @@
   ]
  },
  {
+  "name": "days and months are capitals",
+  "register": "prose",
+  "segments": [
+   "see you monday, or friday's meeting in october but you may march"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See you Monday, or Friday's meeting in October but you may march"
+   ],
+   [
+    "final",
+    "See you Monday, or Friday's meeting in October but you may march",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "i inside a word stays",
   "register": "prose",
   "segments": [

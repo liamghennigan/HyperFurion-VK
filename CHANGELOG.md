@@ -12,6 +12,8 @@ on `main` cuts the GitHub release automatically.
 - **A lowercase recognizer's "i" is a capital in prose.** Streaming models
   that write everything lowercase typed "i think i'm"; prose now types
   "I think I'm" (also I'll, I'd, I've). Spelled words are left alone.
+  Days and months are capitals too ("Monday", "Friday's", "October"),
+  though never "may" or "march", which are verbs.
 - **Amounts and times in prose.** Prose still keeps spoken numbers as words
   ("no one knows"), but a unit right after one makes the reading certain:
   "twenty five percent" → `25%`, "five dollars" → `$5`, "three thirty pm"

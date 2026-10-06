@@ -72,6 +72,12 @@ TERMINAL_APPS = {
 
 
 # A lowercase recognizer's "i", "i'm", "i'll": the pronoun is always a capital.
+# Days and months a lowercase recognizer writes small. Not "may" or
+# "march" (verbs), nor "sun"/"wed" (words).
+PROPER_WORDS = frozenset(
+    "monday tuesday wednesday thursday friday saturday sunday january february "
+    "april june july august september october november december".split()
+)
 _PRONOUN_I = re.compile(r"i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*")
 
 def resolve_register(name: str) -> Register:
@@ -218,6 +224,7 @@ def render_items(
             text = item.text
             if register.smart_caps and item.mode != "verbatim" and (
                 capitalize_next or _PRONOUN_I.fullmatch(text)
+                or text.rstrip(".,!?;:'\u2019s").casefold() in PROPER_WORDS
             ):
                 text = _capitalized(text)
             emit(text, glue_left=False)

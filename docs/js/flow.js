@@ -15,6 +15,9 @@ import * as pauses from "./pauses.js";
 // ── the spoken grammar (grammar.py, verbatim defaults) ────────────────────
 const PUNCT_STRIP = /[.,!?;:]+$/;
 // a lowercase recognizer's "i", "i'm", "i'll": the pronoun is always a capital
+// days and months a lowercase recognizer writes small; not "may"/"march" (verbs)
+const PROPER_WORDS = new Set(("monday tuesday wednesday thursday friday saturday sunday january february " +
+  "april june july august september october november december").split(" "));
 const PRONOUN_I = /^i(?:['\u2019](?:m|ll|d|ve))?[.,!?;:]*$/;
 const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "");
 
@@ -698,7 +701,7 @@ export function render(items, register, state) {
       if (it.sentenceEnd && reg.smartCaps) st.capNext = true;
     } else if (it.kind === "word") {
       let t = it.text;
-      if (reg.smartCaps && it.mode !== "verbatim" && (st.capNext || PRONOUN_I.test(t))) t = capitalized(t);
+      if (reg.smartCaps && it.mode !== "verbatim" && (st.capNext || PRONOUN_I.test(t) || PROPER_WORDS.has(t.replace(/[.,!?;:'\u2019s]+$/, "").toLowerCase()))) t = capitalized(t);
       emit(t, false);
       st.capNext = reg.smartCaps && ENDERS.test(t.trimEnd());
     }
