@@ -152,3 +152,46 @@ def convert_numbers(tokens: list[str], *, min_value: int = 0) -> list[str]:
             result.append(tokens[index])
             index += 1
     return result
+
+
+# Prose keeps spoken numbers as words, except right before a unit that
+# makes the reading certain: "twenty five percent" -> "25%", "five
+# dollars" -> "$5", "three thirty pm" -> "3:30 PM".
+UNIT_WORDS = frozenset({"percent", "dollar", "dollars", "am", "pm", "a.m", "p.m"})
+_MERIDIEM = {"am": "AM", "a.m": "AM", "pm": "PM", "p.m": "PM"}
+
+
+def _clock(words: list[str]) -> Optional[str]:
+    """"three" -> "3", "three thirty five" -> "3:35"; None unless an hour
+    one..twelve, then nothing or minutes ten..fifty-nine."""
+    if not words or words[0] not in _UNITS or not 1 <= _UNITS[words[0]] <= 12:
+        return None
+    hour = _UNITS[words[0]]
+    if len(words) == 1:
+        return str(hour)
+    minutes = _parse_cardinal(words[1:])
+    if minutes is None or not 10 <= minutes <= 59 or words[1] == "and":
+        return None
+    return f"{hour}:{minutes:02d}"
+
+
+def fold_unit(words: list[str], unit: str) -> Optional[str]:
+    """A number run and the unit word after it as one token, or None.
+
+    `words` are spoken-number words (or one digit token from the
+    recognizer: "25 percent" -> "25%"); spoken digit strings ("one two
+    percent") are never amounts."""
+    words = [w.casefold() for w in words]
+    unit = unit.casefold()
+    if unit in _MERIDIEM:
+        clock = _clock(words)
+        return f"{clock} {_MERIDIEM[unit]}" if clock else None
+    if len(words) == 1 and words[0].replace(".", "", 1).isdigit() and words[0][0].isdigit():
+        amount = words[0]
+    elif "point" in words or _parse_cardinal(words) is not None:
+        amount = parse_number_run(words)
+    else:
+        return None
+    if amount is None:
+        return None
+    return amount + "%" if unit == "percent" else "$" + amount

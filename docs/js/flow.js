@@ -142,6 +142,58 @@ function parseNumberRun(words) {
 // Replace maximal runs of spoken-number words with digit strings. Single-
 // word runs below minValue stay words (prose keeps "five" but converts
 // "twenty three"); multi-word runs always convert.
+// Prose keeps spoken numbers as words, except right before a unit that
+// makes the reading certain: "twenty five percent" -> "25%", "five dollars"
+// -> "$5", "three thirty pm" -> "3:30 PM" (numbers.py fold_unit).
+const UNIT_WORDS = new Set(["percent", "dollar", "dollars", "am", "pm", "a.m", "p.m"]);
+const MERIDIEM = { am: "AM", "a.m": "AM", pm: "PM", "p.m": "PM" };
+function clock(words) {
+  if (!words.length || !(words[0] in UNITS) || UNITS[words[0]] < 1 || UNITS[words[0]] > 12) return null;
+  const hour = UNITS[words[0]];
+  if (words.length === 1) return String(hour);
+  const minutes = parseCardinal(words.slice(1));
+  if (minutes === null || minutes < 10 || minutes > 59 || words[1] === "and") return null;
+  return hour + ":" + String(minutes).padStart(2, "0");
+}
+export function foldUnit(words, unit) {
+  words = words.map((w) => w.toLowerCase()); unit = unit.toLowerCase();
+  if (unit in MERIDIEM) { const c = clock(words); return c ? c + " " + MERIDIEM[unit] : null; }
+  let amount;
+  if (words.length === 1 && /^\d+(\.\d+)?$/.test(words[0])) amount = words[0];
+  else if (words.includes("point") || parseCardinal(words) !== null) amount = parseNumberRun(words);
+  else return null;
+  if (amount === null) return null;
+  return unit === "percent" ? amount + "%" : "$" + amount;
+}
+function foldUnits(items, frozen, itemEnd, pendingFrom) {
+  const out = [];
+  const bare = (it) => it.kind === "word" && !PUNCT_TAIL.test(it.text) && NUMBER_WORDS.has(core(it.text));
+  let i = 0;
+  while (i < items.length) {
+    const it = items[i];
+    let end = i;
+    while (end < items.length && bare(items[end])) end += 1;  // "five," ends a thought
+    if (end > i && GLUE.has(core(it.text))) end = i + 1;  // glue only joins a number already begun
+    if (end === i && it.kind === "word" && /^\d/.test(it.text)) end = i + 1;  // "25 percent"
+    if (end > i && !GLUE.has(core(it.text)) && end < items.length) {
+      const unit = items[end], uc = unit.kind === "word" ? core(unit.text) : "";
+      const verb = uc === "am" && end + 1 < items.length && items[end + 1].kind === "word" && core(items[end + 1].text) === "i";
+      if (unit.kind === "word" && UNIT_WORDS.has(uc) && !verb && (it.s >= frozen || unit.e <= itemEnd(it.s))) {
+        let folded = foldUnit(items.slice(i, end).map((x) => core(x.text)), uc);
+        if (folded !== null) {
+          if (uc !== "a.m" && uc !== "p.m") folded += (unit.text.match(PUNCT_TAIL) || [""])[0];  // "percent." keeps its period
+          out.push({ kind: "word", text: folded, s: it.s, e: unit.e });
+          i = end + 1; continue;
+        }
+      }
+    }
+    if (end > i && end === items.length && pendingFrom !== null && items[end - 1].e === pendingFrom &&
+        it.s >= frozen && !GLUE.has(core(it.text))) return { items: out, pendingFrom: it.s };  // its unit may be what is pending
+    end = Math.max(end, i + 1);  // a run that did not fold stays words, all of it
+    out.push(...items.slice(i, end)); i = end;
+  }
+  return { items: out, pendingFrom };
+}
 export function convertNumbers(tokens, minValue = 0) {
   const result = [];
   let i = 0;
@@ -537,6 +589,8 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
     close(run.length > 0 && run[0].s >= frozen);  // a run behind the fence was decided when committed
     return { items: out, pendingFrom };
   }
+  const code = !!(reg.compiler || reg.terminal);
+  if ((!cfg || !cfg.numbers || cfg.numbers === "auto") && !code) return foldUnits(items, frozen, itemEnd, pendingFrom);
   return { items, pendingFrom };
 }
 

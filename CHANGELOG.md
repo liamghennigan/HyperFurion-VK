@@ -9,6 +9,11 @@ on `main` cuts the GitHub release automatically.
 
 ### Added
 
+- **Amounts and times in prose.** Prose still keeps spoken numbers as words
+  ("no one knows"), but a unit right after one makes the reading certain:
+  "twenty five percent" → `25%`, "five dollars" → `$5`, "three thirty pm"
+  → `3:30 PM`, and a recognizer's "25 percent" → `25%`. "Which one am I"
+  stays words; a run already typed as words is never rewritten.
 - **Spoken numbered lists.** "Steps colon new number build new number test"
   types `Steps:` / `1. Build` / `2. Test`. The count survives a scratch
   (scratching item 2 gives its number back) and restarts at a new paragraph.

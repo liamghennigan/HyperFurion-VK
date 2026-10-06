@@ -17,7 +17,7 @@ from typing import Optional
 from voice_keyboard.flow.nav import PENDING as NAV_PENDING
 from voice_keyboard.flow.nav import VERBS as NAV_VERBS
 from voice_keyboard.flow.nav import parse_nav
-from voice_keyboard.flow.numbers import NUMBER_WORDS, convert_numbers
+from voice_keyboard.flow.numbers import NUMBER_WORDS, UNIT_WORDS, convert_numbers, fold_unit
 from voice_keyboard.flow.pauses import COMMON_LOWER
 from voice_keyboard.flow.spelling import (
     MAX_SPELLED_LETTERS,
@@ -221,6 +221,8 @@ class Grammar:
         numbers = numbers if numbers in {"auto", "always", "off"} else "auto"
         self._numbers_on = numbers == "always" or (numbers == "auto" and numbers_on)
         self._numbers_min = 0 if numbers == "always" else numbers_min
+        # Prose: only "twenty five percent", "five dollars", "three pm".
+        self._units_on = numbers == "auto" and not self._numbers_on and not code
 
         merged_commands = dict(DEFAULT_COMMANDS)
         for action, phrases in (commands or {}).items():
@@ -648,8 +650,68 @@ class Grammar:
             )
             if number_pending is not None and pending_from is None:
                 pending_from = number_pending
+        elif self._units_on:
+            items, pending_from = self._fold_units(
+                items, frozen=frozen, item_end=item_end, pending_from=pending_from
+            )
 
         return ParseResult(items=items, pending_from=pending_from)
+
+    @staticmethod
+    def _fold_units(
+        items: list[Item], *, frozen: int, item_end=None, pending_from: Optional[int] = None
+    ) -> tuple[list[Item], Optional[int]]:
+        """Fold a spoken number and the unit right after it into one word:
+        "twenty five percent" -> "25%". A number run is held back only
+        while the words right after it are ("percent" might still become
+        "percent sign"); nothing behind the fence changes: a run committed
+        as words stays words."""
+        result: list[Item] = []
+        index = 0
+        while index < len(items):
+            item = items[index]
+            end = index
+            # number words with nothing attached ("five," ends a thought)
+            while (
+                end < len(items) and items[end].kind == "word"
+                and items[end].text.rstrip(".,!?;:") == items[end].text
+                and _core(items[end].text) in NUMBER_WORDS
+            ):
+                end += 1
+            if end > index and _core(item.text) in ("and", "point"):
+                end = index + 1  # glue only joins a number already begun
+            # one digit token from the recognizer is a run too: "25 percent"
+            if end == index and item.kind == "word" and item.text[:1].isdigit():
+                end = index + 1
+            if end > index and _core(item.text) not in ("and", "point") and end < len(items):
+                unit = items[end]
+                unit_core = _core(unit.text)
+                verb = (
+                    unit_core == "am" and end + 1 < len(items)
+                    and items[end + 1].kind == "word" and _core(items[end + 1].text) == "i"
+                )
+                if unit.kind == "word" and unit_core in UNIT_WORDS and not verb and (
+                    item.span[0] >= frozen
+                    or (item_end is not None and unit.span[1] <= item_end(item.span[0]))
+                ):
+                    folded = fold_unit([_core(it.text) for it in items[index:end]], unit_core)
+                    if folded is not None:
+                        if unit_core not in ("a.m", "p.m"):  # "percent." keeps its period
+                            folded += unit.text[len(unit.text.rstrip(".,!?;:")):]
+                        result.append(Item(kind="word", text=folded, span=(item.span[0], unit.span[1])))
+                        index = end + 1
+                        continue
+            if (
+                end > index and end == len(items) and pending_from is not None
+                and items[end - 1].span[1] == pending_from and item.span[0] >= frozen
+                and _core(item.text) not in ("and", "point")
+            ):
+                return result, item.span[0]  # its unit may be what is pending
+            # a run that did not fold stays words, all of it: never "twenty 5%"
+            end = max(end, index + 1)
+            result.extend(items[index:end])
+            index = end
+        return result, pending_from
 
     @staticmethod
     def _limit(

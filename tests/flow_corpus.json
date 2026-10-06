@@ -426,6 +426,277 @@
   ]
  },
  {
+  "name": "prose percent",
+  "register": "prose",
+  "segments": [
+   "about twenty five percent of users"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "About 25% of users"
+   ],
+   [
+    "final",
+    "About 25% of users",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose percent held while percent might grow",
+  "register": "prose",
+  "segments": [
+   "it went up one hundred percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It went up"
+   ],
+   [
+    "final",
+    "It went up 100%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose dollars",
+  "register": "prose",
+  "segments": [
+   "it costs twenty five dollars period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "It costs $25."
+   ],
+   [
+    "final",
+    "It costs $25.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose decimal percent",
+  "register": "prose",
+  "segments": [
+   "growth was two point five percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Growth was"
+   ],
+   [
+    "final",
+    "Growth was 2.5%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose times",
+  "register": "prose",
+  "segments": [
+   "meet at three thirty pm or twelve am"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Meet at 3:30 PM or 12 AM"
+   ],
+   [
+    "final",
+    "Meet at 3:30 PM or 12 AM",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "which one am I stays words",
+  "register": "prose",
+  "segments": [
+   "which one am i"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Which one am i"
+   ],
+   [
+    "final",
+    "Which one am i",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose digits and a unit",
+  "register": "prose",
+  "segments": [
+   "up 25 percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Up"
+   ],
+   [
+    "final",
+    "Up 25%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a digit string is never an amount",
+  "register": "prose",
+  "segments": [
+   "one two three percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "One two three percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose numbers alone stay words",
+  "register": "prose",
+  "segments": [
+   "no one knows the twenty five reasons"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "No one knows the twenty five reasons"
+   ],
+   [
+    "final",
+    "No one knows the twenty five reasons",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "glue never starts an amount",
+  "register": "prose",
+  "segments": [
+   "this and five percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "This and"
+   ],
+   [
+    "final",
+    "This and 5%",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "units across a pause stay words",
+  "register": "prose",
+  "segments": [
+   "twenty five",
+   "percent"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Twenty five"
+   ],
+   [
+    "screen",
+    "Twenty five"
+   ],
+   [
+    "final",
+    "Twenty five percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbers off leaves units alone",
+  "register": "prose",
+  "segments": [
+   "twenty five percent"
+  ],
+  "options": {
+   "numbers": "off"
+  },
+  "events": [
+   [
+    "screen",
+    "Twenty five"
+   ],
+   [
+    "final",
+    "Twenty five percent",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "numbered lists count",
   "register": "prose",
   "segments": [
