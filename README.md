@@ -127,6 +127,9 @@ routes the just-typed text through an LLM and repairs it on screen.
   mined from the opt-in ledger; accept what is right. Or add a word now:
   `voice-keyboard learned add hyper furion = HyperFurion` (a one-word
   written form also becomes a hotword the recognizer leans toward).
+- **Polish per app:** `[polish.map]` maps an app to a style (`slack =
+  "casual"`, `thunderbird = "a clear, polite email"`); each prose dictation
+  of four words or more there is rewritten in that style through `[llm]`.
 - **Hold rewrites for approval:** `[flow] rewrite_pending = true`, then
   "keep it" / "scratch that" (or `voice-keyboard keep` / `discard`).
 - **Something not working?** `voice-keyboard doctor` checks the config,

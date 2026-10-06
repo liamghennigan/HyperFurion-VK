@@ -325,6 +325,15 @@ mode = "say"
 # {date}, {isodate}, {time} and {weekday} fill in when typed:
 # "stamp" = "Updated {date} at {time}"
 
+[polish.map]
+# Per-app style, applied by [llm] after a prose dictation of four words
+# or more in that app (as if you said "VK, make that …"). The app name is
+# what `voice-keyboard status` shows; never in terminals, code or password
+# fields; on any failure the text stays as dictated. Pairs well with
+# [flow] rewrite_pending = true, which holds each polish for "keep it".
+# slack = "casual and friendly, keep it short"
+# thunderbird = "a clear, polite email"
+
 [recall]
 # Total recall: search everything you dictated ([flow] history ledger).
 # Keyword search needs no setup; set base_url + model to an

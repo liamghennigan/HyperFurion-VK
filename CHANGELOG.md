@@ -12,6 +12,12 @@ proven to be the daemon's.
 
 ### Added
 
+- **Polish per app (`[polish.map]`).** Map an app to a style — `slack =
+  "casual"`, `thunderbird = "a clear, polite email"` — and each prose
+  dictation of four words or more there is rewritten in it through `[llm]`,
+  like an automatic "VK, make that …". Never in terminals, code or password
+  fields, never after focus moved; a failure leaves the text as dictated;
+  with `rewrite_pending` it waits for "keep it".
 - **Snippet placeholders.** `{date}`, `{isodate}`, `{time}` and `{weekday}` in a
   `[snippets]` entry fill in when it is typed: `"stamp" = "Updated {date}"`.
 - **`voice-keyboard doctor`.** Checks what stands between you and dictation —

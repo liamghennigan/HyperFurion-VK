@@ -253,6 +253,10 @@ DEFAULT_CONFIG: dict = {
     # end of a dictation ("send the invoice to VK, my email"). Spoken name
     # -> text, typed exactly (newlines included).
     "snippets": {},
+    # Polish per app: after a prose dictation in a mapped app, [llm]
+    # rewrites it in that style, the way "VK, make that …" would. Off
+    # until an app is mapped; never in terminals, code or secret fields.
+    "polish": {"map": {}},
     "recall": {
         # Total recall: search everything you ever dictated (the opt-in
         # [flow] history ledger). Keyword search works with no setup;
@@ -625,6 +629,11 @@ def validate_config(config: dict) -> None:
     for name, text in snippets.items():
         if not str(name).strip() or not isinstance(text, str) or not text:
             raise RuntimeError(f"snippets.{name!r}: a spoken name and the text to type")
+    polish_map = (config.get("polish", {}) or {}).get("map", {})
+    if not isinstance(polish_map, dict) or not all(
+        isinstance(v, str) and v.strip() for v in polish_map.values()
+    ):
+        raise RuntimeError('polish.map must be a table of app = "style", e.g. slack = "casual"')
     _validate_ambient_config(config)
     _validate_verb_channel(config, "ask")
     _validate_verb_channel(config, "recall")

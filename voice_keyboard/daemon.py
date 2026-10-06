@@ -82,6 +82,9 @@ PENDING_REWRITE_TTL_S = 120.0
 
 
 
+# Shorter dictations ("ok", "on my way") are left as said.
+POLISH_MIN_WORDS = 4
+
 _PLACEHOLDER = re.compile(r"\{(date|isodate|time|weekday)\}")
 
 
@@ -1687,6 +1690,12 @@ class Daemon:
             target = final + self._snippet_gap(final, snippet) + snippet
             worker.set_target(target)
             final = await worker.drain(timeout=self._drain_timeout(target))
+        elif not instruction and final and not worker.abandoned and (style := self._polish_style(final)):
+            try:
+                final = await self._run_transform(f"polish this dictation: {style}", worker=worker)
+            except Exception as exc:
+                # The dictation stands as typed; polish is a nicety.
+                logger.info("Polish skipped: %s", exc)
         elif instruction and final and not worker.abandoned:
             try:
                 final = await self._run_transform(instruction, worker=worker)
@@ -1705,8 +1714,17 @@ class Daemon:
         if resolved is not None:
             return resolved
         snippet = self._snippet(instruction) if instruction and final else None
+        style = self._polish_style(final) if not instruction and final else ""
         if snippet is not None:
             final = final + self._snippet_gap(final, snippet) + snippet
+        elif style:
+            llm_client = create_llm_client(self._config)
+            if llm_client is not None:
+                await self._show_hotkey_overlay("processing", detail=f"⌁ polish: {style}")
+                try:
+                    final = await asyncio.to_thread(llm_client.rewrite, final, f"polish this dictation: {style}")
+                except Exception as exc:
+                    logger.info("Polish skipped: %s", exc)  # typed as dictated
         elif instruction and final:
             llm_client = create_llm_client(self._config)
             if llm_client is None:
@@ -1853,6 +1871,25 @@ class Daemon:
             )
 
     # -------------------------------------------------------- transforms
+
+    def _polish_style(self, final: str) -> str:
+        """The [polish.map] style for the app this dictation went to, or ""
+        when none applies: unmapped app, a terminal / code / secret field,
+        focus moved, or a dictation too short to restyle."""
+        styles = (self._config.get("polish", {}) or {}).get("map", {}) or {}
+        focus = self._session_focus
+        if not styles or focus is None or not focus.app:
+            return ""
+        if self._session_secret or self._focus_lost or not self._session_register.smart_caps:
+            return ""
+        if len(final.split()) < POLISH_MIN_WORDS or not llm_ready(self._config):
+            return ""
+        app = focus.app.strip().lower()
+        for key in (app, app[:-4] if app.endswith(".exe") else app):
+            for name, style in styles.items():
+                if str(name).strip().lower() == key:
+                    return str(style).strip()
+        return ""
 
     def _register_for(self, focus) -> Register:
         """The register for a focused app, per [registers]."""
