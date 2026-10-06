@@ -58,6 +58,8 @@ CASES = [
     ("scratch as its own segment", "prose", ["hello world period", "scratch that", "goodbye period"], {}),
     ("scratch twice", "prose", ["one", "two", "three", "scratch that", "scratch that"], {}),
     ("scratch with nothing typed", "prose", ["scratch that"], {}),
+    ("scratch synonyms", "prose", ["one", "strike that", "two", "undo that", "three", "scratch this", "four"], {}),
+    ("a recognizer's past tense still scratches", "prose", ["keep this", "drop this", "scratched that"], {}),
     # the wake word
     ("instruction at the end", "prose", ["i think it works now vk make that formal"], {}),
     ("instruction alone", "prose", ["hello", "vk make that formal"], {}),

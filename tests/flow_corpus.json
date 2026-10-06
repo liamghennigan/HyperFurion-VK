@@ -409,6 +409,90 @@
   ]
  },
  {
+  "name": "scratch synonyms",
+  "register": "prose",
+  "segments": [
+   "one",
+   "strike that",
+   "two",
+   "undo that",
+   "three",
+   "scratch this",
+   "four"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Two"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Three"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Four"
+   ],
+   [
+    "final",
+    "Four",
+    "",
+    "",
+    3,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a recognizer's past tense still scratches",
+  "register": "prose",
+  "segments": [
+   "keep this",
+   "drop this",
+   "scratched that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Keep this"
+   ],
+   [
+    "screen",
+    "Keep this drop this"
+   ],
+   [
+    "screen",
+    "Keep this"
+   ],
+   [
+    "final",
+    "Keep this",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
   "name": "instruction at the end",
   "register": "prose",
   "segments": [

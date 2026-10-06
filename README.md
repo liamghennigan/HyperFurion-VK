@@ -569,7 +569,7 @@ recognizer's periods.
 
 | You say | You get |
 | --- | --- |
-| `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text) |
+| `scratch that` / `delete that` / `strike that` / `undo that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |
 | `new line` / `new paragraph` | `\n` / `\n\n` |
 | `period`, `comma`, `question mark`, `em dash`, `open quote`, … | the glyph, correctly spaced |
 | `literal period` | the word "period" |

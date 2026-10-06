@@ -50,7 +50,10 @@ class ParseResult:
 
 # action name -> default trigger phrases
 DEFAULT_COMMANDS: dict[str, tuple[str, ...]] = {
-    "scratch_that": ("scratch that", "delete that"),
+    "scratch_that": (
+        "scratch that", "delete that", "strike that", "undo that",
+        "scratch this", "scratched that",  # how recognizers often write it
+    ),
     "new_line": ("new line",),
     "new_paragraph": ("new paragraph",),
     "literal": ("literal",),

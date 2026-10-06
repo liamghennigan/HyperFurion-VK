@@ -1565,6 +1565,14 @@ class Daemon:
             final = result.text
             self._last_scratches = result.scratches
             self._note_spellings(result.corrections)
+            if (
+                not final
+                and result.reach_back
+                and not result.instruction
+                and not result.typed_before
+                and self._peek_pending_rewrite() is None
+            ):
+                await self._scratch_previous()
             if not result.instruction:
                 final = await self._self_corrected(final)
             if worker is not None:
@@ -1804,6 +1812,40 @@ class Daemon:
             text = await self._run_transform(instruction, worker=None)
             self._remember_typed(text)
             return text
+
+    async def _scratch_previous(self) -> bool:
+        """A recording that was only "scratch that": take back the previous
+        dictation — when the caret is surely still right after it: the
+        same app and register, within REJOIN_WINDOW_S, no focus change,
+        nothing typed since, and no complex Unicode (backspacing by
+        characters is unreliable there). Otherwise say why and leave the
+        screen alone."""
+        landing, text = self._landing, self._last_typed
+        focus = self._session_focus
+        identity = focus.identity if focus is not None else ""
+        reason = ""
+        if not landing or not text:
+            reason = "nothing to scratch"
+        elif self._focus_lost or identity != landing["identity"] or \
+                self._session_register.name != landing["register"]:
+            reason = "the last dictation was in another app"
+        elif time.monotonic() - landing["when"] > REJOIN_WINDOW_S:
+            reason = "the last dictation is too old to scratch"
+        elif self._session_secret:
+            reason = "not in a secret field"
+        elif risky_backspace(text):
+            reason = "can't backspace safely over that text"
+        if reason:
+            logger.info("scratch that: %s", reason)
+            await self._show_hotkey_overlay("empty", detail=f"⌁ {reason}", timeout_ms=1800)
+            return False
+        await asyncio.to_thread(self._injector.delete_chars, len(text))
+        self._last_typed = ""
+        self._landing = None
+        preview = text if len(text) <= 40 else text[:37] + "…"
+        logger.info("scratch that: removed the last dictation (%d characters)", len(text))
+        await self._show_hotkey_overlay("inserted", detail=f"⌁ scratched: {preview}", timeout_ms=1800)
+        return True
 
     async def _self_corrected(self, text: str) -> str:
         """[flow] corrections = "llm": a dictation with a correction cue

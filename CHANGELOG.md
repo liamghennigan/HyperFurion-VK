@@ -56,6 +56,14 @@ proven to be the daemon's.
 
 ### Added
 
+- **"Scratch that" reaches back.** Stop, notice the mistake, press the
+  hotkey and say "scratch that": the previous dictation is taken back.
+  Only when the caret is surely still right after it — the same app and
+  register, within 30 seconds, no focus change, nothing complex to
+  backspace over; otherwise the overlay says why and nothing is touched.
+  "Strike that", "undo that", "scratch this" and the recognizer's
+  "scratched that" now work in the daemon too (the landing page already
+  took them).
 - **`[snippets]` — text you type by name.** `"my email" =
   "you@example.com"` in config, then "VK, my email" types it — alone, or
   at the end of a dictation ("send the invoice to VK, my email"), where

@@ -86,6 +86,9 @@ class FinalResult:
     action: Optional["NavAction"] = None
     # Text typed in earlier segments, before navigation moved the caret.
     typed_before: str = ""
+    # "scratch that" said with nothing in this recording to take back: it
+    # reaches for the previous dictation (the daemon decides if it can).
+    reach_back: int = 0
 
 
 @dataclass(frozen=True)
@@ -180,6 +183,7 @@ class FlowEngine:
         self._lower_seen: set[str] = set()
         self._instruction = ""
         self._scratches = 0
+        self._reach_back = 0
         self._corrections: list[tuple[str, str]] = []
         # Token counts at each final: segment boundaries for navigation.
         self._segment_bounds: set[int] = {0}
@@ -275,6 +279,7 @@ class FlowEngine:
             text=self._committed_render,
             instruction=self._instruction if self._barrier is None else "",
             scratches=self._scratches,
+            reach_back=self._reach_back,
             corrections=tuple(self._corrections),
             action=self._barrier,
             typed_before=self._typed_before,
@@ -626,6 +631,8 @@ class FlowEngine:
                 target = snapshot
                 break
         if target is None:
+            if not self._committed_render and not self._typed_before:
+                self._reach_back += 1
             return
         removed = self._committed_render[target.render_len:]
         if risky_backspace(removed):
