@@ -49,7 +49,8 @@ proven to be the daemon's.
   `items[0]` — while keywords and operators keep their space (`x = (a +
   b)`, `if (x)`). "print open paren x close paren" no longer types
   `print((x)`: a spoken open paren right after a callable that already
-  opened one is absorbed.
+  opened one is absorbed. Spoken calls nest, and a colon closes every
+  open one: "for i in range len xs colon" types `for i in range(len(xs)):`.
 - **Flow: words committed one at a time never merge later.** "open" let
   go by the holdback timer, then "quote" committed on its own, read back
   as the phrase `"` on the next reparse — the fence only guarded the

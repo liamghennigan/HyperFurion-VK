@@ -200,6 +200,7 @@ const isName = (t) => /^[A-Za-z_][\w.]*$/.test(t) && !PY_KEYWORDS.has(t);
 function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
   const out = [];
   let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "", afterName = !!state.afterName;
+  let openCalls = state.openCalls || 0;
   const emit = (text, glueLeft, name = false) => {
     if (!atStart && !glueNext && !glueLeft) out.push(" ");
     out.push(text); atStart = false; glueNext = false; afterName = name;
@@ -211,16 +212,15 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
     else emit(glyph, false);
   };
   const flushDash = () => { if (pending === "dash") { emit("-", false); pending = ""; } };
-  const inCall = () => pending === "call" || pending === "call-open";
   for (const it of items) {
-    if (it.kind === "break") { flushDash(); pending = ""; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
+    if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
       if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
-      if (inCall() && it.text === ":") { emit("):", true); pending = ""; continue; }
+      if (openCalls && it.text === ":") { emit(")".repeat(openCalls) + ":", true); pending = ""; openCalls = 0; continue; }  // a colon closes every open call
       if (dashHold && it.text === "-" && it.mode === "none") { flushDash(); pending = "dash"; continue; }
       flushDash();
-      if (inCall() && it.text === ")") pending = "";
-      else if (pending === "call-open") pending = "call";
+      if (pending === "call-open") pending = openCalls ? "call" : "";
+      if (openCalls && it.text === ")") { openCalls -= 1; if (!openCalls) pending = ""; }
       if (glueCalls && afterName && "([".includes(it.text) && it.mode === "right") { emit(it.text, true); glueNext = true; continue; }
       emitMode(it.text, it.mode);
     } else if (it.kind === "word") {
@@ -229,11 +229,11 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls }) {
       if (pending === "call-open") pending = "call";
       const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
       if (g) { emitMode(g[0], g[1]); continue; }
-      if (callables.has(c) && pending !== "call") { emit(it.text + "(", false); glueNext = true; pending = "call-open"; continue; }
+      if (callables.has(c)) { emit(it.text + "(", false); glueNext = true; pending = "call-open"; openCalls += 1; continue; }  // calls nest
       emit(it.text, false, !!glueCalls && isName(it.text));
     }
   }
-  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName } };
+  return { text: out.join(""), st: { ...state, atStart, glueNext, capNext: false, pending, afterName, openCalls } };
 }
 
 // ── parse: raw tokens -> items, with the frozen fence (grammar.py) ────────

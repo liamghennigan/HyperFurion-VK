@@ -72,6 +72,7 @@ def _compile(
     glue_next = state.glue_next
     pending = state.pending
     after_name = state.after_name
+    open_calls = state.open_calls
 
     def emit(text: str, *, glue_left: bool, name: bool = False) -> None:
         nonlocal at_start, glue_next, after_name
@@ -105,6 +106,7 @@ def _compile(
         if item.kind == "break":
             flush_dash()
             pending = ""
+            open_calls = 0
             out.append(item.text)
             at_start = False
             glue_next = True
@@ -113,9 +115,11 @@ def _compile(
             if pending == "call-open" and item.text == "(" and item.mode == "right":
                 pending = "call"  # "print open paren": the callable already opened it
                 continue
-            if pending in ("call", "call-open") and item.text == ":":
-                emit("):", glue_left=True)
+            if open_calls and item.text == ":":
+                # "range len xs colon": a colon closes every open call
+                emit(")" * open_calls + ":", glue_left=True)
                 pending = ""
+                open_calls = 0
                 continue
             if dash_hold and item.text == "-" and item.mode == "none":
                 # Hold the dash: the next word becomes a flag ("-i").
@@ -123,10 +127,12 @@ def _compile(
                 pending = "dash"
                 continue
             flush_dash()
-            if pending in ("call", "call-open") and item.text == ")":
-                pending = ""
-            elif pending == "call-open":
-                pending = "call"
+            if pending == "call-open":
+                pending = "call" if open_calls else ""
+            if open_calls and item.text == ")":
+                open_calls -= 1
+                if not open_calls:
+                    pending = ""
             if glue_calls and after_name and item.text in "([" and item.mode == "right":
                 emit(item.text, glue_left=True)  # a call or a subscript: f(, xs[
                 glue_next = True
@@ -144,10 +150,12 @@ def _compile(
             if glyph is not None:
                 emit_mode(glyph[0], glyph[1])
                 continue
-            if core in callables and pending != "call":
+            if core in callables:
+                # Calls nest: "print range ten close paren close paren".
                 emit(item.text + "(", glue_left=False)
                 glue_next = True
                 pending = "call-open"  # an explicit "open paren" next is absorbed
+                open_calls += 1
                 continue
             emit(item.text, glue_left=False, name=glue_calls and _is_name(item.text))
         # scratch/instruction items render nothing; the engine acts on them.
@@ -159,6 +167,7 @@ def _compile(
         capitalize_next=False,
         pending=pending,
         after_name=after_name,
+        open_calls=open_calls,
     )
 
 

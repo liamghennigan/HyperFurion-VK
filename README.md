@@ -659,7 +659,7 @@ Quartz on macOS, Win32 on Windows — and picks a register:
 | `prose` (default) | smart capitalization and punctuation spacing |
 | `terminal` | no auto-caps, numbers as digits, pastes with `Ctrl+Shift+V` |
 | `verbatim` | grammar off; words exactly as recognized |
-| `python` | compiles speech: "for i in range ten colon" → `for i in range(10):` |
+| `python` | compiles speech: "for i in range ten colon" → `for i in range(10):`, "for i in range len xs colon" → `for i in range(len(xs)):` |
 | `shell` | compiles speech: "pipe grep dash i error" → `| grep -i error` |
 
 Known terminals (kitty, alacritty, foot, konsole, GNOME Terminal, wezterm,

@@ -240,6 +240,82 @@
   ]
  },
  {
+  "name": "calls nest and a colon closes them all",
+  "register": "python",
+  "segments": [
+   "for i in range len xs colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range(len(xs)):"
+   ],
+   [
+    "final",
+    "for i in range(len(xs)):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "nested calls closed by hand",
+  "register": "python",
+  "segments": [
+   "print range ten close paren close paren",
+   "x equals abs y close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "print(range(10))"
+   ],
+   [
+    "screen",
+    "print(range(10)) x = abs(y)"
+   ],
+   [
+    "final",
+    "print(range(10)) x = abs(y)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a nested call across segments",
+  "register": "python",
+  "segments": [
+   "for i in range",
+   "len xs colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range("
+   ],
+   [
+    "screen",
+    "for i in range(len(xs)):"
+   ],
+   [
+    "final",
+    "for i in range(len(xs)):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "shell compiles flags",
   "register": "shell",
   "segments": [

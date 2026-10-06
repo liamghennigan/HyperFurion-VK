@@ -105,6 +105,7 @@ class RenderState:
     capitalize_next: bool = True   # next word starts a sentence
     pending: str = ""              # semantic-compiler hold (dash, call-open, call)
     after_name: bool = False       # code: the last atom was a name ("f" before "(")
+    open_calls: int = 0            # code: calls a spoken callable opened, not yet closed
 
 
 def initial_state(register: Register) -> RenderState:
