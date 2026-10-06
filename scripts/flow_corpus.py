@@ -282,12 +282,12 @@ def main() -> int:
     corpus = build()
     text = json.dumps(corpus, indent=1, ensure_ascii=False) + "\n"
     if "--check" in sys.argv:
-        if not CORPUS.exists() or CORPUS.read_text() != text:
+        if not CORPUS.exists() or CORPUS.read_text(encoding="utf-8") != text:
             print(f"{CORPUS} is stale: run scripts/flow_corpus.py", file=sys.stderr)
             return 1
         print(f"{CORPUS}: {len(corpus)} cases, up to date")
         return 0
-    CORPUS.write_text(text)
+    CORPUS.write_text(text, encoding="utf-8")
     print(f"wrote {CORPUS}: {len(corpus)} cases")
     return 0
 

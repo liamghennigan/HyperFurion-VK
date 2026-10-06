@@ -20,7 +20,7 @@ from voice_keyboard.flow.registers import PROSE, TERMINAL  # noqa: E402
 
 
 def test_corpus_is_current() -> None:
-    written = json.loads((ROOT / "tests" / "flow_corpus.json").read_text())
+    written = json.loads((ROOT / "tests" / "flow_corpus.json").read_text(encoding="utf-8"))
     assert written == flow_corpus.build(), "run scripts/flow_corpus.py"
 
 
