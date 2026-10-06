@@ -145,10 +145,19 @@ def convert_numbers(tokens: list[str], *, min_value: int = 0) -> list[str]:
         while end > index and _core(tokens[end - 1]) in {"and", "point"}:
             end -= 1
 
-        run = [_core(tokens[k]) for k in range(index, end)]
-        parsed = parse_number_run(run)
-        multi_word = end - index > 1
-        if parsed is not None and (multi_word or abs(float(parsed)) >= min_value):
+        # The longest prefix of the run that reads as a number: "one
+        # thousand hundred" is 1000 then "hundred", the same split it gets
+        # when "one thousand" was typed before "hundred" was heard.
+        parsed = None
+        while end > index:
+            run = [_core(tokens[k]) for k in range(index, end)]
+            if run[-1] not in {"and", "point"}:
+                parsed = parse_number_run(run)
+                if parsed is not None and (end - index > 1 or abs(float(parsed)) >= min_value):
+                    break
+                parsed = None
+            end -= 1
+        if parsed is not None:
             # Trailing punctuation of the run's last token survives.
             tail = tokens[end - 1]
             suffix = tail[len(tail.rstrip(_PUNCT)):]

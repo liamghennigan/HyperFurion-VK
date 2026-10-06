@@ -326,10 +326,20 @@ export function convertNumbers(tokens, minValue = 0) {
       if (PUNCT_TAIL.test(tokens[end - 1])) break;
     }
     while (end > i && GLUE.has(core(tokens[end - 1]))) end -= 1;
-    const run = tokens.slice(i, end).map(core);
-    const parsed = parseNumberRun(run);
-    const multi = end - i > 1;
-    if (parsed !== null && (multi || Math.abs(parseFloat(parsed)) >= minValue)) {
+    // the longest prefix of the run that reads as a number: "one thousand
+    // hundred" is 1000 then "hundred", the split it gets when "one thousand"
+    // was typed before "hundred" was heard (numbers.py convert_numbers)
+    let parsed = null;
+    while (end > i) {
+      const run = tokens.slice(i, end).map(core);
+      if (!GLUE.has(run[run.length - 1])) {
+        parsed = parseNumberRun(run);
+        if (parsed !== null && (end - i > 1 || Math.abs(parseFloat(parsed)) >= minValue)) break;
+        parsed = null;
+      }
+      end -= 1;
+    }
+    if (parsed !== null) {
       const tail = tokens[end - 1];
       const suffix = (tail.match(PUNCT_TAIL) || [""])[0];
       result.push(parsed + suffix);
@@ -970,7 +980,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   function tick(now) {
     // a "quote" waits for its utterance to close, never for the expiry: committed
     // as a word, it could not become an opening mark when the closer came
-    const quoteWaits = pendingFrom !== null && core(tokens[pendingFrom] || "") === "quote";
+    const quoteWaits = pendingFrom !== null && tokens.slice(pendingFrom).some((t) => core(t) === "quote");  // anywhere in the held tail
     if (pendingFrom !== null && !pendingIsInstruction() && !quoteWaits) {
       if (now - meta[pendingFrom].since >= 2 * stabMs()) { flushPending = true; reparse(); }
     }

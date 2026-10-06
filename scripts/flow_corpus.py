@@ -277,6 +277,16 @@ STREAMS = [
         [0.0, "she said quote ship it", "interim"], [0.4, "she said quote ship it", "interim"], [2.2, "tick"],
         [2.5, "she said quote ship it unquote", "interim"], [2.8, "she said quote ship it on quote", "interim"],
         [4.5, "tick"], [5.0, "she said quote ship it unquote", "final"]], {}),
+    ("a typed number never re-reads alone", "python", [
+        [4.9, "the heading scratch", "final"], [5.0, "the heading scratch one", "interim"],
+        [5.6, "the heading scratch one thousand", "interim"], [5.9, "the heading scratch one thousand hundred", "interim"],
+        [7.5, "the heading scratch one thousand hundred it", "interim"], [8.1, "the heading scratch one thousand hundred it pm", "interim"]], {}),
+    ("a quote held behind a number never expires", "prose", [
+        [4.4, "g", "final"], [9.7, "g cents said euros bullet i the", "interim"], [10.3, "g cents said euros bullet i the one", "interim"],
+        [11.9, "g cents said euros bullet i the one quote", "interim"],
+        [14.8, "g cents said euros bullet i the one quote at comma undo heading word", "interim"],
+        [16.4, "g cents said euros bullet i the one quote at comma undo rocket word", "interim"], [16.5, "tick"],
+        [16.6, "g cents said euros bullet i the one quote at comma twenty rocket word", "interim"]], {}),
     ("am waits for the next word", "prose", [
         [0.0, "which one am", "interim"], [2.0, "tick"], [2.5, "which one am i", "interim"], [4.5, "tick"],
         [5.0, "which one am i", "final"]], {}),

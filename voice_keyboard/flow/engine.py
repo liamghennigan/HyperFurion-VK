@@ -450,9 +450,13 @@ class FlowEngine:
         """A "quote" waiting for its "unquote": it waits for the utterance to
         close, never for the holdback expiry — committed as a word, it could
         not become an opening quotation mark when the closer came."""
-        if self._pending_from is None or self._pending_from >= len(self._tokens):
+        if self._pending_from is None:
             return False
-        return self._tokens[self._pending_from].casefold().strip(".,!?;:") == "quote"
+        # anywhere in the held tail: a number run before it holds from its
+        # own start ("one quote ...")
+        return any(
+            token.casefold().strip(".,!?;:") == "quote" for token in self._tokens[self._pending_from:]
+        )
 
     def _pending_is_instruction(self) -> bool:
         if self._pending_from is None or self._pending_from >= len(self._tokens):
