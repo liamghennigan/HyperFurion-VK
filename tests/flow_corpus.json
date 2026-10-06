@@ -1,0 +1,1554 @@
+[
+ {
+  "name": "prose caps and punctuation",
+  "register": "prose",
+  "segments": [
+   "hello world period this is a test comma right question mark"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello world. This is a test, right?"
+   ],
+   [
+    "final",
+    "Hello world. This is a test, right?",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "prose keeps small numbers as words",
+  "register": "prose",
+  "segments": [
+   "no one knows the nine lives"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "No one knows the nine lives"
+   ],
+   [
+    "final",
+    "No one knows the nine lives",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "terminal digits",
+  "register": "terminal",
+  "segments": [
+   "twenty three failed tests comma rerun the flaky ones"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "23 failed tests, rerun the flaky ones"
+   ],
+   [
+    "final",
+    "23 failed tests, rerun the flaky ones",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "digit runs and decimals",
+  "register": "terminal",
+  "segments": [
+   "ping one two seven dot zero dot zero dot one",
+   "pi is three point one four"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "ping 127 dot 0 dot 0 dot"
+   ],
+   [
+    "screen",
+    "ping 127 dot 0 dot 0 dot 1 pi is"
+   ],
+   [
+    "final",
+    "ping 127 dot 0 dot 0 dot 1 pi is 3.14",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "python compiles",
+  "register": "python",
+  "segments": [
+   "for i in range ten colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range(10):"
+   ],
+   [
+    "final",
+    "for i in range(10):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "python print",
+  "register": "python",
+  "segments": [
+   "print x close paren"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "print(x)"
+   ],
+   [
+    "final",
+    "print(x)",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "shell compiles flags",
+  "register": "shell",
+  "segments": [
+   "pipe grep dash i error"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "| grep -i error"
+   ],
+   [
+    "final",
+    "| grep -i error",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "shell path",
+  "register": "shell",
+  "segments": [
+   "pytest dash x tests slash test underscore flow dot py"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "pytest -x tests/test_flow.py"
+   ],
+   [
+    "final",
+    "pytest -x tests/test_flow.py",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "verbatim is words",
+  "register": "verbatim",
+  "segments": [
+   "scratch that period new line"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "scratch that period new line"
+   ],
+   [
+    "final",
+    "scratch that period new line",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "new line and paragraph",
+  "register": "prose",
+  "segments": [
+   "first line new line second line new paragraph third"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "First line\nSecond line\n\nThird"
+   ],
+   [
+    "final",
+    "First line\nSecond line\n\nThird",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "quotes and dashes",
+  "register": "prose",
+  "segments": [
+   "open quote hyper furion close quote em dash a voice keyboard"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "\"HyperFurion\"—a voice keyboard"
+   ],
+   [
+    "final",
+    "\"HyperFurion\"—a voice keyboard",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "literal",
+  "register": "prose",
+  "segments": [
+   "say literal period to type the word"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Say period to type the word"
+   ],
+   [
+    "final",
+    "Say period to type the word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "vocabulary with trailing punctuation",
+  "register": "prose",
+  "segments": [
+   "hyper furion, is open source period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "HyperFurion, is open source."
+   ],
+   [
+    "final",
+    "HyperFurion, is open source.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch mid-utterance",
+  "register": "prose",
+  "segments": [
+   "fixed the race addition scratch that fixed the race condition period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Fixed the race condition."
+   ],
+   [
+    "final",
+    "Fixed the race condition.",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch as its own segment",
+  "register": "prose",
+  "segments": [
+   "hello world period",
+   "scratch that",
+   "goodbye period"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello world."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Goodbye."
+   ],
+   [
+    "final",
+    "Goodbye.",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch twice",
+  "register": "prose",
+  "segments": [
+   "one",
+   "two",
+   "three",
+   "scratch that",
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One two three"
+   ],
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "final",
+    "One",
+    "",
+    "",
+    2,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch with nothing typed",
+  "register": "prose",
+  "segments": [
+   "scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "instruction at the end",
+  "register": "prose",
+  "segments": [
+   "i think it works now vk make that formal"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I think it works now"
+   ],
+   [
+    "final",
+    "I think it works now",
+    "",
+    "make that formal",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "instruction alone",
+  "register": "prose",
+  "segments": [
+   "hello",
+   "vk make that formal"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "final",
+    "Hello",
+    "",
+    "make that formal",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell that replaces keeping punctuation",
+  "register": "prose",
+  "segments": [
+   "I run wrold.",
+   "spell that w o r l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "I run wrold."
+   ],
+   [
+    "screen",
+    "I run world."
+   ],
+   [
+    "final",
+    "I run world.",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "world"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell that keeps a capital",
+  "register": "prose",
+  "segments": [
+   "Ngnix spell that n g i n x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Nginx"
+   ],
+   [
+    "final",
+    "Nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "Ngnix",
+      "Nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell that with nato and capital",
+  "register": "prose",
+  "segments": [
+   "the host is engine-x",
+   "spell that capital n golf india november x-ray"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The host is engine-x"
+   ],
+   [
+    "screen",
+    "The host is Nginx"
+   ],
+   [
+    "final",
+    "The host is Nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "engine-x",
+      "Nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell that hyphenated",
+  "register": "prose",
+  "segments": [
+   "use ngnix",
+   "spell that n-g-i-n-x"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Use ngnix"
+   ],
+   [
+    "screen",
+    "Use nginx"
+   ],
+   [
+    "final",
+    "Use nginx",
+    "",
+    "",
+    0,
+    [
+     [
+      "ngnix",
+      "nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell inserts",
+  "register": "terminal",
+  "segments": [
+   "kubectl spell k eight s"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "kubectl k8s"
+   ],
+   [
+    "final",
+    "kubectl k8s",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell letters follow in the next segment",
+  "register": "prose",
+  "segments": [
+   "hello wrold",
+   "spell that",
+   "w o r l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "final",
+    "Hello world",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "world"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell then more words",
+  "register": "prose",
+  "segments": [
+   "hello wrold spell that w o r l d then more"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello world then more"
+   ],
+   [
+    "final",
+    "Hello world then more",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "world"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell ambiguous tail stays prose",
+  "register": "prose",
+  "segments": [
+   "mark it x spell that y a good one"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Mark it y a good one"
+   ],
+   [
+    "final",
+    "Mark it y a good one",
+    "",
+    "",
+    0,
+    [
+     [
+      "x",
+      "y"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell nothing to replace",
+  "register": "prose",
+  "segments": [
+   "spell that a b"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "cast a spell stays prose",
+  "register": "prose",
+  "segments": [
+   "cast a spell on them"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Cast a spell on them"
+   ],
+   [
+    "final",
+    "Cast a spell on them",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spelling off",
+  "register": "prose",
+  "segments": [
+   "wrold spell that w o r l d"
+  ],
+  "options": {
+   "spelling": false
+  },
+  "events": [
+   [
+    "screen",
+    "Wrold spell that w o r l d"
+   ],
+   [
+    "final",
+    "Wrold spell that w o r l d",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch after respell rewinds the shifted boundary",
+  "register": "prose",
+  "segments": [
+   "first part",
+   "ngnix",
+   "spell that n g i n x",
+   "more words scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "First part"
+   ],
+   [
+    "screen",
+    "First part ngnix"
+   ],
+   [
+    "screen",
+    "First part nginx"
+   ],
+   [
+    "screen",
+    "First part nginx"
+   ],
+   [
+    "final",
+    "First part nginx",
+    "",
+    "",
+    1,
+    [
+     [
+      "ngnix",
+      "nginx"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "select previous word then type over",
+  "register": "prose",
+  "segments": [
+   "hello world",
+   "select previous word",
+   "planet"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello world"
+   ],
+   [
+    "action",
+    "select:word:left",
+    1,
+    "Hello world"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "planet"
+   ],
+   [
+    "final",
+    "planet",
+    "Hello world",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "go to end of line keeps spacing",
+  "register": "prose",
+  "segments": [
+   "one two",
+   "go to end of line",
+   "three"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One two"
+   ],
+   [
+    "action",
+    "move:line:end",
+    1,
+    "One two"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " three"
+   ],
+   [
+    "final",
+    " three",
+    "One two",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "go to start of line glues",
+  "register": "prose",
+  "segments": [
+   "one",
+   "go to start of line",
+   "two"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "One"
+   ],
+   [
+    "action",
+    "move:line:start",
+    1,
+    "One"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "two"
+   ],
+   [
+    "final",
+    "two",
+    "One",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "several commands",
+  "register": "prose",
+  "segments": [
+   "alpha",
+   "go left",
+   "beta",
+   "press tab",
+   "gamma"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Alpha"
+   ],
+   [
+    "action",
+    "move:char:left",
+    1,
+    "Alpha"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " beta"
+   ],
+   [
+    "action",
+    "press:tab",
+    1,
+    " beta"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "Gamma"
+   ],
+   [
+    "final",
+    "Gamma",
+    "Alpha beta",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "count and unit",
+  "register": "prose",
+  "segments": [
+   "a b c d",
+   "select the next four words",
+   "x"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "A b c d"
+   ],
+   [
+    "action",
+    "select:word:right",
+    4,
+    "A b c d"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "x"
+   ],
+   [
+    "final",
+    "x",
+    "A b c d",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "delete line",
+  "register": "prose",
+  "segments": [
+   "old line",
+   "delete the line",
+   "fresh text"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Old line"
+   ],
+   [
+    "action",
+    "delete:line:here",
+    1,
+    "Old line"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "fresh text"
+   ],
+   [
+    "final",
+    "fresh text",
+    "Old line",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "press escape twice",
+  "register": "prose",
+  "segments": [
+   "hello",
+   "press escape twice",
+   "world"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "action",
+    "press:escape",
+    2,
+    "Hello"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "World"
+   ],
+   [
+    "final",
+    "World",
+    "Hello",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "mid-sentence command is typed",
+  "register": "prose",
+  "segments": [
+   "please go left three words now"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Please go left three words now"
+   ],
+   [
+    "final",
+    "Please go left three words now",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "command split across segments is words",
+  "register": "prose",
+  "segments": [
+   "select",
+   "previous word"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Select"
+   ],
+   [
+    "screen",
+    "Select previous word"
+   ],
+   [
+    "final",
+    "Select previous word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spelling split across three segments",
+  "register": "prose",
+  "segments": [
+   "hello wrold",
+   "spell that w o r",
+   "l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    "Hello wor"
+   ],
+   [
+    "screen",
+    "Hello wor l d"
+   ],
+   [
+    "final",
+    "Hello wor l d",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "wor"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "spell held then flushed by time is not regrown",
+  "register": "prose",
+  "segments": [
+   "hello wrold spell that w o r",
+   "l d"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello wor"
+   ],
+   [
+    "screen",
+    "Hello wor l d"
+   ],
+   [
+    "final",
+    "Hello wor l d",
+    "",
+    "",
+    0,
+    [
+     [
+      "wrold",
+      "wor"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "scratch cannot cross a command",
+  "register": "prose",
+  "segments": [
+   "keep this",
+   "go left",
+   "oops scratch that"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Keep this"
+   ],
+   [
+    "action",
+    "move:char:left",
+    1,
+    "Keep this"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "Keep this",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "nav off types the words",
+  "register": "prose",
+  "segments": [
+   "hello",
+   "select previous word"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Hello"
+   ],
+   [
+    "screen",
+    "Hello select previous word"
+   ],
+   [
+    "final",
+    "Hello select previous word",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "terminal navigation",
+  "register": "shell",
+  "segments": [
+   "pytest dash x tests slash test underscore flow dot py",
+   "delete previous word",
+   "tests slash test underscore nav dot py"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "pytest -x tests/test_flow.py"
+   ],
+   [
+    "action",
+    "delete:word:left",
+    1,
+    "pytest -x tests/test_flow.py"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "tests/test_nav.py"
+   ],
+   [
+    "final",
+    "tests/test_nav.py",
+    "pytest -x tests/test_flow.py",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "go left twenty words",
+  "register": "prose",
+  "segments": [
+   "many words here",
+   "go left twenty words",
+   "front"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Many words here"
+   ],
+   [
+    "action",
+    "move:word:left",
+    20,
+    "Many words here"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " front"
+   ],
+   [
+    "final",
+    " front",
+    "Many words here",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "out of range count is prose",
+  "register": "prose",
+  "segments": [
+   "go left fifty words"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Go left fifty words"
+   ],
+   [
+    "final",
+    "Go left fifty words",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell after a selection",
+  "register": "prose",
+  "segments": [
+   "hello wrold",
+   "select previous word",
+   "spell that w o r l d"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "Hello wrold"
+   ],
+   [
+    "action",
+    "select:word:left",
+    1,
+    "Hello wrold"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "world"
+   ],
+   [
+    "final",
+    "world",
+    "Hello wrold",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbers always in prose",
+  "register": "prose",
+  "segments": [
+   "nine lives and twenty three cats"
+  ],
+  "options": {
+   "numbers": "always"
+  },
+  "events": [
+   [
+    "screen",
+    "9 lives and 23 cats"
+   ],
+   [
+    "final",
+    "9 lives and 23 cats",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "number glue and thousands",
+  "register": "terminal",
+  "segments": [
+   "two thousand twenty six and counting",
+   "one hundred and five"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "2026 and counting"
+   ],
+   [
+    "screen",
+    "2026 and counting"
+   ],
+   [
+    "final",
+    "2026 and counting 105",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "digit pairs and attached punctuation",
+  "register": "terminal",
+  "segments": [
+   "version one two period then four. five six"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "version 12. then"
+   ],
+   [
+    "final",
+    "version 12. then 4. 56",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "twenty hundred and zero",
+  "register": "terminal",
+  "segments": [
+   "twenty hundred then zero then zero zero"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "2000 then 0 then"
+   ],
+   [
+    "final",
+    "2000 then 0 then 00",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "numbers off",
+  "register": "terminal",
+  "segments": [
+   "twenty three"
+  ],
+  "options": {
+   "numbers": "off"
+  },
+  "events": [
+   [
+    "screen",
+    "twenty three"
+   ],
+   [
+    "final",
+    "twenty three",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ }
+]

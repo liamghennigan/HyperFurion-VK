@@ -6,8 +6,11 @@ export const settings = {
   code: "KeyV", mods: { ctrl: true, alt: true, shift: false, meta: false },
   mode: "auto", holdMs: 280,
   // [flow]
-  flowLive: true, interim: true, stabilityMs: 1500, autoStopMs: 0,
+  flowLive: true, interim: true, stabilityMs: 1500, stabilityUpdates: 2, autoStopMs: 0,
   numbers: "auto", wakeWord: "vk",
+  // [flow] spelling = true; [nav] enabled — off by default in the daemon,
+  // on here so the page can show it
+  spelling: true, nav: true,
   lang: (navigator.language || "en-US"),
   // [tts]
   tts: { rate: 1, pitch: 1, voice: null },

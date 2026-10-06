@@ -27,6 +27,51 @@ on `main` cuts the GitHub release automatically.
   - Safety: a command fires only as an utterance of its own and never
     presses Enter. With hold-to-talk it waits until the hotkey is released.
 
+## [Unreleased]
+
+The landing page becomes a real text field, and the engine it runs is
+proven to be the daemon's.
+
+### Fixed
+
+- **Flow: a word duplicated at stop.** When a dictation contained a spoken
+  number that was folded to digits ("twenty three" → `23`) or a `literal`
+  phrase, finalizing re-committed the last word: a terminal got
+  `23 failed tests tests`. The grammar re-read the committed tokens
+  differently once they sat behind the fence (number runs could not start
+  there; a bare `literal` read back as two words). Both now reproduce the
+  committed items exactly, and the engine's "committed items changed under
+  reparse" warning is a test failure in the new parity corpus.
+- **Flow: a verb that closed a segment stays a word.** "select" said alone,
+  then "previous word" after a pause, could be re-read as one navigation
+  command at stop. A command is now decided against the segment it started
+  in, so a split command is typed as the words it was.
+
+### Added
+
+- **The landing page types into a real text field.** The focused window is
+  a document with a caret and a selection (per register: the editor's and
+  the shell's), and every keystroke the 3D board presses lands in it — so
+  "spell that n g i n x" backspaces over the misheard word, and a caret
+  command said on its own ("select previous word", "go to start of line",
+  "delete previous word") waits for the text to land, presses the real
+  chord on the board (`shift+ctrl+←` in the editor, `ctrl+w` in the
+  shell), moves the caret, and the next words type over the selection —
+  in the daemon's order. The board grew to a 75% layout (an F-row, home /
+  end / page keys, an arrow cluster) so it has the keys to press. Enter
+  still cannot go down.
+- **One engine per recording on the page.** Each utterance the recognizer
+  closes is a final segment of the same engine, as in the daemon: "scratch
+  that" after a pause rewinds the previous utterance, and the stability
+  window, the fence, and navigation barriers behave identically. The
+  scripted demo is now one continuous recording per register.
+- **A parity corpus** (`scripts/flow_corpus.py` → `tests/flow_corpus.json`):
+  53 dictations run through the Python `FlowEngine`, recorded, and
+  replayed through the page's port under `node --test docs/js/test` — same
+  screens after every segment, same navigation actions, same final text,
+  corrections and scratch counts. A new `landing` CI job runs it;
+  `tests/test_flow_corpus.py` keeps the file current on the Python side.
+
 ## [2.3.0] — 2026-10
 
 Download it, run it, and it walks you through the settings.

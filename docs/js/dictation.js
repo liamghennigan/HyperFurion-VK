@@ -1,9 +1,14 @@
 // ═══ DICTATION — the product's forward lane, molten ════════════════════════
-// Every path — your browser's speech engine, the hosted xAI relay, and the
-// scripted chips — feeds the same flow engine (flow.js), the same way every
-// provider feeds the daemon's. Words render molten, repair in place, freeze
-// on the stability window, honor the spoken grammar and the focused
-// window's register — and every keystroke lands on the board.
+// Every path — the in-tab speech model, your browser's speech engine, the
+// hosted xAI relay, and the scripted demo — feeds the same engine
+// (flow.js), the same way every provider feeds the daemon's. One engine
+// lives for one recording; each utterance the recognizer closes is a
+// final segment inside it. Words render molten, repair in place, freeze on
+// the stability window, honor the spoken grammar and the focused window's
+// register — and every keystroke lands on the board and in the window's
+// text field. "spell that …" swaps a word on screen; a navigation command
+// said on its own waits for the text to land, then presses its chord on
+// the board and moves the caret, exactly in the daemon's order.
 import { mic, micCap, stopBtn, favicon, reduced, SR, baseTitle, FAV_IDLE, FAV_REC } from "./env.js";
 import { bus } from "./bus.js";
 import { state } from "./state.js";
@@ -14,7 +19,9 @@ import { Demo } from "./demo-relay.js";
 import { LocalSTT } from "./stt-local.js";
 import { Window } from "./window.js";
 import { Typist } from "./typist.js";
+import { Keyboard } from "./keyboard.js";
 import { moltenLine, compileScript, pageRewrite } from "./flow.js";
+import { keymap, chordsFor, label as navLabel } from "./nav.js";
 
 export const Dictation = (() => {
   const SIM_LINES = [
@@ -26,16 +33,18 @@ export const Dictation = (() => {
   let engine = "none", rec = null, simIdx = 0;
   let relay = null, relayT = 0, funneled = false;
   let local = null;           // the in-tab model session
-  let line = null;            // the molten line for the current utterance
+  let line = null;            // the engine for the current recording
   let rawFinal = "", rawInterim = "";
   let guard = false;          // focus changed mid-dictation: typing is frozen
+  let busy = false;           // a chord or a rewrite is landing: hold the typing
   let tickT = 0, autoStopT = 0;
-  let playTimers = [];        // scripted playback
+  let script = null;          // the scripted session in progress {cancel}
   let scripted = false;
-  let sessionCommits = 0;      // lines committed since the mic was tapped
+  let sessionCommits = 0;      // utterances closed since the mic was tapped
   Object.defineProperty(D, "engine", { get: () => engine });
 
   const liveFlow = () => settings.flowLive && settings.interim;
+  const wait = (ms) => new Promise((r) => setTimeout(r, reduced ? 0 : ms));
   const log = (text, cls) => Window.log(text, cls);
 
   function engineLabel() {
@@ -67,34 +76,40 @@ export const Dictation = (() => {
   // molten until the utterance closes (a pause) and freeze then — never on
   // a clock that a slow pass could satisfy by accident. The scripted demo
   // keeps the daemon's 1.5 s window so its molten→frozen beat shows.
-  function newLine(live = false) {
+  function newEngine(live = false) {
     line = moltenLine({ register: Window.register(), cfg: live ? { ...settings, stabilityMs: Infinity } : settings });
-    rawFinal = ""; rawInterim = ""; guard = false;
+    rawFinal = ""; rawInterim = ""; guard = false; busy = false;
     state.lastError = "";
   }
-  // a final closes the line: flush, resolve "scratch that" and the wake
-  // word, commit (or retract), and start the next line while still recording
-  function closeUtterance(text) {
-    if (!line) return "";
-    rawFinal = text || ""; rawInterim = "";
-    pump();
-    const settled = settleLine();
-    if (D.recording) newLine(true);
-    return settled;
-  }
-  function raw() { return (rawFinal + " " + rawInterim).trim(); }
+  const raw = () => (rawFinal + " " + rawInterim).trim();
   function paint(r) {
-    if (guard) return;                       // the daemon never types into the wrong window
-    for (let k = 0; k < (r.retracts || 0); k++) Typist.retract();
+    if (guard || busy || !r) return;             // the daemon never types into the wrong window
     Typist.setTarget(r);
+    if (r.action) act(r.action);
   }
   function pump() {
     if (!line) return;
-    if (!liveFlow()) {                       // flow.live = false → the old behavior
+    if (!liveFlow()) {                            // flow.live = false → the old behavior
       Typist.setTarget({ frozen: rawFinal, molten: settings.interim ? rawInterim : "" });
       return;
     }
     paint(line.update(raw(), performance.now()));
+  }
+  function tick() { if (line && liveFlow()) paint(line.tick(performance.now())); }
+  // a final closes an utterance: it becomes a final segment of the engine —
+  // the stability window is satisfied, "scratch that" and "spell that" act,
+  // a lone navigation command becomes a barrier, a wake-word instruction
+  // that ends the utterance is taken
+  function closeUtterance(text) {
+    if (!line) return;
+    rawFinal = (rawFinal + " " + (text || "")).trim(); rawInterim = "";
+    sessionCommits++;
+    state.lastRaw = (text || "").trim() || state.lastRaw;
+    if (!liveFlow()) { pump(); return; }
+    paint(line.update(raw(), performance.now(), { final: true }));
+    const instr = line.takeInstruction();
+    if (instr) rewriteInPlace(instr);
+    Window.panes();
   }
   function armAutoStop() {
     clearTimeout(autoStopT);
@@ -103,19 +118,75 @@ export const Dictation = (() => {
       autoStopT = setTimeout(() => { log("auto-stop: " + ms + " ms of silence", "dim"); stop(); }, ms);
   }
 
+  // ── navigation: the text lands, then the chord, then the caret moves ────
+  // The engine holds everything after the command until completeAction;
+  // the Typist drains first so keys never fire mid-word (the daemon's
+  // worker.drain before press_combo). Returns whether the keys were pressed.
+  async function pressAction(action) {
+    const reg = Window.register();
+    await Typist.settled();
+    if (guard) { log("focus moved · " + navLabel(action.action, action.count) + " not pressed", "dim"); return false; }
+    const chords = chordsFor(action.action, action.count, keymap({ terminal: !!reg.terminal }));
+    if (!chords) {
+      log("can't " + action.action.split(":")[0] + " that here · " + (reg.terminal ? "a terminal has no selection" : "no binding in this app"), "err");
+      return false;
+    }
+    const buf = Window.buffer();
+    for (const chord of chords) {
+      await Keyboard.chord(chord);
+      buf.press(chord);
+      Window.moved();
+    }
+    log("⌁ " + navLabel(action.action, action.count) + " · " + chords.map((c) => c.join("+")).join(" "), "nav");
+    return true;
+  }
+  async function act(action) {
+    if (busy || !line) return;
+    busy = true;
+    const l = line;
+    const pressed = await pressAction(action);
+    if (l !== line) { busy = false; return; }  // the recording ended; stop() walked the rest
+    if (pressed) Typist.release();              // the caret moved: the text behind it is not ours
+    l.completeAction(performance.now(), { pressed });
+    busy = false;
+    Typist.setTarget(l.peek());
+  }
+
+  // ── the wake word: rewrite the just-typed text in place ─────────────────
+  // The daemon sends it to your [llm]; the page applies a small
+  // deterministic rewrite instead, labeled as such. Nothing leaves.
+  async function rewriteInPlace(instr) {
+    const l = line;
+    const text = l.committed();
+    if (!text) { log("nothing typed yet to rewrite · dictate first, then the wake word", "dim"); return; }
+    const rewritten = pageRewrite(text, instr);
+    busy = true;
+    await Typist.settled();
+    await wait(420);
+    if (l !== line && !l.pendingAction) { busy = false; return; }
+    Typist.setTarget({ frozen: "", molten: rewritten, repair: true });
+    log("“" + settings.wakeWord + ", " + instr + "” · rewritten in place (page stand-in for your LLM)", "dim");
+    await Typist.settled();
+    await wait(320);
+    l.rewrite(rewritten);
+    Typist.setTarget({ frozen: rewritten, molten: "" });
+    busy = false;
+    if (l === line) Typist.setTarget(l.peek());
+  }
+
   function start() {
     if (D.recording) return;
-    stopPlayback();
+    cancelScript();
     scripted = false;
     sessionCommits = 0;
-    newLine(true);
+    newEngine(true);
     Typist.reset();
     setRecording(true);
     Window.setLatency(null);
     const sigP = Signal.start();
     Ticker.wake();
     // the stability clock ticks even between provider updates
-    tickT = setInterval(pump, 350);
+    tickT = setInterval(tick, 350);
     armAutoStop();
     if (Demo.armed()) {
       engine = "relay";
@@ -293,9 +364,7 @@ export const Dictation = (() => {
     if (!relay) return;
     clearTimeout(relayT);
     relayCleanup();
-    settleLine();
-    if (sessionCommits) funnel();
-    else log("nothing recognized", "dim");
+    settleLine().then((text) => { if (text) funnel(); else log("nothing recognized", "dim"); });
   }
   function relayFail(msg) {
     // NB: relay may be null here — a failure before the socket/nodes were
@@ -318,49 +387,47 @@ export const Dictation = (() => {
     log("that came through xAI via the relay", "dim");
   }
 
-  // ── the landing: flush the grammar, run the rewrite lane, commit ────────
-  // Returns the committed text ("" when nothing was recognized).
-  function settleLine() {
+  // ── the landing: finalize the engine, walk its barriers, commit ─────────
+  // The daemon's stop path: finalize, and for every navigation command not
+  // yet pressed, put its segment on screen, press its keys, move on.
+  // Resolves to the text of the whole recording ("" when nothing landed).
+  async function settleLine() {
     if (!line) return "";
-    state.lastRaw = raw();
+    const l = line; line = null;
     if (!liveFlow()) {
-      line = null;
       const text = raw();
-      if (guard) { return clipboardLanding(text); }
+      if (guard) return clipboardLanding(text);
       Typist.setTarget({ frozen: text, molten: "" });
-      const settled = Typist.commit(text);
-      if (settled) done(settled);
-      return settled;
+      await Typist.settled();
+      if (text) done(text);
+      Typist.release();
+      return text;
     }
-    const r = line.flush();
-    const text = (r.frozen + r.molten).trim();
-    if (guard) { line = null; return clipboardLanding(text); }
-    for (let k = 0; k < (r.retracts || 0); k++) Typist.retract();
-    line = null;
-    if (r.instr && text) {
-      // the wake word: rewrite the just-typed utterance in place. These
-      // timers finish on their own — a new dictation must never cancel
-      // the commit out from under the window.
-      Typist.setTarget({ frozen: text, molten: "" });
-      const rewritten = pageRewrite(text, r.instr);
-      Typist.settled().then(() => setTimeout(() => {
-        Typist.setTarget({ frozen: "", molten: rewritten, repair: true });
-        log("“" + settings.wakeWord + ", " + r.instr + "” · rewritten in place (page stand-in for your LLM)", "dim");
-        Typist.settled().then(() => setTimeout(() => {
-          Typist.setTarget({ frozen: rewritten, molten: "" });
-          const t = Typist.commit(rewritten); if (t) done(t);
-        }, reduced ? 0 : 320));
-      }, reduced ? 0 : 420));
-      return rewritten;
+    while (busy) await wait(50);               // a chord or rewrite mid-flight finishes first
+    let r = l.finalize(raw(), performance.now());
+    if (guard) { const t = (r.typedBefore + " " + r.text).trim(); return clipboardLanding(t); }
+    while (r.action) {
+      Typist.setTarget({ frozen: r.text, molten: "" });
+      busy = true;
+      const pressed = await pressAction(r.action);
+      busy = false;
+      if (pressed) Typist.release();
+      r = l.completeAction(performance.now(), { pressed });
     }
-    if (r.instr && !text) {
+    if (r.instruction && r.text) {
+      busy = false;
+      line = l; await rewriteInPlace(r.instruction); line = null;
+      r = { ...r, text: l.committed() };
+    } else if (r.instruction) {
       log("nothing typed yet to rewrite · dictate first, then the wake word", "dim");
-      return "";
     }
-    Typist.setTarget({ frozen: text, molten: "" });
-    const settled = Typist.commit(text);
-    if (settled) done(settled);
-    return settled;
+    Typist.setTarget({ frozen: r.text, molten: "" });
+    await Typist.settled();
+    Typist.release();
+    Window.paintDoc();
+    const whole = (r.typedBefore + (r.text[0] === " " || !r.typedBefore ? "" : " ") + r.text).trim();
+    if (whole) done(whole);
+    return whole;
   }
   function clipboardLanding(text) {
     // focus moved mid-dictation: the transcript lands on the clipboard,
@@ -382,9 +449,9 @@ export const Dictation = (() => {
     if (rec) { try { rec.stop(); } catch {} rec = null; }
     state.dictations++;
     bus.emit("rec:stop", {});
-    const finish = () => {
-      settleLine();
-      if (!sessionCommits) {
+    const finish = async () => {
+      const text = await settleLine();
+      if (!text && !sessionCommits) {
         if (engine === "sim" || engine === "trying" || engine === "none") {
           log("nothing recognized · a scripted line stands in", "dim");
           playScript(SIM_LINES[simIdx++ % SIM_LINES.length]);
@@ -405,56 +472,62 @@ export const Dictation = (() => {
     setTimeout(finish, engine === "live" || engine === "trying" ? 350 : 0);
   }
 
-  // ── scripted playback: chips, autopilot, and the no-engine fallback ─────
-  // A compiled script replays interim snapshots through the same molten
-  // engine a live session uses — deterministic, and shaped like the truth.
-  function playScript(script, opts = {}) {
-    stopPlayback();
-    const sc = typeof script === "string" ? { text: script } : script;
-    const compiled = compileScript(sc.text, { revise: sc.revise || null });
-    newLine(false);
+  // ── scripted playback: the autopilot and the no-engine fallback ─────────
+  // A scripted session replays interim snapshots through the same molten
+  // engine a live session uses — deterministic, and shaped like the truth:
+  // one recording, several utterances, a pause between them.
+  // script: { text, revise } for one utterance, or { utterances: [...] }.
+  async function playScript(scr, opts = {}) {
+    cancelScript();
+    const utterances = scr.utterances || [{ text: scr.text, revise: scr.revise || null }];
+    const token = { live: true };
+    script = { cancel: () => { token.live = false; } };
+    newEngine(false);
+    if (opts.raw) line = moltenLine({ register: { name: "verbatim", smartCaps: false, grammar: false }, cfg: settings });
     scripted = true;
     caption();
-    if (opts.raw) line = moltenLine({ register: { name: "verbatim", smartCaps: false, grammar: false }, cfg: settings });
-    if (reduced || !liveFlow()) {
-      rawFinal = compiled.final;
-      line.update(compiled.final, performance.now());
-      settleLine();
-      state.dictations++;
-      return;
+    Typist.reset();
+    const stopped = () => !token.live;
+    for (const u of utterances) {
+      const compiled = compileScript(u.text, { revise: u.revise || null });
+      if (reduced || !liveFlow()) { closeUtterance(compiled.final); continue; }
+      let t0 = performance.now();
+      for (const step of compiled.steps) {
+        await wait(Math.max(0, step.t - (performance.now() - t0)));
+        if (stopped()) return;
+        rawInterim = step.text; pump();
+      }
+      await wait(560);
+      if (stopped()) return;
+      closeUtterance(compiled.final);
+      while (busy && !stopped()) await wait(50);   // a chord lands before the next words
+      await wait(u.pause || 900);
+      if (stopped()) return;
     }
-    for (const step of compiled.steps) {
-      playTimers.push(setTimeout(() => {
-        rawFinal = ""; rawInterim = step.text;
-        pump();
-      }, step.t));
-    }
-    playTimers.push(setTimeout(() => {
-      rawFinal = compiled.final; rawInterim = "";
-      pump();
-      settleLine();
-      state.dictations++;
-    }, compiled.dur + 560));
+    const text = await settleLine();
+    if (stopped()) return;
+    state.dictations++;
+    script = null;
+    if (opts.onDone) opts.onDone(text);
   }
-  function stopPlayback() {
-    for (const t of playTimers) clearTimeout(t);
-    playTimers = [];
+  function cancelScript() {
+    if (script) { script.cancel(); script = null; }
+    if (scripted && line) { line = null; Typist.reset(); }
   }
 
   function done(text) {
     state.ledger.push({ text, app: Window.focusedName(), when: Date.now() });
     if (state.ledger.length > 20) state.ledger.shift();
     bus.emit("type:text", { text });
-    sessionCommits++;
   }
 
   D.start = start; D.stop = stop;
   D.toggle = () => (D.recording ? stop() : start());
-  // scripted typing into the focused window — the chips and the autopilot
-  // use this; it ends in the same type:text event real dictation does
-  D.simulate = (script, opts) => { if (!D.recording) playScript(script, opts); };
-  D.busy = () => D.recording || playTimers.length > 0;
-  D.cancelScript = () => { stopPlayback(); if (line) { line = null; Typist.reset(); } };
+  // scripted typing into the focused window — the autopilot uses this;
+  // it ends in the same type:text event real dictation does
+  D.simulate = (scr, opts) => { if (!D.recording) return playScript(scr, opts); return Promise.resolve(""); };
+  D.busy = () => D.recording || script !== null;
+  D.cancelScript = cancelScript;
   // the focus guard: the window calls this when focus moves mid-dictation
   D.guard = () => {
     if (!D.recording || guard) return;
@@ -463,7 +536,7 @@ export const Dictation = (() => {
     log("focus changed · typing frozen", "dim");
   };
 
-  bus.on("simulate", ({ script }) => D.simulate(script));
+  bus.on("simulate", ({ script: s }) => D.simulate(s));
   bus.on("stt:slow", ({ ms }) => log("slow device: " + (ms / 1000).toFixed(1) + " s per pass · words land late here", "dim"));
   bus.on("focus:changed", () => D.guard());
   mic.addEventListener("click", () => D.toggle());

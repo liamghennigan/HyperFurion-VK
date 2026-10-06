@@ -222,6 +222,7 @@ class Grammar:
         flush: bool = False,
         frozen: int = 0,
         settled: int = 0,
+        bounds: tuple[int, ...] = (),
     ) -> ParseResult:
         """Parse raw tokens into items.
 
@@ -237,7 +238,11 @@ class Grammar:
 
         `settled` is how many tokens the provider has finalized. A spelled
         run or a navigation command starting inside them is decided there:
-        it never waits for, or grows into, the next segment.
+        it never waits for, or grows into, the next segment. `bounds` are
+        the segment boundaries (token counts at each final, ascending): a
+        command is decided against the segment it started in, so a verb
+        that closed one segment as a word stays a word when the next
+        segment arrives — whatever that segment says.
         """
         if not self.enabled:
             items = [
@@ -274,12 +279,18 @@ class Grammar:
                 break
 
             if self._spelling and core == SPELL_WORD:
-                limit, decided = self._limit(index, len(tokens), frozen, settled, flush)
+                limit, decided = self._limit(index, len(tokens), frozen, settled, flush, bounds)
                 head = index + (2 if cores[index + 1:index + 2] == ["that"] else 1)
-                if index >= frozen and head >= limit:
+                if head >= limit:
                     # "spell that" ended its segment: the letters may come
-                    # after a pause, in the next one.
-                    limit, decided = len(tokens), flush
+                    # after a pause, in the next one. Behind the fence the
+                    # run reads back exactly as it was committed.
+                    if index < frozen:
+                        limit, decided = frozen, True
+                    elif settled > head:
+                        limit, decided = settled, True
+                    else:
+                        limit, decided = len(tokens), flush
                 spelled = self._parse_spelling(
                     tokens[:limit], cores[:limit], index, decided
                 )
@@ -292,7 +303,7 @@ class Grammar:
                     continue
 
             if self._nav and core in NAV_VERBS:
-                limit, decided = self._limit(index, len(tokens), frozen, settled, flush)
+                limit, decided = self._limit(index, len(tokens), frozen, settled, flush, bounds)
                 command = parse_nav(cores[:limit], index, decided=decided)
                 if command == NAV_PENDING:
                     pending_from = index
@@ -337,8 +348,11 @@ class Grammar:
                     # token survives the replacement ("hyper furion," -> ",").
                     items.extend(self._trailing_punct(tokens[index + consumed - 1], span))
                 elif payload == "literal":
-                    # Emit the next token verbatim, bypassing the grammar.
-                    if index < frozen or index + consumed >= len(tokens):
+                    # Emit the next token verbatim, bypassing the grammar. A
+                    # "literal" that was committed bare (its word never came
+                    # before the fence closed) reads back bare.
+                    target = index + consumed
+                    if target >= len(tokens) or (index < frozen and target >= frozen):
                         if index >= frozen and not flush:
                             pending_from = index
                             break
@@ -350,11 +364,11 @@ class Grammar:
                     items.append(
                         Item(
                             kind="word",
-                            text=tokens[index + consumed],
-                            span=(index, index + consumed + 1),
+                            text=tokens[target],
+                            span=(index, target + 1),
                         )
                     )
-                    index += consumed + 1
+                    index = target + 1
                     continue
                 elif payload in _BREAKS:
                     items.append(
@@ -385,16 +399,28 @@ class Grammar:
 
     @staticmethod
     def _limit(
-        index: int, total: int, frozen: int, settled: int, flush: bool
+        index: int,
+        total: int,
+        frozen: int,
+        settled: int,
+        flush: bool,
+        bounds: tuple[int, ...] = (),
     ) -> tuple[int, bool]:
         """How far an open-ended command at `index` may read, and whether
-        its end is decided: behind the committed fence or inside a final
-        segment it may not cross that boundary and never waits."""
+        its end is decided: inside the final segments it may not cross the
+        end of the segment it started in (nor the committed fence) and
+        never waits; in the molten tail it reads to the end and waits
+        unless flushing."""
+        if index >= settled and index >= frozen:
+            return total, flush
+        limit = max(settled, frozen)
+        for bound in bounds:
+            if bound > index:
+                limit = min(limit, bound)
+                break
         if index < frozen:
-            return frozen, True
-        if index < settled:
-            return settled, True
-        return total, flush
+            limit = min(limit, frozen)
+        return limit, True
 
     def _parse_spelling(
         self, tokens: list[str], cores: list[str], index: int, flush: bool
@@ -452,8 +478,9 @@ class Grammar:
         """Convert runs of consecutive number-word items into digit items.
 
         A number run still touching the molten tail is held back (it might
-        keep growing) unless flushing. Runs never start before the frozen
-        fence — committed words stay exactly as they were committed.
+        keep growing) unless flushing. No run crosses the frozen fence: a
+        run committed as "23" folds to "23" again on every reparse, and a
+        number word after the fence can never reach back and change it.
         """
         result: list[Item] = []
         run: list[Item] = []
@@ -478,14 +505,13 @@ class Grammar:
             run.clear()
 
         for item in items:
-            if (
-                item.kind == "word"
-                and item.span[0] >= frozen
-                and _core(item.text) in NUMBER_WORDS
-            ):
+            if item.kind == "word" and _core(item.text) in NUMBER_WORDS:
+                if run and run[0].span[0] < frozen <= item.span[0]:
+                    close_run(at_tail=False)  # the committed part folds alone
                 run.append(item)
             else:
                 close_run(at_tail=False)
                 result.append(item)
-        close_run(at_tail=True)
+        # A run entirely behind the fence was decided when it was committed.
+        close_run(at_tail=bool(run) and run[0].span[0] >= frozen)
         return result, pending_from

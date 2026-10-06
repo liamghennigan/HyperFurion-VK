@@ -508,6 +508,7 @@ class FlowEngine:
             flush=self._flush_pending,
             frozen=self._committed_tokens,
             settled=self._final_tokens,
+            bounds=tuple(sorted(self._segment_bounds)),
         )
         if result.items[:self._committed_items] != self._items[:self._committed_items]:
             # Deterministic parsing plus the frozen fence should make this

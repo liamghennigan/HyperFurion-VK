@@ -14,7 +14,11 @@ runs **fully offline with a local model**, and it **never presses Enter — only
 you do.**
 
 ▶ **See it work:** **<https://liamghennigan.github.io/HyperFurion-VK/>** — the
-landing page dictates itself, live, in your browser.
+landing page is a working instance: an open-source speech model runs in
+your browser, the words land in a real text field, and a 3D keyboard
+presses every key — the spelling fixes, the caret commands, never Enter.
+Its engine is a port of the daemon's, and CI replays the same corpus
+through both (`tests/flow_corpus.json`).
 
 <!-- TODO(demo): drop a 30–45s screen capture here once recorded — it is the
      single most shareable asset. See launch/demo-shot-list.md for the script.
@@ -1293,7 +1297,16 @@ python -m pytest -q
 ruff check .
 bash -n install.sh
 bash -n packaging/install-hyperfurion-vk.sh
+node --test docs/js/test/*.test.mjs   # the landing page's engine port
 ```
+
+The landing page under `docs/` runs a JavaScript port of
+`voice_keyboard/flow/` (`docs/js/flow.js`, `nav.js`, `spelling.js`).
+`scripts/flow_corpus.py` runs 50-odd dictations through the Python
+`FlowEngine` and writes `tests/flow_corpus.json`; the Node tests replay
+the file through the port and expect the same screens, actions and final
+text. Change the engine, rerun the script, and the diff shows what changed
+— in both languages.
 
 CI runs the suite on Linux (Python 3.11–3.13) and on Windows — where
 `tests/test_windows_live.py` types into a real edit box and drives the

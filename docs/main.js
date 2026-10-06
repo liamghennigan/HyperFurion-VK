@@ -2,13 +2,17 @@
 //
 //   board     -> a 3D keyboard whose keys press themselves: every character
 //                the voice types is a keycap going down, every repair a
-//                backspace, every capital a held Shift. Enter is guarded —
-//                the page can never press it (./js/keyboard.js)
-//   dictation -> words land in the focused window WHILE you speak, molten
-//                at first, repairing in place as the transcript firms up,
-//                frozen once they survive the stability window — the same
-//                flow engine the daemon runs (./js/flow.js is a port of
-//                voice_keyboard/flow/, code registers included)
+//                backspace, every capital a held Shift, every caret command
+//                a chord. Enter is guarded — the page can never press it
+//                (./js/keyboard.js)
+//   window    -> the focused app: a real text field with a caret and a
+//                selection that the keys type into (./js/buffer.js)
+//   dictation -> words land in the field WHILE you speak, molten at first,
+//                repairing in place as the transcript firms up, frozen once
+//                they survive the stability window — the same flow engine
+//                the daemon runs (./js/flow.js is a port of
+//                voice_keyboard/flow/: grammar, registers, code compilers,
+//                "spell that", navigation; tests/flow_corpus.json proves it)
 //   autopilot -> a scripted demo for browsers without a speech engine,
 //                labeled as scripted, and only ever started by a click
 //   relay     -> the hosted xAI engines, strictly opt-in behind a sheet

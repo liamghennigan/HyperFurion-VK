@@ -8,6 +8,9 @@
 // logic, no DOM; the demo wires it to the windows the way the daemon wires
 // it to uinput.
 
+import { MAX_SPELLED_LETTERS, lettersAt, couldBeCapital } from "./spelling.js";
+import { VERBS as NAV_VERBS, PENDING as NAV_PENDING, parseNav, GLUED, FRESH_FIELD } from "./nav.js";
+
 // ── the spoken grammar (grammar.py, verbatim defaults) ────────────────────
 const PUNCT_STRIP = /[.,!?;:]+$/;
 const core = (t) => t.toLowerCase().replace(PUNCT_STRIP, "");
@@ -75,63 +78,103 @@ function couldExtend(cores, i) {
   return false;
 }
 
-// ── spoken cardinals -> digits (numbers.py, the working subset) ──────────
+// ── spoken cardinals -> digits (numbers.py) ───────────────────────────────
+// "one hundred twenty three" -> "123"; "three point one four" -> "3.14";
+// "one two seven" -> "127". Deliberately conservative: anything not fully
+// understood stays spoken words, and single small words ("one", "nine")
+// are only converted in aggressive mode so "no one knows" survives.
 const UNITS = { zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7,
   eight:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14,
   fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19 };
 const TENS = { twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70,
   eighty:80, ninety:90 };
+const DIGITS = Object.fromEntries(Object.entries(UNITS).filter(([, v]) => v <= 9));
 const NUMBER_WORDS = new Set([...Object.keys(UNITS), ...Object.keys(TENS),
-  "hundred", "and", "point"]);
+  "hundred", "thousand", "and", "point"]);
+const GLUE = new Set(["and", "point"]);
+const PUNCT_TAIL = /[.,!?;:]+$/;
 
 function parseCardinal(words) {
   if (!words.length) return null;
   let total = 0, current = 0, seen = false;
   for (const w of words) {
-    if (w === "and") { if (!seen) return null; continue; }
+    if (w === "and") { if (!seen) return null; continue; }  // only valid mid-number
     if (w in UNITS) {
       const v = UNITS[w];
-      if (v === 0) { if (seen || words.length > 1) return null; }
-      else if (v >= 10) { if (current % 100 !== 0) return null; current += v; }
+      if (v === 0) { if (seen || words.length > 1) return null; current = 0; }  // "zero" stands alone
+      else if (v >= 10) { if (current % 100 !== 0) return null; current += v; }  // teens claim the slot
       else { if (current % 10 !== 0 || (current % 100 >= 10 && current % 100 < 20)) return null; current += v; }
       seen = true;
     } else if (w in TENS) {
       if (current % 100 !== 0) return null;
       current += TENS[w]; seen = true;
     } else if (w === "hundred") {
-      if (!seen || current === 0 || current > 9) return null;
+      if (!seen || current === 0 || current >= 100) return null;
       current *= 100;
+    } else if (w === "thousand") {
+      if (!seen || current === 0 || current >= 1000) return null;
+      total += current * 1000; current = 0; seen = true;
     } else return null;
   }
   return seen ? total + current : null;
 }
-function convertNumbers(words, minValue) {
-  // digit run: three+ single digits ("one two seven" -> "127")
-  if (words.length >= 3 && words.every((w) => w in UNITS && UNITS[w] <= 9))
-    return [words.map((w) => UNITS[w]).join("")];
-  // decimal: "<cardinal> point <digits...>"
-  const pi = words.indexOf("point");
-  if (pi > 0 && pi < words.length - 1) {
-    const whole = parseCardinal(words.slice(0, pi));
-    const frac = words.slice(pi + 1);
-    if (whole !== null && frac.every((w) => w in UNITS && UNITS[w] <= 9))
-      return [whole + "." + frac.map((w) => UNITS[w]).join("")];
-    return null;
+// "one two seven" -> "127": all words must be single digits
+function parseDigitSequence(words) {
+  if (words.length < 2 || words.some((w) => !(w in DIGITS))) return null;
+  return words.map((w) => DIGITS[w]).join("");
+}
+function parseNumberRun(words) {
+  const lowered = words.map((w) => w.toLowerCase());
+  const split = lowered.indexOf("point");
+  if (split !== -1) {
+    const whole = lowered.slice(0, split), frac = lowered.slice(split + 1);
+    if (!frac.length || frac.includes("point") || frac.some((w) => !(w in DIGITS))) return null;
+    const wholeValue = whole.length ? parseCardinal(whole) : 0;
+    if (wholeValue === null) return null;
+    return wholeValue + "." + frac.map((w) => DIGITS[w]).join("");
   }
-  const n = parseCardinal(words);
-  if (n === null) return null;
-  if (words.length === 1 && n < minValue) return null;  // "no one knows" survives
-  return [String(n)];
+  const value = parseCardinal(lowered);
+  if (value !== null) return String(value);
+  return parseDigitSequence(lowered);
+}
+// Replace maximal runs of spoken-number words with digit strings. Single-
+// word runs below minValue stay words (prose keeps "five" but converts
+// "twenty three"); multi-word runs always convert.
+export function convertNumbers(tokens, minValue = 0) {
+  const result = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const c = core(tokens[i]);
+    if (!NUMBER_WORDS.has(c) || GLUE.has(c)) { result.push(tokens[i]); i += 1; continue; }
+    // greedily extend the run, then trim trailing glue words; a token with
+    // attached punctuation ("four.") ends the run after itself
+    let end = i;
+    while (end < tokens.length && NUMBER_WORDS.has(core(tokens[end]))) {
+      end += 1;
+      if (PUNCT_TAIL.test(tokens[end - 1])) break;
+    }
+    while (end > i && GLUE.has(core(tokens[end - 1]))) end -= 1;
+    const run = tokens.slice(i, end).map(core);
+    const parsed = parseNumberRun(run);
+    const multi = end - i > 1;
+    if (parsed !== null && (multi || Math.abs(parseFloat(parsed)) >= minValue)) {
+      const tail = tokens[end - 1];
+      const suffix = (tail.match(PUNCT_TAIL) || [""])[0];
+      result.push(parsed + suffix);
+      i = end;
+    } else { result.push(tokens[i]); i += 1; }
+  }
+  return result;
 }
 
 // ── registers (registers.py) ──────────────────────────────────────────────
 export const REGISTERS = {
   prose:    { name: "prose",    smartCaps: true,  grammar: true,  numbersOn: false, numbersMin: 10 },
-  terminal: { name: "terminal", smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0 },
+  terminal: { name: "terminal", smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, terminal: true },
   verbatim: { name: "verbatim", smartCaps: false, grammar: false, numbersOn: false, numbersMin: 10 },
   // semantic registers (code.py): speech is compiled, not transcribed
   python:   { name: "python",   smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, compiler: "python" },
-  shell:    { name: "shell",    smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, compiler: "shell" },
+  shell:    { name: "shell",    smartCaps: false, grammar: true,  numbersOn: true,  numbersMin: 0, compiler: "shell", terminal: true },
 };
 
 // ── the semantic compilers (code.py) — pure, prefix-stable folds ──────────
@@ -183,28 +226,82 @@ function compileCode(items, state, { glyphs, callables, dashHold }) {
 }
 
 // ── parse: raw tokens -> items, with the frozen fence (grammar.py) ────────
-// items: {kind: word|punct|break|scratch|instruction, text, mode,
-//         sentenceEnd, s, e}  — s/e are [start, end) raw-token indices
-export function parse(tokens, { flush = false, frozen = 0, register, cfg }) {
+// items: {kind: word|punct|break|scratch|instruction|respell|key, text,
+//         mode, sentenceEnd, count, s, e}  — s/e are [start, end) raw-token
+// indices. respell: mode replace (the previous word) | insert. key: text
+// is the action ("select:word:left"), count how many times.
+// `settled` is how many tokens the provider has finalized: a spelled run
+// or a navigation command starting inside them is decided there — it
+// never waits for, or grows into, the next segment.
+const SPELL_WORD = "spell";
+const AMBIGUOUS = new Set(["a", "i", "one", "two", "four", "eight"]);  // letters that are also words
+const PENDING = "pending";
+
+export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds = [], register, cfg }) {
   const reg = register || REGISTERS.prose;
   if (!reg.grammar) {
     return { items: tokens.map((t, i) => ({ kind: "word", text: t, s: i, e: i + 1 })),
              pendingFrom: null };
   }
   const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
+  const spelling = !cfg || cfg.spelling !== false;
+  const nav = !!(cfg && cfg.nav);
   const cores = tokens.map(core);
   const items = [];
   let pendingFrom = null, i = 0;
+  // how far an open-ended command at i may read, and whether its end is
+  // decided: inside the final segments it may not cross the end of the
+  // segment it started in (nor the committed fence) and never waits; in
+  // the molten tail it reads to the end and waits unless flushing
+  const limitAt = (i) => {
+    if (i >= settled && i >= frozen) return [tokens.length, flush];
+    let limit = Math.max(settled, frozen);
+    for (const b of bounds) if (b > i) { limit = Math.min(limit, b); break; }
+    if (i < frozen) limit = Math.min(limit, frozen);
+    return [limit, true];
+  };
   while (i < tokens.length) {
     const fence = i < frozen ? frozen - i : tokens.length;
     // wake word: everything after it is an instruction, never typed —
     // it resolves only at finalize; until then it holds the tail back
-    const wk = i >= frozen ? wakeAt(cores, i, wake) : 0;
+    const wk = wakeAt(cores, i, wake);
+    if (wk && i < frozen) {
+      // the page takes an instruction when its utterance closes (the
+      // daemon waits for the stop); below the fence it reads back as the
+      // instruction it was committed as
+      items.push({ kind: "instruction", text: tokens.slice(i + wk, frozen).join(" "), s: i, e: frozen });
+      i = frozen; continue;
+    }
     if (wk) {
       if (!flush) { pendingFrom = i; break; }
       items.push({ kind: "instruction", text: tokens.slice(i + wk).join(" "),
                    s: i, e: tokens.length });
       break;
+    }
+    if (spelling && cores[i] === SPELL_WORD) {
+      let [limit, decided] = limitAt(i);
+      const head = i + (cores[i + 1] === "that" ? 2 : 1);
+      // "spell that" ended its segment: the letters may come after a
+      // pause, in the next one. Behind the fence the run reads back
+      // exactly as it was committed.
+      if (head >= limit) {
+        if (i < frozen) { limit = frozen; decided = true; }
+        else if (settled > head) { limit = settled; decided = true; }
+        else { limit = tokens.length; decided = flush; }
+      }
+      const spelled = parseSpelling(tokens.slice(0, limit), cores.slice(0, limit), i, decided);
+      if (spelled === PENDING) { pendingFrom = i; break; }
+      if (spelled) { items.push(spelled[0]); i = spelled[1]; continue; }
+    }
+    if (nav && cores[i] in NAV_VERBS) {
+      const [limit, decided] = limitAt(i);
+      const command = parseNav(cores.slice(0, limit), i, { decided });
+      if (command === NAV_PENDING) { pendingFrom = i; break; }
+      if (command) {
+        const [action, count, end] = command;
+        items.push({ kind: "key", text: action, count, s: i, e: end });
+        i = end; continue;
+      }
     }
     const [entry, used] = matchPhrase(cores, i, fence);
     if (!entry && !flush && i >= frozen && couldExtend(cores, i)) { pendingFrom = i; break; }
@@ -220,13 +317,15 @@ export function parse(tokens, { flush = false, frozen = 0, register, cfg }) {
           items.push({ kind: "punct", text: ch, mode: "left",
                        sentenceEnd: ".!?".includes(ch), s: i, e: i + used });
       } else if (payload === "literal") {
-        // emit the next token verbatim, bypassing the grammar
-        if (i + used >= tokens.length) {
+        // emit the next token verbatim, bypassing the grammar; a "literal"
+        // committed bare (its word never came) reads back bare
+        const target = i + used;
+        if (target >= tokens.length || (i < frozen && target >= frozen)) {
           if (i >= frozen && !flush) { pendingFrom = i; break; }
           items.push({ kind: "word", text: tokens[i], s: i, e: i + 1 }); i += 1; continue;
         }
-        items.push({ kind: "word", text: tokens[i + used], s: i, e: i + used + 1 });
-        i += used + 1; continue;
+        items.push({ kind: "word", text: tokens[target], s: i, e: target + 1 });
+        i = target + 1; continue;
       } else if (payload === "scratch") {
         items.push({ kind: "scratch", s: i, e: i + used });
       } else {  // "\n" | "\n\n"
@@ -240,28 +339,64 @@ export function parse(tokens, { flush = false, frozen = 0, register, cfg }) {
   // fold spoken-number runs (held back while still touching the molten tail)
   const numbersOn = (cfg && cfg.numbers === "always") ||
     ((!cfg || cfg.numbers === "auto") && reg.numbersOn);
+  const numbersMin = cfg && cfg.numbers === "always" ? 0 : reg.numbersMin;
   if (numbersOn) {
     const out = []; let run = [];
+    const nflush = flush || pendingFrom !== null;
     const close = (atTail) => {
       if (!run.length) return;
-      if (atTail && !flush) {
+      if (atTail && !nflush) {
         if (pendingFrom === null) pendingFrom = run[0].s;
         run = []; return;
       }
-      const conv = convertNumbers(run.map((it) => core(it.text)), reg.numbersMin);
-      if (conv) for (const t of conv)
-        out.push({ kind: "word", text: t, s: run[0].s, e: run[run.length - 1].e });
-      else out.push(...run);
+      const texts = run.map((it) => it.text);
+      const conv = convertNumbers(texts, numbersMin);
+      if (conv.length === texts.length && conv.every((t, k) => t === texts[k])) out.push(...run);
+      else for (const t of conv) out.push({ kind: "word", text: t, s: run[0].s, e: run[run.length - 1].e });
       run = [];
     };
     for (const it of items) {
-      if (it.kind === "word" && it.s >= frozen && NUMBER_WORDS.has(core(it.text))) run.push(it);
-      else { close(false); out.push(it); }
+      if (it.kind === "word" && NUMBER_WORDS.has(core(it.text))) {
+        if (run.length && run[0].s < frozen && frozen <= it.s) close(false);  // the committed part folds alone
+        run.push(it);
+      } else { close(false); out.push(it); }
     }
-    close(true);
+    close(run.length > 0 && run[0].s >= frozen);  // a run behind the fence was decided when committed
     return { items: out, pendingFrom };
   }
   return { items, pendingFrom };
+}
+
+// "spell that <letters>" (replace the previous word) or "spell <letters>"
+// (type the spelled word) at `index`. Returns [item, next index]; PENDING
+// while the letter run touches the tail and might keep growing; null when
+// this "spell" is just a word (an insert needs two letters, so "cast a
+// spell" and "spell a …" stay prose).
+function parseSpelling(tokens, cores, index, flush) {
+  let start = index + 1, mode = "insert";
+  if (start < tokens.length && cores[start] === "that") { mode = "replace"; start += 1; }
+  if (start >= tokens.length) return flush ? null : PENDING;
+  const pieces = [];  // [letters, tokens used]
+  let cursor = start, endedOnWord = false, total = 0;
+  while (cursor < tokens.length && total < MAX_SPELLED_LETTERS) {
+    const [letters, used] = lettersAt(tokens, cursor);
+    if (!used) {
+      if (!flush && cursor === tokens.length - 1 && couldBeCapital(tokens[cursor])) return PENDING;
+      endedOnWord = true; break;
+    }
+    pieces.push([letters, used]); total += letters.length; cursor += used;
+  }
+  if (cursor >= tokens.length && !flush) return PENDING;  // the next update may spell more letters
+  if (endedOnWord) {
+    // a real word follows: trailing "a" / "I" / "one" are likely that
+    // sentence's words, not letters ("… x a good one")
+    while (pieces.length > 1 && AMBIGUOUS.has(cores[cursor - pieces[pieces.length - 1][1]]))
+      cursor -= pieces.pop()[1];
+  }
+  let word = pieces.map((p) => p[0]).join("");
+  if (word.length < (mode === "replace" ? 1 : 2)) return null;
+  word = word.slice(0, MAX_SPELLED_LETTERS);
+  return [{ kind: "respell", text: word, mode, s: index, e: cursor }, cursor];
 }
 
 // ── render: the pure register fold (registers.py render_items) ───────────
@@ -303,118 +438,272 @@ export function render(items, register, state) {
       emit(t, false);
       st.capNext = reg.smartCaps && ENDERS.test(t.trimEnd());
     }
-    // scratch/instruction render nothing; the engine acts on them
+    // scratch/instruction/key render nothing; the engine acts on them
   }
   return { text: out.join(""), st };
 }
 
-// ═══ THE MOLTEN LINE — one utterance, from first sound to freeze ═════════
-// The daemon's engine.py, reduced to what a window can show. Tokens carry
-// a stability clock; once a rendered item's tokens all survive the window
-// (stabilityMs, 2 updates) it is folded into the committed text and its
-// tokens are CONSUMED — never parsed again, exactly like keystrokes the
-// daemon has already typed. Commitment lands on item boundaries only, so
-// a phrase, number run, or vocabulary match can never be split by the
-// fence. Provider revisions repair the molten tail; revisions to consumed
-// tokens are ignored — frozen text keeps its form. Only the user's own
-// "scratch that" may take committed text back.
-export function moltenLine({ register, cfg }) {
-  const stab = () => (cfg && cfg.stabilityMs === Infinity) ? Infinity : Math.max(200, (cfg && cfg.stabilityMs) || 1500);
-  let all = [];          // the full transcript view, tokenized
-  let track = [];        // per-global-index stability clocks
-  let committed = 0;     // tokens consumed into the fold
-  let fold = { text: "", st: initialState(register) };
-  let lastRendered = { frozen: "", molten: "", instr: "", repair: false };
+// char-counted backspacing over `text` may not match how the focused app
+// groups grapheme clusters (astral plane, combining marks, ZWJ sequences)
+export function riskyBackspace(text) {
+  return /[\u{10000}-\u{10FFFF}̀-ͯ‍️︎]/u.test(text);
+}
 
-  function update(rawText, now) {
-    const next = rawText.trim() ? rawText.trim().split(/\s+/) : [];
-    let repair = false;
-    for (let i = 0; i < next.length; i++) {
-      if (track[i] && track[i].text !== next[i]) {
-        if (i >= committed && i < all.length) repair = true;  // a revision landed
-        track[i] = { text: next[i], since: now, updates: 1 };
-      } else if (track[i]) track[i].updates++;
-      else track[i] = { text: next[i], since: now, updates: 1 };
+// ═══ THE MOLTEN ENGINE — one dictation, from first sound to the stop ═════
+// A port of the daemon's engine.py (minus the pause reviewer, which needs
+// a recognizer that punctuates pauses). One engine lives for one
+// recording; every utterance the recognizer closes is a final segment
+// inside it. It keeps the single source of truth for what should be on
+// screen:
+//
+//   committed  — text frozen on screen; repairs never cross it
+//   molten     — parsed but still revisable; rendered as preview
+//   pending    — trailing tokens held back (an incomplete phrase, a
+//                growing number run, a wake-word instruction)
+//
+// A molten item commits when the provider finalizes it, when it survives
+// the stability window, or eagerly when it contains non-ASCII (never
+// repair across a clipboard-pasted run). Commits are monotonic: the only
+// way committed text shrinks is the user's own "scratch that", which
+// rewinds to a segment snapshot, or "spell that", which swaps one word.
+//
+// A navigation command ("select previous word") is a barrier: it fires
+// only when it is a whole final segment of its own — said with a pause
+// before and after — and then everything before it must be on screen
+// before its keys are pressed. The engine stops committing at the
+// barrier; the page converges the window, presses the keys on the board,
+// and calls completeAction(), which starts a fresh segment: the caret has
+// moved, so nothing before the command can be repaired or scratched.
+const LAST_WORD = /(\S+?)([.,!?;:)\]}"'»”’]*)(\s*)$/;
+const FINAL_ONLY = new Set(["respell", "key"]);  // rewrite committed text: never on a stability guess
+
+export function moltenLine({ register, cfg, state } = {}) {
+  const reg = register || REGISTERS.prose;
+  const stabMs = () => (cfg && cfg.stabilityMs === Infinity) ? Infinity : Math.max(200, (cfg && cfg.stabilityMs) || 1500);
+  const required = Math.max(1, (cfg && cfg.stabilityUpdates) || 2);
+  const maxMolten = (cfg && cfg.maxMoltenChars) || 160;
+  let tokens = [], meta = [];          // meta[i]: {since, stable}
+  let items = [], pendingFrom = null, flushPending = false;
+  let committedTokens = 0, committedItems = 0;
+  let committedRender = "", renderState = state || initialState(reg);
+  let finalTokens = 0;
+  let snapshots = [{ len: 0, st: renderState }];
+  let segmentMarks = [], segmentBounds = new Set([0]);
+  let instruction = "", scratches = 0, corrections = [];
+  let barrier = null, lastAction = null, typedBefore = "", finalizing = false;
+  let lastRepair = false;
+
+  // ── inputs ─────────────────────────────────────────────────────────────
+  function update(raw, now, { final = false } = {}) {
+    let next = raw.trim() ? raw.trim().split(/\s+/) : [];
+    if (next.length < committedTokens) next = tokens.slice(0, committedTokens);  // the floor wins
+    const oldMolten = tokens.slice(committedTokens), newMolten = next.slice(committedTokens);
+    let prefix = 0;
+    while (prefix < oldMolten.length && prefix < newMolten.length &&
+           oldMolten[prefix].toLowerCase() === newMolten[prefix].toLowerCase()) prefix++;
+    lastRepair = oldMolten.length > prefix;  // a revision landed, or the tail shrank
+    flushPending = false;
+    const merged = newMolten.map((t, i) => {
+      if (i < prefix) { const m = meta[committedTokens + i]; m.stable++; return m; }
+      return { since: now, stable: 0 };
+    });
+    tokens = tokens.slice(0, committedTokens).concat(newMolten);
+    meta = meta.slice(0, committedTokens).concat(merged);
+    if (final) { finalTokens = Math.max(finalTokens, tokens.length); segmentBounds.add(tokens.length); }
+    reparse();
+    commitReady(now);
+    if (final) markSegmentBoundary();
+    return view();
+  }
+  // time-based commits between provider updates, plus holdback expiry so a
+  // trailing half-phrase can't stall dictation forever
+  function tick(now) {
+    if (pendingFrom !== null && !pendingIsInstruction()) {
+      if (now - meta[pendingFrom].since >= 2 * stabMs()) { flushPending = true; reparse(); }
     }
-    track.length = next.length;
-    if (next.length < all.length && all.length > committed) repair = true;
-    all = next;
-    if (committed > all.length) committed = all.length;  // interim collapse
-    return compose(false, now, repair);
+    commitReady(now);
+    return view();
+  }
+  function finalize(raw, now) {
+    update(raw, now, { final: true });
+    flushPending = true;
+    reparse();
+    finalizing = true;
+    return commitRest();
+  }
+  // at finalize: commit everything, stopping at a navigation barrier (the
+  // page resumes with completeAction)
+  function commitRest() {
+    while (barrier === null && committedItems < items.length) commitItem(items[committedItems]);
+    return result();
+  }
+  function result() {
+    return { text: committedRender, instruction: barrier === null ? instruction : "", scratches,
+             corrections: [...corrections], action: barrier, typedBefore, ...view() };
+  }
+  // the page pressed the barrier's keys — or refused them (pressed=false:
+  // the caret never moved, so nothing changes). Either way dictation
+  // resumes; after a press it starts a fresh segment.
+  function completeAction(now, { pressed = true } = {}) {
+    const action = barrier;
+    if (action === null) return finalizing ? commitRest() : null;
+    barrier = null;
+    if (!pressed) { if (finalizing) return commitRest(); commitReady(now); return null; }
+    lastAction = action;
+    typedBefore += committedRender;
+    committedRender = "";
+    let st = renderState;
+    if (FRESH_FIELD.has(action.action)) st = initialState(reg);  // tab / escape / a page away: likely another field
+    else if (GLUED.some((g) => action.action.startsWith(g)) || action.action.endsWith(":start"))
+      st = { ...st, glueNext: true };  // the next word fills a selection or a gap, or starts a line
+    renderState = st;
+    snapshots = [{ len: 0, st }];
+    if (finalizing) return commitRest();
+    commitReady(now);
+    return null;
+  }
+  // the page's one liberty: a wake-word instruction that closes an
+  // utterance is taken there (the daemon waits for the stop). Returns the
+  // instruction, consuming its tokens, or "".
+  function takeInstruction() {
+    if (barrier !== null || !pendingIsInstruction() || tokens.length > finalTokens) return "";
+    flushPending = true; reparse(); flushPending = false;
+    const it = items[committedItems];
+    if (!it || it.kind !== "instruction" || committedItems !== items.length - 1) { reparse(); return ""; }
+    commitItem(it);
+    const text = instruction; instruction = "";
+    return text;
+  }
+  // the rewrite landed: the committed text is now `text`
+  function rewrite(text) {
+    committedRender = text;
+    renderState = { ...renderState, atStart: text.length === 0, glueNext: false,
+                    capNext: reg.smartCaps && (text.length === 0 || /[.!?]$/.test(text.trimEnd())) };
+    snapshots = [{ len: text.length, st: renderState }];
   }
 
-  function compose(flush, now, repair) {
-    let retracts = 0;
-    let parsed;
-    // resolve scratches leftmost-first, consuming their tokens so each
-    // applies exactly once across updates
-    for (;;) {
-      const tail = all.slice(committed);
-      parsed = parse(tail, { flush, frozen: 0, register, cfg });
-      const visTo = parsed.pendingFrom === null ? parsed.items.length :
-        parsed.items.findIndex((it) => it.s >= parsed.pendingFrom);
-      const vis = visTo === -1 ? parsed.items : parsed.items.slice(0, visTo);
-      const k = vis.findIndex((it) => it.kind === "scratch");
-      if (k === -1) { parsed = { ...parsed, vis }; break; }
-      const spoken = vis.slice(0, k).some(
-        (it) => it.kind === "word" || it.kind === "punct" || it.kind === "break");
-      if (!spoken) {
-        if (fold.text) fold = { text: "", st: initialState(register) };  // backspace the typed segment
-        else retracts++;                        // nothing here: eat the previous line
+  // ── outputs ────────────────────────────────────────────────────────────
+  function view() {
+    const molten = barrier !== null ? "" : render(previewItems(), reg, { ...renderState }).text;
+    let instr = "";
+    if (pendingIsInstruction()) instr = tokens.slice(pendingFrom + 1).join(" ") || " ";
+    return { frozen: committedRender, molten, instr: instr.trim(), repair: lastRepair, action: barrier };
+  }
+
+  // ── internal ───────────────────────────────────────────────────────────
+  function previewItems() {
+    const out = [];
+    for (const it of items.slice(committedItems)) {
+      if (it.kind === "word" || it.kind === "punct" || it.kind === "break") out.push(it);
+      else if (it.kind === "respell" && it.mode === "insert") out.push({ kind: "word", text: it.text, s: it.s, e: it.e });
+    }
+    return out;
+  }
+  function pendingIsInstruction() {
+    if (pendingFrom === null || pendingFrom >= tokens.length) return false;
+    return wakeAt(tokens.map(core), pendingFrom, (cfg && cfg.wakeWord) || "vk") > 0;
+  }
+  function reparse() {
+    const r = parse(tokens, { flush: flushPending, frozen: committedTokens, settled: finalTokens,
+                              bounds: [...segmentBounds].sort((a, b) => a - b), register: reg, cfg });
+    items = r.items; pendingFrom = r.pendingFrom;
+  }
+  function commitReady(now) {
+    const horizon = stabMs();
+    while (barrier === null && committedItems < items.length) {
+      const it = items[committedItems];
+      if (it.kind === "instruction") break;  // consumed at finalize, never mid-stream
+      let committable = it.e <= finalTokens;
+      if (!committable && FINAL_ONLY.has(it.kind)) break;
+      if (!committable) {
+        const metas = meta.slice(it.s, it.e);
+        committable = metas.every((m) => m.stable >= required && now - m.since >= horizon);
+        if (!committable && it.kind === "word" && /[^\x00-\x7F]/.test(it.text))
+          committable = metas.every((m) => m.stable >= 1);  // never repair across a pasted run
       }
-      committed += vis[k].e;                    // consume dropped words + the phrase
+      if (!committable) break;
+      commitItem(it);
     }
-    const vis = parsed.vis;
-    const live = vis.filter((it) => it.kind !== "instruction");
-    const instrIt = vis.find((it) => it.kind === "instruction");
-    // stability: how many tail tokens have survived the window
-    const tailLen = all.length - committed;
-    const limit = flush ? tailLen :
-      (parsed.pendingFrom === null ? tailLen : parsed.pendingFrom);
-    let stable = 0;
-    while (stable < limit) {
-      const t = track[committed + stable];
-      if (!flush && !(t && now - t.since >= stab() && t.updates >= 2)) break;
-      stable++;
+    // safety valve: an endlessly-revising provider must not grow the
+    // repairable tail without bound
+    while (barrier === null && committedItems < items.length &&
+           items[committedItems].kind !== "instruction" && !FINAL_ONLY.has(items[committedItems].kind)) {
+      if (render(previewItems(), reg, { ...renderState }).text.length <= maxMolten) break;
+      commitItem(items[committedItems]);
     }
-    // commit whole items only — the fence can never split a phrase
-    let cut = 0, consumed = 0;
-    for (const it of live) {
-      if (it.e <= stable) { cut++; consumed = it.e; } else break;
+  }
+  function commitItem(it) {
+    if (it.kind === "scratch") applyScratch();
+    else if (it.kind === "respell" && it.mode === "replace") applyRespell(it.text);
+    else if (it.kind === "respell") append([{ kind: "word", text: it.text, s: it.s, e: it.e }]);
+    else if (it.kind === "key") commitKey(it);
+    else if (it.kind === "instruction") { if (it.text) instruction = it.text; }
+    else append([it]);
+    committedTokens = Math.max(committedTokens, it.e);
+    committedItems += 1;
+    takeSnapshots();
+  }
+  function append(list) {
+    const r = render(list, reg, renderState);
+    committedRender += r.text; renderState = r.st;
+  }
+  function applyScratch() {
+    let target = null;
+    for (let i = snapshots.length - 1; i >= 0; i--) if (snapshots[i].len < committedRender.length) { target = snapshots[i]; break; }
+    if (!target) return;
+    if (riskyBackspace(committedRender.slice(target.len))) return;
+    committedRender = committedRender.slice(0, target.len);
+    renderState = target.st;
+    while (snapshots.length && snapshots[snapshots.length - 1].len > target.len) snapshots.pop();
+    scratches++;
+  }
+  // a navigation command fires only as a whole final segment; said
+  // mid-sentence it was dictation after all, and types as words
+  function commitKey(it) {
+    if (segmentBounds.has(it.s) && segmentBounds.has(it.e)) { barrier = { action: it.text, count: it.count }; return; }
+    append(tokens.slice(it.s, it.e).map((t, k) => ({ kind: "word", text: t, s: it.s + k, e: it.s + k + 1 })));
+  }
+  // "spell that …": swap the last committed word for the spelled one,
+  // keeping its trailing punctuation and its capital
+  function applyRespell(spelled) {
+    const m = LAST_WORD.exec(committedRender);
+    if (!m) {
+      if (lastAction && lastAction.action.startsWith("select:")) append([{ kind: "word", text: spelled }]);  // typed over the selection
+      return;
     }
-    if (flush) { cut = live.length; consumed = tailLen; }
-    if (cut > 0) {
-      const r = render(live.slice(0, cut), register, fold.st);
-      fold = { text: fold.text + r.text, st: r.st };
-      committed += consumed;
+    const token = m[1];
+    const heard = token.replace(/^["'([{«“‘]+/, "");  // an opening quote stays put
+    const start = m.index + token.length - heard.length;
+    if (!heard) return;
+    if (riskyBackspace(committedRender.slice(start))) return;
+    if (/^[A-Z]/.test(heard) && spelled === spelled.toLowerCase()) spelled = spelled[0].toUpperCase() + spelled.slice(1);
+    committedRender = committedRender.slice(0, start) + spelled + m[2] + m[3];
+    const shift = spelled.length - heard.length;
+    snapshots = snapshots.map((s) => (s.len <= start ? s : { len: s.len + shift, st: s.st }));
+    if (heard !== spelled) corrections.push([heard, spelled]);
+  }
+  function markSegmentBoundary() {
+    const mark = tokens.length;
+    if (!segmentMarks.length || segmentMarks[segmentMarks.length - 1] !== mark) segmentMarks.push(mark);
+    takeSnapshots();
+  }
+  // snapshot each segment end once all of its words are committed
+  function takeSnapshots() {
+    while (segmentMarks.length && segmentMarks[0] <= committedTokens) {
+      segmentMarks.shift();
+      if (snapshots.length && snapshots[snapshots.length - 1].len === committedRender.length) continue;
+      snapshots.push({ len: committedRender.length, st: renderState });
     }
-    const moltenR = render(live.slice(cut), register, { ...fold.st });
-    // the wake word holds the tail back while an instruction is forming —
-    // surface it so the caption can show instruction-listening state
-    const wake = ((cfg && cfg.wakeWord) || "vk").toLowerCase();
-    let instr = instrIt ? instrIt.text : "";
-    if (!instr && !flush) {
-      const tailNow = all.slice(committed);
-      const p2 = parse(tailNow, { flush: false, frozen: 0, register, cfg });
-      if (p2.pendingFrom !== null && wakeAt(tailNow.map(core), p2.pendingFrom, wake))
-        instr = tailNow.slice(p2.pendingFrom).join(" ");
-    }
-    lastRendered = {
-      frozen: fold.text, molten: moltenR.text, instr,
-      isFinalInstr: !!instrIt, repair: !!repair, retracts,
-    };
-    return lastRendered;
   }
 
   return {
-    update,
-    flush: () => compose(true, 0, false),
-    peek: () => lastRendered,
-    reset() {
-      all = []; track = []; committed = 0;
-      fold = { text: "", st: initialState(register) };
-      lastRendered = { frozen: "", molten: "", instr: "", repair: false };
-    },
+    update, tick, finalize, completeAction, takeInstruction, rewrite,
+    flush: (now = 0) => finalize(tokens.join(" "), now),
+    peek: view,
+    pendingAction: () => barrier,
+    committed: () => committedRender,
+    state: () => renderState,
+    register: reg,
   };
 }
 
