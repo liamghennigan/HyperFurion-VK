@@ -6,7 +6,6 @@ from unittest import mock
 
 import pytest
 from fakes import FakeStreamingSTT, RecordingInjector, _make_daemon
-from waiting import wait_until
 
 from voice_keyboard.config import _default_config_with_paths, validate_config
 
