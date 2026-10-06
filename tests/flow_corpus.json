@@ -360,6 +360,33 @@
   ]
  },
  {
+  "name": "a domain goes on as a path",
+  "register": "prose",
+  "segments": [
+   "see example dot com slash docs slash intro dot html today",
+   "mail sam at example dot com slash later"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See example.com/docs/intro.html today"
+   ],
+   [
+    "screen",
+    "See example.com/docs/intro.html today mail sam@example.com slash later"
+   ],
+   [
+    "final",
+    "See example.com/docs/intro.html today mail sam@example.com slash later",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "symbols by name",
   "register": "prose",
   "segments": [

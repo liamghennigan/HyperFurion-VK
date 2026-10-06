@@ -444,7 +444,7 @@ const SENTENCE_STOPS = ".?!";
 // never English words ("in", "at", "it", "to", "so", "me", "no", "be", "us")
 const TLDS = new Set(("com org net io dev ai app co edu gov uk de fr ca info biz xyz sh gg tv " +
   "eu nl se es jp au nz ch ly cc").split(" "));
-const ADDRESS_GLUE = { dot: ".", at: "@" };
+const ADDRESS_GLUE = { dot: ".", at: "@", slash: "/" };
 const isGlue = (c) => Object.hasOwn(ADDRESS_GLUE, c);
 const addressPart = (c) => !!c && /^[a-z0-9-]+$/.test(c) && /[a-z0-9]/.test(c);
 // a spoken domain or email at `index`, read no further than `limit`:
@@ -459,14 +459,15 @@ function addressAt(cores, index, limit, decided, fillers) {
   for (;;) {
     if (cursor >= limit) return decided ? best : PENDING;  // the run touches an open tail
     const sep = cores[cursor];
-    if (!isGlue(sep) || (sep === "at" && seps.includes("@"))) return best;
+    if (sep === "slash" && (best === null || seps.includes("@"))) return best;  // a path only follows a whole domain
+    if (!isGlue(sep) || (sep === "at" && (seps.includes("@") || seps.includes("/")))) return best;
     if (cursor + 1 >= limit) return decided ? best : PENDING;
     const part = cores[cursor + 1];
     if (!addressPart(part)) return best;
     seps.push(ADDRESS_GLUE[sep]); parts.push(part);
     cursor += 2;
     const at = seps.indexOf("@");
-    if (seps[seps.length - 1] === "." && TLDS.has(part) && (at === -1 || at < seps.length - 1))
+    if (seps.includes("/") || (seps[seps.length - 1] === "." && TLDS.has(part) && (at === -1 || at < seps.length - 1)))
       best = [parts.map((p, k) => p + (seps[k] || "")).join(""), cursor];
   }
 }

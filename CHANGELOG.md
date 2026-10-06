@@ -12,6 +12,9 @@ proven to be the daemon's.
 
 ### Added
 
+- **Spoken links keep their path.** "example dot com slash docs slash
+  intro dot html" types `example.com/docs/intro.html`. A path only follows
+  a whole domain, never an email address.
 - **More symbols by name.** "asterisk", "hashtag" / "hash sign", "less
   than sign", "greater than sign" and "caret sign". A word after `#` or `@`
   is never capitalized, so tags and mentions stay as said.

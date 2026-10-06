@@ -181,7 +181,7 @@ TLDS = frozenset(
     "com org net io dev ai app co edu gov uk de fr ca info biz xyz sh gg tv "
     "eu nl se es jp au nz ch ly cc".split()
 )  # never English words ("in", "at", "it", "to", "so", "me", "no", "be", "us")
-_ADDRESS_GLUE = {"dot": ".", "at": "@"}
+_ADDRESS_GLUE = {"dot": ".", "at": "@", "slash": "/"}
 
 # Spoken case formatters: "snake case user id" -> user_id. The formatter
 # takes the plain words after it, up to punctuation, a command, or the end
@@ -418,7 +418,8 @@ class Grammar:
         than `limit`: (text, end); _PENDING while an undecided tail could
         still become one; None. Shape: part ("dot" part)* ["at" part
         ("dot" part)*], ending in "dot" + a top-level domain — the longest
-        such run wins ("example dot co dot uk")."""
+        such run wins ("example dot co dot uk"). A domain may go on as a
+        path: ("slash" part ["dot" part]*)* — "example dot com slash docs"."""
         if not self._address_on or index + 1 >= limit:
             return None  # a lone word at the tail is just a word, for now
         first = cores[index]
@@ -437,7 +438,9 @@ class Grammar:
             if cursor >= limit:
                 return best if decided else _PENDING  # the run touches an open tail
             sep = cores[cursor]
-            if sep not in _ADDRESS_GLUE or (sep == "at" and "@" in seps):
+            if sep == "slash" and (best is None or "@" in seps):
+                return best  # a path only follows a whole domain, never a mailbox
+            if sep not in _ADDRESS_GLUE or (sep == "at" and ("@" in seps or "/" in seps)):
                 return best
             if cursor + 1 >= limit:
                 return best if decided else _PENDING
@@ -447,7 +450,9 @@ class Grammar:
             seps.append(_ADDRESS_GLUE[sep])
             parts.append(part)
             cursor += 2
-            if seps[-1] == "." and part in TLDS and (seps.count("@") == 0 or seps.index("@") < len(seps) - 1):
+            if "/" in seps or (
+                seps[-1] == "." and part in TLDS and (seps.count("@") == 0 or seps.index("@") < len(seps) - 1)
+            ):
                 best = ("".join(p + q for p, q in zip(parts, seps + [""])), cursor)
 
     @staticmethod

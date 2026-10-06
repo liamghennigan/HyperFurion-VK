@@ -26,7 +26,7 @@ VOCAB = (
     "percent dollars and fifty cents pm am i quote unquote end said period comma new line "
     "bullet number heading scratch that spell n g x correct to cap uppercase select undo "
     "go left word emoji rocket point hundred thousand euros june first second graders "
-    "literal snake case user id dot com at example um"
+    "literal snake case user id dot com at example slash um"
 ).split()
 
 
