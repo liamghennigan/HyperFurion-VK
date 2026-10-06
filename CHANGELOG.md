@@ -14,7 +14,8 @@ proven to be the daemon's.
 
 - **Years read as years.** "nineteen eighty four" types `1984`, "nineteen
   oh five" `1905`, "twenty twenty six" `2026`. "Twenty twenty vision" and
-  "nineteen people" stay words. A date takes its year with a comma:
+  "nineteen people" stay words, and so does a count ("nineteen forty
+  people"). A date takes its year with a comma:
   "june fifth nineteen ninety nine" → `June 5, 1999`.
 - **Big money reads like money.** "three point two billion dollars" types
   `$3.2 billion`, "two million euros" types `€2 million`, and a price
@@ -22,7 +23,7 @@ proven to be the daemon's.
 - **Spoken links keep their path.** "example dot com slash docs slash
   intro dot html" types `example.com/docs/intro.html`. A path only follows
   a whole domain, never an email address.
-- **More symbols by name.** "asterisk", "hashtag" / "hash sign", "less
+- **More symbols by name.** "asterisk", "hash sign", "less
   than sign", "greater than sign" and "caret sign". A word after `#` or `@`
   is never capitalized, so tags and mentions stay as said.
 - **Line breaks in chat apps are Shift+Enter.** In Slack, Discord, Teams,

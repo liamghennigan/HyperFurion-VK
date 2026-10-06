@@ -302,3 +302,14 @@ class TestPausePunctuation:
         assert engine._committed_render == "I"
         engine.on_tick(now=6.0)  # never requested: released by the rules
         assert engine._committed_render.startswith("I think.")
+
+
+def test_a_pause_after_nineteen_oh_still_folds_the_year() -> None:
+    """"nineteen oh" at the molten tail is held, so a pause before "five"
+    does not commit "nineteen" as a word."""
+    engine = make_engine()
+    engine.on_transcript("born in nineteen oh", is_final=False, now=0.0)
+    for now in (0.5, 1.0, 1.5, 2.0, 2.5):
+        engine.on_tick(now=now)
+    engine.on_transcript("born in nineteen oh five ok", is_final=False, now=2.6)
+    assert engine.finalize("born in nineteen oh five ok", now=3.0).text == "Born in 1905 OK"

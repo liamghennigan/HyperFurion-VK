@@ -387,6 +387,116 @@
   ]
  },
  {
+  "name": "half a year never folds",
+  "register": "prose",
+  "segments": [
+   "the class of nineteen ninety nine's reunion, nineteen sixty nine-ish"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "The class of nineteen ninety nine's reunion, nineteen sixty nine-ish"
+   ],
+   [
+    "final",
+    "The class of nineteen ninety nine's reunion, nineteen sixty nine-ish",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a count is not a year",
+  "register": "prose",
+  "segments": [
+   "there were nineteen forty people and it costs nineteen ninety nine dollars"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "There were nineteen forty people and it costs nineteen ninety nine dollars"
+   ],
+   [
+    "final",
+    "There were nineteen forty people and it costs nineteen ninety nine dollars",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a year after oh carries the stop",
+  "register": "prose",
+  "segments": [
+   "born in nineteen oh five. and on june fifth nineteen oh five."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Born in 1905. And on June 5, 1905."
+   ],
+   [
+    "final",
+    "Born in 1905. And on June 5, 1905.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a path stops at a common word",
+  "register": "prose",
+  "segments": [
+   "see example dot com slash docs dot then we leave"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "See example.com/docs dot then we leave"
+   ],
+   [
+    "final",
+    "See example.com/docs dot then we leave",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a hashtag is a word",
+  "register": "prose",
+  "segments": [
+   "what hashtag should we use"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "What hashtag should we use"
+   ],
+   [
+    "final",
+    "What hashtag should we use",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a date and its year",
   "register": "prose",
   "segments": [
@@ -498,7 +608,7 @@
   "name": "symbols by name",
   "register": "prose",
   "segments": [
-   "hashtag launch day and two asterisk three",
+   "hash sign launch day and two asterisk three",
    "a less than sign b greater than sign c caret sign d"
   ],
   "options": {},

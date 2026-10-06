@@ -282,6 +282,14 @@ def parse_day(words: list[str]) -> Optional[int]:
 PHONE_MIN_DIGITS = 7
 
 
+# A count, not a year: "nineteen forty people", "twenty thirty one minute laps".
+NOT_A_YEAR_AFTER = frozenset(
+    "people persons hours hour minutes minute seconds second page pages times items things "
+    "dollars dollar euros euro yen percent pounds miles feet meters kilometers points words "
+    "users students copies units calories kids years days weeks months".split()
+)
+
+
 def fold_year(words: list[str]) -> Optional[str]:
     """A year read in pairs: "nineteen eighty four" -> "1984", "nineteen oh
     five" -> "1905", "twenty twenty six" -> "2026". A 20xx year needs all

@@ -12,6 +12,7 @@ user vocabulary all come from config and can be remapped or disabled.
 """
 
 from dataclasses import dataclass
+import re
 from typing import Optional
 
 from voice_keyboard.flow.nav import PENDING as NAV_PENDING
@@ -24,6 +25,7 @@ from voice_keyboard.flow.numbers import (
     DATE_MONTHS,
     DIGIT_WORDS,
     NOT_A_DAY_AFTER,
+    NOT_A_YEAR_AFTER,
     SCALE_WORDS,
     UNIT_WORDS,
     convert_numbers,
@@ -126,7 +128,6 @@ DEFAULT_PUNCTUATION: dict[str, tuple[str, str, bool]] = {
     "plus sign": ("+", "none", False),
     "asterisk": ("*", "none", False),
     "hash sign": ("#", "right", False),
-    "hashtag": ("#", "right", False),
     "less than sign": ("<", "none", False),
     "greater than sign": (">", "none", False),
     "caret sign": ("^", "none", False),
@@ -261,6 +262,9 @@ def _core(token: str) -> str:
 
 
 DATE_MONTHS_SET = frozenset(DATE_MONTHS)
+
+
+_LEADING_WORD = re.compile(r"[a-z]+")
 
 
 def _clean(token: str) -> bool:
@@ -448,8 +452,8 @@ class Grammar:
             if cursor + 1 >= limit:
                 return best if decided else _PENDING
             part = cores[cursor + 1]
-            if not _address_part(part):
-                return best
+            if not _address_part(part) or (sep == "dot" and "/" in seps and part in COMMON_LOWER):
+                return best  # "…slash docs dot then we leave": "then" is a word
             seps.append(_ADDRESS_GLUE[sep])
             parts.append(part)
             cursor += 2
@@ -1045,22 +1049,39 @@ class Grammar:
             ):
                 return result, item.span[0]  # a number read digit by digit may still grow
 
-            closer = items[end] if end < size and items[end].kind == "word" else None
-            if (
-                closer is not None and inside(closer) and not _clean(closer.text)
-                and closer.text.lstrip(_PUNCT_STRIP) == closer.text
-                and (year := fold_year(words + [_core(closer.text)])) is not None
-            ):
-                # "nineteen eighty four." — the year's last word carries the stop
-                year += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]
-                year_comma(index, (item.span[0], closer.span[1]))
-                result.append(Item(kind="word", text=year, span=(item.span[0], closer.span[1])))
-                index = end + 1
-                continue
-            if end == size and molten(item.span[0]) and len(words) <= 2 and words[0] in ("nineteen", "twenty"):
-                return result, item.span[0]  # a year may still be being read ("nineteen ninety …")
+            year = None
+            if words[0] in ("nineteen", "twenty"):
+                # a year: its last word may carry the stop ("…four."), after
+                # an "oh" the run trimmed ("nineteen oh five.")
+                at, tail = end, []
+                if (
+                    at < size and items[at].kind == "word" and _clean(items[at].text)
+                    and _core(items[at].text) == "oh" and inside(items[at])
+                ):
+                    at, tail = at + 1, ["oh"]
+                closer = items[at] if at < size and items[at].kind == "word" and inside(items[at]) else None
+                attached = closer is not None and not _clean(closer.text)
+                if attached and closer.text.lstrip(_PUNCT_STRIP) == closer.text:
+                    year = fold_year(words + tail + [_core(closer.text)])
+                    if year is not None:
+                        year += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]
+                        year_comma(index, (item.span[0], closer.span[1]))
+                        result.append(Item(kind="word", text=year, span=(item.span[0], closer.span[1])))
+                        index = at + 1
+                        continue
+                if at == size and molten(item.span[0]) and (len(words) + len(tail) <= 2 or fold_year(words)):
+                    return result, item.span[0]  # a year may still grow, or the next word says count
+                year = None if tail else fold_year(words)
+                after = items[end] if end < size and items[end].kind == "word" and inside(items[end]) else None
+                if year is not None and after is not None and not committed:
+                    lead = _LEADING_WORD.match(after.text.casefold())
+                    if lead and lead.group(0) != after.text.casefold() and lead.group(0) in NUMBER_WORDS | {"oh"}:
+                        year = None  # half a year never folds ("nineteen ninety nine's")
+                    elif _core(after.text) in NOT_A_YEAR_AFTER:
+                        year = None  # a count: "nineteen forty people"
             digits = fold_digits(words)
-            if digits is None and (digits := fold_year(words)) is not None:
+            if digits is None and year is not None:
+                digits = year
                 year_comma(index, (item.span[0], items[end - 1].span[1]))
             if digits is not None:
                 result.append(Item(kind="word", text=digits, span=(item.span[0], items[end - 1].span[1])))

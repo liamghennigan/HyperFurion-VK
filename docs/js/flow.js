@@ -65,7 +65,7 @@ const PUNCT = {
   "tilde": ["~", "right", false], "backtick": ["`", "both", false],
   "equals sign": ["=", "none", false], "plus sign": ["+", "none", false],
   "asterisk": ["*", "none", false], "hash sign": ["#", "right", false],
-  "hashtag": ["#", "right", false], "less than sign": ["<", "none", false],
+  "less than sign": ["<", "none", false],
   "greater than sign": [">", "none", false], "caret sign": ["^", "none", false],
 };
 // [flow.vocabulary] — the documented example ships live on this page
@@ -247,6 +247,10 @@ function centsAt(items, at) {
 // (numbers.py fold_digits); fewer stay words, and so does counting
 // a year read in pairs (numbers.py fold_year): "nineteen eighty four" ->
 // "1984"; a 20xx year needs all three words and stops at 2039
+// a count, not a year (numbers.py NOT_A_YEAR_AFTER)
+const NOT_A_YEAR_AFTER = new Set(("people persons hours hour minutes minute seconds second page pages times items things " +
+  "dollars dollar euros euro yen percent pounds miles feet meters kilometers points words " +
+  "users students copies units calories kids years days weeks months").split(" "));
 export function foldYear(words) {
   words = words.map((w) => w.toLowerCase());
   if ((words.length !== 2 && words.length !== 3) || (words[0] !== "nineteen" && words[0] !== "twenty")) return null;
@@ -254,12 +258,12 @@ export function foldYear(words) {
   const rest = words.slice(1);
   let year;
   if (rest[0] === "oh") {
-    if (rest.length !== 2 || !DIGITS[rest[1]]) return null;
+    if (rest.length !== 2 || !Object.hasOwn(DIGITS, rest[1]) || !DIGITS[rest[1]]) return null;
     year = DIGITS[rest[1]];
-  } else if (rest[0] in TENS) {
+  } else if (Object.hasOwn(TENS, rest[0])) {
     year = TENS[rest[0]];
     if (rest.length === 2) {
-      if (!DIGITS[rest[1]]) return null;
+      if (!Object.hasOwn(DIGITS, rest[1]) || !DIGITS[rest[1]]) return null;
       year += DIGITS[rest[1]];
     }
   } else return null;
@@ -349,19 +353,33 @@ function foldUnits(items, frozen, itemEnd, pendingFrom, flush, settled) {
       return { items: out, pendingFrom: it.s };  // its unit may be what is pending
     if (end === n && molten(it.s) && end - i >= 2 && words.every((w) => w in DIGITS || w === "oh"))
       return { items: out, pendingFrom: it.s };  // a number read digit by digit may still grow
-    const closer = end < n && items[end].kind === "word" ? items[end] : null;
-    if (closer && inside(closer) && !clean(closer.text) && !PUNCT_HEAD.test(closer.text)) {
-      const year = foldYear([...words, core(closer.text)]);
-      if (year !== null) {  // "nineteen eighty four." — the year's last word carries the stop
-        yearComma(i, it.s, closer.e);
-        out.push({ kind: "word", text: year + (closer.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: closer.e });
-        i = end + 1; continue;
+    let year = null;
+    if (words[0] === "nineteen" || words[0] === "twenty") {
+      // a year: its last word may carry the stop ("…four."), after an "oh" the run trimmed ("nineteen oh five.")
+      let at = end, tail = [];
+      if (at < n && items[at].kind === "word" && clean(items[at].text) && core(items[at].text) === "oh" && inside(items[at])) { at += 1; tail = ["oh"]; }
+      const closer = at < n && items[at].kind === "word" && inside(items[at]) ? items[at] : null;
+      const attached = !!closer && !clean(closer.text);
+      if (attached && !PUNCT_HEAD.test(closer.text)) {
+        year = foldYear([...words, ...tail, core(closer.text)]);
+        if (year !== null) {
+          yearComma(i, it.s, closer.e);
+          out.push({ kind: "word", text: year + (closer.text.match(PUNCT_TAIL) || [""])[0], s: it.s, e: closer.e });
+          i = at + 1; continue;
+        }
+      }
+      if (at === n && molten(it.s) && (words.length + tail.length <= 2 || foldYear(words) !== null))
+        return { items: out, pendingFrom: it.s };  // a year may still grow, or the next word says count
+      year = tail.length ? null : foldYear(words);
+      const after = end < n && items[end].kind === "word" && inside(items[end]) ? items[end] : null;
+      if (year !== null && after && !committed) {
+        const lead = after.text.toLowerCase().match(/^[a-z]+/);
+        if (lead && lead[0] !== after.text.toLowerCase() && (NUMBER_WORDS.has(lead[0]) || lead[0] === "oh")) year = null;  // half a year never folds
+        else if (NOT_A_YEAR_AFTER.has(core(after.text))) year = null;  // a count: "nineteen forty people"
       }
     }
-    if (end === n && molten(it.s) && words.length <= 2 && (words[0] === "nineteen" || words[0] === "twenty"))
-      return { items: out, pendingFrom: it.s };  // a year may still be being read ("nineteen ninety …")
     let digits = foldDigits(words);
-    if (digits === null && (digits = foldYear(words)) !== null) yearComma(i, it.s, items[end - 1].e);
+    if (digits === null && year !== null) { digits = year; yearComma(i, it.s, items[end - 1].e); }
     if (digits !== null) out.push({ kind: "word", text: digits, s: it.s, e: items[end - 1].e });
     else out.push(...items.slice(i, end));  // a run that did not fold stays words, all of it
     i = end;
@@ -513,7 +531,7 @@ function addressAt(cores, index, limit, decided, fillers) {
     if (!isGlue(sep) || (sep === "at" && (seps.includes("@") || seps.includes("/")))) return best;
     if (cursor + 1 >= limit) return decided ? best : PENDING;
     const part = cores[cursor + 1];
-    if (!addressPart(part)) return best;
+    if (!addressPart(part) || (sep === "dot" && seps.includes("/") && pauses.COMMON_LOWER.has(part))) return best;  // "slash docs dot then": a word
     seps.push(ADDRESS_GLUE[sep]); parts.push(part);
     cursor += 2;
     const at = seps.indexOf("@");
