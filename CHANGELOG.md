@@ -38,8 +38,10 @@ proven to be the daemon's.
 - **Numbers that name things.** After a numbered noun (room, page,
   chapter, floor, gate, flight, step, version, …) a number is digits:
   "room four oh two" `room 402`, "page twenty five" `page 25`, "version
-  three point one point four" `version 3.1.4`. "q three" types `Q3`,
-  "two point five megabytes" `2.5 MB`, and EOD, KPI, ROI, UI, UX, QA, SDK,
+  three point one point four" `version 3.1.4`; a single word folds on its
+  own stop ("page five." `page 5.`), and a count stays words ("page two
+  of three"). "q three" types `Q3`,
+  "two point five megabytes" `2.5 MB`, and EOD, KPI, OKR, UI, UX, QA, SDK,
   CLI and friends are capitals.
 - **"five o'clock" types `5 o'clock`, and a time after "at" is a time:**
   "meet at three thirty" types `meet at 3:30`, "at twelve oh five" `at
