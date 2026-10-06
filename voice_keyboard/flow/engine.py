@@ -306,8 +306,7 @@ class FlowEngine:
         while self._barrier is None and self._committed_items < len(self._items):
             self._commit_item(self._items[self._committed_items])
         if self._barrier is None:
-            tail, self._render_state = flush_code(self._render_state, self._register)
-            self._committed_render += tail
+            self._settle_hold()
         return FinalResult(
             text=self._committed_render,
             instruction=self._instruction if self._barrier is None else "",
@@ -649,6 +648,11 @@ class FlowEngine:
 
     def _commit_item(self, item: Item) -> None:
         start, end = item.span
+        if item.kind in ("scratch", "respell", "key", "recase", "correct"):
+            # An edit or a key acts on what is on screen: a word a code
+            # compiler still holds ("x equals not", "git add dot") is typed
+            # first, never after the key or past the edit.
+            self._settle_hold()
         for index, pause in self._pauses.items():
             if pause.decision is None and start < index <= end:
                 # Forced out by the molten-length valve: what shows, stays.
@@ -833,7 +837,8 @@ class FlowEngine:
             logger.info("flow: nothing to respell")
             return
         token = match.group(1)
-        heard = token.lstrip("\"'([{«“‘„¿¡")  # an opening mark stays put
+        # an opening mark stays put, and so does a call it ends: "print(value"
+        heard = token[max(token.rfind(c) for c in "([{") + 1:].lstrip("\"'([{«“‘„¿¡")
         start = match.start(1) + len(token) - len(heard)
         if not heard:
             return
@@ -865,10 +870,19 @@ class FlowEngine:
             self._segment_marks.append(mark)
         self._take_snapshots()
 
+    def _settle_hold(self) -> None:
+        """Type what a code compiler still holds (a dash, a dot, the first
+        word of a two-word operator) as said."""
+        tail, self._render_state = flush_code(self._render_state, self._register)
+        self._committed_render += tail
+
     def _take_snapshots(self) -> None:
-        """Snapshot each segment end once all of its words are committed."""
+        """Snapshot each segment end once all of its words are committed.
+        A hold never crosses a segment end: "scratch that" and "select
+        that" count what the segment typed."""
         while self._segment_marks and self._segment_marks[0] <= self._committed_tokens:
             self._segment_marks.pop(0)
+            self._settle_hold()
             if (
                 self._snapshots
                 and self._snapshots[-1].render_len == len(self._committed_render)

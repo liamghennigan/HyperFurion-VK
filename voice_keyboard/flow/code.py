@@ -52,7 +52,7 @@ _SHELL_PAIRS = {
 # A path after one of these starts a new argument: "cd slash etc" -> "cd /etc".
 _SHELL_COMMANDS = frozenset(
     "cd ls cat tail head less more vim vi nano code rm cp mv mkdir rmdir touch chmod chown "
-    "find grep source open sudo echo tree du df stat file ln tar unzip zip scp rsync".split()
+    "find grep source open sudo echo tree du df stat ln tar unzip zip scp rsync".split()
 )
 
 # Two spoken words, one operator: "double equals" -> "==". The first word
@@ -101,7 +101,8 @@ _PYTHON_CALLABLES = {
 # A name an opening paren or bracket glues to: "get_user (" -> get_user(.
 # Keywords keep their space ("if (", "in [").
 _NAME = re.compile(r"^[A-Za-z_][\w.]*$")
-_KEYWORDS = frozenset(keyword.kwlist) | frozenset(keyword.softkwlist)
+# softkwlist gained "type" in 3.12; the page engine's list has it too.
+_KEYWORDS = frozenset(keyword.kwlist) | frozenset(keyword.softkwlist) | {"_", "case", "match", "type"}
 
 
 def _is_name(text: str) -> bool:
@@ -167,6 +168,18 @@ def _compile(
         elif pending == "dot":
             pending = ""
             emit(".", glue_left=False)  # "find dot dash name": the dot is a path
+        elif pending.startswith("dothold:"):
+            held, pending = pending[8:], ""
+            glued_dot(held)
+            word(held)
+
+    def glued_dot(following: str) -> None:
+        nonlocal glue_next
+        # "file dot txt" glues; after a command ("source dot venv") or
+        # before a slash ("dot slash run") the dot starts a path
+        slash = word_glyphs.get(following.casefold(), ("",))[0] == "/"
+        emit(".", glue_left=not slash and last_atom not in _SHELL_COMMANDS)
+        glue_next = True
 
     def word(text: str) -> None:
         nonlocal pending, glue_next, open_calls
@@ -210,7 +223,10 @@ def _compile(
             glue_next = True
             after_name = False
         elif item.kind == "punct":
-            if pending.startswith("hold:") or pending == "dot":
+            if pending == "dot" and item.mode == "left":
+                pending = ""
+                emit(".", glue_left=True)  # "done dot unquote": the dot ends it
+            if pending.startswith(("hold:", "dothold:")) or pending == "dot":
                 flush_dash()  # the held word was a word ("type (" opens its call)
             if pending == "call-open" and item.text == "(" and item.mode == "right":
                 pending = "call"  # "print open paren": the callable already opened it
@@ -262,11 +278,21 @@ def _compile(
                 flush_dash()
                 pending = "dot"
                 continue
+            if pending.startswith("dothold:"):
+                held = pending[8:]
+                operator = (pairs or {}).get((held.casefold(), core))
+                if operator is not None:
+                    pending = ""
+                    emit(".", glue_left=False)  # "git add dot and and": a path, then &&
+                    emit(operator, glue_left=False)
+                    continue
+                flush_dash()  # "style dot less": an extension after all
             if pending == "dot":
                 pending = ""
-                # "file dot txt" glues; "dot slash run" starts a path
-                emit(".", glue_left=word_glyphs.get(core, ("",))[0] != "/")
-                glue_next = True
+                if core in firsts:
+                    pending = "dothold:" + item.text  # "dot and and" or "dot less"?
+                    continue
+                glued_dot(item.text)
             if pending in ("dash", "dashes"):
                 emit(("--" if pending == "dashes" else "-") + item.text, glue_left=False)
                 pending = ""
@@ -333,7 +359,7 @@ def flush_code(state: RenderState, register: Register) -> tuple[str, RenderState
     """At the end of a dictation: what a compiler still holds (a dash, the
     first word of a two-word operator) is typed as said."""
     if not register.compiler or not (
-        state.pending in ("dash", "dashes", "dot") or state.pending.startswith("hold:")
+        state.pending in ("dash", "dashes", "dot") or state.pending.startswith(("hold:", "dothold:"))
     ):
         return "", state
     compiler = COMPILERS[register.compiler]

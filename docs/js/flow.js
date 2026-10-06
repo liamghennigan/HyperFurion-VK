@@ -444,7 +444,7 @@ const SH_GLYPHS = { pipe: ["|", "none"], dot: [".", "both"], star: ["*", "right"
 const SH_PAIRS = { "greater than": ">", "less than": "<", "and and": "&&" };
 // a path after one of these starts a new argument: "cd slash etc" -> "cd /etc"
 const SH_COMMANDS = new Set(("cd ls cat tail head less more vim vi nano code rm cp mv mkdir rmdir touch chmod chown " +
-  "find grep source open sudo echo tree du df stat file ln tar unzip zip scp rsync").split(" "));
+  "find grep source open sudo echo tree du df stat ln tar unzip zip scp rsync").split(" "));
 const PY_CALLABLES = new Set(["range", "print", "len", "str", "int", "float", "input",
   "enumerate", "sorted", "reversed", "abs", "min", "max", "sum", "type", "repr"]);
 // Python's constants said in lowercase ("is not none" -> None); string
@@ -497,13 +497,22 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
     if (pending === "dash" || pending === "dashes") { emit(pending === "dashes" ? "--" : "-", false); pending = ""; }
     else if (pending.startsWith("hold:")) { const held = pending.slice(5); pending = ""; word(held); }  // the held word was a word
     else if (pending === "dot") { pending = ""; emit(".", false); }  // "find dot dash name": the dot is a path
+    else if (pending.startsWith("dothold:")) { const held = pending.slice(8); pending = ""; gluedDot(held); word(held); }
+  };
+  // "file dot txt" glues; after a command ("source dot venv") or before a
+  // slash ("dot slash run") the dot starts a path
+  const gluedDot = (following) => {
+    const f = following.toLowerCase();
+    const slash = Object.hasOwn(glyphs, f) && glyphs[f][0] === "/";
+    emit(".", !slash && !SH_COMMANDS.has(lastAtom)); glueNext = true;
   };
   for (const it of items) {
     if (it.kind === "flush") { flushDash(); continue; }  // the dictation ended: a hold is typed as said
     if (it.kind === "break" && (it.mode === "bullet" || it.mode === "number")) continue;  // a list item means nothing in code
     if (it.kind === "break") { flushDash(); pending = ""; openCalls = 0; innerParens = 0; out.push(it.text); atStart = false; glueNext = true; afterName = false; }
     else if (it.kind === "punct") {
-      if (pending.startsWith("hold:") || pending === "dot") flushDash();  // the held word was a word ("type (" opens its call)
+      if (pending === "dot" && it.mode === "left") { pending = ""; emit(".", true); }  // "done dot unquote": the dot ends it
+      if (pending.startsWith("hold:") || pending.startsWith("dothold:") || pending === "dot") flushDash();  // the held word was a word ("type (" opens its call)
       if (pending === "call-open" && it.text === "(" && it.mode === "right") { pending = "call"; continue; }  // the callable opened it
       if (openCalls && it.text === ":") { emit(")".repeat(innerParens + openCalls) + ":", true); pending = ""; openCalls = innerParens = 0; continue; }  // a colon closes every open call
       if (dashHold && it.text === "-" && it.mode === "none") {  // the next word becomes a flag: "-i", "--rm"
@@ -524,7 +533,16 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
         if (pending === "dot") { pending = ""; emit("..", false); continue; }
         flushDash(); pending = "dot"; continue;
       }
-      if (pending === "dot") { pending = ""; emit(".", !(Object.hasOwn(glyphs, c) && glyphs[c][0] === "/")); glueNext = true; }  // "dot slash run" starts a path
+      if (pending.startsWith("dothold:")) {
+        const held = pending.slice(8), key = held.toLowerCase() + " " + c;
+        if (pairs && Object.hasOwn(pairs, key)) { pending = ""; emit(".", false); emit(pairs[key], false); continue; }  // "git add dot and and": a path, then &&
+        flushDash();  // "style dot less": an extension after all
+      }
+      if (pending === "dot") {
+        pending = "";
+        if (firsts.has(c)) { pending = "dothold:" + it.text; continue; }  // "dot and and" or "dot less"?
+        gluedDot(it.text);
+      }
       if (pending === "dash" || pending === "dashes") { emit((pending === "dashes" ? "--" : "-") + it.text, false); pending = ""; continue; }
       if (pending.startsWith("hold:")) {
         const key = pending.slice(5).toLowerCase() + " " + c;
@@ -541,7 +559,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
 // operator is typed as said
 function flushCode(st, reg) {
   const p = st.pending || "";
-  if (!reg.compiler || !COMPILERS[reg.compiler] || !(p === "dash" || p === "dashes" || p === "dot" || p.startsWith("hold:"))) return { text: "", st };
+  if (!reg.compiler || !COMPILERS[reg.compiler] || !(p === "dash" || p === "dashes" || p === "dot" || p.startsWith("hold:") || p.startsWith("dothold:"))) return { text: "", st };
   return compileCode([{ kind: "flush" }], st, COMPILERS[reg.compiler]);
 }
 
@@ -1145,7 +1163,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   // page resumes with completeAction)
   function commitRest() {
     while (barrier === null && committedItems < items.length) commitItem(items[committedItems]);
-    if (barrier === null) { const f = flushCode(renderState, reg); committedRender += f.text; renderState = f.st; }
+    if (barrier === null) settleHold();
     return result();
   }
   function result() {
@@ -1323,7 +1341,11 @@ export function moltenLine({ register, cfg, state } = {}) {
       commitItem(items[committedItems]);
     }
   }
+  // type what a code compiler still holds (a dash, a dot, half an operator)
+  function settleHold() { const f = flushCode(renderState, reg); committedRender += f.text; renderState = f.st; }
   function commitItem(it) {
+    // an edit or a key acts on what is on screen: a held word is typed first
+    if (["scratch", "respell", "key", "recase", "correct"].includes(it.kind)) settleHold();
     for (const [index, pause] of pauseMap)
       if (pause.decision === null && it.s < index && index <= it.e)
         pause.decision = pause.provisional || pauses.keep(index < tokens.length ? tokens[index] : "");  // forced out: what shows, stays
@@ -1421,7 +1443,8 @@ export function moltenLine({ register, cfg, state } = {}) {
       return;
     }
     const token = m[1];
-    const heard = token.replace(/^["'([{«“‘„¿¡]+/, "");  // an opening mark stays put
+    const heard = token.slice(Math.max(...[..."([{"].map((c) => token.lastIndexOf(c))) + 1)
+      .replace(/^["'([{«“‘„¿¡]+/, "");  // an opening mark stays put, and so does a call it ends: "print(value"
     const start = m.index + token.length - heard.length;
     if (!heard) return;
     if (riskyBackspace(committedRender.slice(start))) return;
@@ -1440,6 +1463,7 @@ export function moltenLine({ register, cfg, state } = {}) {
   function takeSnapshots() {
     while (segmentMarks.length && segmentMarks[0] <= committedTokens) {
       segmentMarks.shift();
+      settleHold();  // a hold never crosses a segment end
       if (snapshots.length && snapshots[snapshots.length - 1].len === committedRender.length) continue;
       snapshots.push({ len: committedRender.length, st: renderState });
     }

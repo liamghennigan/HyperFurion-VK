@@ -426,7 +426,7 @@
    ],
    [
     "screen",
-    "if a == b: x += 1 if not x <= y: def f() -> str: return x is"
+    "if a == b: x += 1 if not x <= y: def f() -> str: return x is not"
    ],
    [
     "final",
@@ -463,7 +463,7 @@
    ],
    [
     "screen",
-    "raise ValueError(\"bad\") except KeyError: x = type(y) return"
+    "raise ValueError(\"bad\") except KeyError: x = type(y) return value"
    ],
    [
     "final",
@@ -545,6 +545,337 @@
   ]
  },
  {
+  "name": "a held word is typed before a key",
+  "register": "python",
+  "segments": [
+   "x equals not",
+   "go left",
+   "y"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "x = not"
+   ],
+   [
+    "action",
+    "move:char:left",
+    1,
+    "x = not"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " y"
+   ],
+   [
+    "final",
+    " y",
+    "x = not",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a held dot is typed before tab",
+  "register": "shell",
+  "segments": [
+   "git add dot",
+   "press tab"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "git add"
+   ],
+   [
+    "action",
+    "press:tab",
+    1,
+    "git add ."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "final",
+    "",
+    "git add .",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch takes back a held word's segment",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "not",
+   "scratch that",
+   "y"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1 not"
+   ],
+   [
+    "screen",
+    "x = 1"
+   ],
+   [
+    "screen",
+    "x = 1 y"
+   ],
+   [
+    "final",
+    "x = 1 y",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "scratch in the same segment as a hold",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "not scratch that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1"
+   ],
+   [
+    "final",
+    "x = 1",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "select that covers a held word",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "not",
+   "select that",
+   "z"
+  ],
+  "options": {
+   "nav": true
+  },
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1 not"
+   ],
+   [
+    "action",
+    "select:that",
+    4,
+    "x = 1 not"
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    " z"
+   ],
+   [
+    "final",
+    " z",
+    "x = 1 not",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "recase a held word",
+  "register": "python",
+  "segments": [
+   "x equals one",
+   "value",
+   "uppercase that"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x ="
+   ],
+   [
+    "screen",
+    "x = 1 value"
+   ],
+   [
+    "screen",
+    "x = 1 VALUE"
+   ],
+   [
+    "final",
+    "x = 1 VALUE",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "spell that over a held word",
+  "register": "python",
+  "segments": [
+   "x equals value",
+   "spell that v a l",
+   "print key",
+   "spell that k e y s"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = value"
+   ],
+   [
+    "screen",
+    "x = val"
+   ],
+   [
+    "screen",
+    "x = val print(key"
+   ],
+   [
+    "screen",
+    "x = val print(keys"
+   ],
+   [
+    "final",
+    "x = val print(keys",
+    "",
+    "",
+    0,
+    [
+     [
+      "value",
+      "val"
+     ],
+     [
+      "key",
+      "keys"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "correct a held word",
+  "register": "python",
+  "segments": [
+   "x equals key",
+   "correct key to k"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "x = key"
+   ],
+   [
+    "screen",
+    "x = k"
+   ],
+   [
+    "final",
+    "x = k",
+    "",
+    "",
+    0,
+    [
+     [
+      "key",
+      "k"
+     ]
+    ]
+   ]
+  ]
+ },
+ {
+  "name": "shell dot after a command and before an operator",
+  "register": "shell",
+  "segments": [
+   "source dot venv slash bin slash activate",
+   "git add dot and and git commit",
+   "cat style dot less",
+   "echo quote done dot unquote"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "source .venv/bin/activate"
+   ],
+   [
+    "screen",
+    "source .venv/bin/activate git add . && git commit"
+   ],
+   [
+    "screen",
+    "source .venv/bin/activate git add . && git commit cat style"
+   ],
+   [
+    "screen",
+    "source .venv/bin/activate git add . && git commit cat style.less echo \"done.\""
+   ],
+   [
+    "final",
+    "source .venv/bin/activate git add . && git commit cat style.less echo \"done.\"",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a held dash is typed at the end",
   "register": "shell",
   "segments": [
@@ -554,7 +885,7 @@
   "events": [
    [
     "screen",
-    "ls"
+    "ls -"
    ],
    [
     "final",
