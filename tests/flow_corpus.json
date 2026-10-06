@@ -876,6 +876,33 @@
   ]
  },
  {
+  "name": "a held callable before an operator is a name",
+  "register": "python",
+  "segments": [
+   "type equals five",
+   "if a not equal b colon"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "type ="
+   ],
+   [
+    "screen",
+    "type = 5 if a != b:"
+   ],
+   [
+    "final",
+    "type = 5 if a != b:",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a held dash is typed at the end",
   "register": "shell",
   "segments": [

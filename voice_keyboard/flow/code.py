@@ -61,6 +61,8 @@ _SHELL_COMMANDS = frozenset(
 _PYTHON_PAIRS = {
     ("double", "equals"): "==",
     ("not", "equals"): "!=",
+    ("double", "equal"): "==",
+    ("not", "equal"): "!=",
     ("less", "than"): "<",
     ("greater", "than"): ">",
     # builtin exceptions: "raise value error" -> ValueError
@@ -181,7 +183,7 @@ def _compile(
         emit(".", glue_left=not slash and last_atom not in _SHELL_COMMANDS)
         glue_next = True
 
-    def word(text: str) -> None:
+    def word(text: str, *, plain: bool = False) -> None:
         nonlocal pending, glue_next, open_calls
         core = text.casefold()
         if pending == "call-open":
@@ -194,7 +196,7 @@ def _compile(
                 return
             emit_mode(glyph[0], glyph[1])
             return
-        if core in callables and last_atom != "->":
+        if core in callables and last_atom != "->" and not plain:
             # Calls nest: "print range ten close paren close paren". After
             # "->" it is a type: "-> str:".
             emit(text + "(", glue_left=False)
@@ -303,7 +305,11 @@ def _compile(
                     pending = ""
                     emit(operator, glue_left=False, name=glue_calls and _is_name(operator))
                     continue
-                flush_dash()  # the held word was a word
+                held = pending[5:]
+                pending = ""
+                # the held word was a word; before an operator a callable
+                # is a name ("type equals five" -> "type = 5")
+                word(held, plain=core in word_glyphs and word_glyphs[core][1] == "none")
             if core in firsts:
                 if pending == "call-open":
                     pending = "call" if open_calls else ""

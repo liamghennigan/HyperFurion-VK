@@ -71,6 +71,7 @@ CASES = [
     ("spell that over a held word", "python", ["x equals value", "spell that v a l", "print key", "spell that k e y s"], {}),
     ("correct a held word", "python", ["x equals key", "correct key to k"], {}),
     ("shell dot after a command and before an operator", "shell", ["source dot venv slash bin slash activate", "git add dot and and git commit", "cat style dot less", "echo quote done dot unquote"], {}),
+    ("a held callable before an operator is a name", "python", ["type equals five", "if a not equal b colon"], {}),
     ("a held dash is typed at the end", "shell", ["ls dash"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
     ("years read in pairs", "prose", ["born in nineteen eighty four, moved in nineteen oh five", "back in twenty twenty six with twenty twenty vision and nineteen people"], {}),

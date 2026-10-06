@@ -454,7 +454,7 @@ const STRING_PREFIXES = new Set(["f", "r", "b", "rb", "br", "fr", "rf", "u"]);
 const SH_GLUED = { "=": "both", ":": "both" };
 // two spoken words, one operator; the first is held until the next says
 // whether it was half an operator ("if not x" types "not")
-const PY_PAIRS = { "double equals": "==", "not equals": "!=", "less than": "<", "greater than": ">", "value error": "ValueError", "type error": "TypeError", "key error": "KeyError", "index error": "IndexError", "runtime error": "RuntimeError", "attribute error": "AttributeError", "import error": "ImportError", "name error": "NameError", "assertion error": "AssertionError", "lookup error": "LookupError", "permission error": "PermissionError", "timeout error": "TimeoutError", "connection error": "ConnectionError", "os error": "OSError", "memory error": "MemoryError", "recursion error": "RecursionError", "stop iteration": "StopIteration", "keyboard interrupt": "KeyboardInterrupt" };  // operators and builtin exceptions (code.py _PYTHON_PAIRS)
+const PY_PAIRS = { "double equals": "==", "not equals": "!=", "double equal": "==", "not equal": "!=", "less than": "<", "greater than": ">", "value error": "ValueError", "type error": "TypeError", "key error": "KeyError", "index error": "IndexError", "runtime error": "RuntimeError", "attribute error": "AttributeError", "import error": "ImportError", "name error": "NameError", "assertion error": "AssertionError", "lookup error": "LookupError", "permission error": "PermissionError", "timeout error": "TimeoutError", "connection error": "ConnectionError", "os error": "OSError", "memory error": "MemoryError", "recursion error": "RecursionError", "stop iteration": "StopIteration", "keyboard interrupt": "KeyboardInterrupt" };  // operators and builtin exceptions (code.py _PYTHON_PAIRS)
 const AUGMENTED = new Set(["+", "-", "*", "/", "%", "<", ">", "!", "=", "//", "**"]);
 const COMPILERS = {
   python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS, pairs: PY_PAIRS },
@@ -481,7 +481,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
     else if (mode === "both") { emit(glyph, true); glueNext = true; }
     else emit(glyph, false);
   };
-  const word = (text) => {
+  const word = (text, plain = false) => {
     const c = text.toLowerCase();
     if (pending === "call-open") pending = "call";
     const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
@@ -489,7 +489,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
       if (dotHold && g[0] === "/" && (SH_COMMANDS.has(lastAtom) || lastAtom[0] === "-")) { emit("/", false); glueNext = true; return; }  // "cd slash etc"
       emitMode(g[0], g[1]); return;
     }
-    if (callables.has(c) && lastAtom !== "->") { emit(text + "(", false); glueNext = true; pending = "call-open"; openCalls += 1; return; }  // calls nest; after "->" it is a type
+    if (callables.has(c) && lastAtom !== "->" && !plain) { emit(text + "(", false); glueNext = true; pending = "call-open"; openCalls += 1; return; }  // calls nest; after "->" it is a type
     if (constants && Object.hasOwn(constants, c)) { emit(constants[c], false); return; }
     emit(text, false, !!glueCalls && isName(text));
   };
@@ -547,7 +547,8 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
       if (pending.startsWith("hold:")) {
         const key = pending.slice(5).toLowerCase() + " " + c;
         if (pairs && Object.hasOwn(pairs, key)) { pending = ""; emit(pairs[key], false, !!glueCalls && isName(pairs[key])); continue; }  // "double equals" -> "=="
-        flushDash();
+        const held = pending.slice(5); pending = "";
+        word(held, Object.hasOwn(glyphs, c) && glyphs[c][1] === "none");  // before an operator a callable is a name: "type = 5"
       }
       if (firsts.has(c)) { if (pending === "call-open") pending = openCalls ? "call" : ""; pending = "hold:" + it.text; continue; }
       word(it.text);
