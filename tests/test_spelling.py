@@ -224,3 +224,15 @@ class TestDaemon:
         ]
         self._run(events, secret=True)
         assert dictionary.load_dictionary()["spelled"] == {}
+
+
+class TestGreedyRun:
+    def test_real_words_after_the_run_are_kept(self) -> None:
+        engine = make_engine()
+        result = engine.finalize("ngnix spell that n g i n x a good one", now=0.0)
+        assert result.text == "Nginx a good one"
+
+    def test_a_lone_ambiguous_letter_is_still_spelled(self) -> None:
+        engine = make_engine()
+        result = engine.finalize("b spell that a now", now=0.0)
+        assert result.text == "A now"

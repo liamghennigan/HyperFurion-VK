@@ -180,6 +180,7 @@ class FlowEngine:
         # Token counts at each final: segment boundaries for navigation.
         self._segment_bounds: set[int] = {0}
         self._barrier: Optional[NavAction] = None
+        self._last_action: Optional[NavAction] = None  # last command pressed
         self._typed_before = ""
         self._finalizing = False
         self._rev_depth = 0.0  # adaptive: observed ASR revision depth, decaying
@@ -279,14 +280,22 @@ class FlowEngine:
         """The navigation command waiting for the screen to catch up."""
         return self._barrier
 
-    def complete_action(self, now: float) -> Optional[FinalResult]:
-        """The daemon pressed the barrier's keys (or refused them): start a
-        fresh segment after it. When finalizing, returns the next result
-        (which may stop at another barrier)."""
+    def complete_action(self, now: float, *, pressed: bool = True) -> Optional[FinalResult]:
+        """The daemon pressed the barrier's keys — or refused them
+        (pressed=False: the caret never moved, so nothing changes). Either
+        way dictation resumes; after a press it starts a fresh segment.
+        When finalizing, returns the next result (which may stop at
+        another barrier)."""
         action = self._barrier
         if action is None:
             return self._commit_rest() if self._finalizing else None
         self._barrier = None
+        if not pressed:
+            if self._finalizing:
+                return self._commit_rest()
+            self._commit_ready(now)
+            return None
+        self._last_action = action
         self._typed_before += self._committed_render
         self._committed_render = ""
         state = self._render_state
@@ -633,6 +642,15 @@ class FlowEngine:
         one, keeping its trailing punctuation and its capital."""
         match = _LAST_WORD.search(self._committed_render)
         if match is None:
+            last = self._last_action
+            if last is not None and last.action.startswith("select:"):
+                # Right after "select previous word": the spelled word is
+                # typed over the selection.
+                delta, self._render_state = render_items(
+                    [Item(kind="word", text=spelled)], self._render_state, self._register
+                )
+                self._committed_render += delta
+                return
             logger.info("flow: nothing to respell")
             return
         token = match.group(1)

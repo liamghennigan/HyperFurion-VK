@@ -49,6 +49,9 @@ from voice_keyboard.tts import TTSClient, create_tts_client
 logger = logging.getLogger(__name__)
 
 FLOW_TICK_S = 0.25
+# At stop, how long a navigation command waits for the hotkey's modifiers
+# to be released before it is refused.
+NAV_RELEASE_WAIT_S = 1.5
 # Pause reviews ([flow] pause_review): one call's limit, and how long the
 # stop path waits for the last ones before the rules decide.
 PAUSE_REVIEW_CALL_S = 5.0
@@ -1148,11 +1151,25 @@ class Daemon:
         self._nav_task = asyncio.create_task(self._run_nav_live(engine, worker))
 
     def _hotkey_combo_held(self) -> bool:
-        held = getattr(self._hotkey_listener, "combo_held", None)
-        try:
-            return bool(held()) if callable(held) else False
-        except Exception:
-            return False
+        """The hold-to-talk keys, or any of the binding's modifiers, are
+        still down: a chord now would combine with them."""
+        listener = self._hotkey_listener
+        for name in ("combo_held", "modifiers_held"):
+            held = getattr(listener, name, None)
+            try:
+                if callable(held) and held():
+                    return True
+            except Exception:
+                pass
+        return False
+
+    async def _wait_hotkey_released(self, timeout: float = NAV_RELEASE_WAIT_S) -> bool:
+        deadline = time.perf_counter() + timeout
+        while self._hotkey_combo_held():
+            if time.perf_counter() >= deadline:
+                return False
+            await asyncio.sleep(0.02)
+        return True
 
     async def _run_nav_live(self, engine: FlowEngine, worker: InjectionWorker) -> None:
         action = engine.pending_action()
@@ -1164,9 +1181,10 @@ class Daemon:
             return  # the dictation ended (stop handles the rest) or moved on
         if typed != target and not worker.abandoned:
             return  # not on screen yet: never press keys mid-typing; retry next tick
-        await self._press_nav(action, abandoned=worker.abandoned)
-        engine.complete_action(time.monotonic())
-        worker.reset()
+        pressed = await self._press_nav(action, abandoned=worker.abandoned)
+        engine.complete_action(time.monotonic(), pressed=pressed)
+        if pressed:
+            worker.reset()  # the caret moved: the text behind it is not ours
         worker.set_target(engine.desired_text())
 
     async def _press_nav(self, action: NavAction, *, abandoned: bool = False) -> bool:
@@ -1184,6 +1202,13 @@ class Daemon:
                 timeout_ms=1800,
             )
             return False
+        label = action.action.replace(":", " ").replace("move ", "")
+        if action.count > 1:
+            label += f" ×{action.count}"
+        # Show what fired — without holding the keys back for the overlay.
+        asyncio.get_running_loop().create_task(
+            self._show_hotkey_overlay("listening", detail=f"⌁ {label}", timeout_ms=900)
+        )
         try:
             for chord in chords:
                 await asyncio.to_thread(self._injector.press_combo, chord)
@@ -1218,9 +1243,12 @@ class Daemon:
                 abandoned = self._focus_lost
                 if result.text and not abandoned:
                     await asyncio.to_thread(self._injector.type_text, result.text)
-            await self._press_nav(result.action, abandoned=abandoned)
-            result = engine.complete_action(time.monotonic())
-            if worker is not None:
+            if not abandoned and not await self._wait_hotkey_released():
+                logger.info("nav: hotkey modifiers still held; not pressing")
+                abandoned = True
+            pressed = await self._press_nav(result.action, abandoned=abandoned)
+            result = engine.complete_action(time.monotonic(), pressed=pressed)
+            if worker is not None and pressed:
                 worker.reset()
         return result
 
@@ -1527,9 +1555,11 @@ class Daemon:
                 final = await self._finish_live(worker, final, result.instruction)
             else:
                 final = await self._finish_classic(final, result.instruction)
+            segment = final
             if result.typed_before:
                 # Earlier segments, before navigation moved the caret.
-                final = (result.typed_before + " " + final).strip()
+                gap = "" if final[:1].isspace() else " "
+                final = (result.typed_before + gap + final).strip()
         finally:
             await self._teardown_flow_session()
 
@@ -1539,6 +1569,10 @@ class Daemon:
             logger.info("No transcript received")
         self._record_latency(final)
         self._remember_typed(final)
+        if result.typed_before and not self._session_secret:
+            # Only the text after the last command is where the caret left
+            # it: a later transform/keep may backspace over that, nothing more.
+            self._last_typed = segment
         return final
 
     async def _finish_live(

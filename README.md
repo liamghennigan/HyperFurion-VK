@@ -591,7 +591,7 @@ sentence, "delete the previous word" is just typed as words.
 | You say | Editors (Linux and Windows) | Terminals: Linux / Windows |
 | --- | --- | --- |
 | `go left` / `go right [N] [words]` | arrows, `ctrl+←/→` | arrows, `alt+b/f` / `ctrl+←/→` |
-| `go up` / `go down [N] lines` | arrows | arrows (shell history) |
+| `go up` / `go down [N] lines` | arrows | refused (that's shell history: say `press up`) |
 | `go to start` / `end of line` | `home` / `end` | `ctrl+a` / `ctrl+e`, or `home` / `end` |
 | `go to start` / `end of document` | `ctrl+home` / `ctrl+end` | — |
 | `select previous` / `next [N] words`, `select all`, `select line` | `shift` + the motion, `ctrl+a` | refused: a terminal has no selection to extend |
@@ -605,9 +605,12 @@ sentence, "delete the previous word" is just typed as words.
   no leading space. After `press tab`, `press escape` or `press page
   up`/`down`, dictation starts as if in a new field.
 - With hold-to-talk, the keys fire after you let go of the hotkey, so the
-  hotkey's modifiers never combine with them.
+  hotkey's modifiers never combine with them (if a modifier is still held
+  at stop, the command is skipped). The overlay shows each command as it
+  fires; a command that can't run in this app changes nothing.
 - **Enter is never pressed.** No command produces it, and a `[nav.keys]`
-  override that would press it (`enter`, `ctrl+m`, `ctrl+j`) is rejected.
+  override that would press it (`enter`, `ctrl+m`, `ctrl+j`, `ctrl+o`) is
+  rejected, as is an unknown key name.
 - Remap or disable a command per kind of app with `[nav.keys.editor]` and
   `[nav.keys.terminal]`, for example `"move:word:left" = "ctrl+left"`.
 - Not on macOS yet: there are no key chords on that backend, so commands

@@ -13,7 +13,7 @@ from voice_keyboard.config import _default_config_with_paths, validate_config
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FlowConfig, FlowEngine
 from voice_keyboard.flow.grammar import Grammar
-from voice_keyboard.flow.registers import PROSE
+from voice_keyboard.flow.registers import PROSE, TERMINAL
 
 
 def _parse(text: str, *, decided: bool = True):
@@ -379,3 +379,88 @@ class TestDaemon:
         assert asyncio.run(run()) == ""
         assert injector.combos == []
         assert injector.screen == ""
+
+
+class TestCriticRegressions:
+    def test_unicode_digit_count_does_not_crash(self) -> None:
+        # "²" is not a count (and must not crash int()): a plain "go left".
+        assert _parse("go left ² words") == ("move:char:left", 1, 2)
+        Grammar(nav=True).parse("go left ² words".split(), flush=True)
+
+    @pytest.mark.parametrize("platform", ["linux", "win32"])
+    def test_terminal_line_moves_are_refused(self, platform) -> None:
+        table = nav.keymap(terminal=True, platform=platform)
+        assert nav.chords_for("move:line:up", 2, table) is None
+        assert nav.chords_for("press:up", 1, table) == [["up"]]
+
+    def test_ctrl_o_and_unknown_keys_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Enter"):
+            nav.parse_override("ctrl+o")
+        with pytest.raises(ValueError, match="unknown key"):
+            nav.parse_override("ctrl+lefft")
+
+    def test_refused_command_keeps_spacing_and_text(self) -> None:
+        engine = make_engine(TERMINAL)
+        engine.on_transcript("ls -la", is_final=True, now=0.0)
+        engine.on_transcript("ls -la select previous word", is_final=True, now=1.0)
+        engine.complete_action(now=1.1, pressed=False)
+        result = engine.finalize("ls -la select previous word grep foo", now=2.0)
+        assert result.text == "ls -la grep foo"
+        assert result.typed_before == ""
+
+    def test_spell_that_after_select_types_over_the_selection(self) -> None:
+        engine = make_engine()
+        engine.on_transcript("hello wrold", is_final=True, now=0.0)
+        engine.on_transcript("hello wrold select previous word", is_final=True, now=1.0)
+        engine.complete_action(now=1.1)
+        result = engine.finalize(
+            "hello wrold select previous word spell that w o r l d", now=2.0
+        )
+        assert result.text == "world"
+
+
+class TestDaemonRegressions:
+    @pytest.fixture(autouse=True)
+    def inline(self, tmp_path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+
+        async def _to_thread(func, /, *args, **kwargs):
+            await asyncio.sleep(0)
+            return func(*args, **kwargs)
+
+        monkeypatch.setattr(asyncio, "to_thread", _to_thread)
+        monkeypatch.setattr("voice_keyboard.client._show_overlay", lambda *a, **k: None)
+        monkeypatch.setattr("voice_keyboard.daemon.NAV_RELEASE_WAIT_S", 0.1)
+
+    def _run(self, events, injector, *, held=lambda: False) -> tuple:
+        daemon = _make_daemon(FakeStreamingSTT(events), injector)
+        daemon._config["nav"]["enabled"] = True
+        daemon._hotkey_combo_held = held
+
+        async def run() -> str:
+            with daemon._audio_patch, daemon._stt_patch, daemon._probe_patch:
+                await daemon._start_recording()
+                await wait_until(lambda: injector.screen)
+                await asyncio.sleep(0.3)
+                return await daemon._stop_recording()
+
+        return asyncio.run(run()), daemon
+
+    def test_last_typed_is_only_the_segment_after_the_command(self) -> None:
+        events = [
+            {"type": "transcript.partial", "text": "hello world", "is_final": True},
+            {"type": "transcript.partial", "text": "go to end of line", "is_final": True},
+            {"type": "transcript.partial", "text": "more", "is_final": True},
+        ]
+        final, daemon = self._run(events, RecordingInjector())
+        assert final == "Hello world more"
+        assert daemon._last_typed == " more"
+
+    def test_modifiers_still_held_at_stop_refuse_the_keys(self) -> None:
+        events = [
+            {"type": "transcript.partial", "text": "draft", "is_final": True},
+            {"type": "transcript.partial", "text": "press tab", "is_final": True},
+        ]
+        injector = RecordingInjector()
+        self._run(events, injector, held=lambda: True)
+        assert injector.combos == []

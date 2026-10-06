@@ -65,7 +65,17 @@ _REPEAT_WORDS = {"once": 1, "twice": 2, "thrice": 3}
 
 # Chords nothing may ever press: each one submits a line somewhere.
 _FORBIDDEN_KEYS = {"enter", "return", "kpenter"}
-_FORBIDDEN_CHORDS = ({"ctrl", "j"}, {"ctrl", "m"})
+# ctrl+o: readline's operate-and-get-next runs the line.
+_FORBIDDEN_CHORDS = ({"ctrl", "j"}, {"ctrl", "m"}, {"ctrl", "o"})
+
+# Key names every backend's press_combo knows (Linux uinput and Windows
+# SendInput); single characters resolve on both too.
+KNOWN_KEYS = {
+    "ctrl", "control", "shift", "alt", "super", "meta", "win", "cmd",
+    "tab", "esc", "escape", "space", "backspace", "delete", "del", "insert",
+    "up", "down", "left", "right", "home", "end", "pageup", "pagedown",
+    *(f"f{n}" for n in range(1, 13)),
+}
 
 
 class _NeedMore(Exception):
@@ -75,7 +85,7 @@ class _NeedMore(Exception):
 def _count_of(core: str) -> Optional[int]:
     if core in ("a", "an"):
         return 1  # "go back a word"
-    if core.isdigit():
+    if core.isascii() and core.isdecimal():
         value = int(core)
     elif core in _UNITS or core in _TENS:
         value = _UNITS[core] if core in _UNITS else _TENS[core]
@@ -192,7 +202,7 @@ def _parse_motion(verb, cursor, at, optional, decided, total):
     count = 1
     word = optional(cursor)
     counted = _count_of(word) if word is not None else None
-    if counted is None and word is not None and (word.isdigit() or word in _UNITS or word in _TENS):
+    if counted is None and word is not None and (word.isdecimal() or word in _UNITS or word in _TENS):
         return None  # a count out of range: not a command
     if counted is not None:
         count = counted
@@ -250,6 +260,8 @@ LINUX_TERMINAL: dict[str, Optional[list[list[str]]]] = {
     "move:word:left": [["alt", "b"]], "move:word:right": [["alt", "f"]],
     "move:line:start": [["ctrl", "a"]], "move:line:end": [["ctrl", "e"]],
     "move:doc:start": None, "move:doc:end": None,
+    # Up/down in a shell is history, not a line: "press up" says it plainly.
+    "move:line:up": None, "move:line:down": None,
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["ctrl", "w"]], "delete:word:right": [["alt", "d"]],
     "delete:line:here": [["ctrl", "e"], ["ctrl", "u"]],
@@ -260,6 +272,7 @@ WINDOWS_TERMINAL: dict[str, Optional[list[list[str]]]] = {
     **{key: value for key, value in EDITOR.items() if key.startswith("move:")},
     **_NO_SELECTION,
     "move:doc:start": None, "move:doc:end": None,
+    "move:line:up": None, "move:line:down": None,
     "delete:char:left": [["backspace"]], "delete:char:right": [["delete"]],
     "delete:word:left": [["ctrl", "backspace"]], "delete:word:right": [["ctrl", "delete"]],
     "delete:line:here": None,
@@ -292,6 +305,9 @@ def parse_override(value) -> Optional[list[list[str]]]:
     for chord in chords:
         if _forbidden(chord):
             raise ValueError(f"{'+'.join(chord)!r} would press Enter")
+        unknown = [n for n in chord if len(n) != 1 and n not in KNOWN_KEYS]
+        if unknown:
+            raise ValueError(f"unknown key {unknown[0]!r}")
     return chords or None
 
 

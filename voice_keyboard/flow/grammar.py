@@ -97,6 +97,8 @@ DEFAULT_PUNCTUATION: dict[str, tuple[str, str, bool]] = {
 _BREAKS = {"new_line": "\n", "new_paragraph": "\n\n"}
 
 SPELL_WORD = "spell"
+# Spelled symbols that are also everyday words.
+_AMBIGUOUS = {"a", "i", "one", "two", "four", "eight"}
 _PENDING = "pending"
 
 
@@ -411,9 +413,10 @@ class Grammar:
             start += 1
         if start >= len(tokens):
             return None if flush else _PENDING
-        word = ""
+        pieces: list[tuple[str, int]] = []  # (letters, tokens used)
         cursor = start
-        while cursor < len(tokens) and len(word) < MAX_SPELLED_LETTERS:
+        ended_on_word = False
+        while cursor < len(tokens) and sum(len(p) for p, _ in pieces) < MAX_SPELLED_LETTERS:
             letters, used = letters_at(tokens, cursor)
             if not used:
                 if (
@@ -422,11 +425,18 @@ class Grammar:
                     and could_be_capital(tokens[cursor])
                 ):
                     return _PENDING
+                ended_on_word = True
                 break
-            word += letters
+            pieces.append((letters, used))
             cursor += used
         if cursor >= len(tokens) and not flush:
             return _PENDING  # the next update may spell more letters
+        if ended_on_word:
+            # A real word follows: trailing "a" / "I" / "one" are likely
+            # that sentence's words, not letters ("... x a good one").
+            while len(pieces) > 1 and cores[cursor - pieces[-1][1]] in _AMBIGUOUS:
+                cursor -= pieces.pop()[1]
+        word = "".join(letters for letters, _ in pieces)
         if len(word) < (1 if mode == "replace" else 2):
             return None
         word = word[:MAX_SPELLED_LETTERS]
