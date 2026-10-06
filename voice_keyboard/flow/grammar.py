@@ -1235,6 +1235,16 @@ class Grammar:
             if item.kind == "word" and _core(item.text) in NUMBER_WORDS:
                 if run and run[0].span[0] < frozen and item.span[0] >= item_end(run[0].span[0]):
                     close_run(at_tail=False)  # the committed part folds alone
+                before = result[-1] if result else None
+                if (
+                    not run and _core(item.text) in DIGIT_WORDS and before is not None
+                    and before.kind == "punct" and before.text == "-" and before.mode == "none"
+                ):
+                    # "kill dash nine one two three four": a flag is one
+                    # digit (-9 1234), decided by the dash behind it
+                    run.append(item)
+                    close_run(at_tail=False)
+                    continue
                 run.append(item)
             else:
                 close_run(at_tail=False)

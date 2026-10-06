@@ -898,6 +898,10 @@ export function parse(tokens, { flush = false, frozen = 0, settled = 0, bounds =
     for (const it of items) {
       if (it.kind === "word" && NUMBER_WORDS.has(core(it.text))) {
         if (run.length && run[0].s < frozen && it.s >= itemEnd(run[0].s)) close(false);  // the committed part folds alone
+        const before = out.length ? out[out.length - 1] : null;
+        if (!run.length && Object.hasOwn(DIGITS, core(it.text)) && before && before.kind === "punct" && before.text === "-" && before.mode === "none") {
+          run.push(it); close(false); continue;  // "kill dash nine one two three four": a flag is one digit (-9 1234)
+        }
         run.push(it);
       } else { close(false); out.push(it); }
     }

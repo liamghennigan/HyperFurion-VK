@@ -518,6 +518,33 @@
   ]
  },
  {
+  "name": "a flag after a dash is one digit",
+  "register": "shell",
+  "segments": [
+   "kill dash nine one two three four",
+   "head dash n twenty file"
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "kill -9"
+   ],
+   [
+    "screen",
+    "kill -9 1234 head -n 20 file"
+   ],
+   [
+    "final",
+    "kill -9 1234 head -n 20 file",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "a held dash is typed at the end",
   "register": "shell",
   "segments": [

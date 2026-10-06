@@ -61,6 +61,7 @@ CASES = [
     ("python operators from two words", "python", ["if a double equals b colon", "x plus equals one", "if not x less than equals y colon", "def f open paren close paren arrow str colon", "return x is not"], {}),
     ("builtin exceptions by name", "python", ["raise value error open paren quote bad unquote close paren", "except key error colon", "x equals type open paren y close paren", "return value"], {}),
     ("shell dots, paths and redirects", "shell", ["cd dot dot slash src and and ls dot dash a", "find dot dash name star dot py", "tail dash f slash var slash log", "chmod plus x dot slash run dot sh", "echo hi greater than out dot txt"], {}),
+    ("a flag after a dash is one digit", "shell", ["kill dash nine one two three four", "head dash n twenty file"], {}),
     ("a held dash is typed at the end", "shell", ["ls dash"], {}),
     ("shell path", "shell", ["pytest dash x tests slash test underscore flow dot py"], {}),
     ("years read in pairs", "prose", ["born in nineteen eighty four, moved in nineteen oh five", "back in twenty twenty six with twenty twenty vision and nineteen people"], {}),
