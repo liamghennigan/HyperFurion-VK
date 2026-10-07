@@ -227,7 +227,12 @@ def test_existing_config_is_edited_in_place(tmp_path):
     assert config["hotkey"] == {"key": "super+h", "mode": "hold"}
     assert config["stt"]["language"] == "de"
     assert config["tts"]["language"] == "de"
-    assert config["assistant"]["enabled"] is False
+    # Kai would use xAI for speech, so it is already off: "n" changes nothing.
+    assert "assistant" not in config
+    joined = "\n".join(out)
+    assert "send these to xAI? (y/N)" in "\n".join(wizard._ask.prompts)
+    assert "xAI for" not in joined  # hops are listed by role, not as a sentence
+    assert "hears you:" in joined
     assert config["flow"]["history"] is True
     assert config["nav"]["enabled"] is True
     assert config["flow"]["corrections"] == "llm"

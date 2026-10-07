@@ -4,6 +4,10 @@ Both installers run it (install.sh on Linux, the PowerShell installer on
 Windows), and it can be re-run any time. It edits config.toml in place,
 so comments and every setting it doesn't ask about are kept.
 
+It also asks about Kai, the voice assistant, which turns on by itself only
+when everything it uses runs on this computer: the question says where
+Kai's questions would go, and Enter never changes whether Kai is on.
+
 The first thing it does is look for a llama.cpp server (`llama-server`)
 already running on this machine. If one answers, it offers to make that
 model the default for [llm] — "vk, ..." rewrites, `transform`, Kai's
@@ -14,7 +18,7 @@ away. Only loopback ports are probed, with short timeouts.
 import getpass
 import os
 import sys
-import tempfile
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -233,6 +237,7 @@ class Wizard:
             return 1
         if self.hosted and not self._login():
             self.out("    Sign-in did not finish. Run `voice-keyboard login` later to finish it.")
+            self.say_kai()
         self.finish()
         return 0
 
@@ -343,7 +348,6 @@ class Wizard:
         elif choice == 2:
             url = self.ask("Server base URL", "http://127.0.0.1:8000/v1")
             self.set("stt", "provider", "openai", f"Speech: local server at {url}")
-            self.set("tts", "provider", "openai")
             self.set("providers.openai", "base_url", url)
             # Left unset, the OpenAI model names would be sent, and a local
             # server only answers to the ids it has installed.
@@ -351,12 +355,47 @@ class Wizard:
             stt_model = self.ask("Transcription model", "Systran/faster-whisper-large-v3")
             self.set("stt", "model", stt_model, f"Transcription model: {stt_model}")
             if self.confirm("Does it also speak (read-aloud and Kai's voice; Speaches does, whisper.cpp doesn't)?", True):
+                self.set("tts", "provider", "openai")
                 tts_model = self.ask("Text-to-speech model", "speaches-ai/Kokoro-82M-v1.0-ONNX")
                 voice = self.ask("Voice", "af_heart")
                 self.set("tts", "model", tts_model, f"Text-to-speech: {tts_model}, voice {voice}")
                 self.set("tts", "voice_id", voice)
             else:
-                self.out("    Read-aloud and Kai's spoken answers need a server that speaks; set [tts] later.")
+                self.step_other_voice(current)
+
+    def step_other_voice(self, current: Optional[dict] = None) -> None:
+        """The speech server only transcribes: [tts] must not point at it.
+        Nothing speaks unless you pick a service (never a cloud voice by
+        surprise)."""
+        self.out("    Read-aloud and Kai's spoken answers need something that speaks.")
+        choice = self.choose(
+            "What should speak?",
+            [
+                "Nothing for now (read-aloud is off; Kai shows its answers on screen)",
+                "xAI (your API key; it receives the text to speak)",
+                "ElevenLabs (your API key; it receives the text to speak)",
+            ],
+            1,
+        )
+        if choice == 1:
+            self.set("tts", "provider", "none", "Text-to-speech: none (set [tts] later)")
+            return
+        tts = "xai" if choice == 2 else "elevenlabs"
+        self.set("tts", "provider", tts, f"Text-to-speech: {tts}")
+        old = ((current or {}).get("tts") or {}) if isinstance(current, dict) else {}
+        if str(old.get("provider", "")).strip().lower() != tts:
+            # A model and voice named for the previous speaker (a speech
+            # server's Kokoro, af_heart) mean nothing to this one: its own
+            # defaults apply.
+            from voice_keyboard.config import DEFAULT_CONFIG
+
+            for key in ("model", "voice_id"):
+                value = str(old.get(key, "") or "")
+                if value and value != DEFAULT_CONFIG["tts"].get(key, ""):
+                    self.set("tts", key, "")
+        key = self.secret(f"{tts} API key")
+        if key:
+            self.set(f"providers.{tts}", "api_key", key)
 
     def step_language_model(self, current: dict) -> None:
         self.out("")
@@ -434,13 +473,99 @@ class Wizard:
             if pack != str(current.get("flow", {}).get("language", "en")):
                 self.set("flow", "language", pack, f"Spoken commands: {pack} (+ English)")
 
+    def planned(self, current: dict) -> dict:
+        """`current` with this run's answers applied: the settings Kai will
+        run under once saved."""
+        import copy
+
+        planned = copy.deepcopy(current)
+        for table, key, value, _ in self.edits:
+            if not table or (table, key) == ("assistant", "enabled"):
+                continue
+            node = planned
+            for part in table.split("."):
+                child = node.get(part)
+                if not isinstance(child, dict):
+                    child = node[part] = {}
+                node = child
+            node[key] = value
+        if self.hosted:
+            planned.setdefault("stt", {})["provider"] = "hyperfurion"
+            planned.setdefault("tts", {})["provider"] = "hyperfurion"
+        return planned
+
+    def step_kai(self, current: dict) -> None:
+        """Kai, the voice assistant. It turns on by itself only when
+        everything it uses runs on this computer; with an online service it
+        stays off unless you turn it on, after reading where your questions
+        would go. Enter keeps Kai as it is."""
+        from voice_keyboard.assistant.locality import hop_payload, kai_state, summon_hint
+
+        planned = self.planned(current)
+        state = kai_state(planned)
+        name = state.name
+        self.out("")
+        self.out(f"-- {name}, the voice assistant --")
+        how = summon_hint(planned)
+        self.out(f"{how[0].upper()}{how[1:]} and ask {name} something: it answers out loud, or in a")
+        self.out("terminal types the command for you to run (it never presses Enter).")
+        if not state.can_answer:
+            self.out(f"{name} has no language model to answer with ([llm]), so it stays off.")
+            return
+        if state.local:
+            width = max(len(hop.role) for hop in state.hops) + 1
+            self.out(f"Everything {name} uses runs on {state.place}:")
+            for hop in state.hops:
+                self.out(f"    {hop.role + ':':<{width}}  {hop.service}")
+            memory = (planned.get("assistant", {}) or {}).get("memory_enabled", True) is not False
+            if memory:
+                self.out("It remembers your questions and its answers on this computer.")
+            prompt = f"Turn on {name}?" if not state.on else f"Keep {name} on?"
+        else:
+            # What it would use once on: `true` also uses an online [recall]
+            # that is skipped while Kai is off, so the list comes from that.
+            listed = state if state.on else kai_state(
+                {**planned, "assistant": {**(planned.get("assistant") or {}), "enabled": True}}
+            )
+            online = listed.online_hops()
+            width = max(len(hop.role) for hop in online) + 1
+            if state.on:
+                self.out(f"{name} is on (you turned it on), and uses online services:")
+            else:
+                self.out(f"{name} would use online services, so it stays off unless you turn it on:")
+            for hop in online:
+                lead = f"    {hop.role + ':':<{width}}  "
+                for line in textwrap.wrap(
+                    f"{hop.service}: {hop_payload(hop, planned)}", width=78,
+                    initial_indent=lead, subsequent_indent=" " * len(lead),
+                ):
+                    self.out(line)
+            self.out(f"To keep {name} on this computer, use a local speech server and a local model.")
+            companies = listed.online()
+            prompt = (
+                f"Keep {name} on and keep sending these to {companies}?" if state.on
+                else f"Turn on {name} and send these to {companies}?"
+            )
+        answer = self.confirm(prompt, state.on)
+        if not answer:
+            if state.on:
+                self.set("assistant", "enabled", False, f"{name}: off")
+            return
+        if state.local and (not state.on or state.setting == "on"):
+            # "auto", not a blanket true: switching anything to an online
+            # service later turns Kai off and asks again.
+            label = (
+                f"{name}: on (runs on {state.place}; asks again if you switch to an online service)"
+                if state.setting == "on" else f"{name}: on (runs on {state.place})"
+            )
+            self.set("assistant", "enabled", "auto", label)
+        elif not state.on:
+            self.set("assistant", "enabled", True, f"{name}: on (uses {listed.online()})")
+
     def step_extras(self, current: dict) -> None:
         self.out("")
         self.out("-- Extras --")
-        kai_now = bool(current.get("assistant", {}).get("enabled", True))
-        kai = self.confirm("Turn on Kai, the voice assistant (its own hotkey: hold Right Ctrl)?", kai_now)
-        if kai != kai_now:
-            self.set("assistant", "enabled", kai, f"Kai: {'on' if kai else 'off'}")
+        self.step_kai(current)
         history_now = bool(current.get("flow", {}).get("history", False))
         history = self.confirm("Keep a private local history of what you dictate?", history_now)
         if history != history_now:
@@ -470,6 +595,7 @@ class Wizard:
             self.out("No changes.")
             if not self.path.exists():
                 self._write(text)
+            self._kai_told()
             return True
         self.out("Summary:")
         for label in changes:
@@ -477,30 +603,57 @@ class Wizard:
         if not self.confirm(f"Save to {self.path}?", True):
             self.out("Not saved.")
             return False
+        from voice_keyboard.config import set_kai_enabled
+
         for table, key, value, _ in self.edits:
-            if table:
+            if (table, key) == ("assistant", "enabled"):
+                # The one writer for Kai's switch: it leaves the comment that
+                # marks the value as chosen (config.enabled_true_is_a_choice).
+                try:
+                    text = set_kai_enabled(text, value)
+                except ValueError as exc:
+                    shown = {True: "true", False: "false", "auto": '"auto"'}[value]
+                    self.out(f"    Kai's setting wasn't changed: {exc} (set [assistant] enabled = {shown})")
+            elif table:
                 text = _set_value(text, table, key, value)
         self._write(text)
         self.out(f"Saved {self.path}")
+        self._kai_told()
         return True
 
     def _write(self, text: str) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        from voice_keyboard.config import write_config_text
+
         # Written beside the target and renamed over it: an interrupted
         # save never leaves half a config, and keys are never world-readable.
-        fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), prefix=".config-", suffix=".toml")
+        write_config_text(self.path, text)
+
+    def _kai_told(self) -> None:
+        """The Kai question said where Kai stands: the daemon needn't
+        announce it again (assistant/announce.py)."""
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(text)
-            if os.name == "posix":
-                os.chmod(tmp, 0o600)
-            os.replace(tmp, self.path)
-        except BaseException:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+            from voice_keyboard.assistant import announce
+            from voice_keyboard.assistant.locality import kai_state
+            from voice_keyboard.config import load_config
+
+            announce.write_record(kai_state(load_config(self.path)))
+        except Exception:
+            pass
+
+    def say_kai(self) -> None:
+        """Kai's state from the saved file (after a sign-in that didn't
+        finish, it is not what the question assumed)."""
+        try:
+            from voice_keyboard.assistant.locality import kai_state, turn_on_hint
+            from voice_keyboard.config import load_config
+
+            state = kai_state(load_config(self.path))
+        except Exception:
+            return
+        line = f"    {state.name} is {state.why()}"
+        if not state.on and state.setting != "off" and state.can_answer:
+            line += f" (to turn it on: {turn_on_hint()})"
+        self.out(line)
 
     def finish(self) -> None:
         from voice_keyboard.config import is_usable

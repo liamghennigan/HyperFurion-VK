@@ -70,30 +70,41 @@ def _notify(
     *,
     urgency: str = "normal",
     timeout_ms: int = 4000,
-) -> None:
+    replace: bool = True,
+) -> bool:
+    """Show a desktop notification. True when it was handed to the desktop
+    (notify-send or osascript succeeded, or the Windows tray took it).
+
+    replace: on Linux, take the one slot every progress notice shares
+    ("Listening…" replaces "Processing…"). False for a notice that must stay
+    until read (Kai turning on or off): its own notification, not replaced
+    by the next dictation's."""
     if sys.platform == "darwin":
         # ensure_ascii=False keeps non-ASCII text literal (json.dumps still
         # escapes the quotes/backslashes AppleScript needs); with the default
-        # ensure_ascii=True, 'café' becomes "café" and osascript prints
+        # ensure_ascii=True, 'café' becomes "caf\u00e9" and osascript prints
         # the literal escape.
         script = (
             f"display notification {json.dumps(body or summary, ensure_ascii=False)}"
             f" with title {json.dumps(summary, ensure_ascii=False)}"
         )
         try:
-            subprocess.run(["osascript", "-e", script], timeout=3, check=False)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-        return
+            result = subprocess.run(["osascript", "-e", script], timeout=3, check=False)
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return False
+        return getattr(result, "returncode", 1) == 0
     if sys.platform == "win32":
         if _local_shell is not None:
             _local_shell.notify(summary, body, error=urgency == "critical")
-        elif not _daemon_overlay_ok and not _in_daemon and urgency == "critical":
+            # A balloon needs the tray icon (not up yet at the very start).
+            return bool(getattr(_local_shell, "can_notify", True))
+        if not _daemon_overlay_ok and not _in_daemon and urgency == "critical":
             # Only failures, and only when the daemon's overlay couldn't say
             # it: progress toasts ("Listening…") from a CLI whose daemon is
             # down would be wrong, and each one is a PowerShell spawn.
             _toast_once(summary, body)
-        return
+            return True
+        return False
     command = [
         "notify-send",
         "-a",
@@ -104,13 +115,12 @@ def _notify(
         urgency,
         "-t",
         str(timeout_ms),
-        "-p",
-        "-h",
-        "string:x-canonical-private-synchronous:voice-keyboard",
     ]
-    replace_id = _read_notification_id()
-    if replace_id:
-        command.extend(["-r", replace_id])
+    if replace:
+        command += ["-p", "-h", "string:x-canonical-private-synchronous:voice-keyboard"]
+        replace_id = _read_notification_id()
+        if replace_id:
+            command.extend(["-r", replace_id])
     command.append(summary)
     if body:
         command.append(body)
@@ -124,11 +134,14 @@ def _notify(
             check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return
-    if result.returncode == 0:
-        notification_id = result.stdout.strip()
+        return False
+    if result.returncode != 0:
+        return False
+    if replace:
+        notification_id = (result.stdout or "").strip()
         if notification_id:
             _write_notification_id(notification_id)
+    return True
 
 
 def _focused_anchor() -> tuple[int, int]:
@@ -333,6 +346,15 @@ def _daemon_start_hint() -> str:
     return "systemctl --user start voice-keyboard-daemon"
 
 
+def _daemon_restart_hint() -> str:
+    """How to restart the daemon on this platform."""
+    if sys.platform == "win32":
+        return "right-click the HyperFurion VK tray icon → Restart"
+    if sys.platform == "darwin":
+        return "launchctl kickstart -k gui/$(id -u)/com.hyperfurion.voice-keyboard"
+    return "systemctl --user restart voice-keyboard-daemon"
+
+
 def _print_connect_failure(exc: Exception) -> None:
     print(f"Failed to connect to daemon: {exc}", file=sys.stderr)
     if isinstance(exc, (ConnectionRefusedError, FileNotFoundError)):
@@ -424,6 +446,8 @@ def _print_status_details(response: dict) -> None:
         details.append(f"flow: {flow}")
     if response.get("focused_app"):
         details.append(f"app: {response['focused_app']}")
+    if "assistant" in response:
+        details.append(f"kai: {'on' if response.get('assistant') else 'off'}")
     if response.get("last_text_len"):
         details.append(f"last: {response['last_text_len']} chars")
     if response.get("uptime_s") is not None:
@@ -816,6 +840,23 @@ def _write_hosted_login(key: str) -> Path:
     return path
 
 
+def _say_kai_after_login(before: dict, path: Path) -> None:
+    """Kai on because everything was local turns off once speech goes
+    through the hosted service (the relay forwards to xAI): say so."""
+    from voice_keyboard.assistant.locality import kai_state
+
+    try:
+        was = kai_state(before)
+        now = kai_state(load_config(path))
+    except Exception:
+        return
+    if was.on and was.setting == "auto" and not now.on:
+        print(
+            f"  {now.name} turns off at the next start: the hosted service is online (it"
+            " forwards your speech to xAI). To turn it on anyway: voice-keyboard kai on"
+        )
+
+
 def _run_login(config: dict, argv: list) -> None:
     import requests
 
@@ -859,12 +900,261 @@ def _run_login(config: dict, argv: list) -> None:
         sys.exit(1)
     path = _write_hosted_login(key)
     print(f"✓ Signed in. Key saved to {path}; speech + dictation set to the hosted service.")
+    _say_kai_after_login(config, path)
     if sys.platform == "win32":
         print("  Apply it:  right-click the HyperFurion VK tray icon → Restart")
         print("             (if it was waiting for setup, it starts by itself)")
     else:
         print("  Apply it:  systemctl --user restart voice-keyboard-daemon")
     print("  Lost your key or on a new machine? Just run `voice-keyboard login` again.")
+
+
+# ── `voice-keyboard kai [on|off]`: Kai's state, and the one place to change it ─
+
+
+def _kai_daemon(socket_path: str, command: str = "status", timeout: float = 3.0):
+    """The running daemon's answer, or None when there is none."""
+    try:
+        response = IPCClient(socket_path, timeout=timeout).send_command(command, timeout=timeout)
+    except Exception:
+        return None
+    return response if response.get("status", "ok") == "ok" else None
+
+
+def _kai_hop_lines(hops, config: dict) -> list:
+    from voice_keyboard.assistant.locality import NO_VOICE, hop_payload
+
+    width = max((len(hop.role) for hop in hops), default=0) + 1
+    lines = []
+    for hop in hops:
+        if hop.service == NO_VOICE:
+            where = f"{hop.service} ({hop.section})"
+        elif hop.local:
+            mine = "on this computer" if hop.here else "on your network"
+            where = f"{hop.service}, {mine} ({hop.section})"
+        else:
+            where = f"{hop.service}, online ({hop.section}): {hop_payload(hop, config)}"
+        lines.append(f"    {hop.role + ':':<{width}}  {where}")
+    return lines
+
+
+def _kai_write(path: Path, value) -> bool:
+    """Set [assistant] enabled in config.toml; False (and why) on failure."""
+    from voice_keyboard.config import read_config_text, set_kai_enabled, write_config_text
+
+    shown = {True: "true", False: "false", "auto": '"auto"'}[value]
+    try:
+        text = read_config_text(path) if path.exists() else ""
+        write_config_text(path, set_kai_enabled(text, value))
+    except ValueError as exc:
+        print(f"Can't change {path}: {exc} (set [assistant] enabled = {shown})", file=sys.stderr)
+        return False
+    except OSError as exc:
+        print(
+            f"Can't write {path} ({exc}): set [assistant] enabled = {shown}"
+            " where your config comes from",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _kai_state_with(config, value):
+    """Kai's state were [assistant] enabled set to `value`."""
+    from voice_keyboard.assistant.locality import KaiState, kai_state
+
+    if config is None:
+        return KaiState(on=bool(value), setting="on" if value is True else "off", local=False)
+    table = config.get("assistant", {}) if isinstance(config.get("assistant"), dict) else {}
+    return kai_state({**config, "assistant": {**table, "enabled": value}})
+
+
+def _kai_told(state) -> None:
+    """Record `state` as announced (assistant/announce.py): what `kai
+    on|off` just printed is the notice."""
+    try:
+        from voice_keyboard.assistant import announce
+
+        announce.write_record(state)
+    except Exception:
+        pass
+
+
+def _kai_after(response, file_state, name: str) -> None:
+    """Say what the running daemon actually did."""
+    if response is None:
+        print("The daemon isn't running; it applies when the daemon starts.")
+        return
+    on = bool(response.get("assistant"))
+    if on == file_state.on:
+        print(f"The running daemon has {name} {'on' if on else 'off'} now.")
+        return
+    print(f"The running daemon still has {name} {'on' if on else 'off'}: {response.get('assistant_why', '')}")
+    print(f"  Its speech settings change only at a restart: {_daemon_restart_hint()}")
+
+
+def _run_kai(argv: list, socket: str | None) -> int:
+    """`voice-keyboard kai` says whether Kai, the voice assistant, is on and
+    why; `kai on` turns it on (asking first when it would use online
+    services; `--yes` is that answer for scripts); `kai off` turns it off,
+    at once."""
+    import copy
+
+    from voice_keyboard import paths
+    from voice_keyboard.assistant.locality import kai_state, summon_hint
+
+    args = [a for a in argv if a != "--yes"]
+    yes = "--yes" in argv
+    action = args[0].lower() if args else "status"
+    if action not in {"status", "on", "off"} or len(args) > 1:
+        print("usage: voice-keyboard kai [on [--yes] | off]", file=sys.stderr)
+        return 2
+    path = paths.config_dir() / "config.toml"
+    try:
+        config = load_config(path)
+    except Exception as exc:
+        if action == "off":
+            config = None  # off never depends on the rest of the file
+        else:
+            print(f"Can't read {path}: {exc}. Fix it first (voice-keyboard doctor).", file=sys.stderr)
+            return 1
+    if socket:
+        socket_path = socket
+    elif config is not None:
+        socket_path = config["daemon"]["socket_path"]
+    else:
+        from voice_keyboard.config import _default_config_with_paths
+
+        socket_path = _default_config_with_paths()["daemon"]["socket_path"]
+    cli = "voice-keyboard"
+
+    if action == "off":
+        name = str(((config or {}).get("assistant", {}) or {}).get("name", "Kai")).strip() or "Kai"
+        # What this says is the notice: the daemon needn't repeat it.
+        _kai_told(_kai_state_with(config, False))
+        written = _kai_write(path, False)
+        # Off now, whatever the file write did.
+        response = _kai_daemon(socket_path, "kai_off")
+        if response is None:
+            print(f"{name} is off." if written else f"{name} is not off yet: fix the file above.")
+            if written:
+                print("The daemon isn't running; it stays off when it starts.")
+        else:
+            print(f"{name} is off now. Turn it on: {cli} kai on")
+            if not written:
+                print(
+                    f"  …until the daemon restarts, or you change {name}'s settings in the file:"
+                    " the file above still has it on."
+                )
+        return 0 if written else 1
+
+    state = kai_state(config)
+    name = state.name
+    if action == "on":
+        from voice_keyboard.config import validate_config
+
+        try:
+            validate_config(config)
+        except Exception as exc:
+            # The daemon refuses this file, so Kai can't turn on with it.
+            print(
+                f"Can't turn {name} on: {path} has an error: {exc}. Fix it first"
+                " (voice-keyboard doctor).",
+                file=sys.stderr,
+            )
+            return 1
+    daemon = _kai_daemon(socket_path)
+    if daemon is not None and daemon.get("config_path") and Path(daemon["config_path"]) != path:
+        print(f"Note: the running daemon reads {daemon['config_path']}, not {path}.")
+
+    if action == "status":
+        now = None
+        if daemon is not None and "assistant" in daemon:
+            now = (bool(daemon.get("assistant")), daemon.get("assistant_why", ""))
+        if now is not None and (now[0] != state.on or now[1] != state.why()):
+            print(f"Now: {name} is {now[1]}")
+            print(f"After a restart: {name} is {state.why()}")
+        else:
+            print(f"{name} is {state.why()}")
+        if state.from_example:
+            print(
+                "  (The enabled = true in your settings was copied from an older example"
+                ' config, where it was the default, so it counts as "auto".)'
+            )
+        for line in _kai_hop_lines(state.hops, config):
+            print(line)
+        if state.on:
+            print(f"Ask it: {summon_hint(config)}. Turn it off: {cli} kai off")
+        elif state.setting == "auto" and state.can_answer:
+            print(f"Turn it on anyway: {cli} kai on")
+            print("Or keep it on this computer: a local speech server and a local model.")
+        elif state.setting == "off":
+            print(f"Turn it on: {cli} kai on")
+        return 0
+
+    # on
+    if state.on:
+        if daemon is None or daemon.get("assistant"):
+            print(f"{name} is already {state.why()}")
+            return 0
+        print(f"{name} is {state.why()} in your settings.")
+        _kai_after(_kai_daemon(socket_path, "reload"), state, name)
+        return 0
+    planned = copy.deepcopy(config)
+    planned.setdefault("assistant", {})["enabled"] = "auto"
+    auto = kai_state(planned)
+    if auto.on:
+        _kai_told(auto)
+        if state.setting != "auto" and not _kai_write(path, "auto"):
+            return 1
+        print(f"{name} is on: everything it uses runs on {auto.place}.")
+        print("  (If you switch any of it to an online service, it turns off until you say so.)")
+        response = _kai_daemon(socket_path, "reload")
+        _kai_after(response, auto, name)
+        return 0
+    if not state.can_answer and not auto.can_answer:
+        print(f"{name} has no language model to answer with: set [llm] first.", file=sys.stderr)
+        return 1
+    # Online: ask, naming every service it would use, now or after a restart.
+    # The hops come from the state once turned on: `true` also uses an online
+    # [recall] that is skipped while Kai is off.
+    on_state = _kai_state_with(config, True)
+    hops = list(on_state.hops)
+    seen = {(hop.role, hop.service) for hop in hops}
+    for hop in (daemon or {}).get("assistant_hops", []) or []:
+        if not hop.get("local") and (hop.get("role"), hop.get("service")) not in seen:
+            from voice_keyboard.assistant.locality import Hop
+
+            hops.append(Hop(hop.get("role", ""), hop.get("service", ""), False, hop.get("section", "")))
+            seen.add((hop.get("role"), hop.get("service")))
+    online = [hop for hop in hops if not hop.local]
+    print(f"{name}, the voice assistant, would use online services:")
+    for line in _kai_hop_lines(online, config):
+        print(line)
+    print("To keep it on this computer instead, use a local speech server and a local model.")
+    names: list = []
+    for hop in online:
+        if (hop.company or hop.service) not in names:
+            names.append(hop.company or hop.service)
+    companies = " and ".join(names) if len(names) < 3 else ", ".join(names[:-1]) + " and " + names[-1]
+    if not yes:
+        if not sys.stdin.isatty():
+            print(f"Run `{cli} kai on` in a terminal to confirm, or `{cli} kai on --yes`.")
+            return 2
+        try:
+            answer = input(f"Turn on {name} and send these to {companies}? (y/N) ").strip().lower()
+        except EOFError:
+            answer = ""
+        if answer not in {"y", "yes"}:
+            print(f"{name} stays off.")
+            return 0
+    _kai_told(on_state)
+    if not _kai_write(path, True):
+        return 1
+    print(f"{name} is on (you turned it on). Ask it: {summon_hint(config)}. Turn it off: {cli} kai off")
+    response = _kai_daemon(socket_path, "reload")
+    _kai_after(response, on_state, name)
+    return 0
 
 
 def main() -> None:
@@ -879,7 +1169,7 @@ def main() -> None:
         choices=[
             "start", "stop", "toggle", "tts", "status",
             "history", "recall", "transform", "intent", "learned",
-            "keep", "discard", "ask", "find", "converse", "summon",
+            "keep", "discard", "ask", "find", "converse", "summon", "kai",
             "login", "quit", "devices", "setup", "stats", "commands", "doctor", "try",
         ],
         help="Command to send to daemon (default: toggle)",
@@ -893,6 +1183,7 @@ def main() -> None:
             " | learned [accept N | reject N | hotword N | macro N <name> |"
             " add <spoken> = <written> | forget <spoken>] | stats [--json]"
             " | commands [filter] | try [register:] <words…> (no words: one per line)"
+            " | kai [on [--yes] | off]"
         ),
     )
     parser.add_argument(
@@ -900,6 +1191,11 @@ def main() -> None:
         action=_LazyVersion,
         nargs=0,
         help="show the version and exit",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="kai on: turn Kai on even with online services, without asking (for scripts)",
     )
     parser.add_argument(
         "--socket",
@@ -933,6 +1229,11 @@ def main() -> None:
         findings = doctor.run(path, loaded)
         print(doctor.render(findings), end="")
         sys.exit(1 if any(f.status == doctor.FAIL for f in findings) else 0)
+
+    if args.command == "kai":
+        # Kai on or off, and why. Before the config loads: `kai off` must
+        # work whatever else is wrong with the file.
+        sys.exit(_run_kai(args.args + (["--yes"] if args.yes else []), args.socket))
 
     if args.command == "setup":
         # The settings walkthrough; it must run before the config is
@@ -1017,12 +1318,15 @@ def main() -> None:
 
     if args.command in {"converse", "summon"}:
         # Summon Kai (or end/cancel a live turn) — the same toggle the second
-        # hotkey and the on-screen orb fire. Fire-and-forget: the turn owns
-        # its own overlay, so don't wait on it.
+        # hotkey and the on-screen orb fire. The turn owns its own overlay,
+        # so this waits only to hear whether Kai is off.
         try:
-            client.send_command("converse", timeout=5.0)
+            response = client.send_command("converse", timeout=5.0)
         except Exception as e:
             _print_connect_failure(e)
+            sys.exit(1)
+        if response.get("status") == "error":
+            print(response.get("message", "Kai is off"), file=sys.stderr)
             sys.exit(1)
         return
 

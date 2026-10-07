@@ -152,13 +152,15 @@ class AssistantMemory:
         return scored[:limit]
 
     def relevant_chunks(
-        self, query: str, limit: int, *, config: Optional[dict] = None
+        self, query: str, limit: int, *, embedder: Optional[recall.Embedder] = None
     ) -> list[ContextChunk]:
         """The unified recall: durable memories PLUS dictation-ledger hits.
 
         Memories come first (explicit, durable); ledger entries fold in so
         the brain can recall anything you dictated. Ledger search reuses
-        the daemon's recall (keyword, or semantic when configured)."""
+        the daemon's recall: keyword, or semantic with the `embedder` the
+        brain chose (only when [recall] is local, or Kai was turned on with
+        online services; see assistant/locality.py)."""
         chunks: list[ContextChunk] = []
         for record in self.search(query, limit):
             chunks.append(
@@ -172,7 +174,6 @@ class AssistantMemory:
             )
         try:
             entries = history.last_entries(500)
-            embedder = recall.create_embedder(config or {})
             for hit in recall.search(entries, query, embedder=embedder, limit=limit):
                 chunks.append(
                     ContextChunk(

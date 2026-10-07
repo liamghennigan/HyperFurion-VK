@@ -14,6 +14,8 @@ from typing import Optional
 
 import requests
 
+from voice_keyboard.netpolicy import refuse_redirect, request_kwargs
+
 logger = logging.getLogger(__name__)
 
 _WORD_RE = re.compile(r"[\w'-]+", re.UNICODE)
@@ -27,18 +29,29 @@ def create_embedder(config: dict) -> Optional["Embedder"]:
     model = str(recall_cfg.get("model", "")).strip()
     if not base_url or not model:
         return None
+    from voice_keyboard.config import is_direct_endpoint
+
     return Embedder(
         base_url=base_url,
         model=model,
         api_key=str(recall_cfg.get("api_key", "")).strip(),
+        direct=is_direct_endpoint(config, base_url),
     )
 
 
 class Embedder:
-    def __init__(self, *, base_url: str, model: str, api_key: str = ""):
+    def __init__(
+        self, *, base_url: str, model: str, api_key: str = "", direct: Optional[bool] = None
+    ):
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._api_key = api_key
+        if direct is None:
+            from voice_keyboard.config import _is_local_endpoint
+
+            direct = _is_local_endpoint(base_url)
+        # A local server is reached directly: no proxy, no redirects.
+        self._direct = bool(direct)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         headers = {"Content-Type": "application/json"}
@@ -50,7 +63,9 @@ class Embedder:
                 headers=headers,
                 json={"model": self._model, "input": texts},
                 timeout=EMBED_TIMEOUT_S,
+                **request_kwargs(self._direct),
             )
+            refuse_redirect(response, self._direct)
             response.raise_for_status()
             data = response.json()["data"]
             vectors = [item["embedding"] for item in data]

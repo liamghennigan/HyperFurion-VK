@@ -107,6 +107,16 @@ NIF_SHOWTIP = 0x80
 NIIF_INFO = 0x01
 NIIF_ERROR = 0x03
 NIIF_NOSOUND = 0x10
+# MessageBoxW: the tray's questions (Turn on Kai…) and their errors. On top
+# and in front, since the tray menu that asked has already closed.
+MB_OK = 0x0
+MB_YESNO = 0x4
+MB_ICONQUESTION = 0x20
+MB_ICONWARNING = 0x30
+MB_DEFBUTTON2 = 0x100
+MB_SETFOREGROUND = 0x10000
+MB_TOPMOST = 0x40000
+IDYES = 6
 NOTIFYICON_VERSION_4 = 4
 NIN_SELECT = 0x0400  # WM_USER + 0
 NIN_KEYSELECT = 0x0401
@@ -378,6 +388,9 @@ class ShellCallbacks:
     set_autostart: Callable[[bool], None] = lambda enabled: None
     open_help: Callable[[], None] = lambda: None
     status: Callable[[], dict] = lambda: {}
+    # Turn on Kai… (True) / Turn off Kai (False); returns at once (the app
+    # does the work, and any question, on a worker thread).
+    set_kai: Callable[[bool], None] = lambda on: None
 
 
 @dataclass
@@ -395,7 +408,9 @@ class _Overlay:
 @dataclass
 class _Orb:
     visible: bool = False
-    want: bool = True
+    # Hidden until the daemon says Kai is on (set_button(True)): the orb
+    # never flashes up for a Kai that is off.
+    want: bool = False
     hover: bool = False
     tracking: bool = False
     pressed: bool = False
@@ -482,6 +497,25 @@ class WinShell:
 
     def notify(self, title: str, body: str = "", *, error: bool = False) -> None:
         self._post(("notify", title, body, error))
+
+    @property
+    def can_notify(self) -> bool:
+        """The notification-area icon is up, so a balloon will show."""
+        return bool(self._tray.added)
+
+    def confirm(self, title: str, body: str) -> bool:  # pragma: no cover - requires Windows
+        """A Yes/No question in front of everything, No by default. Blocks:
+        call it from a worker thread, never the UI thread."""
+        user32 = _load_api()[0]
+        flags = MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2 | MB_SETFOREGROUND | MB_TOPMOST
+        return int(user32.MessageBoxW(self._hwnd or None, body, title, flags)) == IDYES
+
+    def alert(self, title: str, body: str) -> None:  # pragma: no cover - requires Windows
+        """A message that must be read (a settings file that couldn't be
+        written). Blocks: call it from a worker thread."""
+        user32 = _load_api()[0]
+        flags = MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST
+        user32.MessageBoxW(self._hwnd or None, body, title, flags)
 
     def set_labels(self, *, dictation: str, assistant: str, read: str) -> None:
         """Hotkey names shown in the menu and tooltip (refreshed whenever the
@@ -1286,15 +1320,23 @@ class WinShell:
                 + f"\t{self._dictation_hotkey}",
                 lambda: self._with_focus_restored(self._cb.toggle_dictation),
             )
-            if status.get("assistant", True):
+            # Kai, the voice assistant: asked, its orb, and turned off while
+            # it is on; only "Turn on Kai…" while it is off (that item says
+            # first where your questions would go).
+            kai_on = bool(status.get("assistant", False))
+            if kai_on:
                 kai = f"\tHold {self._assistant_hotkey}" if self._assistant_hotkey else ""
                 add(f"Ask Kai{kai}", lambda: self._with_focus_restored(self._cb.summon))
+            else:
+                add("Turn on Kai…", lambda: self._cb.set_kai(True))
             read_label = "Read clipboard aloud"
             if self._read_hotkey:
                 read_label += f"\t(selection: {self._read_hotkey})"
             add(read_label, self._cb.read_clipboard, refocus=True)
             separator()
-            add("Show Kai orb", self._toggle_orb, checked=self._orb.want, refocus=True)
+            if kai_on:
+                add("Show Kai orb", self._toggle_orb, checked=self._orb.want, refocus=True)
+                add("Turn off Kai", lambda: self._cb.set_kai(False), refocus=True)
             add("Open settings file…", self._cb.open_settings)
         add("Open logs folder", self._cb.open_logs)
         add("Start with Windows", self._toggle_autostart, checked=self._safe_autostart(),

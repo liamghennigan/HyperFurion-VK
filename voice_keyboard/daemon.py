@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import dataclasses
 import json
 import logging
 import signal
@@ -11,6 +12,8 @@ from typing import Optional
 from voice_keyboard import clipboard, dictionary, history, latency, recall
 from voice_keyboard.ambient import AmbientGate
 from voice_keyboard.assistant import Brain, create_brain
+from voice_keyboard.assistant import announce
+from voice_keyboard.assistant.locality import KaiState, kai_state, turn_on_hint
 from voice_keyboard.audio_capture import AudioCapture
 from voice_keyboard.config import _config_dir, load_config, validate_config
 from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
@@ -83,6 +86,11 @@ REJOIN_WINDOW_S = 30.0
 PAUSE_REVIEW_CALL_S = 5.0
 PAUSE_REVIEW_FINAL_S = 2.5
 FOCUS_WATCHDOG_S = 1.5
+# How often the daemon looks at config.toml for a Kai on/off change.
+KAI_POLL_S = 2.0
+# The "Kai is off" hint on releasing Right Ctrl shows at most this often
+# (under "auto": Right Ctrl is also an ordinary Ctrl key).
+KAI_OFF_HINT_EVERY_S = 600.0
 # A hands-free Kai question (a tap, or the wake word) ends after this much
 # trailing silence — you just stop talking, no second press.
 CONVERSE_AUTO_STOP_MS = 1500
@@ -130,6 +138,11 @@ def _nav_refusal(action) -> str:
         return f"Can't {action.action.split(':')[1]} here"
     return f"Can't {action.action.split(':')[0]} that here"
 
+
+class KaiTurnedOff(RuntimeError):
+    """Kai was turned off while a question was starting."""
+
+
 class Daemon:
     def __init__(
         self,
@@ -172,8 +185,26 @@ class Daemon:
         # the daemon is still starting) must not be lost.
         self._stop_requested = False
         self._hotkey_lock: Optional[asyncio.Lock] = None
-        # The conversational mind (None until [assistant] enabled).
+        # Kai, the conversational mind: a Brain while Kai is on, None while
+        # it is off. Under the default ([assistant] enabled = "auto") Kai is
+        # on only when everything it uses runs on this computer
+        # (assistant/locality.py). _brain changes only on the event loop.
         self._brain: Optional[Brain] = create_brain(self._config)
+        self._kai_state: KaiState = (
+            self._brain.state if self._brain is not None else kai_state(self._config)
+        )
+        # Set by `kai_off` (IPC, the tray): Kai's sections of the file as
+        # they were then. Kai stays off until a reload finds them changed,
+        # even if the file couldn't be written.
+        self._kai_off_pin: Optional[dict] = None
+        # Right Ctrl held while Kai is off: the hint shows on release.
+        self._off_hold = False
+        self._off_hint_at: Optional[float] = None
+        self._kai_tasks: set = set()
+        self._kai_poll_task: Optional[asyncio.Task] = None
+        # One Kai notice at a time (assistant/announce.py).
+        self._kai_notice_lock: Optional[asyncio.Lock] = None
+        self._wake_lock = threading.Lock()
         # This recording session routes to the brain, not the keyboard.
         self._converse_capture = False
         self._converse_pcm: list[bytes] = []
@@ -250,6 +281,8 @@ class Daemon:
         self._wake_listener = None
         self._started_at = time.monotonic()
         self._config_mtime = self._current_config_mtime()
+        # The file as Kai's state last saw it (the 2 s poll, a forced reload).
+        self._kai_stamp = self._config_mtime
 
     async def run(self) -> None:
         from voice_keyboard import client as _client
@@ -331,6 +364,15 @@ class Daemon:
             )
             self._remote_mic.start()
         self._start_wake_listener()
+        self._log_kai()
+        # Tell what changed since the last notice (Kai off after the update,
+        # on because everything is local, a new online service): never
+        # awaited here, so a slow notification never delays the start.
+        self._schedule_kai_notice()
+        # A hand edit of config.toml turns Kai on or off within seconds, not
+        # at the next recording (and turning it off closes a warm wake-word
+        # mic and hides the orb at once).
+        self._kai_poll_task = self._loop.create_task(self._kai_poll_loop())
 
     def _check_hotkey_hooks(self) -> None:
         for listener in (
@@ -354,6 +396,11 @@ class Daemon:
     @property
     def assistant_enabled(self) -> bool:
         return self._brain is not None
+
+    @property
+    def kai_state(self) -> KaiState:
+        """Why Kai is on or off, as the running daemon decided it."""
+        return self._kai_state
 
     @property
     def conversing(self) -> bool:
@@ -382,6 +429,9 @@ class Daemon:
         whatever else fails — an in-process restart must be able to bind
         again, and a dead daemon must not keep answering commands."""
         logger.info("Shutting down daemon")
+        if self._kai_poll_task is not None:
+            self._kai_poll_task.cancel()
+            self._kai_poll_task = None
         try:
             for name in (
                 "_wake_listener", "_remote_mic", "_prefetch_watcher", "_hotkey_listener",
@@ -487,22 +537,42 @@ class Daemon:
 
     def _start_wake_listener(self) -> None:
         """Arm the opt-in local wake word. A detection fires the same summon
-        toggle as the hotkey, hands-free."""
+        toggle as the hotkey, hands-free. Only while Kai is on: while it is
+        off the microphone stays closed. Safe from any thread."""
         from voice_keyboard.wake import WakeListener, wake_enabled
 
         if not wake_enabled(self._config):
             return
-        try:
-            self._wake_listener = WakeListener(
-                config=self._config,
-                on_wake=lambda: self._schedule_hotkey_action("converse_toggle"),
-                is_busy=lambda: self._recording
-                or bool(self._converse_task and not self._converse_task.done()),
-            )
-            self._wake_listener.start()
-        except Exception:
-            logger.exception("Failed to start wake listener")
-            self._wake_listener = None
+        with self._wake_lock:
+            if self._brain is None:
+                logger.warning(
+                    "Wake word is on in [wake], but %s is off, so the microphone stays"
+                    " closed (%s)", self._assistant_name(), turn_on_hint(),
+                )
+                return
+            if self._wake_listener is not None:
+                return
+            try:
+                self._wake_listener = WakeListener(
+                    config=self._config,
+                    on_wake=lambda: self._schedule_hotkey_action("converse_toggle"),
+                    is_busy=lambda: self._recording
+                    or bool(self._converse_task and not self._converse_task.done()),
+                )
+                self._wake_listener.start()
+            except Exception:
+                logger.exception("Failed to start wake listener")
+                self._wake_listener = None
+
+    def _stop_wake_listener(self) -> None:
+        """Close the wake word's microphone. Safe from any thread."""
+        with self._wake_lock:
+            listener, self._wake_listener = self._wake_listener, None
+            if listener is not None:
+                try:
+                    listener.stop()
+                except Exception:
+                    logger.exception("Stopping the wake listener failed")
 
     def _schedule_hotkey_action(self, action: str) -> None:
         if self._loop is None or self._loop.is_closed():
@@ -532,7 +602,7 @@ class Daemon:
                     await self._converse_cancel()
                 elif action == "converse_toggle":
                     # A quick tap (or the button / wake word): cut Kai off if
-                    # she's mid-turn, end an in-flight question, or start a
+                    # it's mid-turn, end an in-flight question, or start a
                     # new hands-free one. Never touches a live dictation
                     # session (that's the other key's job).
                     if self._converse_task and not self._converse_task.done():
@@ -598,13 +668,15 @@ class Daemon:
             anchor=anchor,
         )
 
+    def _button_visible(self) -> bool:
+        return bool(self._config.get("assistant", {}).get("button", True)) and (
+            self._brain is not None
+        )
+
     def _push_button_visibility(self) -> None:
-        """Tell the overlay extension whether to draw the always-on Kai orb.
-        The orb defaults visible, so we only need to hide it when the button
-        is switched off or the mind is disabled; a missed call in the common
-        case leaves it correctly shown."""
-        cfg = self._config.get("assistant", {})
-        visible = bool(cfg.get("button", True)) and bool(cfg.get("enabled", True))
+        """Tell the overlay whether to draw the always-on Kai orb: only
+        while Kai is on and [assistant] button is true."""
+        visible = self._button_visible()
         try:
             from voice_keyboard.client import _set_overlay_button
 
@@ -884,13 +956,44 @@ class Daemon:
 
                 elif command == "converse":
                     # Summon Kai (or end/cancel a turn) — the same toggle the
-                    # hotkey fires. Fire-and-forget: the turn is long and owns
-                    # its own overlay, so don't block the caller (the orb) on
-                    # it.
-                    asyncio.run_coroutine_threadsafe(
-                        self._handle_hotkey_action("converse_toggle"), self._loop
+                    # hotkey fires. The turn is long and owns its own overlay,
+                    # so the caller (the orb, `summon`) waits only to learn
+                    # whether Kai is off.
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._converse_request(), self._loop
                     )
-                    response = {"status": "ok", "message": "converse toggled"}
+                    try:
+                        ok, message = future.result(timeout=2)
+                    except TimeoutError:
+                        ok, message = True, "converse toggled"
+                    response = {"status": "ok" if ok else "error", "message": message}
+
+                elif command == "reload":
+                    # `voice-keyboard kai on|off` and the tray, after writing
+                    # config.toml: apply it now.
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._reload_request(), self._loop
+                    )
+                    try:
+                        future.result(timeout=5)
+                    except TimeoutError:
+                        response = {"status": "error", "message": "timed out reloading"}
+                    else:
+                        response = self._status_response()
+
+                elif command == "kai_off":
+                    # Unconditional and immediate, whatever else is wrong
+                    # with the file: no brain, no live question, no wake
+                    # word, no orb.
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._kai_off_request(), self._loop
+                    )
+                    try:
+                        future.result(timeout=5)
+                    except TimeoutError:
+                        response = {"status": "error", "message": "timed out turning Kai off"}
+                    else:
+                        response = self._status_response()
 
                 elif command == "status":
                     response = self._status_response()
@@ -907,7 +1010,10 @@ class Daemon:
                 else:
                     response = {"status": "error", "message": f"unknown command: {command}"}
 
-                conn.sendall(json.dumps(response).encode("utf-8"))
+                try:
+                    conn.sendall(json.dumps(response).encode("utf-8"))
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # the GNOME orb sends `converse` and never reads the reply
             except Exception as exc:
                 logger.exception("Error handling IPC command")
                 try:
@@ -937,7 +1043,19 @@ class Daemon:
             "pending_rewrite": self._pending_rewrite is not None,
             "ambient": self._ambient_gate is not None,
             "assistant": self._brain is not None,
+            # Why Kai is on or off, as this daemon decided it (it speaks with
+            # its in-memory [stt]/[tts], which change only at a restart).
+            "assistant_setting": self._kai_state.setting,
+            "assistant_local": self._kai_state.local,
+            "assistant_why": self._kai_state.why(),
+            "assistant_hops": [
+                {"role": hop.role, "service": hop.service, "local": hop.local,
+                 "section": hop.section}
+                for hop in self._kai_state.hops
+            ],
+            "assistant_button": self._button_visible(),
             "assistant_can_act": bool(self._config.get("assistant", {}).get("can_act", False)),
+            "config_path": str(_config_dir() / "config.toml"),
             "last_text_len": len(self._last_typed),
             "last_error": self._last_error,
             "uptime_s": int(time.monotonic() - self._started_at),
@@ -967,40 +1085,311 @@ class Daemon:
 
     # ------------------------------------------------------------ config
 
-    def _current_config_mtime(self) -> float:
+    def _current_config_mtime(self) -> tuple:
+        """config.toml's (mtime in ns, size): two saves within one timestamp
+        tick still differ by size more often than not."""
         try:
-            return (_config_dir() / "config.toml").stat().st_mtime
+            stat = (_config_dir() / "config.toml").stat()
         except OSError:
-            return 0.0
+            return (0, 0)
+        return (stat.st_mtime_ns, stat.st_size)
 
-    def _maybe_reload_flow_config(self) -> None:
-        """Adopt [flow]/[registers]/[llm]/[intent] edits without a restart.
+    def _maybe_reload_flow_config(self, force: bool = False) -> None:
+        """Adopt [flow]/[registers]/[llm]/[intent]/[assistant] edits without
+        a restart, and re-decide whether Kai is on.
 
         Provider, audio, hotkey, and daemon changes still need a restart —
-        they own live resources. Reload happens at recording start, so a
-        broken config never interrupts an active session.
+        they own live resources. Reload happens at recording start (and at
+        `voice-keyboard kai on|off`, `force`), so a broken config never
+        interrupts an active session. A broken file still turns Kai off when
+        it says Kai is off.
         """
-        mtime = self._current_config_mtime()
-        if mtime == self._config_mtime:
+        stamp = self._current_config_mtime()
+        if not force and stamp == self._config_mtime:
             return
-        self._config_mtime = mtime
+        self._config_mtime = stamp
+        self._kai_stamp = stamp
         try:
             fresh = load_config()
+        except Exception as exc:
+            logger.warning("Config changed but could not be read; keeping old: %s", exc)
+            self._kai_off_if_broken_file_says_so()
+            return
+        try:
             validate_config(fresh)
         except Exception as exc:
             logger.warning("Config changed but did not validate; keeping old: %s", exc)
+            self._kai_off_if_file_says_so(fresh)
             return
         for section in (
             "flow", "registers", "llm", "intent", "ambient", "ask", "recall", "assistant",
             "nav",
         ):
             self._config[section] = fresh.get(section, {})
-        # Rebuild the brain so [assistant] edits (brain, can_act, agent_id,
-        # privacy) take effect at the next turn without a restart. The
-        # assistant HOTKEY still needs a restart — it owns a listener.
-        self._brain = create_brain(self._config)
+        self._sync_speech_direct()
+        # Re-decide Kai so [assistant]/[llm]/[recall] edits (on/off, brain,
+        # can_act, agent_id, privacy) take effect at the next turn without a
+        # restart. The assistant HOTKEY still needs a restart — it owns a
+        # listener — and so does [stt]/[tts], which Kai's verdict includes.
+        self._resolve_kai(self._config)
         self._latency.persist = bool(self._config["flow"].get("latency_log", False))
         logger.info("Reloaded flow/registers/llm/intent/ambient/ask/recall/assistant config")
+
+    # ------------------------------------------------------------- Kai on/off
+
+    _KAI_SECTIONS = ("assistant", "llm", "recall")
+
+    def _kai_view(self, fresh: dict) -> dict:
+        """The running config with `fresh`'s Kai sections: what a brain
+        built now would use ([stt]/[tts]/[providers] don't hot-reload)."""
+        view = dict(self._config)
+        for section in self._KAI_SECTIONS:
+            view[section] = fresh.get(section, {})
+        return view
+
+    def _sync_speech_direct(self) -> None:
+        """[assistant] local_hosts was just reloaded: the speaking client,
+        built at the start, reaches its server directly exactly when it
+        counts as local now (the speech-to-text client is built per
+        recording and reads it then)."""
+        client = self._tts_client
+        base = getattr(client, "openai_base_url", "")
+        if not isinstance(base, str) or not base or not hasattr(client, "set_direct"):
+            return
+        from voice_keyboard.config import is_direct_endpoint
+
+        try:
+            client.set_direct(is_direct_endpoint(self._config, base))
+        except Exception:
+            logger.exception("Updating the speech client's connection failed")
+
+    def _kai_sections(self, config: dict) -> dict:
+        return {section: config.get(section, {}) for section in self._KAI_SECTIONS}
+
+    def _resolve_kai(self, view: dict) -> None:
+        """Re-decide Kai from `view` and apply the result. On the loop."""
+        if self._kai_off_pin is not None:
+            sections = self._kai_sections(view)
+            if not self._kai_off_pin:
+                # The file couldn't be read at `kai off`: the first version
+                # that reads is what it said then (a typo fixed elsewhere
+                # is no decision about Kai). Kai stays off.
+                self._kai_off_pin = sections
+                return
+            if sections == self._kai_off_pin:
+                return  # still the settings `kai off` saw: Kai stays off
+            self._kai_off_pin = None
+        brain = self._brain
+        if brain is not None and brain.built_from(view):
+            return  # nothing Kai uses changed; a live turn keeps its brain
+        new = create_brain(view)
+        self._kai_state = new.state if new is not None else kai_state(view)
+        self._set_brain(new)
+
+    def _set_brain(self, brain: Optional[Brain]) -> None:
+        previous = self._brain
+        was = previous is not None
+        self._brain = brain
+        if was != (brain is not None):
+            self._kai_changed(brain is not None)
+        if brain is not previous:
+            # On or off, or rebuilt for other services: say so if it's news.
+            self._schedule_kai_notice()
+
+    def _kai_off_if_file_says_so(self, fresh: dict) -> None:
+        """A file that fails validation can't turn Kai on, but it still
+        turns Kai off when that's what it says (or what "auto" makes of it)."""
+        if self._brain is None:
+            return
+        view = self._kai_view(fresh)
+        state = kai_state(view)
+        if state.on:
+            return
+        logger.warning("Kai is off in the changed config, so it is off now")
+        self._kai_state = state
+        self._set_brain(None)
+
+    def _kai_off_if_broken_file_says_so(self) -> None:
+        """config.toml doesn't parse, but [assistant] alone says enabled =
+        false: Kai is off now, without waiting for the typo to be fixed."""
+        if self._brain is None:
+            return
+        from voice_keyboard.config import kai_off_in_broken_text, read_config_text
+
+        try:
+            off = kai_off_in_broken_text(read_config_text(_config_dir() / "config.toml"))
+        except Exception:
+            return
+        if not off:
+            return
+        logger.warning("Kai is off in the changed config, so it is off now")
+        self._kai_state = dataclasses.replace(self._kai_state, on=False, setting="off")
+        self._set_brain(None)
+
+    def _reload_kai_only(self, *, force: bool = False) -> None:
+        """Re-decide Kai from config.toml without touching anything a live
+        dictation uses ([flow], [registers], ...); the rest is adopted at the
+        next recording start. The 2 s poll and a forced reload during a
+        dictation use it."""
+        stamp = self._current_config_mtime()
+        if not force and stamp == self._kai_stamp:
+            return
+        self._kai_stamp = stamp
+        try:
+            fresh = load_config()
+        except Exception as exc:
+            logger.warning("Config changed but could not be read; keeping old: %s", exc)
+            self._kai_off_if_broken_file_says_so()
+            return
+        try:
+            validate_config(fresh)
+        except Exception as exc:
+            logger.warning("Config changed but did not validate; keeping old: %s", exc)
+            self._kai_off_if_file_says_so(fresh)
+            return
+        view = self._kai_view(fresh)
+        # The orb, the name and the earcon follow at once.
+        self._config["assistant"] = view["assistant"]
+        self._sync_speech_direct()
+        self._resolve_kai(view)
+
+    async def _kai_poll_loop(self) -> None:
+        while True:
+            await asyncio.sleep(KAI_POLL_S)
+            try:
+                self._reload_kai_only()
+            except Exception:
+                logger.exception("Checking config.toml for Kai failed")
+
+    async def _reload_request(self) -> None:
+        """IPC `reload` / Daemon.reload_config(): apply config.toml now. A
+        live dictation (or one starting) keeps its settings: only Kai is
+        re-decided, the rest waits for the next recording.
+
+        Sent only by `voice-keyboard kai on` and the tray's Turn on Kai…
+        after they wrote the file: an earlier `kai off` gives way to it,
+        even when that couldn't write the file and it still says on."""
+        self._kai_off_pin = None
+        lock = self._hotkey_lock
+        if self._recording or (lock is not None and lock.locked()):
+            self._reload_kai_only(force=True)
+        else:
+            self._maybe_reload_flow_config(force=True)
+
+    async def _kai_off_request(self) -> None:
+        """IPC `kai_off` / Daemon.kai_off(): off now, whatever the file says
+        or whether it could be written. Kai stays off until Kai's settings
+        in the file change."""
+        try:
+            pin = self._kai_sections(self._kai_view(load_config()))
+        except Exception:
+            pin = {}  # unreadable: any readable file counts as a change
+        self._kai_off_pin = pin
+        self._kai_state = dataclasses.replace(self._kai_state, on=False, setting="off")
+        if self._brain is not None:
+            self._set_brain(None)
+        else:
+            self._off_hold = False
+            self._schedule_kai_notice()  # records "off"; says nothing
+            await asyncio.to_thread(self._push_button_visibility)
+            await asyncio.to_thread(self._stop_wake_listener)
+
+    def reload_config(self, timeout: float = 5.0) -> bool:
+        """Thread-safe: apply config.toml now (the tray, after writing it)."""
+        return self._run_on_loop(self._reload_request(), timeout)
+
+    def kai_off(self, timeout: float = 5.0) -> bool:
+        """Thread-safe: turn Kai off now (the tray's Turn off Kai)."""
+        return self._run_on_loop(self._kai_off_request(), timeout)
+
+    def _run_on_loop(self, coro, timeout: float) -> bool:
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            coro.close()
+            return False
+        try:
+            asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
+        except Exception:
+            logger.exception("Applying the Kai change failed")
+            return False
+        return True
+
+    def _kai_changed(self, on: bool) -> None:
+        """Kai just turned on or off: log it, and bring the orb, the wake
+        word and any live question in line — off the loop where it blocks
+        (gdbus, joining the wake thread)."""
+        self._log_kai()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is None:  # no loop yet (startup, tests): apply in place
+            self._apply_kai_side_effects()
+            return
+        task = loop.create_task(self._kai_transition(on))
+        self._kai_tasks.add(task)
+        task.add_done_callback(self._kai_tasks.discard)
+
+    async def _kai_transition(self, on: bool) -> None:
+        if not on:
+            # Off means off: a question being captured is dropped before it
+            # is sent, and an answer in progress stops.
+            await self._discard_kai_turn()
+        await asyncio.to_thread(self._apply_kai_side_effects)
+
+    def _apply_kai_side_effects(self) -> None:
+        """Orb and wake word follow Kai's current state (not the state when
+        this was scheduled, so two quick changes settle on the last)."""
+        self._push_button_visibility()
+        if self._brain is not None:
+            self._start_wake_listener()
+        else:
+            self._stop_wake_listener()
+
+    async def _discard_kai_turn(self) -> None:
+        if self._hotkey_lock is None:
+            self._hotkey_lock = asyncio.Lock()
+        async with self._hotkey_lock:
+            self._off_hold = False
+            if self._brain is not None:
+                return  # turned back on meanwhile
+            if self._converse_capture or (self._converse_task and not self._converse_task.done()):
+                await self._converse_cancel(quiet=True)
+                await self._show_hotkey_overlay(
+                    "empty", detail=f"⌁ {self._assistant_name()} is off", timeout_ms=1500
+                )
+
+    def _schedule_kai_notice(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no loop yet: _start_services announces
+        task = loop.create_task(self._announce_kai())
+        self._kai_tasks.add(task)
+        task.add_done_callback(self._kai_tasks.discard)
+
+    async def _announce_kai(self) -> None:
+        """Tell what changed about Kai since the last notice, if anything
+        (assistant/announce.py), from the state this daemon runs under."""
+        if self._kai_notice_lock is None:
+            self._kai_notice_lock = asyncio.Lock()
+        async with self._kai_notice_lock:
+            config = self._config
+            if self._assistant_hotkey_listener is None:
+                # No listener (none bound, or it failed): don't say "hold
+                # Right Ctrl".
+                config = {**config, "assistant": {**config.get("assistant", {}), "hotkey": ""}}
+            try:
+                await asyncio.to_thread(announce.announce, self._kai_state, config)
+            except Exception:
+                logger.exception("Telling about Kai's state failed")
+
+    def _log_kai(self) -> None:
+        state = self._kai_state
+        line = f"{self._assistant_name()}: {state.why()}"
+        if not state.on and state.setting == "auto":
+            line += f" (turn it on: {turn_on_hint()})"
+        logger.info("%s", line)
 
     # ------------------------------------------------------- flow session
 
@@ -1446,14 +1835,20 @@ class Daemon:
 
     # --------------------------------------------------------- recording
 
-    async def _start_recording(self) -> None:
+    async def _start_recording(self, *, reload: bool = True) -> None:
+        """Open the mic and the speech-to-text connection. `reload=False`:
+        the caller already reloaded (a Kai summon, which decided on the
+        brain it got). For a Kai question, nothing connects once Kai is off."""
         if self._recording:
             return
         self._timer = latency.UtteranceTimer()
         self._timer.mark("start")
         self._onset = OnsetDetector()
-        self._maybe_reload_flow_config()
+        if reload:
+            self._maybe_reload_flow_config()
         validate_config(self._config)
+        if self._kai_question_refused():
+            raise KaiTurnedOff()  # not even the mic opens
 
         flow_cfg = self._config.get("flow", {})
         probe_task: Optional[asyncio.Task] = None
@@ -1482,6 +1877,11 @@ class Daemon:
                 probe_task.cancel()
             raise
 
+        if self._kai_question_refused():
+            if probe_task is not None:
+                probe_task.cancel()
+            await self._cleanup_after_failed_start()
+            raise KaiTurnedOff()
         self._stt_client = create_stt_client(self._config)
         try:
             await self._stt_client.connect(self._audio_capture.sample_rate)
@@ -1492,6 +1892,12 @@ class Daemon:
                 probe_task.cancel()
             await self._cleanup_after_failed_start()
             raise
+        if self._kai_question_refused():
+            # Turned off while connecting: not one chunk is sent.
+            if probe_task is not None:
+                probe_task.cancel()
+            await self._cleanup_after_failed_start()
+            raise KaiTurnedOff()
 
         await self._setup_flow_session(probe_task)
 
@@ -1543,6 +1949,11 @@ class Daemon:
     async def _stop_recording(self) -> str:
         if not self._recording:
             return ""
+        if self._kai_question_refused():
+            # Kai was turned off mid-question: the buffered audio (REST
+            # providers upload it here) is dropped, not sent.
+            await self._drop_converse_capture()
+            return ""
 
         self._recording = False
         self._stop_note = ""
@@ -1569,6 +1980,12 @@ class Daemon:
             audio_capture = self._audio_capture
             self._audio_capture = None
             await asyncio.to_thread(audio_capture.stop)
+
+        if self._kai_question_refused():
+            # Kai was turned off while the mic closed: a REST speech server
+            # would get the whole recording at send_audio_done. Not sent.
+            await self._drop_converse_capture()
+            return ""
 
         if self._stt_client:
             try:
@@ -2391,28 +2808,42 @@ class Daemon:
     def _assistant_name(self) -> str:
         return str(self._config.get("assistant", {}).get("name", "Kai")).strip() or "Kai"
 
+    def _kai_question_refused(self) -> bool:
+        """A Kai question is being captured, but Kai is off now."""
+        return self._converse_capture and self._brain is None
+
     async def _converse_start(self, *, hands_free: bool = False) -> None:
         """Summon Kai: open the mic for a spoken question. Shared by the
         hotkey (hold or tap), the on-screen button, and the wake word.
 
-        hands_free (a tap or the wake word) ends the question on silence; a
-        hold ends it on release."""
+        hands_free (a tap, the orb, the wake word, `summon`) ends the
+        question on silence; a hold ends it on release."""
         if self._recording or (self._converse_task and not self._converse_task.done()):
             return
+        # Read config.toml first: Kai turned on or off there counts now.
+        self._maybe_reload_flow_config()
         if self._brain is None:
-            # Bound but the mind is off — a helpful nudge, never silence.
-            await self._show_hotkey_overlay(
-                "empty",
-                detail="⌁ enable [assistant] to summon Kai",
-                timeout_ms=2600,
-            )
+            if hands_free:
+                # Asked for Kai on purpose: say why it is off, and how.
+                await self._show_kai_off_hint(asked=True)
+            else:
+                # A Right-Ctrl hold may just be Ctrl in a shortcut: show
+                # nothing now, the hint on release.
+                self._off_hold = True
             return
         self._converse_capture = True
         self._converse_hands_free = hands_free
         self._converse_pcm = []
         await self._show_hotkey_overlay("starting", detail=f"⌁ {self._assistant_name()}…")
         try:
-            await self._start_recording()
+            await self._start_recording(reload=False)
+        except KaiTurnedOff:
+            self._converse_capture = False
+            self._converse_pcm = []
+            await self._show_hotkey_overlay(
+                "empty", detail=f"⌁ {self._assistant_name()} is off", timeout_ms=1500
+            )
+            return
         except Exception as exc:
             self._converse_capture = False
             self._converse_pcm = []
@@ -2428,7 +2859,21 @@ class Daemon:
 
     async def _converse_stop(self) -> None:
         """End the spoken question and hand the turn off the hotkey lock."""
+        if self._off_hold:
+            # Released a hold that started while Kai was off (unless Kai
+            # turned on meanwhile: then there is nothing to explain).
+            self._off_hold = False
+            if self._brain is None:
+                await self._show_kai_off_hint(asked=False)
+            return
         if not self._converse_capture:
+            return
+        if self._kai_question_refused():
+            # Turned off mid-question: the question is dropped, not sent.
+            await self._drop_converse_capture()
+            await self._show_hotkey_overlay(
+                "empty", detail=f"⌁ {self._assistant_name()} is off", timeout_ms=1500
+            )
             return
         self._earcon("captured")
         await self._show_hotkey_overlay(
@@ -2437,12 +2882,19 @@ class Daemon:
         # _stop_recording drains STT, then schedules self._converse_task.
         await self._stop_recording()
 
-    async def _converse_cancel(self) -> None:
-        """Barge-in: cut off Kai's answer, or discard a live question."""
+    async def _converse_cancel(self, *, quiet: bool = False) -> None:
+        """Barge-in: cut off Kai's answer, or discard a live question.
+        `quiet`: no "cancelled" overlay (Kai was turned off)."""
+        if self._off_hold:
+            # The hold that started while Kai was off turned into a chord
+            # (Right Ctrl used as Ctrl): nothing to say.
+            self._off_hold = False
+            return
+        task = self._converse_task
+        live = bool(task and not task.done()) or self._converse_capture
         if self._converse_cancel_flag is not None:
             self._converse_cancel_flag.set()  # an answer not yet playing never will
         await self._stop_audio()
-        task = self._converse_task
         self._converse_task = None
         if task and not task.done():
             task.cancel()
@@ -2450,16 +2902,74 @@ class Daemon:
                 await task
             except (asyncio.CancelledError, Exception):
                 pass
-        if self._converse_capture and self._recording:
+        if self._converse_capture:
             # A question was still being captured — tear it down WITHOUT the
-            # type-at-stop path, so nothing is injected.
-            self._converse_capture = False
-            self._converse_pcm = []
+            # type-at-stop path, so nothing is injected or sent.
             try:
-                await self._cleanup_after_failed_start()
+                await self._drop_converse_capture()
             except Exception:
                 logger.exception("Error discarding live capture on cancel")
-        await self._show_hotkey_overlay("empty", detail="⌁ cancelled", timeout_ms=1200)
+        if live and not quiet:
+            await self._show_hotkey_overlay("empty", detail="⌁ cancelled", timeout_ms=1200)
+
+    async def _drop_converse_capture(self) -> None:
+        """Discard a live Kai question: the mic closes and nothing more is
+        sent (no final upload, no turn)."""
+        self._converse_capture = False
+        self._converse_pcm = []
+        self._recording = False
+        send = self._send_task
+        self._send_task = None
+        if send is not None and send is not asyncio.current_task():
+            # Let an in-flight PortAudio read finish before the stream closes.
+            try:
+                await asyncio.wait_for(send, timeout=3.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+                pass
+        receive = self._receive_task
+        self._receive_task = None
+        if receive is not None and not receive.done():
+            receive.cancel()
+        await self._cleanup_after_failed_start()
+
+    async def _converse_request(self) -> tuple:
+        """IPC `converse` (the orb, `voice-keyboard summon`): (ok, message).
+        Kai off → the hint, and an error saying why and how to turn it on."""
+        if not (self._recording or self.conversing):
+            self._reload_kai_only()
+        if self._brain is None and not self.conversing:
+            asyncio.ensure_future(self._show_kai_off_hint(asked=True))
+            name = self._assistant_name()
+            return False, f"{name} is {self._kai_state.why()}. To turn it on: {turn_on_hint()}"
+        asyncio.ensure_future(self._handle_hotkey_action("converse_toggle"))
+        return True, "converse toggled"
+
+    def _kai_off_detail(self) -> str:
+        state = self._kai_state
+        name = self._assistant_name()
+        if state.setting == "off" or state.unreadable:
+            return f"⌁ {name} is off"
+        why = (
+            "no language model is set up" if not state.can_answer
+            else f"it would use {state.online()}"
+        )
+        return f"⌁ {name} is off ({why}). To turn it on: {turn_on_hint()}"
+
+    async def _show_kai_off_hint(self, *, asked: bool) -> None:
+        """Why Kai didn't answer. Turned off on purpose: a short note.
+        Off under "auto": what it would use and how to turn it on — on a
+        Right Ctrl release at most every 10 minutes (it is also Ctrl)."""
+        state = self._kai_state
+        if state.setting == "off":
+            await self._show_hotkey_overlay("empty", detail=self._kai_off_detail(), timeout_ms=1500)
+            return
+        now = time.monotonic()
+        if not asked and self._off_hint_at is not None and (
+            now - self._off_hint_at < KAI_OFF_HINT_EVERY_S
+        ):
+            return
+        self._off_hint_at = now
+        await self._show_hotkey_overlay("empty", detail=self._kai_off_detail(), timeout_ms=6000)
 
     async def _converse_turn(self, pcm: bytes, transcript: str) -> None:
         """Run one Kai turn to completion, owning its own overlay. Runs as a
@@ -2505,8 +3015,14 @@ class Daemon:
         - anywhere else → answer / search the web, spoken back (the voice
           agent when configured, else the local brain).
         """
-        if self._brain is None:
-            raise RuntimeError("[assistant] is not enabled")
+        # One brain for the whole turn: a reload mid-turn can't swap where
+        # the question goes. Kai turned off meanwhile: the turn is dropped.
+        brain = self._brain
+        if brain is None:
+            await self._show_hotkey_overlay(
+                "empty", detail=f"⌁ {self._assistant_name()} is off", timeout_ms=1500
+            )
+            return ""
 
         # On Wayland the daemon often can't see the focused app at all —
         # GPU terminals (Ghostty, kitty, …) expose no AT-SPI, and GNOME
@@ -2527,7 +3043,8 @@ class Daemon:
             # certain — the user might just have a question. Classify the
             # query: a runnable request becomes a typed command (no Enter);
             # a question falls through to the spoken answer below.
-            llm_client = create_llm_client(self._config)
+            # The brain's own [llm] client, the one Kai's verdict was made on.
+            llm_client = brain.llm
             if llm_client is not None:
                 await self._show_hotkey_overlay("processing", detail=f"⌁ {transcript[:40]}")
                 try:
@@ -2543,13 +3060,13 @@ class Daemon:
 
         await self._show_hotkey_overlay("processing", detail=f"⌁ {self._assistant_name()}…")
         sample_rate = int(self._config.get("audio", {}).get("sample_rate", 16000))
-        result = await self._brain.respond_audio(
+        result = await brain.respond_audio(
             pcm, sample_rate=sample_rate, transcript_hint=transcript
         )
         answer = result.text
         self._last_answer = answer
         if transcript:
-            self._brain.remember_interaction(transcript, answer)
+            brain.remember_interaction(transcript, answer)
         # Show the answer BEFORE speaking it — playback takes seconds and the
         # persistent PROCESSING pill must never outlive the thinking.
         if answer:
@@ -2785,6 +3302,10 @@ class Daemon:
                     break
                 chunk = await asyncio.to_thread(audio_capture.read_chunk)
                 if not self._recording or self._stt_client is None:
+                    break
+                if self._kai_question_refused():
+                    # Kai was turned off mid-question: send nothing more;
+                    # the transition drops the capture.
                     break
                 if self._converse_capture:
                     # Keep the raw PCM: a converse turn may go to the voice

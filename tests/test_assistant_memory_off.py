@@ -164,3 +164,40 @@ def test_reads_before_any_write_create_nothing() -> None:
     assert memory.db_path.exists()
     assert len(_rows(memory, "interactions")) == 1
 
+
+
+def test_memory_off_looks_up_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # memory_enabled = false is Kai's memory switched off: no stored
+    # memories AND no dictation-history lookups reach the brain's prompt.
+    from voice_keyboard import history
+
+    history.append_entry("the relay caps were re-derived at real prices", app="editor")
+    seeded = AssistantMemory()
+    seeded.remember("relay caps are a secret plan")
+    cfg = _config(enabled=True, brain="local", memory_enabled=False)
+    lookups: list[str] = []
+    monkeypatch.setattr(
+        history, "last_entries", lambda *a, **k: lookups.append("ledger") or []
+    )
+    llm = _local_llm("ok")
+    brain = _brain(cfg, AssistantMemory(), llm=llm)
+
+    asyncio.run(brain.respond("what about the relay caps"))
+
+    prompt = llm.complete.call_args.args[0]
+    assert "re-derived" not in prompt
+    assert "secret plan" not in prompt
+    assert lookups == []
+
+
+def test_memory_on_folds_in_history() -> None:
+    from voice_keyboard import history
+
+    history.append_entry("the relay caps were re-derived at real prices", app="editor")
+    cfg = _config(enabled=True, brain="local", memory_enabled=True)
+    llm = _local_llm("ok")
+    brain = _brain(cfg, AssistantMemory(), llm=llm)
+
+    asyncio.run(brain.respond("what about the relay caps"))
+
+    assert "re-derived" in llm.complete.call_args.args[0]

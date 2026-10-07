@@ -32,20 +32,30 @@ def llm(monkeypatch: pytest.MonkeyPatch):
 
 class TestLLM:
     def test_default_settings_without_llm_say_what_wont_work(self, llm) -> None:
+        # Kai is off by default with online services, so it isn't listed.
         finding = doctor.check_llm(_defaults())
         assert "nothing needs it" not in finding.detail
         assert finding.status == doctor.WARN
-        assert finding.detail == 'not set: Kai and "VK, …" rewrites won\'t work; pause review uses rules only'
-        assert "[llm]" in finding.fix and "[assistant] enabled = false" in finding.fix
+        assert finding.detail == 'not set: "VK, …" rewrites won\'t work; pause review uses rules only'
+        assert "[llm]" in finding.fix and "Kai" not in finding.fix
 
     def test_default_settings_with_llm_say_what_its_for(self, llm) -> None:
         llm["ready"] = True
         finding = doctor.check_llm(_defaults())
         assert finding.status == doctor.OK
-        assert finding.detail == 'ready for Kai, "VK, …" rewrites, pause review'
+        assert finding.detail == 'ready for "VK, …" rewrites, pause review'
+
+    def test_kai_turned_on_needs_llm(self, llm) -> None:
+        finding = doctor.check_llm(_defaults(assistant={"enabled": True}))
+        assert finding.detail == 'not set: Kai and "VK, …" rewrites won\'t work; pause review uses rules only'
+        assert "turn Kai off: " in finding.fix
+        llm["ready"] = True
+        assert doctor.check_llm(_defaults(assistant={"enabled": True})).detail == (
+            'ready for Kai, "VK, …" rewrites, pause review'
+        )
 
     def test_a_voice_agent_answers_kai_out_loud(self, llm) -> None:
-        config = _defaults(assistant={"agent_id": "agent-1", "api_key": "k"})
+        config = _defaults(assistant={"enabled": True, "agent_id": "agent-1", "api_key": "k"})
         finding = doctor.check_llm(config)
         assert finding.detail.startswith("not set: Kai's terminal commands and")
 
@@ -57,7 +67,9 @@ class TestLLM:
     def test_switched_on_features_still_fail(self, llm) -> None:
         finding = doctor.check_llm(_defaults(polish={"map": {"slack": "casual"}}))
         assert finding.status == doctor.FAIL
-        assert finding.detail.startswith("[polish.map] need [llm]") and "Kai" in finding.detail
+        assert finding.detail.startswith("[polish.map] need [llm]") and "Kai" not in finding.detail
+        on = doctor.check_llm(_defaults(polish={"map": {"slack": "casual"}}, assistant={"enabled": True}))
+        assert "Kai" in on.detail
 
     def test_pause_review_llm_is_a_switched_on_feature(self, llm) -> None:
         config = _defaults(assistant={"enabled": False}, flow={"wake_word": "", "pause_review": "llm"})

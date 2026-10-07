@@ -16,6 +16,7 @@ from websockets.exceptions import WebSocketException
 from urllib3.util.retry import Retry
 
 from voice_keyboard.providers import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS  # noqa: F401
+from voice_keyboard.netpolicy import refuse_redirect, request_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +115,17 @@ def create_stt_client(config: dict):
             config.get("providers", {}).get("openai", {}).get("base_url", "")
         ).strip()
 
+    from voice_keyboard.config import is_direct_endpoint  # lazy: avoid cycle
+
+    # A local speech server is reached directly: no proxy, no redirects.
+    direct = provider == "openai" and is_direct_endpoint(config, base_url)
     client = BufferedRESTSTTClient(
         provider=provider,
         api_key=api_key,
         model=model,
         language=language,
         base_url=base_url,
+        direct=direct,
     )
 
     if _live_rest_enabled(config, provider=provider, base_url=base_url):
@@ -136,6 +142,7 @@ def create_stt_client(config: dict):
             base_url=base_url,
             # Interim probes must never stall the stop path; keep them short.
             timeout=min(10.0, interval_ms / 1000.0 * 3),
+            direct=direct,
         )
         return ChunkedRESTAdapter(client, interim, interval_ms=interval_ms)
     return client
@@ -308,10 +315,17 @@ class BufferedRESTSTTClient:
         poll_interval: float = 1.0,
         max_poll_time: float = 120.0,
         base_url: str = "",
+        direct: Optional[bool] = None,
     ):
         self._provider = provider
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
+        if direct is None:
+            from voice_keyboard.config import _is_local_endpoint  # lazy: avoid cycle
+
+            direct = provider == "openai" and bool(base_url) and _is_local_endpoint(base_url)
+        # A local server is reached directly: no proxy, no redirects.
+        self._direct = bool(direct)
         self._model = model or DEFAULT_STT_MODELS.get(provider, "")
         self._language = language
         self._timeout = timeout
@@ -339,6 +353,8 @@ class BufferedRESTSTTClient:
     def session(self) -> requests.Session:
         if self._session is None:
             self._session = _build_session()
+            if self._direct:
+                self._session.trust_env = False  # no proxy from the environment
         return self._session
 
     async def connect(self, sample_rate: int) -> None:
@@ -458,7 +474,9 @@ class BufferedRESTSTTClient:
             data=data,
             files=files,
             timeout=self._timeout,
+            **request_kwargs(self._direct),
         )
+        refuse_redirect(response, self._direct)
         response.raise_for_status()
         payload = response.json()
         return str(payload.get("text", "")).strip()

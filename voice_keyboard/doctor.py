@@ -231,10 +231,13 @@ def check_focus_probe() -> Finding:
 
 
 def check_speech(config: dict) -> Finding:
+    from voice_keyboard.assistant.locality import speech_hop
+
     stt = config.get("stt", {})
     provider = str(stt.get("provider", "xai")).lower()
-    base = str(config.get("providers", {}).get(provider, {}).get("base_url", "") or "")
-    local = any(host in base for host in ("localhost", "127.0.0.1", "[::1]"))
+    # The same test Kai's verdict uses: a local speech server is local; a
+    # HyperFurion relay is cloud even on localhost (it forwards to xAI).
+    local = speech_hop(config, "stt").local
     where = "local, nothing leaves the machine" if local else "cloud"
     if not local:
         from voice_keyboard.stt import _provider_api_key
@@ -252,21 +255,16 @@ def _and(items: list[str]) -> str:
 
 def _voice_agent(config: dict) -> bool:
     """Kai answers spoken questions through the xAI voice agent, not [llm]."""
-    brain = str((config.get("assistant", {}) or {}).get("brain", "auto")).strip().lower()
-    if brain not in ("realtime", "auto"):
-        return False
-    try:
-        from voice_keyboard.assistant.realtime import create_realtime_client
+    from voice_keyboard.assistant.locality import uses_voice_agent
 
-        return create_realtime_client(config) is not None
-    except Exception:
-        return False
+    return uses_voice_agent(config)
 
 
 def check_llm(config: dict) -> Finding:
     """Features that use [llm], and whether [llm] can answer. Some you
-    switch on, and they fail without it; some are on by default — Kai,
-    "VK, …" rewrites, pause review — and do less without it."""
+    switch on, and they fail without it; some are on by default — Kai
+    (while it is on), "VK, …" rewrites, pause review — and do less without
+    it."""
     from voice_keyboard.llm import llm_ready
 
     flow = config.get("flow", {}) or {}
@@ -282,9 +280,11 @@ def check_llm(config: dict) -> Finding:
     if review == "llm":
         needs.append("pause review")
     uses = []  # on by default: they don't work without [llm]
+    from voice_keyboard.assistant.locality import kai_state
+
     assistant = config.get("assistant", {}) or {}
     kai = ""
-    if assistant.get("enabled", False):
+    if kai_state(config).on:
         name = str(assistant.get("name", "Kai")).strip() or "Kai"
         # A voice agent answers out loud without [llm]; [llm] still turns
         # a request in a terminal into a command (else Kai answers it).
@@ -299,7 +299,9 @@ def check_llm(config: dict) -> Finding:
         return Finding(OK, "llm", "ready for " + ", ".join(wanted) if wanted else "ready (nothing uses it)")
     fix = "set [llm] base_url, model and api_key (or point base_url at a local server)"
     if kai:
-        fix += "; or, if you don't want Kai, [assistant] enabled = false"
+        from voice_keyboard.assistant.locality import turn_off_hint
+
+        fix += f"; or turn Kai off: {turn_off_hint()}"
     if needs:
         detail = ", ".join(needs) + " need [llm], which has no model, endpoint or key"
         if uses:
@@ -313,13 +315,79 @@ def check_llm(config: dict) -> Finding:
     return Finding(WARN, "llm", "not set: " + "; ".join(parts), fix)
 
 
+_PROXY_VARIABLES = ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "all_proxy")
+
+
+def check_kai(config: dict, daemon_status: Optional[dict] = None) -> Finding:
+    """Kai, the voice assistant: on or off, and why. Under the default
+    ([assistant] enabled = "auto") it is on only when everything it uses
+    runs on this computer. `daemon_status`: what the running daemon decided
+    (it keeps [stt]/[tts] until a restart)."""
+    from voice_keyboard.assistant.locality import kai_state, turn_on_hint, turn_off_hint
+    from voice_keyboard.assistant.memory import memory_db_path
+
+    state = kai_state(config)
+    name = state.name
+    detail = state.why()
+    if state.from_example:
+        detail += (
+            " (the enabled = true in your settings was copied from an older example"
+            ' config, where it was the default, so it counts as "auto")'
+        )
+    if not state.on and state.setting == "auto" and state.can_answer:
+        detail += f"; to turn it on: {turn_on_hint()}"
+    recall = config.get("recall", {}) or {}
+    if (
+        state.on and state.setting == "auto" and not state.uses_embeddings
+        and str(recall.get("base_url", "") or "").strip() and str(recall.get("model", "") or "").strip()
+        and (config.get("assistant", {}) or {}).get("memory_enabled", True) is not False
+    ):
+        detail += "; its history search uses keywords: [recall] is online"
+    if not state.on:
+        try:
+            memory = memory_db_path()
+            if memory.exists():
+                detail += f"; its memory is kept at {memory}"
+        except Exception:
+            pass
+    wake = (config.get("wake", {}) or {}).get("enabled", False) is True
+    if wake and not state.on:
+        return Finding(WARN, "kai", f"the wake word is on, but {name} is off, so it isn't listening"
+                       f" ({detail})", f"{turn_on_hint()}, or [wake] enabled = false")
+    if daemon_status and "assistant" in daemon_status:
+        running = bool(daemon_status.get("assistant"))
+        if running != state.on:
+            from voice_keyboard.client import _daemon_restart_hint
+
+            now = "on" if running else "off"
+            why = daemon_status.get("assistant_why", "")
+            return Finding(
+                WARN, "kai",
+                f"the running daemon has {name} {now}" + (f" ({why})" if why else "")
+                + f", but your settings say {detail}",
+                f"it follows config.toml within seconds ({turn_on_hint() if state.on else turn_off_hint()}"
+                f" applies it at once); [stt] and [tts] changes need a restart: {_daemon_restart_hint()}",
+            )
+    if state.on and state.local:
+        proxy = next((v for v in _PROXY_VARIABLES if os.environ.get(v)), "")
+        if proxy:
+            return Finding(
+                WARN, "kai", f"{detail}; {proxy} is set, but {name} reaches its local servers"
+                " directly, never through the proxy",
+                "nothing to do while they answer: a local address is never sent through a"
+                " proxy, so a server reachable only through one won't answer Kai",
+            )
+    return Finding(OK, "kai", detail)
+
+
 def run(config_path: Path, config: Optional[dict]) -> list[Finding]:
     findings = [check_config(config_path)]
     checks: list[Callable[[], Finding]] = [check_typing, check_clipboard, check_focus_probe]
     if config is not None:
         status: dict = {}  # the daemon's answer, once check_daemon has run
         checks = [lambda: check_speech(config), lambda: check_audio(config),
-                  lambda: check_daemon(config, status), lambda: check_llm(config)] + checks
+                  lambda: check_daemon(config, status), lambda: check_llm(config),
+                  lambda: check_kai(config, status)] + checks
         if sys.platform == "linux":
             checks.append(lambda: check_hotkey(config, status))
     for check in checks:

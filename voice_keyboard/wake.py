@@ -1,4 +1,4 @@
-"""Wake word: summon Kai hands-free by saying her name.
+"""Wake word: summon Kai hands-free by saying its name.
 
 openWakeWord runs a tiny local model over a rolling mic buffer — no
 transcription, nothing leaves the box — and fires a callback the instant it

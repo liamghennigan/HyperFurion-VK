@@ -8,9 +8,11 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from voice_keyboard.netpolicy import refuse_redirect, request_kwargs
 from voice_keyboard.providers import (  # noqa: F401
     DEFAULT_TTS_MODELS,
     DEFAULT_TTS_VOICES,
+    NO_VOICE,
     SUPPORTED_TTS_PROVIDERS,
 )
 
@@ -66,6 +68,8 @@ def create_tts_client(config: dict):
         openai_base = str(
             config.get("providers", {}).get("openai", {}).get("base_url", "")
         ).strip()
+    from voice_keyboard.config import is_direct_endpoint  # lazy: avoid cycle
+
     return TTSClient(
         api_key=_provider_api_key(config, provider),
         provider=provider,
@@ -74,6 +78,8 @@ def create_tts_client(config: dict):
         language=str(tts_cfg.get("language", "en")),
         hyperfurion_url=hyperfurion_tts_url(config) if provider == "hyperfurion" else "",
         openai_base_url=openai_base,
+        # A local speech server is reached directly: no proxy, no redirects.
+        direct=bool(openai_base) and is_direct_endpoint(config, openai_base),
     )
 
 
@@ -89,8 +95,17 @@ class TTSClient:
         model: str = "",
         hyperfurion_url: str = "",
         openai_base_url: str = "",
+        direct: Optional[bool] = None,
     ):
         self._api_key = api_key
+        if direct is None:
+            from voice_keyboard.config import _is_local_endpoint  # lazy: avoid cycle
+
+            direct = provider == "openai" and bool(openai_base_url) and _is_local_endpoint(
+                openai_base_url
+            )
+        # Only the openai-compatible endpoint can be a local server.
+        self._direct = bool(direct) and provider == "openai"
         self._provider = provider
         self._voice_id = voice_id or DEFAULT_TTS_VOICES.get(provider, "eve")
         self._language = language
@@ -110,7 +125,29 @@ class TTSClient:
     def session(self) -> requests.Session:
         if self._session is None:
             self._session = _build_session()
+            if self._direct:
+                self._session.trust_env = False  # no proxy from the environment
         return self._session
+
+    @property
+    def openai_base_url(self) -> str:
+        """The openai-compatible server this client speaks through ("" for
+        other providers or OpenAI itself)."""
+        if self._provider != "openai" or self._openai_url == OPENAI_TTS_URL:
+            return ""
+        return self._openai_url[: -len("/audio/speech")]
+
+    def set_direct(self, direct: bool) -> None:
+        """Reach the speech server directly, or not, from the next request
+        on: [assistant] local_hosts can change while the daemon runs."""
+        direct = bool(direct) and self._provider == "openai"
+        if direct == self._direct:
+            return
+        self._direct = direct
+        if self._session is not None:
+            # Each request passes no proxies when direct; the environment is
+            # ignored too, as for a session built direct.
+            self._session.trust_env = not direct
 
     def close(self) -> None:
         if self._session is not None:
@@ -126,6 +163,8 @@ class TTSClient:
             audio = self._synthesize_openai(text)
         elif self._provider == "elevenlabs":
             audio = self._synthesize_elevenlabs(text)
+        elif self._provider == "none":
+            raise RuntimeError(NO_VOICE)
         else:
             raise RuntimeError(f"unsupported TTS provider: {self._provider}")
         logger.info("TTS synthesized %d bytes of audio using %s", len(audio), self._provider)
@@ -189,8 +228,10 @@ class TTSClient:
             "response_format": "mp3",
         }
         resp = self.session.post(
-            self._openai_url, json=payload, headers=headers, timeout=self._timeout
+            self._openai_url, json=payload, headers=headers, timeout=self._timeout,
+            **request_kwargs(self._direct),
         )
+        refuse_redirect(resp, self._direct)
         resp.raise_for_status()
         return resp.content
 

@@ -40,8 +40,9 @@ your password for the system steps (audio and clipboard packages, the virtual
 keyboard, adding you to the `input` group), and after the first install you
 log out and back in once. It installs for your user, then walks you through
 the settings: how to transcribe your speech (a key for a cloud provider, or
-your own server), your language model, the hotkey, the language, Kai,
-dictation history, caret commands and self-corrections. If a
+your own server), your language model, the hotkey, the language, Kai (where
+its questions would go, and whether to turn it on), dictation history,
+caret commands and self-corrections. If a
 [llama.cpp](https://github.com/ggml-org/llama.cpp) server (`llama-server`) is
 already running on your computer, setup finds it and asks whether to make
 its model your default language model (rewrites, Kai, pause
@@ -81,7 +82,8 @@ for you if you don't have it. Press **Ctrl+Alt+V** in any app. See
   words appear as you speak and self-correct in place, then freeze — you watch
   the text think. (OpenAI, Groq, Deepgram and AssemblyAI type when you stop.)
 - **Nothing starts until you ask.** The mic opens only when you press to
-  talk or summon Kai, unless you turn on Kai's wake word. In a terminal it
+  talk or summon Kai, unless you turn on Kai's wake word, and Kai itself
+  starts on its own only when it runs locally. In a terminal it
   recognizes it never presses Enter: a spoken "new line" types nothing, and
   Kai (or "VK, run …", once you turn on `[intent]`) *drafts* the command and
   stops — **Enter is yours.** A word you spell or correct is offered to your
@@ -89,9 +91,11 @@ for you if you don't have it. Press **Ctrl+Alt+V** in any app. See
 - **Private by design.** Zero analytics; your keys stay in your config file.
   Your audio goes only to the speech provider you pick, and the text a
   rewrite or Kai needs only to your language model — or run all of it 100%
-  offline with your own speech server and a local model. Kai keeps your
-  questions and its answers on your computer until you turn its memory off
-  (`[assistant] memory_enabled`).
+  offline with your own speech server and a local model. Kai turns on by
+  itself only when nothing it does leaves your machine (or your own
+  network); otherwise it waits until you turn it on, and says first where
+  your questions would go. It keeps your questions and its answers on your
+  computer until you turn its memory off (`[assistant] memory_enabled`).
 - **An editor you can talk to.** "Correct monday to friday", "cap that",
   quotes, lists, headings and to-dos, plus "select that" and "undo that" once
   you turn on caret commands (`[nav]`) — and prose
@@ -100,8 +104,11 @@ for you if you don't have it. Press **Ctrl+Alt+V** in any app. See
   too (`[flow] language`); `voice-keyboard commands` lists everything you
   can say, `voice-keyboard try` shows what any phrase would type.
 - **A voice assistant in the keyboard** — "Kai" (hold Right Ctrl, click the
-  orb, or the opt-in wake word), on by default and push-to-talk, running on the
-  language model you choose (xAI's Grok by default, or a local one).
+  orb, or the opt-in wake word), push-to-talk, running on the language model
+  you choose. It is on by default when it runs locally (your own speech
+  server and language model); with xAI's Grok, the default, or another
+  online service it stays off until you turn it on (`voice-keyboard kai
+  on`), which says first where your questions would go.
 
 ---
 
@@ -114,21 +121,27 @@ selection and puts your clipboard back, while `voice-keyboard tts` reads the
 clipboard; on macOS it reads the clipboard), sends it to the configured TTS
 provider, and plays the returned audio locally.
 
-**Kai — a voice assistant in the keyboard** (since 2.0). Summon Kai three
-ways — **hold Right Ctrl** walkie-talkie style and release to send (a bare
-modifier, so nothing ever leaks into the focused app — configurable),
-**click** the always-on Kai orb on screen (GNOME on Linux, and Windows), or
-(opt-in, with a "Kai" wake-word model you train) say the **wake word "Kai"** —
+**Kai — a voice assistant in the keyboard** (since 2.0). Once Kai is on,
+summon it three ways — **hold Right Ctrl** walkie-talkie style and release
+to send (a bare modifier, so nothing ever leaks into the focused app —
+configurable), **click** the Kai orb on screen (GNOME on Linux, and
+Windows), or (opt-in, with a "Kai" wake-word model you train) say the
+**wake word "Kai"** —
 and it routes your spoken query by where you are: focused on a terminal, a
 request it can run becomes a command typed at the prompt — never pressing
 Enter, only you can; a question, or anything asked elsewhere, it answers
 aloud. An earcon confirms the mic is live, and the turn runs off the hotkey
 path (so a second tap cuts Kai off mid-answer). Kai thinks with your `[llm]`
 model: xAI's Grok with your xAI key by default, or any local
-OpenAI-compatible model (a ~1 GB model handles the command work). On by
-default and push-to-talk — nothing is captured until you summon it — and it
-keeps your questions and its answers on your computer until you turn its
-memory off (`memory_enabled = false`). See `[assistant]` / `[wake]` in
+OpenAI-compatible model (a ~1 GB model handles the command work). It is on
+by default only when it runs locally — your speech server and your language
+model, on this computer or your own network; with xAI, the default, or any
+other online service it stays off until you turn it on (`voice-keyboard kai
+on`, setup, or the Windows tray), which says first where your questions
+would go. See [Kai, the voice assistant](#kai-the-voice-assistant). Push-to-talk
+either way — nothing is captured until you summon it — and it keeps your
+questions and its answers on your computer until you turn its memory off
+(`memory_enabled = false`). See `[assistant]` / `[wake]` in
 `config.toml.example`.
 
 **Flow — [molten dictation](#flow--molten-dictation).** With xAI (the
@@ -150,10 +163,10 @@ through your `[llm]` and repairs it on screen.
   / `voice-keyboard toggle`.
 - **Not working?** `voice-keyboard doctor` checks the config, your speech
   provider's key, the microphone, the daemon, the language model (and what
-  uses it: Kai, "VK, …" rewrites and pause review by default), typing
-  permissions, the clipboard tool, the focus probe and, on Linux, whether
-  the hotkey can read your keyboard, and prints the fix for each problem it
-  finds.
+  uses it: "VK, …" rewrites and pause review by default, and Kai while it
+  is on), whether Kai is on and why, typing permissions, the clipboard
+  tool, the focus probe and, on Linux, whether the hotkey can read your
+  keyboard, and prints the fix for each problem it finds.
 - **Hold-to-talk:** hold `Ctrl+Alt+V`; release it to stop.
 - **Watch words appear as you speak:** on by default with xAI (the default
   provider) or your own local speech server; with OpenAI, Groq, Deepgram or
@@ -164,6 +177,10 @@ through your `[llm]` and repairs it on screen.
   `Ctrl+Alt+R`. On Linux, select text and run `voice-keyboard tts` (bind it
   to a desktop shortcut), or set `[tts] hotkey = "control+alt+r"` and just
   press it. See [Text-To-Speech](#text-to-speech).
+- **Ask Kai, the voice assistant:** hold Right Ctrl (on macOS, run
+  `voice-keyboard summon`), once Kai is on. `voice-keyboard kai` says
+  whether it is on and why; `voice-keyboard kai on` / `off` turns it on or
+  off. See [Kai, the voice assistant](#kai-the-voice-assistant).
 - **Type a command without running it:** `voice-keyboard intent "find every
   TODO in this repo"` — your `[llm]` writes one line, it lands at your prompt,
   and Enter stays yours ("VK, run …" is the voice trigger, off until you set
@@ -200,7 +217,8 @@ through your `[llm]` and repairs it on screen.
   local OpenAI-compatible server (Whisper, Parakeet, Voxtral, Kokoro), and
   point `[llm]` at a local model too (e.g. `llama-server`): then recognition,
   speech, rewrites and Kai run entirely on your machine, no key and no
-  network required. See [Fully Offline](#fully-offline-local-models).
+  network required, and Kai turns on by itself. See
+  [Fully Offline](#fully-offline-local-models).
 
 ## What Gets Installed
 
@@ -363,7 +381,10 @@ local server), or run `voice-keyboard setup`, then restart the agent with
 macOS will require two permissions for your Python binary under
 System Settings → Privacy & Security: **Accessibility** (hotkeys and
 typing) and **Microphone**. There is no GNOME-style overlay or Kai orb; status
-arrives as notification-center toasts. The focus check sees only the front
+arrives as notification-center toasts. Right Ctrl can't summon Kai on macOS
+(a bare modifier can't be a hotkey there): once Kai is on, ask it with
+`voice-keyboard summon`, or set `[assistant] hotkey` to a chord such as
+`control+alt+k`. The focus check sees only the front
 app's name, so password fields aren't detected and the register and what a
 spoken "new line" presses are chosen by app name alone. Read-aloud reads the
 clipboard on macOS: copy first.
@@ -404,7 +425,8 @@ packaging\windows\install-hyperfurion-vk.ps1 -Source .` installs that checkout
   key(s) (typed hidden), point at your own local speech server (with the
   model ids it serves), sign in with an
   existing hosted subscription (it isn't on sale right now), or skip for
-  now — the hotkey, the language, Kai, dictation history, caret commands and
+  now — the hotkey, the language, Kai (where its questions would go, and
+  whether to turn it on), dictation history, caret commands and
   self-corrections, then starts the app. Re-running it upgrades in place and
   keeps your settings (it offers the walkthrough again; Enter skips it).
 
@@ -425,7 +447,7 @@ startup launcher, and brings your settings and history along.
 | --- | --- |
 | Tap **Ctrl+Alt+V** | start dictating; tap again to stop |
 | Hold **Ctrl+Alt+V** | talk while held; release to stop |
-| Hold **Right Ctrl** (or click the orb) | ask Kai; release to send — a tap cuts Kai off |
+| Hold **Right Ctrl** (or click the orb) | ask Kai, once it is on; release to send — a tap cuts Kai off |
 | Select text, press **Ctrl+Alt+R** | read it aloud; press again to stop |
 | Left-click the tray icon | start/stop dictation in the app you were just in |
 | Right-click the tray icon | the menu |
@@ -440,14 +462,20 @@ fields to it), or a window it can't identify, and if the clipboard holds
 something it can't save whole (a huge image) it leaves it alone. The copied
 text does appear in clipboard history (Win+V), like any copy. The overlay pill appears next to the text cursor — STARTING,
 LISTENING with the live caption and level meter, PROCESSING, INSERTED,
-NO SIGNAL, ERROR — and never takes focus. The **Kai orb** sits bottom-right:
-click to summon, drag to move (the spot is remembered); it never steals focus,
-so Kai still knows which app you were in. The tray icon is cyan when idle, red
-while recording, and amber when setup is needed.
+NO SIGNAL, ERROR — and never takes focus. While Kai is on, the **Kai orb**
+sits bottom-right: click to summon, drag to move (the spot is remembered); it
+never steals focus, so Kai still knows which app you were in. While Kai is
+off, the orb is hidden. The tray icon is cyan when idle, red while
+recording, and amber when setup is needed.
 
 Tray menu: Start/Stop dictation · Ask Kai · Read clipboard aloud · Show Kai
-orb · Open settings file · Open logs folder · Start with Windows · Help ·
-Restart · Quit.
+orb · Turn off Kai · Open settings file · Open logs folder · Start with
+Windows · Help · Restart · Quit. While Kai is off, **Turn on Kai…** takes
+the place of Ask Kai, Show Kai orb and Turn off Kai: when everything Kai
+uses runs locally it turns Kai on at once; otherwise it lists each online
+service and what it would receive, and asks first (No is the default).
+**Turn off Kai** applies at once, even when the settings file can't be
+written.
 
 ### First run and settings
 
@@ -457,13 +485,15 @@ and **Sign in (existing hosted-service subscribers)** (the subscription isn't on
 sale right now), or run `voice-keyboard setup` in a new terminal. Save a valid
 config and dictation starts on its own — no restart. Provider, audio, and
 hotkey changes later need **Restart** from the menu; Flow/register/LLM changes
-apply at the next recording.
+apply at the next recording, and turning Kai on or off in the file within two
+seconds. The first-run balloon says whether Kai is on and, if it is off, why
+and how to turn it on.
 
 | What | Where |
 | --- | --- |
 | Settings | `%APPDATA%\voice-keyboard\config.toml` |
 | Logs | `%LOCALAPPDATA%\voice-keyboard\logs\daemon.log` |
-| History (when on), dictionary, Kai's memory (on by default) | `%LOCALAPPDATA%\voice-keyboard\` |
+| History (when on), dictionary, Kai's memory (when Kai is on) | `%LOCALAPPDATA%\voice-keyboard\` |
 | The app | `%LOCALAPPDATA%\HyperFurion-VK\` |
 
 The CLI works as on Linux (`voice-keyboard status`, `intent`, `ask`,

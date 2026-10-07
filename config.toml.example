@@ -50,8 +50,10 @@ interim_results = true
 hotword_bias = false
 
 [tts]
-# Choices: xai, openai, elevenlabs, and hyperfurion (the hosted service;
-# existing subscribers only)
+# Choices: xai, openai, elevenlabs, hyperfurion (the hosted service;
+# existing subscribers only), and none (nothing speaks: read-aloud is off
+# and Kai shows its answers on screen; for a local speech server that only
+# transcribes, such as whisper.cpp)
 provider = "xai"
 # Defaults by provider:
 # openai = "gpt-4o-mini-tts"
@@ -280,16 +282,38 @@ model = "grok-4.3"
 #   api_key  = "ollama"
 
 [assistant]
-# Kai — the voice assistant. When enabled, a SECOND hotkey (below) takes a
+# Kai — the voice assistant. While it is on, a SECOND hotkey (below) takes a
 # spoken query and routes it by WHERE YOU ARE:
 #   • focused on a terminal  -> it turns your words into a command, types it
 #     at the prompt, and NEVER presses Enter (that stays yours);
-#   • anywhere else          -> it answers / searches the web, spoken back.
-# Voice in, voice or a drafted command out — you never type to it (typed
-# interaction is a future Seneschal-computer thing). On by default: it's
-# push-to-talk, so nothing is captured until you press the hotkey or click
-# the on-screen orb — the hotkey stays the hard mute.
-enabled = true
+#   • anywhere else          -> it answers you, spoken back.
+# Push-to-talk: nothing is captured until you press the hotkey or click the
+# on-screen orb — the hotkey stays the hard mute.
+#   "auto" (the default) = on only when everything Kai uses runs on this
+#          computer or your own network: [stt] and [tts] are a local speech
+#          server, [llm] is a local model, and no agent_id is set. With an
+#          online service anywhere (xAI, the default) it stays off until you
+#          turn it on. "auto" trusts the server at that address to run the
+#          model itself: if it forwards to an online service (an Ollama
+#          "-cloud" model counts as online), Kai is not local.
+#   true  = on, even with online services: your recorded question goes to
+#           [stt] (and to the voice agent, if agent_id is set); the question,
+#           related memories, dictation history and (on Linux) the text you
+#           have highlighted go to [llm]; the answer goes to [tts].
+#           `voice-keyboard kai on` says where before it turns Kai on.
+#   false = off.
+# Turn it on or off with `voice-keyboard kai on` or `voice-keyboard kai off`
+# (on Windows: right-click the tray icon).
+# `voice-keyboard kai` says which, and why.
+enabled = "auto"
+# Servers you count as your own for "auto", besides localhost, names ending
+# in .localhost, .local, .home.arpa or .internal, and loopback or private IP
+# addresses (127.x, 10.x, 172.16-31.x, 192.168.x, fc00::/7): host names, IP
+# addresses or networks, e.g.
+#   local_hosts = ["gpu-box", "100.64.0.0/10"]
+# Other host names count as online. A local server is reached directly,
+# never through a proxy, and a redirect from it is not followed.
+local_hosts = []
 # What the mind calls itself — the local brain's persona and the on-screen
 # copy. "Kai", from KairOS. (The spoken voice agent introduces itself with
 # whatever name you gave it in the xAI Voice Agent Builder console.)
@@ -315,7 +339,7 @@ brain = "auto"
 hotkey = "rightctrl"
 # How the summon key behaves, like [hotkey].mode:
 #   auto   = HOLD to talk / release to send (walkie-talkie), or a quick TAP
-#            to toggle; a tap while Kai is answering cuts her off (barge-in).
+#            to toggle; a tap while Kai is answering cuts it off (barge-in).
 #   hold   = hold to talk only.  toggle = tap to start / tap to stop.
 mode = "auto"
 # A short offline tone when Kai starts listening / captures your question —
@@ -333,6 +357,9 @@ terminal_fallback = true
 # local = never send file contents to the brain; cloud = send excerpts of
 # files you explicitly name. Your selection and memory are always allowed.
 privacy_mode = "local"
+# Kai remembers your questions and its answers on this computer, and looks
+# up related memories and dictation history for a question, only while it
+# is on. false = nothing is stored and nothing is looked up.
 memory_enabled = true
 web_enabled = true
 max_memory_results = 5
@@ -376,6 +403,9 @@ mode = "say"
 # Ollama works: base_url = "http://localhost:11434/v1",
 # model = "nomic-embed-text". Voice trigger gated here;
 # `voice-keyboard find "…"` is always available.
+# Kai searches your history with keywords unless base_url is local too or
+# you turned Kai on yourself ([assistant] enabled = true); then it sends
+# your question and up to 200 lines of dictation history to base_url.
 enabled = false
 verbs = ["recall", "remember"]
 mode = "say"
@@ -439,7 +469,8 @@ enabled = false
 # "move:word:left" = "ctrl+left"    # if your shell binds it
 
 [wake]
-# Summon Kai hands-free by saying her name. A tiny LOCAL openWakeWord model
+# Summon Kai hands-free by saying its name. Kai must be on: while it is off,
+# the wake word doesn't listen. A tiny LOCAL openWakeWord model
 # scores a rolling mic buffer — no transcription, nothing leaves the box —
 # and only when it fires does normal capture begin. OFF by default: this is
 # the ONE summon path that keeps the mic warm, so the hotkey stays the hard

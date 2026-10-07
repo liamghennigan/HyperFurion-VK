@@ -108,15 +108,81 @@ def test_local_speaches_server_gets_model_ids(tmp_path):
 
 
 def test_local_server_that_does_not_speak(tmp_path):
+    """whisper.cpp only transcribes: [tts] must not point at it (read-aloud
+    and Kai's voice would call a server that can't speak, and Kai would
+    count a voice it doesn't have as local). Nothing speaks until you pick
+    something; never a cloud voice by surprise."""
+    from voice_keyboard.assistant.locality import kai_state
+    from voice_keyboard.config import is_usable, load_config
+    from voice_keyboard.tts import create_tts_client
+
     _, code, out = _run(
         tmp_path,
         "2", "http://127.0.0.1:8080/v1",  # whisper.cpp
         "whisper-1",
         "n",   # it does not speak
+        "",    # what should speak: nothing for now
         *_REST,
     )
     assert code == 0
     config = tomllib.loads((tmp_path / "config.toml").read_text())
     assert config["stt"] == {"provider": "openai", "model": "whisper-1"}
-    assert config["tts"] == {"provider": "openai"}  # never a cloud voice by surprise
-    assert any("need a server that speaks" in line for line in out)
+    assert config["tts"] == {"provider": "none"}
+    assert any("What should speak?" in line for line in out)
+    assert is_usable(tmp_path / "config.toml")  # dictation still works offline
+    effective = load_config(tmp_path / "config.toml")
+    with pytest.raises(RuntimeError, match="Nothing is set up to speak"):
+        create_tts_client(effective).synthesize("hello")
+    speaks = [hop for hop in kai_state(effective).hops if hop.section == "[tts]"]
+    assert speaks and "127.0.0.1" not in speaks[0].service
+
+
+def test_local_server_that_does_not_speak_with_a_cloud_voice(tmp_path):
+    wizard = Wizard(
+        tmp_path / "config.toml",
+        ask=Script(
+            "2", "http://127.0.0.1:8080/v1", "whisper-1",
+            "n",   # it does not speak
+            "3",   # ElevenLabs speaks
+            *_REST,
+        ),
+        secret=Script("el-key"),
+        out=[].append,
+        detect=lambda extra=(): None,
+        login=lambda: True,
+    )
+    assert wizard.run() == 0
+    config = tomllib.loads((tmp_path / "config.toml").read_text())
+    assert config["tts"] == {"provider": "elevenlabs"}
+    assert config["providers"]["elevenlabs"]["api_key"] == "el-key"
+    assert config["providers"]["openai"]["base_url"] == "http://127.0.0.1:8080/v1"
+
+
+def test_a_cloud_voice_drops_the_old_speech_servers_model_and_voice(tmp_path):
+    # Re-run after a speech server that also spoke (Speaches): switching to
+    # whisper.cpp and an xAI voice must not send Kokoro's model and voice
+    # names to xAI, which doesn't know them.
+    (tmp_path / "config.toml").write_text(
+        '[providers.openai]\nbase_url = "http://127.0.0.1:8000/v1"\n\n'
+        '[stt]\nprovider = "openai"\n\n'
+        '[tts]\nprovider = "openai"\nmodel = "speaches-ai/Kokoro-82M-v1.0-ONNX"\nvoice_id = "af_heart"\n',
+        encoding="utf-8",
+    )
+    wizard = Wizard(
+        tmp_path / "config.toml",
+        ask=Script(
+            "2", "http://127.0.0.1:8080/v1", "whisper-1",
+            "n",   # it does not speak
+            "2",   # xAI speaks
+            *_REST,
+        ),
+        secret=Script("xai-key"),
+        out=[].append,
+        detect=lambda extra=(): None,
+        login=lambda: True,
+    )
+    assert wizard.run() == 0
+    config = tomllib.loads((tmp_path / "config.toml").read_text())
+    assert config["tts"]["provider"] == "xai"
+    assert config["tts"].get("model", "") == ""
+    assert config["tts"].get("voice_id", "") == ""
