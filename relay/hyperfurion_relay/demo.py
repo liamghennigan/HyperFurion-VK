@@ -67,9 +67,12 @@ DOCS_CONTEXT = """You answer questions about HyperFurion VK, an open-source
   HyperFurion-VK-Setup.cmd, or
   irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
 - Press Ctrl+Alt+V (tap to start and stop, or hold to talk) and it types
-  into the focused app. Kai, the assistant, is push-to-talk: hold Right
-  Ctrl. Nothing listens in the background unless you turn on Kai's wake
-  word (off by default). Read aloud: Ctrl+Alt+R on Windows; on Linux run
+  into the focused app. Kai, the voice assistant, is push-to-talk (hold
+  Right Ctrl). It is on by default only with your own speech server and
+  language model; with xAI (the default) it stays off until you run
+  `voice-keyboard kai on`, which says first where your questions go.
+  Nothing listens in the background unless you turn on Kai's wake word
+  (off by default). Read aloud: Ctrl+Alt+R on Windows; on Linux run
   `voice-keyboard tts` (bind it to a shortcut).
 - No speech model ships with it. Use a key for xAI (the default), OpenAI,
   Groq, Deepgram or AssemblyAI, or your own OpenAI-compatible speech server

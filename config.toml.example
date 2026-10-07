@@ -334,8 +334,10 @@ brain = "auto"
 # "control+alt+.") work too, but terminals encode them as escape codes
 # (CSI-u), so holding one at a shell prompt sprays junk like `6;7u6;7u`.
 # While a bare-key gesture is active, pressing any OTHER key aborts it, so
-# real Right-Ctrl shortcuts still work. Restart to change — it owns a
-# listener.
+# real Right-Ctrl shortcuts still work. macOS can't bind a bare modifier:
+# there, set a chord (e.g. "control+alt+k") or run `voice-keyboard summon`.
+# While Kai is off, holding it opens nothing; letting go says Kai is off.
+# Restart to change — it owns a listener.
 hotkey = "rightctrl"
 # How the summon key behaves, like [hotkey].mode:
 #   auto   = HOLD to talk / release to send (walkie-talkie), or a quick TAP
@@ -345,8 +347,9 @@ mode = "auto"
 # A short offline tone when Kai starts listening / captures your question —
 # eyes-free confirmation. No network, no audio file. Set false for silence.
 earcon = true
-# Draw an always-on clickable Kai orb on screen (the GNOME overlay extension
-# renders it, bottom-right); click it to summon. Set false to hide it.
+# While Kai is on, draw a clickable Kai orb on screen, bottom-right (the
+# GNOME overlay extension and the Windows tray app draw it; it is hidden
+# while Kai is off); click it to summon. Set false to hide it.
 button = true
 # On Wayland the daemon often can't see the focused app (GPU terminals like
 # Ghostty/kitty expose no AT-SPI, and GNOME denies window introspection).
@@ -355,7 +358,8 @@ button = true
 # Set false to always answer by voice when focus can't be resolved.
 terminal_fallback = true
 # local = never send file contents to the brain; cloud = send excerpts of
-# files you explicitly name. Your selection and memory are always allowed.
+# files, and lists of folders, you explicitly name. Your selection and
+# memory are always allowed.
 privacy_mode = "local"
 # Kai remembers your questions and its answers on this computer, and looks
 # up related memories and dictation history for a question, only while it

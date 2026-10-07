@@ -231,7 +231,8 @@ function Install-HyperFurionVK {
     Write-Host ""
     Write-Host "=== Done: $AppName $installed ===" -ForegroundColor Green
     Write-Host "  Dictate:        Ctrl+Alt+V  (tap to start/stop, or hold to talk)"
-    Write-Host "  Ask Kai:        hold Right Ctrl, or click the orb"
+    Write-Host "  Ask Kai:        hold Right Ctrl, or click the orb, once Kai is on"
+    Write-Host "                  (to turn it on: right-click the tray icon > Turn on Kai...)"
     Write-Host "  Read aloud:     select text, press Ctrl+Alt+R"
     Write-Host "  Settings:       right-click the tray icon (notification area)"
     Write-Host "  Settings file:  $ConfigFile"

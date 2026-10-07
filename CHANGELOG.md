@@ -8,7 +8,9 @@ on `main` cuts the GitHub release automatically.
 ## [2.4.0] — 2026-10-06
 
 The landing page becomes a real text field, and the engine it runs is
-proven to be the daemon's.
+proven to be the daemon's. Kai, the voice assistant, now turns on by itself
+only when it runs locally; with xAI, the default, it waits until you turn it
+on (see Changed).
 
 ### Added
 
@@ -109,12 +111,13 @@ proven to be the daemon's.
   config, the speech provider's API key (a cloud provider without one fails
   every dictation), microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
   access, the clipboard tool that types accents and emoji, the AT-SPI focus
-  probe, the language model and what in your config uses it (Kai, "VK, …"
-  rewrites and pause review, by default: without `[llm]` the first two
-  won't work and pause review uses its rules only; a feature you switched
-  on that needs it fails), and on Linux whether the hotkey can read your
-  keyboard (`/dev/input/event*`: the `input` group joined, applied to this
-  login, and to the running daemon) — and prints the fix for each problem.
+  probe, the language model and what in your config uses it ("VK, …"
+  rewrites and pause review by default, and Kai while it is on: without
+  `[llm]` rewrites and Kai won't work and pause review uses its rules only;
+  a feature you switched on that needs it fails), whether Kai is on and
+  why, and on Linux whether the hotkey can read your keyboard
+  (`/dev/input/event*`: the `input` group joined, applied to this login,
+  and to the running daemon) — and prints the fix for each problem.
   Exits non-zero on a failure.
 - **Spoken commands in Spanish, French and German.** `[flow] language =
   "es" | "fr" | "de"` adds that language's punctuation and layout
@@ -373,6 +376,79 @@ proven to be the daemon's.
   it; `tests/test_flow_corpus.py` keeps the file current on the Python
   side and fails on any "committed items changed under reparse".
 
+### Changed
+
+- **Kai turns on by itself only when it runs locally.** `[assistant]
+  enabled` is now `"auto"` by default: Kai is on when its speech-to-text,
+  language model and voice are all servers on this computer or your own
+  network (and no xAI voice agent is set), and off otherwise. With xAI,
+  the default, it waits until you turn it on: `voice-keyboard kai on`, the
+  Kai question in `voice-keyboard setup`, or **Turn on Kai…** in the
+  Windows tray, each of which first lists the online services and what
+  each would receive (your recorded question; your question with related
+  notes and dictation history; its answer) and asks, No by default. With
+  everything local, `kai on` and the tray turn Kai on without asking.
+  `true` still means on, even with online services, and `false` off.
+  `voice-keyboard kai off` and the tray's **Turn off Kai** turn it off at
+  once, even when the settings file can't be written (it then stays off
+  until the daemon restarts, you turn it on, or you change Kai's settings
+  in the file). Going back to 2.3 or earlier: set `[assistant] enabled` to
+  true or false (older versions don't know `"auto"`).
+- **While Kai is off, nothing of it runs.** No language model is asked,
+  and its memory stays on your computer, neither read nor written. The orb
+  is hidden (Windows and GNOME), the wake word keeps the mic closed, and
+  Right Ctrl opens nothing: letting go shows a note that Kai is off (under
+  `"auto"`, with why and how to turn it on, at most once every ten
+  minutes). The Windows tray's one Kai item is **Turn on Kai…**, and
+  `voice-keyboard summon` exits with an error saying why.
+- **An `enabled = true` copied from an older example config counts as the
+  default.** From 2.1 to 2.3, `config.toml.example` shipped `[assistant]
+  enabled = true`, and the Linux and macOS installers (and the AUR
+  package's instructions) copy it. That copy now reads as `"auto"`, so Kai
+  is on only when it runs locally; the first start after updating says so.
+  A `true` you chose (through setup, `voice-keyboard kai on`, the Windows
+  tray, or by hand) stays on; `voice-keyboard kai` and `doctor` say when
+  yours counts as copied.
+- **Kai tells you when it turns on or off, or starts sending your questions
+  to a different service.** One notification each time, and it tries
+  again at the next start if none could be shown; on Linux, the next
+  dictation's notification doesn't replace it. Turning Kai off yourself is
+  never announced.
+- **Setup says where Kai's questions would go, and pressing Enter never
+  turns Kai on or off.** A `true` over services that are all local becomes
+  `"auto"`, so switching to an online service later turns Kai off and asks
+  again.
+- **`voice-keyboard kai`** says whether Kai is on and why, one line per
+  part: what hears you, thinks and speaks, and whether each is on this
+  computer, on your network or online. When the running daemon differs
+  from the file, it shows both. `voice-keyboard kai on --yes` is the
+  consent for scripts; without a terminal, `kai on` otherwise exits 2.
+  `kai on` and the tray refuse a settings file the daemon wouldn't accept,
+  and say what's wrong. `voice-keyboard doctor` has a `kai` line (and warns
+  when the wake word is on while Kai is off), and `voice-keyboard status`
+  shows `kai: on` or `kai: off`.
+- New `[assistant] local_hosts`: servers you count as your own (host
+  names, IP addresses or networks such as `100.64.0.0/10`), for deciding
+  whether Kai is local. They are reached directly too.
+- **Under the default, Kai searches your dictation history by keyword**
+  unless `[recall]` is local too. Turned on with online services, it uses
+  `[recall]`, which receives your question and up to 200 lines of
+  dictation history, and `voice-keyboard kai on` and setup name it first.
+- **A local server is always reached directly:** never through
+  `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` or the system proxy, and a
+  redirect from it is not followed. That holds for speech-to-text,
+  read-aloud and Kai's voice, `[llm]` and `[recall]`.
+- **A keyless local server must be addressed by IP, or by a `localhost`,
+  `.localhost`, `.local`, `.home.arpa` or `.internal` name.** Host names
+  that merely start with `127.`, `10.` or `192.168.` no longer count, nor
+  do URLs with a `user@` part, URLs that requests would send to a
+  different host, or a host ending in a dot (the system resolver asks DNS
+  for it). `[assistant] local_hosts` doesn't make a server keyless.
+- An Ollama model tag ending in `-cloud` or `:cloud` counts as online, and
+  so does the HyperFurion relay, even on `localhost` (it forwards to xAI).
+- New `[tts] provider = "none"`: nothing speaks (read-aloud says so, and
+  Kai shows its answers on screen).
+
 ### Fixed
 
 - **The CLI starts ~130 ms faster.** Every `voice-keyboard` command (the
@@ -453,9 +529,22 @@ proven to be the daemon's.
   command at stop. A command is now decided against the segment it started
   in, so a split command is typed as the words it was.
 - **Kai's memory switch holds on every path.** With `[assistant]
-  memory_enabled = false` nothing is stored: a turn answered by a
-  configured xAI voice agent was logged on its own, ignoring the switch,
-  and the memory file was created even when nothing was written to it.
+  memory_enabled = false` nothing is stored and nothing is looked up: a
+  turn answered by a configured xAI voice agent was logged on its own,
+  ignoring the switch, the memory file was created even when nothing was
+  written to it, and each question still looked up your stored memories
+  and dictation history and sent them to `[llm]` with it.
+- **Turning Kai on or off in config.toml applies within two seconds**,
+  and at once with `voice-keyboard kai on` or `kai off`, not only after
+  the next dictation; an `enabled = false` written by hand applies even
+  while a typo elsewhere breaks the file. A question being asked when Kai
+  turns off is dropped, not sent: before, the next Right Ctrl could still
+  open the mic and send the question to speech-to-text.
+- A config reload during a Kai answer no longer changes which language
+  model or history search that answer uses.
+- `doctor` no longer calls a self-hosted HyperFurion relay on localhost
+  "local" (it forwards to xAI), nor a host name that merely looks like a
+  local address.
 - **Setup leads with your own key or server.** `voice-keyboard setup` lists
   the hosted subscription, which isn't on sale, after a key and a local
   server, labelled for existing subscribers; the Windows tray's sign-in
@@ -464,7 +553,11 @@ proven to be the daemon's.
   say the same, and so does the relay's README, which no longer reads as
   an offer of a $5/month subscription.
   Choosing a local speech server now asks for the model ids it serves and
-  whether it also speaks, instead of leaving OpenAI's names in place.
+  whether it also speaks, instead of leaving OpenAI's names in place and
+  `[tts]` pointed at a server that may only transcribe (whisper.cpp). If it
+  doesn't speak, setup asks what should: nothing for now (the default,
+  `[tts] provider = "none"`), xAI or ElevenLabs, with that service's own
+  model and voice.
 - **The Linux installer works on Fedora.** `install.sh` asked dnf for
   `python3-venv`, which Fedora doesn't have, and dnf5 refused the whole
   install. It now also installs gcc on Fedora and Arch, where PyAudio and

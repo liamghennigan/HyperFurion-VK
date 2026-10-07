@@ -44,6 +44,14 @@ def test_offline_and_enter_policy():
     assert "Shift+Enter in chat apps" in text
 
 
+def test_kai_is_off_until_turned_on_with_an_online_service():
+    # 2.4.0: Kai is on by default only when it runs locally; with xAI (the
+    # default) "hold Right Ctrl" alone would be untrue.
+    text = _flat()
+    assert "on by default only with your own speech server" in text
+    assert "voice-keyboard kai on" in text
+
+
 def test_no_stale_facts():
     text = _flat()
     for stale in ("ASCII", "Ctrl+Alt+T", "Esc cancels", "hfk_"):

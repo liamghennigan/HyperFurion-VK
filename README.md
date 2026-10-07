@@ -138,10 +138,10 @@ by default only when it runs locally — your speech server and your language
 model, on this computer or your own network; with xAI, the default, or any
 other online service it stays off until you turn it on (`voice-keyboard kai
 on`, setup, or the Windows tray), which says first where your questions
-would go. See [Kai, the voice assistant](#kai-the-voice-assistant). Push-to-talk
-either way — nothing is captured until you summon it — and it keeps your
-questions and its answers on your computer until you turn its memory off
-(`memory_enabled = false`). See `[assistant]` / `[wake]` in
+would go (see [Kai, the voice assistant](#kai-the-voice-assistant)).
+Push-to-talk either way — nothing is captured until you summon it — and it
+keeps your questions and its answers on your computer until you turn its
+memory off (`memory_enabled = false`). See `[assistant]` / `[wake]` in
 `config.toml.example`.
 
 **Flow — [molten dictation](#flow--molten-dictation).** With xAI (the
@@ -486,8 +486,8 @@ sale right now), or run `voice-keyboard setup` in a new terminal. Save a valid
 config and dictation starts on its own — no restart. Provider, audio, and
 hotkey changes later need **Restart** from the menu; Flow/register/LLM changes
 apply at the next recording, and turning Kai on or off in the file within two
-seconds. The first-run balloon says whether Kai is on and, if it is off, why
-and how to turn it on.
+seconds. The first-run balloon says how to ask Kai or, when Kai is off
+because it would use online services, how to turn it on.
 
 | What | Where |
 | --- | --- |
@@ -614,8 +614,9 @@ The daemon listens for the configured hotkey. By default:
   and stops when you release the keys.
 
 Nothing starts until you ask: the microphone opens only on this hotkey, Kai's
-(hold Right Ctrl), the on-screen orb or the commands below. Nothing listens in
-the background unless you turn on Kai's wake word (`[wake]`).
+(hold Right Ctrl, once Kai is on), the on-screen orb or the commands below.
+Nothing listens in the background unless you turn on Kai's wake word
+(`[wake]`), and that listens only while Kai is on.
 
 Equivalent CLI commands:
 
@@ -697,6 +698,59 @@ Sway example:
 ```conf
 bindsym Control+Mod1+t exec voice-keyboard tts
 ```
+
+### Kai, the voice assistant
+
+Kai is on by default only when it runs locally: the speech server that
+hears your question and speaks the answer (`[stt]` and `[tts]`) and the
+language model that answers it (`[llm]`) are all on this computer or your
+own network, and no xAI voice agent (`[assistant] agent_id`) is set. That
+is `[assistant] enabled = "auto"`, the default; what counts as local is in
+[Fully Offline](#fully-offline-local-models). With xAI, the default
+provider, or any other online service, Kai stays off until you turn it on:
+
+```bash
+voice-keyboard kai        # is Kai on, and why: where each part of it runs
+voice-keyboard kai on     # lists each online service and what it would receive, then asks
+voice-keyboard kai off    # off at once, in the running daemon too
+```
+
+`kai on` asks before it writes `enabled = true` (`kai on --yes` is that
+answer, for a script); when everything is local it writes `"auto"` without
+asking. `voice-keyboard setup` asks the same question, and pressing Enter
+there never changes it; on Windows the tray has **Turn on Kai…** and
+**Turn off Kai**. `enabled = true` keeps Kai on even with online services,
+and `false` keeps it off. Turning Kai on or off applies at once with these
+commands and the tray, and within two seconds when you edit config.toml by
+hand; a change to `[stt]` or `[tts]` still takes a restart, and Kai
+follows it then. When Kai turns on or off, or starts sending your questions
+to another online service, one notification says so (turning it off
+yourself isn't announced).
+
+Once Kai is on, ask it: hold **Right Ctrl** and release to send (a tap cuts
+it off mid-answer), click the orb (GNOME and Windows), run `voice-keyboard
+summon`, or say the wake word (`[wake]`). On macOS Right Ctrl can't be
+bound: use `summon`, or a chord in `[assistant] hotkey`.
+
+While Kai is off, nothing of it runs: no language model is asked, its
+memory is neither read nor written (the file is kept), the orb is hidden,
+the wake word keeps the microphone closed, and holding Right Ctrl opens
+nothing — letting go shows a note that Kai is off (under `"auto"`, with why
+and how to turn it on, at most once every ten minutes).
+`voice-keyboard summon` prints the same and exits with an error, and
+`voice-keyboard status` shows `kai: off`.
+
+**Updating from an earlier version.** Kai used to be on by default. If your
+config.toml doesn't set `[assistant] enabled` (Windows' starter file
+didn't), or has the `enabled = true` it copied from `config.toml.example`
+(the Linux and macOS installers copy that file, and from 2.1 to 2.3 it
+said `true`), it now gets `"auto"`: with xAI, Kai is off until you turn it
+on, and the first start after the update says so. A `true` you chose —
+with this version's setup, `voice-keyboard kai on` or the tray, or by
+hand — stays on, and `false` stays off. `voice-keyboard kai` and `doctor`
+say when your `true` counts as the copied default; `voice-keyboard kai on`
+makes it your choice. Going back to 2.3 or earlier, set `enabled` to `true`
+or `false` first: older versions don't know `"auto"`.
 
 ## Flow — Molten Dictation
 
@@ -966,8 +1020,9 @@ firefox = "enter"                       # every Firefox tab: Enter, as before 2.
 ### The next-level channels
 
 These are off by default wherever they would change behavior, with one
-exception: Kai is on (push-to-talk, so the mic still opens only when you
-ask), and it keeps a local memory. See `ROADMAP.md` for the doctrine and
+exception: Kai is on by default when it runs locally (push-to-talk even
+then, so the mic still opens only when you ask), and it keeps a local
+memory. See `ROADMAP.md` for the doctrine and
 `config.toml.example` for every key:
 
 - **Hotword biasing** (`[stt] hotword_bias`, off by default) — recognition
@@ -1000,13 +1055,18 @@ ask), and it keeps a local memory. See `ROADMAP.md` for the doctrine and
   are typed; room speech is still transcribed by your provider, but never
   reaches the grammar, the screen or the ledger.
 - **Kai — the voice assistant** (`[assistant]`) — the keyboard grows a voice
-  assistant, on by default and push-to-talk. Summon it three ways: **hold
-  Right Ctrl** and release to send (a bare modifier types nothing, so
-  nothing leaks into a terminal; configurable — chords like
-  `control+alt+.` work but terminals see escape codes when they're held),
-  **click** the always-on Kai orb the overlay draws on screen (GNOME and
-  Windows), or (opt-in `[wake]`, with a wake model you train) say the local
-  **wake word "Kai"**. (On Wayland the daemon often
+  assistant, push-to-talk, and on by default only when `[stt]`, `[tts]` and
+  `[llm]` are all local and no xAI voice agent is set (`enabled = "auto"`;
+  `true` turns it on with online services, `false` off; `voice-keyboard
+  kai` says which and why — see
+  [Kai, the voice assistant](#kai-the-voice-assistant)). Once it is on,
+  summon it three ways: **hold Right Ctrl** and release to send (a bare
+  modifier types nothing, so nothing leaks into a terminal; configurable —
+  chords like `control+alt+.` work but terminals see escape codes when
+  they're held),
+  **click** the Kai orb the overlay draws on screen while Kai is on (GNOME
+  and Windows), or (opt-in `[wake]`, with a wake model you train) say the
+  local **wake word "Kai"**. (On Wayland the daemon often
   can't see the focused app — GPU terminals expose no accessibility — so
   when focus is unknown Kai still compiles commands from clearly-runnable
   requests and answers everything else; toggle with `terminal_fallback`.) Kai routes your query by where you are: **in a
@@ -1017,11 +1077,16 @@ ask), and it keeps a local memory. See `ROADMAP.md` for the doctrine and
   otherwise through `[llm]` and your read-aloud voice. Kai keeps your
   questions and its answers on this computer
   (`assistant-memory.sqlite3` in `~/.local/state/voice-keyboard/`, or
-  `%LOCALAPPDATA%\voice-keyboard\` on Windows); set
+  `%LOCALAPPDATA%\voice-keyboard\` on Windows), and for each question it
+  looks up related earlier questions and answers and, when dictation
+  history is on, related ledger entries, and sends them to `[llm]` with
+  it, as context. It searches the ledger by keyword, or through your
+  `[recall]` embeddings service when that is local too or you turned Kai
+  on yourself (`enabled = true`); an online one then receives your
+  question and up to 200 lines of the ledger. Set
   `memory_enabled = false` under `[assistant]` and nothing is stored (not
-  even the file). When dictation history is on, Kai also looks up the
-  ledger entries related to your question and sends them to `[llm]` with
-  it, as context.
+  even the file) and nothing is looked up. While Kai is off, its memory is
+  neither read nor written; the file is kept.
   An earcon confirms the mic is live; the turn runs off the hotkey path, so
   a second tap barges in
   and cuts Kai off. Voice in, voice or a drafted command out — you never
@@ -1029,9 +1094,10 @@ ask), and it keeps a local memory. See `ROADMAP.md` for the doctrine and
 - **Wake word "Kai"** (`[wake]`, opt-in, default off) — a tiny **local**
   openWakeWord detector summons Kai hands-free; nothing is transcribed and
   nothing leaves the box until it fires. It's the one path that keeps the
-  mic warm, so it stays behind an explicit switch; the hotkey remains the
-  hard mute. No "Kai" model ships yet: make one with
-  `scripts/train_kai_wakeword.py` and set `model_path` (until then
+  mic warm, so it stays behind an explicit switch, and it listens only
+  while Kai is on (while Kai is off the mic stays closed, and `doctor`
+  warns); the hotkey remains the hard mute. No "Kai" model ships yet: make
+  one with `scripts/train_kai_wakeword.py` and set `model_path` (until then
   openWakeWord's pretrained words stand in, for testing). It needs
   openWakeWord in the keyboard's own environment, and openWakeWord's
   models, downloaded once; after the Linux installer, with
@@ -1120,9 +1186,10 @@ non-ASCII is dropped with a warning.
 
 `[flow]`, `[registers]`, `[nav]`, `[llm]`, `[intent]`, `[ambient]`,
 `[ask]`, `[recall]` and `[assistant]` edits hot-reload at the next
-recording — no daemon restart. Providers, audio, the hotkeys (Kai's
-included), `[snippets]` and `[polish.map]` still need one (see
-[Configuration](#configuration)).
+recording — no daemon restart — and Kai's own settings (`[assistant]`,
+`[llm]`, `[recall]`), turning Kai on or off included, within two seconds.
+Providers, audio, the hotkeys (Kai's included), `[snippets]` and
+`[polish.map]` still need one (see [Configuration](#configuration)).
 
 ### Flow limitations (honest ones)
 
@@ -1200,8 +1267,8 @@ language = "en"
 interim_results = true
 
 [tts]
-# Choices: xai, openai, elevenlabs, and hyperfurion (the hosted service;
-# existing subscribers only)
+# Choices: xai, openai, elevenlabs, hyperfurion (the hosted service;
+# existing subscribers only), and none (nothing speaks)
 provider = "xai"
 # Leave empty for the provider default.
 model = ""
@@ -1229,7 +1296,8 @@ mode = "auto"
 
 Edits to `[flow]`, `[registers]`, `[llm]`, `[intent]`, `[nav]`, `[ambient]`,
 `[ask]`, `[recall]` and most of `[assistant]` (not its hotkey) apply at the
-next recording. Anything else — providers, API keys, audio, hotkeys, `[snippets]`,
+next recording; for Kai, within two seconds (`voice-keyboard kai on`/`off`
+applies at once). Anything else — providers, API keys, audio, hotkeys, `[snippets]`,
 `[polish.map]`, the daemon socket — needs a restart (on Windows, **Restart** in
 the tray menu; on macOS, `launchctl kickstart -k
 gui/$(id -u)/com.hyperfurion.voice-keyboard`):
@@ -1280,14 +1348,24 @@ If you switch from xAI to OpenAI or ElevenLabs and leave `voice_id = "eve"`,
 the code uses that provider's default voice instead. Set `voice_id` explicitly
 when you want a specific voice.
 
+`provider = "none"` means nothing speaks: read-aloud says so, and Kai shows
+its answers in the overlay (a long one is cut short). Setup offers it for a
+local speech server that only transcribes (whisper.cpp); with nothing to
+send, Kai can still run locally.
+
 ### Fully Offline (Local Models)
 
 The `openai` provider accepts a `base_url`, so any OpenAI-compatible server
 counts as a provider — including one on `localhost`. A server at a local
-address (`localhost`, or a private-network address such as `192.168.x`) needs
-no API key. Point `[stt]` and `[tts]` at it, and `[llm]` at a local model too
+address needs no API key: `localhost` or a name ending in `.localhost`,
+`.local`, `.home.arpa` or `.internal`, or a loopback, private or link-local
+IP address (`127.x`, `10.x`, `172.16-31.x`, `192.168.x`, `fc00::/7`). Any
+other host name counts as online, even one that looks like an address
+(`127.example.com`), and so does a URL with a `user@` part or a host ending
+in a dot. Point `[stt]` and `[tts]` at it, and `[llm]` at a local model too
 (it handles "VK, …" rewrites, Kai and the punctuation at your pauses), and
-nothing leaves your machine:
+nothing leaves your machine — and Kai, the voice assistant, turns on by
+itself:
 
 ```toml
 [providers.openai]
@@ -1317,6 +1395,18 @@ re-transcribed every 2.5 seconds (`[flow] live_rest = "auto"`).
 included, and sets `[llm]` to a running llama-server's model, or to a local
 server you name.
 
+A local server like these is always reached directly: never through
+`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` or the system proxy, and a redirect
+from it is not followed. For Kai, `[assistant] local_hosts` adds servers you
+own under other names, e.g. `["gpu-box", "100.64.0.0/10"]` for a machine on
+your Tailscale network: Kai counts them as local, and they are reached
+directly too (a keyless server still needs a local address). Kai goes by
+address and trusts a local server to run the model itself: one that
+forwards your request to an online service (a proxy to a cloud API) is
+online in fact, whatever its address. An Ollama model tag ending in
+`-cloud` or `:cloud` already counts as online, and so does the HyperFurion
+relay, even on `localhost` (it forwards to xAI).
+
 Open models and servers that work well locally:
 
 | What | Why |
@@ -1341,7 +1431,9 @@ STT/TTS behind a metered relay; what's left over after upstream costs funds
 the project's development. It speaks the same streaming protocol as `xai`, so
 behavior is identical from the daemon's side. Audio for this provider
 transits the relay on its way to xAI; it is held in memory only and never
-written to disk. The relay is in `relay/` and is fully self-hostable —
+written to disk. For Kai the relay counts as online, so a Kai that was on
+because everything ran locally turns off at the next start (`login` says
+so; `voice-keyboard kai on` turns it on anyway). The relay is in `relay/` and is fully self-hostable —
 see `relay/README.md` for tiers, quotas, and deployment.
 
 ## Hotkeys
@@ -1376,7 +1468,8 @@ Keyboards plugged in after the daemon starts are picked up within a few
 seconds.
 
 Two more bindings use the same names: `[assistant] hotkey` (default
-`rightctrl`, held to talk to Kai) and `[tts] hotkey` (read the selection aloud;
+`rightctrl`, held to talk to Kai once it is on; macOS can't bind a bare
+modifier, so there it needs a chord) and `[tts] hotkey` (read the selection aloud;
 `control+alt+r` on Windows, off by default on Linux and macOS, where you can
 bind a desktop shortcut to `voice-keyboard tts` instead).
 
@@ -1393,8 +1486,11 @@ Modes:
 
 On Linux with GNOME Shell 45–50 (developed on 50, Wayland), the installer copies and enables a Shell extension
 that exposes the D-Bus name `org.voicekeyboard.Overlay`. The CLI and daemon ask
-that extension to show recording state near the focused text field, and to
-draw the Kai orb.
+that extension to show recording state near the focused text field, and,
+while Kai is on, to draw the Kai orb. After a screen unlock the extension
+asks the daemon whether to show the orb; with a custom `[daemon]
+socket_path` it can't, and the orb comes back when Kai next turns on or the
+daemon restarts.
 
 The anchor comes from AT-SPI focus/caret coordinates, collected with
 `/usr/bin/python3` so it can use the system `gi` and `Atspi` packages. If AT-SPI
@@ -1628,33 +1724,52 @@ Yes, with your own local servers. By default speech goes to a cloud provider
 Parakeet, Voxtral, Kokoro; e.g. via
 [Speaches](https://github.com/speaches-ai/speaches)) and `[llm]` at a local
 model, and everything stays on your machine — no API key and no network
-required. See
+required — and Kai, the voice assistant, turns on by itself. See
 [Fully Offline (Local Models)](#fully-offline-local-models). Capture, hotkeys,
 status UI, IPC, playback, and keyboard injection are already local.
 
 ## Security And Privacy
 
-- Your speech-to-text provider receives the audio you dictate, and what you
-  say to Kai.
-- Your text-to-speech provider receives the text you ask it to read aloud, and
-  Kai's spoken answers.
+- Kai, the voice assistant, is on by default only when everything it uses
+  runs on this computer or your own network; with an online service it
+  sends nothing until you turn it on, and `voice-keyboard kai on` (setup,
+  the Windows tray) first lists each service and what it would receive.
+  The check goes by address and trusts a local server to run the model
+  itself: a local gateway that forwards to an online service makes Kai
+  online, whatever its address says.
+- Your speech-to-text provider receives the audio you dictate, and, once
+  Kai is on, what you say to Kai.
+- Your text-to-speech provider receives the text you ask it to read aloud,
+  and, once Kai is on, Kai's spoken answers.
 - Your `[llm]` language model (xAI's Grok with your xAI key, by default)
   receives the text of a "VK, …" rewrite (or the selection it rewrites), a
   `[polish.map]` restyle, a "VK, run …" or `voice-keyboard intent` request, a
   `voice-keyboard ask` question with your selection, a
-  dictation with a correction cue when `[flow] corrections = "llm"`, Kai's
-  questions with your current selection (and, when dictation history is on,
-  the ledger entries related to the question), and, with
+  dictation with a correction cue when `[flow] corrections = "llm"`, once
+  Kai is on, Kai's questions with the text you have highlighted (on Linux)
+  and, unless `[assistant] memory_enabled = false`, related notes from its
+  memory and the ledger entries related to the question (when dictation
+  history is on), and, with
   `[flow] pause_review = "auto"` (the default), the two words around a pause
   its rules can't settle. Point `[llm]` at a local model to keep all of that on
   your machine; `pause_review = "rules"` alone stops the pause words.
+- With an online `[recall]` `base_url`, `voice-keyboard find` and "VK,
+  recall …" send it your search and up to 200 lines of your dictation
+  history, and so does a Kai you turned on yourself (`[assistant] enabled =
+  true`), with your question; under the default, Kai searches by keyword
+  unless `[recall]` is local too.
+- A server at a local address is reached directly, never through a proxy
+  (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` or the system's), and a redirect
+  from it is not followed.
 - Recorded audio is held in memory while it is being transcribed; it is not
   written to disk.
 - TTS audio is written to a temporary MP3 file for playback, then deleted.
-- Kai is on by default and keeps your questions and its answers on your
+- While Kai is on, it keeps your questions and its answers on your
   computer (`~/.local/state/voice-keyboard/assistant-memory.sqlite3`, mode
   600; `%LOCALAPPDATA%\voice-keyboard\` on Windows) until you set
-  `[assistant] memory_enabled = false`. The dictation ledger
+  `[assistant] memory_enabled = false`, which also stops it looking up
+  memories and dictation history; while Kai is off, its memory is neither
+  read nor written (the file is kept). The dictation ledger
   (`[flow] history`) is off by default. A word you spell or correct is saved
   as a suggestion in `dictionary.json` (mode 600) and applied only if you
   accept it.
@@ -1789,7 +1904,8 @@ The daemon owns long-lived resources: the virtual keyboard (uinput on Linux),
 microphone capture, provider clients, hotkey listener, and the IPC socket. The
 CLI is a thin client: most commands read the config, send one IPC command, and
 show overlay or notification state; a few work without the daemon (`setup`,
-`doctor`, `try`, `commands`, `devices`, `history`, `find`, `learned`, `login`).
+`doctor`, `kai`, `try`, `commands`, `devices`, `history`, `find`, `learned`,
+`login`).
 
 ## Development
 
