@@ -66,8 +66,7 @@ def create_hotkey_listener(
 ):
     """Platform factory: evdev on Linux, a Quartz event tap on macOS, a
     low-level keyboard hook on Windows. on_hold_cancel (bare-key gesture
-    aborted by another key) is honored on Linux and Windows; macOS falls
-    back to on_hold_stop semantics."""
+    aborted by another key) is honored on all three."""
     if sys.platform == "darwin":
         from voice_keyboard.macos.hotkey import MacHotkeyListener
 
@@ -76,6 +75,7 @@ def create_hotkey_listener(
             on_toggle=on_toggle,
             on_hold_start=on_hold_start,
             on_hold_stop=on_hold_stop,
+            on_hold_cancel=on_hold_cancel,
         )
     if sys.platform == "win32":
         from voice_keyboard.windows.hotkey import WinHotkeyListener
@@ -107,17 +107,21 @@ _PRETTY_KEYS = {
     "rightshift": "Right Shift", "leftshift": "Left Shift",
     "space": "Space", "enter": "Enter", "return": "Enter", "tab": "Tab",
     "period": ".", "comma": ",", "slash": "/",
+    # macOS-only names (voice_keyboard/macos/hotkey.py).
+    "rightcmd": "Right Cmd", "rightcommand": "Right Cmd", "leftcmd": "Left Cmd",
+    "leftcommand": "Left Cmd", "rightoption": "Right Option", "leftoption": "Left Option",
+    "option": "Option", "opt": "Option", "fn": "fn", "globe": "fn",
 }
 
 
 def pretty_binding(key: str) -> str:
     """A binding as people write it: control+alt+v -> Ctrl+Alt+V,
     rightctrl -> Right Ctrl, super -> Win (Windows) / Super."""
-    meta = "Win" if sys.platform == "win32" else "Super"
+    meta = {"win32": "Win", "darwin": "Cmd"}.get(sys.platform, "Super")
     parts = [p.strip().lower() for p in str(key).split("+") if p.strip()]
     pretty = []
     for part in parts:
-        if part in {"super", "meta", "win"}:
+        if part in {"super", "meta", "win", "cmd", "command"}:
             pretty.append(meta)
         elif part in _PRETTY_KEYS:
             pretty.append(_PRETTY_KEYS[part])
@@ -158,12 +162,15 @@ def bindings_clash(first: str, second: str) -> bool:
 
 def parse_binding(key: str, *, allow_bare: bool = False):
     """Parse a hotkey binding with this platform's keycode table; raises
-    ValueError on a typo. None when no table can be checked (non-Linux
-    hosts without their backend, e.g. macOS until a tap is built)."""
+    ValueError on a typo. None when no table can be checked."""
     if sys.platform == "win32":
         from voice_keyboard.windows.hotkey import WinHotkeySpec
 
         return WinHotkeySpec(key, allow_bare=allow_bare)
+    if sys.platform == "darwin":
+        from voice_keyboard.macos.hotkey import MacHotkeySpec
+
+        return MacHotkeySpec(key, allow_bare=allow_bare)
     if MODIFIER_ALIASES:
         return HotkeySpec(key, allow_bare=allow_bare)
     return None
