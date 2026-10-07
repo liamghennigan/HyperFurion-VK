@@ -7,18 +7,20 @@
 // session it creates on one module-wide promise, so after one failure that
 // copy can never create another session.
 //
-// Nothing is fetched until the mic is tapped. Then the runtime, tokenizer
-// and weights come from jsDelivr and Hugging Face, and transformers.js
+// Nothing is fetched until you tap the mic and the browser lets the page
+// use it. Then the runtime, tokenizer and weights come from jsDelivr and
+// Hugging Face (whose downloads redirect to its CDN), and transformers.js
 // keeps them in this browser's Cache Storage ("transformers-cache"), so a
 // later visit reads them from disk. Audio never leaves the tab.
 //
-// Capture starts at the tap, before the model is ready: what you say while
-// it loads is held in memory and recognized once it is. Each utterance,
-// closed by ~1.2 s of quiet, is trimmed to its voiced audio (a quarter
-// second before the first voiced frame, 0.3 s after the last) — Moonshine
-// returns nothing at all for a clip that opens on a second or two of
-// silence. While an utterance is open it is re-recognized every half
-// second or so, the way a streaming provider revises its interim results.
+// Capture starts as soon as the mic is granted, before the model is
+// ready: what you say while it loads is held in memory and recognized once
+// it is. Each utterance, closed by ~1.2 s of quiet, is trimmed to its
+// voiced audio (a quarter second before the first voiced frame, 0.3 s
+// after the last) — Moonshine returns nothing at all for a clip that opens
+// on a second or two of silence. While an utterance is open it is
+// re-recognized every half second or so, the way a streaming provider
+// revises its interim results.
 import { bus } from "./bus.js";
 
 export const LocalSTT = (() => {
@@ -67,9 +69,18 @@ export const LocalSTT = (() => {
   // shown is bytes that really arrived for the model being loaded (files
   // read from Cache Storage never come through: nothing is downloaded for
   // them). A copy that failed has its downloads cancelled.
+  // It also notes the host that finally answered: Hugging Face redirects
+  // its downloads to its CDN (us.aws.cdn.hf.co, say), and the browser's
+  // own request list names only the address asked for, so the footer
+  // learns the CDN's name here.
+  const hosts = new Set();
   function fetcher(id, signal) {
     return async (input, init) => {
       const res = await fetch(input, { ...(init || {}), signal });
+      try {
+        const h = new URL(res.url).hostname;
+        if (h && !hosts.has(h)) { hosts.add(h); bus.emit("stt:host", { host: h, redirected: !!res.redirected }); }
+      } catch {}
       if (id !== copies || !res.body || res.status !== 200) return res;
       let last = -1, open = true;
       const done = () => { if (open && id === copies) { open = false; inflight--; report(); } };

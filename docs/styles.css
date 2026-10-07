@@ -38,7 +38,7 @@
 /* ─── base ─────────────────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 12px); -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--obsidian-0); color: var(--sand-50); font: 17px/1.55 var(--sans); overflow-x: hidden; font-variant-numeric: tabular-nums; }
 h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -.02em; margin: 0 0 .4em; color: var(--sand-50); text-wrap: balance; }
 h1 { font-size: clamp(42px, 5.6vw, 76px); line-height: .98; font-variation-settings: "opsz" 144, "wght" 560, "SOFT" 30; }
@@ -142,6 +142,15 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
   .key { padding: 0 0 calc(var(--u) * .1) calc(var(--u) * .12); }
 }
 @media (max-width: 360px) { .key[data-opt] { display: none; } .row:first-child { display: none; } }
+/* a phone: a one-unit key is narrower than "ctrl" at the legend size —
+   smaller mod legends, a one-unit key's legend centered, nothing spills
+   onto the next key */
+@media (max-width: 480px) {
+  .key { overflow: hidden; }
+  .key.mod .legend, .key.edit .legend { font-size: min(8px, calc(var(--u) * .46)); letter-spacing: -.02em; }
+  .key[data-code="ControlRight"], .key[data-code="Delete"] { justify-content: center; padding-left: 0; }
+  .key[data-code="ControlRight"] .legend, .key[data-code="Delete"] .legend { font-size: min(7px, calc(var(--u) * .42)); letter-spacing: -.05em; }
+}
 @media (max-width: 640px) {
   .row:first-child .gap { display: none; }
   .key[data-code^="Arrow"] .legend, .key[data-code="PageUp"] .legend, .key[data-code="PageDown"] .legend, .key[data-code="Home"] .legend, .key[data-code="End"] .legend { font-size: 0; }
@@ -179,6 +188,8 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
 .recording .caret { animation: blink 1.1s steps(1) infinite; }
 .fwin-instr { font-size: 12px; color: var(--saffron); margin: 6px 0 0; }
 .fwin-status { height: 34px; display: flex; align-items: center; padding: 0 14px; border-top: 1px solid var(--glass-line); font-size: 11px; color: var(--sand-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fwin-status .msg { min-width: 0; overflow: hidden; white-space: normal; line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.fwin-status .yours { flex: none; white-space: nowrap; }
 .fwin-status.live { color: var(--live); }
 .fwin-status.sim { color: var(--saffron); }
 .fwin-status.err { color: var(--rec); }

@@ -15,20 +15,21 @@
 //                navigation, the pause rules; CI replays
 //                tests/flow_corpus.json through both)
 //   stt       -> an open-source speech model (Moonshine tiny) running in
-//                this tab, downloaded from jsDelivr and Hugging Face when
-//                you first tap the mic (./js/stt-local.js)
+//                this tab, downloaded from jsDelivr and Hugging Face once
+//                you first tap the mic and allow it (./js/stt-local.js)
 //   autopilot -> a scripted demo, only ever started by a click, under a
 //                "scripted demo" badge for its whole run
 //   relay     -> the hosted xAI engines, strictly opt-in behind a sheet
 //                that says what leaves and where; nothing is sent until you
 //                press a button in it
-//   footer    -> counts every request that left the page, live, and says
-//                what you did that caused it (./js/measure.js)
+//   footer    -> counts every file the page asked another server for,
+//                live, names the servers that answered, and says what you
+//                did that caused it (./js/measure.js)
 //
 // Nothing on this page moves until you do something. Every file under
 // ./js/ is readable and none is minified; the page's own files come from
 // this site. Other servers are reached only after you ask: the model's
-// hosts when you tap the mic, the relay from its sheet, and your
+// hosts when you tap the mic and allow it, the relay from its sheet, and your
 // browser's own speech service or an online voice only if you pick one.
 import { $, reduced } from "./js/env.js";
 import { bus } from "./js/bus.js";
@@ -53,5 +54,11 @@ window.__vk = Object.assign(window.__vk || {}, {
   autopilot: Autopilot, stt: LocalSTT, reduced, ready: true,
 });
 document.documentElement.classList.add("ready");
-// the hero's "try it" button is the mic, from further away
-$("hero-try")?.addEventListener("click", (e) => { e.preventDefault(); Dictation.toggle(); });
+// the hero's "try it" button takes you to the mic and puts focus on it:
+// the tap — and the download it starts — stays yours, next to the stop
+// control and the note that says what the tap fetches
+$("hero-try")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  $("stage")?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  $("mic")?.focus({ preventScroll: true });
+});

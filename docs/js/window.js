@@ -124,13 +124,24 @@ export const Window = (() => {
   }
   function clearDoc() { buffer().clear(); paintArgs = { moltenLen: 0, heat: "molten", moved: false }; paintDoc(); bus.emit("doc:cleared", {}); }
 
-  // ── status: one line ────────────────────────────────────────────────────
+  // ── status: one line, replaced ──────────────────────────────────────────
+  // its text wraps to two lines at most, then is cut (the full text is the hover title); painted
+  // only when it changes, so a screen reader hears each status once
+  let painted = "";
   function paintStatus() {
     if (!el.status) return;
-    if (st.note) { el.status.textContent = st.note; el.status.className = "fwin-status " + st.noteCls; return; }
-    el.status.textContent = [st.engine, st.latency].filter(Boolean).join(" · ");
-    el.status.className = "fwin-status " + st.cls;
-    if (register().terminal && buffer().text && !state.recording) {
+    const text = st.note || [st.engine, st.latency].filter(Boolean).join(" · ");
+    const cls = st.note ? st.noteCls : st.cls;
+    const yours = !st.note && register().terminal && buffer().text && !state.recording;
+    const key = cls + "\n" + text + "\n" + yours;
+    if (key === painted) return;
+    painted = key;
+    const msg = document.createElement("span");
+    msg.className = "msg"; msg.textContent = text;
+    el.status.replaceChildren(msg);
+    el.status.className = "fwin-status " + cls;
+    el.status.title = text;
+    if (yours) {
       const y = document.createElement("span"); y.className = "yours"; y.textContent = "⏎ enter — yours";
       el.status.appendChild(y);
     }

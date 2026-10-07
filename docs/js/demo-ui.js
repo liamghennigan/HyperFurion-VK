@@ -5,7 +5,8 @@
 // api.hyperfurion.com whether the hosted demo is up (one GET with nothing
 // you said or typed in it); only a live answer unlocks the switch, the
 // question box and the voice button. The switch sends ONE dictation and
-// turns itself off. The footer counts every request (measure.js).
+// turns itself off. The footer counts each request this sheet sends
+// (measure.js).
 import { $ } from "./env.js";
 import { bus } from "./bus.js";
 import { Demo, AudioOut } from "./demo-relay.js";

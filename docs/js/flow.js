@@ -1781,13 +1781,27 @@ const FORMAL = [
   [/\bcan't\b/gi, "cannot"], [/\bwon't\b/gi, "will not"],
   [/\bit's\b/gi, "it is"], [/\bwe're\b/gi, "we are"], [/\bi'm\b/gi, "I am"],
 ];
+// It knows three instructions — formal (polite, professional), upper case
+// and title case — and says which one it heard; anything else ("make it
+// shorter", "translate that to Spanish", "less formal") is not one of
+// them, and the stand-in leaves the words alone rather than do something
+// else: null.
+export function pageRewriteKind(instruction) {
+  const instr = String(instruction || "").toLowerCase();
+  if (/\b(less|not|non|too)[- ]?(so |too |as |that |very )?(formal|professional|polite)|\b(casual|informal|impolite|unprofessional)\b/.test(instr)) return null;
+  if (/\b(upper[- ]?case|all caps|all capitals|capital letters|shout(ing)?)\b/.test(instr)) return "upper";
+  if (/\btitle([- ]?case)?\b/.test(instr)) return "title";
+  if (/\b(formal(ly)?|more formal|professional(ly)?|polite(ly)?)\b/.test(instr)) return "formal";
+  return null;
+}
 export function pageRewrite(text, instruction) {
-  const instr = (instruction || "").toLowerCase();
+  const kind = pageRewriteKind(instruction);
   let out = text.trim();
-  if (/upper ?case|all caps|shout/.test(instr)) out = out.toUpperCase();
-  else if (/title ?case|title/.test(instr))
+  if (!kind) return null;
+  if (kind === "upper") out = out.toUpperCase();
+  else if (kind === "title")
     out = out.toLowerCase().replace(/(^|\s)(\S)/g, (_, s, c) => s + c.toUpperCase());
-  else {  // the stand-in's one real trick: formal
+  else {  // formal: a fixed list of word swaps
     for (const [re, sub] of FORMAL) out = out.replace(re, sub);
     out = out.replace(/\s+/g, " ").trim();
     out = capitalized(out);

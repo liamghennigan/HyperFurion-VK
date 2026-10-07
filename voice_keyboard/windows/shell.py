@@ -1274,8 +1274,11 @@ class WinShell:
         separator()
         if self._setup_message:
             add(self._setup_message[:80], enabled=False)
-            add("Sign in to the hosted service…", self._cb.sign_in)
+            # A key or your own server is the way in; the hosted
+            # subscription isn't on sale, so its sign-in comes second and
+            # says who it is for.
             add("Open settings file…", self._cb.open_settings)
+            add("Sign in (existing hosted-service subscribers)…", self._cb.sign_in)
         else:
             recording = bool(status.get("recording"))
             add(

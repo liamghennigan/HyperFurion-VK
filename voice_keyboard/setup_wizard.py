@@ -310,20 +310,22 @@ class Wizard:
         stt_now = str(current.get("stt", {}).get("provider", "xai"))
         configured = _has_key(current, stt_now)
         keep = f"Keep the current setup ({stt_now})" if configured else "Skip for now (set it up later)"
+        # The hosted subscription isn't on sale: it comes last and is
+        # labelled for the people who already have one.
         choice = self.choose(
             "How should your speech be transcribed?",
             [
-                "HyperFurion hosted service - sign in with your subscription email",
                 "My own API key (xAI, OpenAI, Groq, Deepgram, AssemblyAI)",
-                "A local OpenAI-compatible speech server (Speaches, whisper.cpp - fully offline)",
+                "A local OpenAI-compatible speech server (Speaches, whisper.cpp - no key; audio goes only to it)",
+                "HyperFurion hosted service - existing subscribers only (it isn't on sale)",
                 keep,
             ],
             4,
         )
-        if choice == 1:
+        if choice == 3:
             self.hosted = True
             self.edits.append(("", "", None, "Speech: HyperFurion hosted (you sign in after saving)"))
-        elif choice == 2:
+        elif choice == 1:
             stt = self.pick("Speech-to-text provider", STT_PROVIDERS, "xai")
             self.set("stt", "provider", stt, f"Speech-to-text: {stt}")
             key = self.secret(f"{stt} API key")
@@ -338,11 +340,23 @@ class Wizard:
                     if tts_key:
                         self.set(f"providers.{tts}", "api_key", tts_key)
             self.set("tts", "provider", tts, f"Text-to-speech: {tts}")
-        elif choice == 3:
+        elif choice == 2:
             url = self.ask("Server base URL", "http://127.0.0.1:8000/v1")
             self.set("stt", "provider", "openai", f"Speech: local server at {url}")
             self.set("tts", "provider", "openai")
             self.set("providers.openai", "base_url", url)
+            # Left unset, the OpenAI model names would be sent, and a local
+            # server only answers to the ids it has installed.
+            self.out("    Name the models as your server knows them (whisper.cpp ignores the name).")
+            stt_model = self.ask("Transcription model", "Systran/faster-whisper-large-v3")
+            self.set("stt", "model", stt_model, f"Transcription model: {stt_model}")
+            if self.confirm("Does it also speak (read-aloud and Kai's voice; Speaches does, whisper.cpp doesn't)?", True):
+                tts_model = self.ask("Text-to-speech model", "speaches-ai/Kokoro-82M-v1.0-ONNX")
+                voice = self.ask("Voice", "af_heart")
+                self.set("tts", "model", tts_model, f"Text-to-speech: {tts_model}, voice {voice}")
+                self.set("tts", "voice_id", voice)
+            else:
+                self.out("    Read-aloud and Kai's spoken answers need a server that speaks; set [tts] later.")
 
     def step_language_model(self, current: dict) -> None:
         self.out("")
@@ -499,7 +513,8 @@ class Wizard:
             self.out("`voice-keyboard doctor` checks the microphone, typing and the daemon.")
         else:
             self.out("Saved, but HyperFurion VK can't start yet: it still needs a speech provider.")
-            self.out("Run `voice-keyboard setup` again, or `voice-keyboard login` for the hosted service.")
+            self.out("Run `voice-keyboard setup` again to add a key or your own server")
+            self.out("(existing subscribers to the hosted service: `voice-keyboard login`).")
         self.out("Change these any time with `voice-keyboard setup`, or edit the settings file.")
 
 

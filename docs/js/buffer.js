@@ -10,13 +10,24 @@ const isWord = (c) => /[\p{L}\p{N}_]/u.test(c);
 const isSpace = (c) => /\s/.test(c);
 const isAlnum = (c) => /[\p{L}\p{N}]/u.test(c);
 
-// editor words: a run of word characters, or a run of punctuation
+// editor words: a run of word characters, or a run of punctuation. Moving
+// left, a sentence mark stuck to the end of a word goes with the word —
+// "Friday." is one step back, the way GTK, macOS and browser text fields
+// move — so "select previous word" after a recognizer's own period takes
+// the word, not the period alone.
+const isMark = (c) => /[.,!?;:]/.test(c);
 export function wordLeft(text, i) {
   while (i > 0 && isSpace(text[i - 1])) i--;
-  if (i > 0) {
-    if (isWord(text[i - 1])) while (i > 0 && isWord(text[i - 1])) i--;
-    else while (i > 0 && !isWord(text[i - 1]) && !isSpace(text[i - 1])) i--;
+  if (i > 0 && !isWord(text[i - 1])) {
+    let j = i;
+    while (j > 0 && isMark(text[j - 1])) j--;
+    if (j < i && j > 0 && isWord(text[j - 1])) i = j;   // "Friday." moves as one word
+    else {
+      while (i > 0 && !isWord(text[i - 1]) && !isSpace(text[i - 1])) i--;
+      return i;
+    }
   }
+  while (i > 0 && isWord(text[i - 1])) i--;
   return i;
 }
 export function wordRight(text, i) {

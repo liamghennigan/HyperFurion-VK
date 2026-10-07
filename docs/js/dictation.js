@@ -26,15 +26,16 @@ import { LocalSTT } from "./stt-local.js";
 import { Window } from "./window.js";
 import { Typist } from "./typist.js";
 import { Keyboard } from "./keyboard.js";
-import { moltenLine, compileScript, pageRewrite, continuationState } from "./flow.js";
+import { moltenLine, compileScript, pageRewrite, pageRewriteKind, continuationState } from "./flow.js";
 import { keymap, chordsFor, label as navLabel } from "./nav.js";
 import { intentRequest, pageCommand } from "./intent.js";
+import { readAsMeant } from "./heard.js";
 
 export const Dictation = (() => {
   const D = { recording: false };
   let engine = "none";        // "local" | "relay" | "browser" — whatever the current recording uses
   let rec = null;             // the browser's SpeechRecognition, when the visitor chose it
-  let browserChosen = false;  // the visitor picked the browser's speech service (for this page load)
+  let browserChosen = false;  // the visitor picked the browser's speech service "for this visit" (this page load)
   let listening = false;      // audio is really being captured for recognition
   let settling = false;       // stopped; the recognizer is still finishing what was said
   let failed = false;         // this recording ended in a failure the page already explained
@@ -81,18 +82,28 @@ export const Dictation = (() => {
     return { service: generic, goes: "may send your audio to your browser maker's servers" };
   })();
 
+  // the download's progress, held between files: the model's files arrive
+  // one after another, and a moment between two of them is not a restart
+  // (a GPU that gives up does restart it, for the CPU's weights: so does this)
+  let lastPct = null, pctDevice = null;
+  function loadPct() {
+    if (LocalSTT.state !== "loading" || LocalSTT.device !== pctDevice) { lastPct = null; pctDevice = LocalSTT.device; }
+    if (LocalSTT.state === "loading" && LocalSTT.pct != null) lastPct = LocalSTT.pct;
+    return lastPct;
+  }
   function engineLabel() {
     if (scripted) return ["scripted demo · nothing is listening", "sim"];
     if (engine === "local") {
+      const pct = loadPct();
       if (LocalSTT.state === "ready")
         return ["Moonshine · in this tab · " + (LocalSTT.device === "webgpu" ? "on your GPU (WebGPU)" : "on your CPU (WebAssembly)"), "live"];
       if (LocalSTT.state === "loading")
-        return [(LocalSTT.pct != null ? "downloading Moonshine to this tab · " + LocalSTT.pct + "%" : "starting Moonshine in this tab") +
+        return [(pct != null ? "loading Moonshine into this tab · " + pct + "% downloaded" : "starting Moonshine in this tab") +
                 (D.recording ? " · your words appear when it's ready" : settling ? " · what you said appears when it's ready" : ""), "live"];
       return ["", ""];
     }
     if (engine === "relay") return ["xAI via relay · opt-in", "live"];
-    if (engine === "browser") return [vendor.service + " · " + vendor.goes + " · your choice", "live"];
+    if (engine === "browser") return [vendor.service + " · " + vendor.goes + " · your choice for this visit", "live"];
     return ["", ""];
   }
   function caption() { Window.setEngine(...engineLabel()); capText(); }
@@ -102,12 +113,15 @@ export const Dictation = (() => {
     let t = "Tap and speak";
     if (D.recording) {
       if (!listening) t = engine === "relay" ? "Connecting to the hosted engine…" : "Opening the microphone…";
-      else if (engine === "local" && LocalSTT.state !== "ready")
-        t = "Listening · model loading" + (LocalSTT.pct != null ? " " + LocalSTT.pct + "%" : "…");
+      else if (engine === "local" && LocalSTT.state !== "ready") {
+        const pct = loadPct();
+        t = "Listening · model loading" + (pct != null ? " " + pct + "%" : "…");
+      }
       else t = "Listening… tap to stop";
     } else if (settling) {
+      const pct = loadPct();
       t = LocalSTT.state === "loading"
-        ? "Transcribing once the model loads" + (LocalSTT.pct != null ? " · " + LocalSTT.pct + "%" : "…")
+        ? "Transcribing once the model loads" + (pct != null ? " · " + pct + "%" : "…")
         : "Transcribing…";
     }
     micCap.textContent = t;
@@ -148,7 +162,9 @@ export const Dictation = (() => {
       b.addEventListener("click", fn);
       return b;
     };
-    const useBrowser = btn("sbtn", "Use " + vendor.service + " — " + vendor.goes, () => {
+    // the choice lasts until the page is reloaded: the button says so, and
+    // the status line names the service on every recording it serves
+    const useBrowser = btn("sbtn", "Use " + vendor.service + " for this visit — " + vendor.goes, () => {
       browserChosen = true; hide(); start();
     });
     const useLocal = btn("sbtn", "Use the speech model in this tab instead", () => {
@@ -213,9 +229,11 @@ export const Dictation = (() => {
       const t = raw().toLowerCase();
       bus.emit("flow:did", { kind: t.lastIndexOf("correct ") > t.lastIndexOf("spell that") ? "correct" : "spell" });
     }
-    // spoken numbers became digits ("twenty five percent" -> "25%")
+    // spoken numbers became digits ("twenty five percent" -> "25%") — in
+    // prose and the terminal, where that is formatting; python, shell and
+    // javascript compile code ("range ten" -> range(10)), which isn't
     const formats = Math.max(0, digits(r.frozen) + digits(r.molten) - digits(raw()));
-    if (formats > seen.formats) { seen.formats = formats; bus.emit("flow:did", { kind: "format" }); }
+    if (formats > seen.formats && ["prose", "terminal"].includes(Window.focusedName())) { seen.formats = formats; bus.emit("flow:did", { kind: "format" }); }
     if (r.pauseLog && r.pauseLog.length > seen.pauses) {
       // a period the recognizer put at a pause, revised by the next words
       const [before, after] = r.pauseLog[r.pauseLog.length - 1];
@@ -230,7 +248,6 @@ export const Dictation = (() => {
   function instruct(instr) {
     const request = settings.intent && settings.intent.enabled ? intentRequest(instr, settings.intent.verbs) : null;
     if (request !== null) { bus.emit("flow:did", { kind: "intent" }); return draftCommand(request); }
-    bus.emit("flow:did", { kind: "rewrite" });
     return rewriteInPlace(instr);
   }
   const raw = () => (rawFinal + " " + rawInterim).trim();
@@ -271,9 +288,12 @@ export const Dictation = (() => {
     if (ms > 0 && D.recording)
       autoStopT = setTimeout(() => { log("auto-stop: " + ms + " ms of silence", "dim"); stop(); }, ms);
   }
+  // the in-tab model's usual mishearings of "VK" and "spell", read as
+  // meant (heard.js) — only for that model, whose habits they are
+  const asHeard = (text) => (engine === "local" ? readAsMeant(text, settings.wakeWord) : text);
   // every recognizer feeds these two
   function heardInterim(text) {
-    rawInterim = text;
+    rawInterim = asHeard(text);
     state.mark = performance.now();
     pump(); armAutoStop();
     bus.emit("rec:interim", { text });
@@ -281,7 +301,7 @@ export const Dictation = (() => {
   function heardFinal(text) {
     state.mark = performance.now();
     bus.emit("rec:final", { text });
-    closeUtterance(text);
+    closeUtterance(asHeard(text));
     armAutoStop();
   }
 
@@ -366,18 +386,29 @@ export const Dictation = (() => {
 
   // ── the wake word: rewrite the just-typed text in place ─────────────────
   // The daemon sends it to your [llm]; the page applies a small
-  // deterministic rewrite instead, labeled as such. Nothing leaves.
+  // deterministic rewrite instead, labeled as such. Nothing leaves. The
+  // stand-in knows three instructions (formal, upper case, title case);
+  // any other leaves your words as they are, and the status line says so.
   async function rewriteInPlace(instr) {
     const l = line;
     const text = l.committed();
     if (!text) { log("nothing typed yet to rewrite · dictate first, then the wake word", "dim"); return; }
+    const asked = instr.trim().replace(/[.,!?;:]+$/, "");
+    const said = "“" + settings.wakeWord + (asked ? ", " + asked : "") + "”";
+    if (!asked) { log(said + " with no instruction after it · nothing changed", "dim"); return; }
+    if (!pageRewriteKind(instr)) {
+      log(said + " · nothing changed: this page's stand-in knows only formal, upper case and title case " +
+        "(the app asks your language model)", "dim");
+      return;
+    }
+    bus.emit("flow:did", { kind: "rewrite" });
     const rewritten = /^\s*/.exec(text)[0] + pageRewrite(text, instr);   // the space that joined it to earlier text stays
     busy = true;
     await Typist.settled();
     await wait(420);
     if (l !== line) { busy = false; return; }   // the recording is gone: nothing of it to rewrite
     Typist.setTarget({ frozen: "", molten: rewritten, repair: true });
-    log("“" + settings.wakeWord + ", " + instr + "” · rewritten in place (page stand-in for your LLM)", "dim");
+    log(said + " · rewritten in place (page stand-in for your LLM)", "dim");
     await Typist.settled();
     await wait(320);
     l.rewrite(rewritten);
@@ -426,12 +457,16 @@ export const Dictation = (() => {
   // — the in-tab path: mic PCM → an open-source model, in this tab —
   async function startLocal() {
     const mine = sigP;
-    if (LocalSTT.state !== "ready") LocalSTT.load().catch(() => {});   // the download starts at the tap; failures land in the session
     try {
       await mine;
       if (!D.recording || sigP !== mine) { if (!D.recording) Signal.stop(); return; }
       const au = Signal.audio();
       if (!au.stream) { micFail(); return; }
+      // the download starts once the mic is yours to use — not at the tap,
+      // so a blocked or dismissed mic downloads nothing; capture starts now
+      // too, so what you say while it loads is still heard. Failures land
+      // in the session.
+      if (LocalSTT.state !== "ready") LocalSTT.load().catch(() => {});
       const session = await LocalSTT.start(au.stream, { onInterim: heardInterim, onFinal: heardFinal, onError: localFail });
       if (!D.recording || sigP !== mine) { session.stop(); return; }
       local = session;
@@ -463,6 +498,8 @@ export const Dictation = (() => {
     const why = Signal.error();
     state.lastError = "microphone: " + why;
     if (D.recording) halt();
+    engine = "none";   // nothing is listening: no engine line, green or otherwise
+    caption();
     Choice.show({
       text: why === "NotFoundError" ? "No microphone was found, so nothing was recorded."
         : why === "unsupported" ? "This browser doesn't give pages microphone access here, so nothing was recorded."
@@ -674,11 +711,12 @@ export const Dictation = (() => {
     return whole;
   }
   function clipboardLanding(text) {
-    // focus moved mid-dictation: the transcript lands on the clipboard,
-    // never in the wrong window — exactly what the daemon does
+    // focus moved mid-dictation: typing stops, never into the wrong window.
+    // The daemon then puts the whole transcript on your clipboard; this page
+    // never writes your clipboard without asking, so it leaves it alone —
+    // the transcript stays in the panes below ("you said: …")
     if (!text) return "";
-    try { navigator.clipboard.writeText(text); } catch {}
-    log("focus changed · transcript went to the clipboard", "dim");
+    log("focus changed · typing stopped · this page leaves your clipboard alone (the app would put the transcript there)", "dim");
     state.dictations++;
     done(text);
     return text;

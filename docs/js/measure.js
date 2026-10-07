@@ -1,15 +1,19 @@
 // ═══ MEASURE — the colophon: real size, measured, not claimed ═════════════
-// Counts the page's own files and bytes, and every request that went to
-// another server, as the browser itself reports them (Resource Timing,
-// watched live, so the footer updates while files arrive). Nothing goes
-// to another server until you do something, and the footer names what you
-// did: tap the mic (the speech model and its runtime, from jsDelivr and
-// Hugging Face), or press a button in the hosted-engine sheet (a status
-// check, a question, a voice line). What the browser doesn't list as a
-// request is counted from the page's own events: a dictation streamed to
-// the hosted engine over a WebSocket, a dictation through your browser's
-// own speech service, and a selection read aloud by an online voice — the
-// last two go wherever the browser sends them.
+// Counts the page's own files and bytes, and every file the page asked
+// another server for, as the browser itself reports them (Resource Timing,
+// watched live, so the footer updates while files arrive). The browser
+// lists one entry per file, with any redirects folded into it, so the
+// footer counts files, not network round trips, and names the servers
+// that answered after a redirect too (Hugging Face sends its downloads on
+// to its CDN; stt-local.js reports those hosts). Nothing goes to another
+// server until you do something, and the footer names what you did: start
+// a dictation (the speech model and its runtime, from jsDelivr and Hugging
+// Face, fetched once the mic is granted), or press a button in the
+// hosted-engine sheet (a status check, a question, a voice line). What the
+// browser doesn't list is counted from the page's own events: a dictation
+// streamed to the hosted engine over a WebSocket, a dictation through your
+// browser's own speech service, and a selection read aloud by a voice that
+// is, or may be, online — the last two go wherever the browser sends them.
 import { $, reduced } from "./env.js";
 import { bus } from "./bus.js";
 
@@ -34,8 +38,13 @@ import { bus } from "./bus.js";
     schedule();
   });
   bus.on("relay:asked", ({ what } = {}) => { if (what in did) did[what] = true; schedule(); });
-  let readOnline = 0;   // read-aloud through an online voice, which the chip named before you tapped it
-  bus.on("tts:online", () => { readOnline++; schedule(); });
+  // read-aloud through an online voice, or the browser's default voice
+  // when it lists none (which may be online) — the chip said so before you tapped it
+  let readOnline = 0, readMaybe = 0;
+  bus.on("tts:online", ({ maybe } = {}) => { if (maybe) readMaybe++; else readOnline++; schedule(); });
+  // the hosts that finally answered the model's downloads, after redirects
+  const answered = new Set();
+  bus.on("stt:host", ({ host } = {}) => { if (host) { answered.add(host); schedule(); } });
 
   // every request to another origin, grouped by what it was for
   const GROUPS = [
@@ -74,8 +83,12 @@ import { bus } from "./bus.js";
   function sentence(m) {
     const parts = [];
     const c = m.count;
-    if (c.model) parts.push(n(c.model, "request") + " to " + list(m.hosts.model) + " for the speech model and its runtime" +
-      (!m.modelBeforeMic ? ", because you started a dictation" : ""));
+    if (c.model) {
+      const onward = new Set([...answered].filter((h) => !m.hosts.model.has(h)));
+      parts.push("requests for " + n(c.model, "file") + " of the speech model and its runtime, to " + list(m.hosts.model) +
+        (onward.size ? " (some redirected on to " + list(onward) + ")" : "") +
+        (!m.modelBeforeMic ? ", because you started a dictation" : ""));
+    }
     const relayHost = list(m.hosts.relay) || "the relay";
     if (c.status) parts.push(n(c.status, "status check") + " to " + relayHost + (did.status ? ", because you pressed “check the relay”" : ""));
     if (c.ask) parts.push(n(c.ask, "question") + " to " + relayHost + " (on to xAI)" + (did.ask ? ", because you pressed “ask”" : ""));
@@ -84,11 +97,12 @@ import { bus } from "./bus.js";
     if (streamed.relay) parts.push(n(streamed.relay, "dictation") + " streamed to the hosted engine over a WebSocket (on to xAI), because you switched it on");
     if (streamed.browser) parts.push(n(streamed.browser, "dictation") + " through your browser's speech service, which you picked — it may send your audio to its maker's servers");
     if (readOnline) parts.push(n(readOnline, "selection") + " read aloud by your browser's online voice, which you picked — the text went to its maker");
+    if (readMaybe) parts.push(n(readMaybe, "selection") + " read aloud by your browser's default voice, which you picked though it may be online — if so, the text went to its maker");
     if (!parts.length) return "";
     return "Sent from this page to other servers so far: " + parts.join(" · ") +
       (m.cached ? " (" + m.cached + " of these " + (m.cached === 1 ? "requests was" : "were") + " answered from your browser's cache and never left it)" : "") + ".";
   }
-  const foreignOf = (m) => Object.values(m.count).reduce((a, b) => a + b, 0) + streamed.relay + streamed.browser + readOnline;
+  const foreignOf = (m) => Object.values(m.count).reduce((a, b) => a + b, 0) + streamed.relay + streamed.browser + readOnline + readMaybe;
   function paint(m, kb) {
     bytesEl.textContent = n(m.files, "file") + " · " + kb + " KB · self-hosted" + (foreignOf(m) ? "" : " · no third-party requests");
     if (fetchedEl) {

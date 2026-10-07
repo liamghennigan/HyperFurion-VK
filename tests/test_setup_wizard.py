@@ -144,7 +144,7 @@ def test_detected_llama_becomes_the_default_model(tmp_path):
     server = LlamaServer("http://127.0.0.1:8080/v1", ["/m/qwen.gguf"])
     ask = Script(
         "",                 # use qwen? yes
-        "2", "xai",         # own key, xAI
+        "1", "xai",         # own key, xAI
         "",                 # hotkey
         "",                 # mode
         "",                 # language
@@ -244,7 +244,7 @@ def test_invalid_hotkey_is_asked_again(tmp_path):
 
 
 def test_groq_asks_for_a_voice_provider(tmp_path):
-    ask = Script("2", "groq", "elevenlabs", "", "", "", "", "", "", "", "", "")
+    ask = Script("1", "groq", "elevenlabs", "", "", "", "", "", "", "", "", "")
     wizard, _ = _wizard(tmp_path, ask, secret=Script("gsk", "el"))
     assert wizard.run() == 0
     config = tomllib.loads((tmp_path / "config.toml").read_text())
@@ -256,14 +256,14 @@ def test_groq_asks_for_a_voice_provider(tmp_path):
 
 def test_hosted_signs_in_after_saving(tmp_path):
     calls = []
-    ask = Script("1", "", "", "", "", "", "", "", "", "")
+    ask = Script("3", "", "", "", "", "", "", "", "", "")
     wizard, _ = _wizard(tmp_path, ask, login=lambda: calls.append((tmp_path / "config.toml").exists()) or True)
     assert wizard.run() == 0
     assert calls == [True]
 
 
 def test_ctrl_c_changes_nothing(tmp_path):
-    ask = Script("2", "xai", KeyboardInterrupt())
+    ask = Script("1", "xai", KeyboardInterrupt())
     wizard, out = _wizard(tmp_path, ask, secret=Script("k"))
     assert wizard.run() == 1
     assert not (tmp_path / "config.toml").exists()
@@ -271,7 +271,7 @@ def test_ctrl_c_changes_nothing(tmp_path):
 
 
 def test_declining_to_save_changes_nothing(tmp_path):
-    ask = Script("2", "xai", "", "", "", "", "", "", "", "", "n")
+    ask = Script("1", "xai", "", "", "", "", "", "", "", "", "n")
     wizard, _ = _wizard(tmp_path, ask, secret=Script("k"))
     assert wizard.run() == 1
     assert not (tmp_path / "config.toml").exists()

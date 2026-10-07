@@ -4,7 +4,8 @@
 // said lights up the moment the engine acts on it — a scratch, a spelled
 // fix, a caret command, a rewrite. While nothing is recording, tapping a
 // hint plays that one thing as a short scripted session in the focused
-// window, under the window's "scripted demo" badge for its whole run.
+// window, on an empty field (the scripted demo clears it the same way),
+// under the window's "scripted demo" badge for its whole run.
 // Each script is written the way a recognizer hands words over (a name it
 // mishears is one wrong word; "to do" is two), so when a recognizer hears
 // you say the same thing, the engine does the same thing.
@@ -23,7 +24,7 @@ export const Hints = (() => {
       { text: "the fix lands on thursday", pause: 700 }, { text: "scratch that", pause: 700 }, { text: "the fix lands on friday period" }] },
     // a recognizer hears a name it doesn't know as a word it does
     { kind: "spell", say: "spell that s i o b h a n",
-      title: "This page's small speech model often mishears “spell” (as “bell” or “built”); tapping shows what happens once it is heard right.", play: [
+      title: "This page's small speech model often hears “spell” as “bell” or “fill”; before “that” and spelled letters, the page reads those as “spell”.", play: [
       { text: "I'll send it to Shivon", pause: 900 }, { text: "spell that s i o b h a n" }] },
     { kind: "select", say: "select previous word", play: [
       { text: "ship it on friday", pause: 900 }, { text: "select previous word", pause: 1100 }, { text: "monday period" }] },
@@ -33,11 +34,12 @@ export const Hints = (() => {
     { kind: "format", say: "twenty five percent by october sixth", play: [
       { text: "steps colon new number ship twenty five percent by october sixth new number celebrate emoji rocket" }] },
     // the app sends the instruction to your language model; this page has
-    // none, so its stand-in does one thing — swap a fixed list of casual
-    // words for formal ones — and the chip says so
+    // none, so its stand-in knows three — formal (a fixed list of word
+    // swaps), upper case, title case — leaves your words alone for any
+    // other, and the chip says so
     { kind: "rewrite", say: wake.toUpperCase() + ", make that formal", note: "page stand-in",
-      title: "This page has no language model: its stand-in swaps a fixed list of casual words for formal ones. " +
-        "The app sends the instruction to your language model, which can do any rewrite.", play: [
+      title: "This page has no language model: its stand-in knows three rewrites — formal (a fixed list of word swaps), " +
+        "upper case and title case — and changes nothing for any other. The app sends the instruction to your language model.", play: [
       { text: "i think it works now", pause: 900 }, { text: wake + " make that formal" }] },
     { kind: "intent", say: wake.toUpperCase() + ", run find every todo", register: "shell", play: [
       { text: wake + " run find every to do in this repo" }] },
@@ -60,6 +62,7 @@ export const Hints = (() => {
       if (Dictation.busy()) return;  // not over a recording, not over the scripted demo
       bus.emit("simulate:hint", { kind: h.kind });
       if (h.register) Window.setRegister(h.register, { silent: true });  // a command belongs at a prompt
+      Window.clearDoc();   // each hint plays alone: not joined onto earlier text
       Window.scripted("hint", true);
       try { await Dictation.simulate({ utterances: h.play }); }
       finally { Window.scripted("hint", false); }

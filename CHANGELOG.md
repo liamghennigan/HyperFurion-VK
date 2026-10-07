@@ -62,10 +62,30 @@ proven to be the daemon's.
 - **More symbols by name.** "asterisk", "hash sign", "less
   than sign", "greater than sign" and "caret sign". A word after `#` or `@`
   is never capitalized, so tags and mentions stay as said.
-- **Line breaks in chat apps are Shift+Enter.** In Slack, Discord, Teams,
-  Signal, Telegram, WhatsApp, Element, Mattermost and others, Enter sends —
-  so a spoken "new line", a list or a multi-line snippet no longer sends
-  half a message. All three platforms; add apps with `[registers] chat_apps`.
+- **A spoken line break presses what the field takes**
+  (`voice_keyboard/newline.py`). Every line break dictation types — "new
+  line", "new paragraph", a bullet, number, checkbox or heading — is a key
+  press, and in many fields Enter sends a message or submits a form. Each
+  recording now works out what it is typing into and presses: nothing in a
+  terminal it recognizes or where the focused app can't be identified (a
+  space is typed), nothing in a one-line field (seen through accessibility
+  on Linux, in classic Win32 edit boxes on Windows) or a spreadsheet;
+  Shift+Enter in chat apps where Enter sends (Slack, Discord, Teams,
+  Signal, Telegram, WhatsApp, Element, Mattermost, the ChatGPT and Claude
+  apps, …), on chat sites and on any other web page, so a spoken "new
+  line", a list or a multi-line snippet no longer sends half a message;
+  and Enter in web document editors (Google Docs, Notion, Word for the
+  web, …) and every other app. A page is known by its address on Linux
+  and by its tab title elsewhere. While words type live, a switch to
+  another tab or field of the same app only makes the choice stricter.
+  Set your own per app, site or tab title in `[registers.newline]`
+  (`"enter"`, `"shift+enter"` or `"none"`); `[registers] chat_apps` adds
+  chat apps. It goes by what it can see and can guess wrong: a chat app it
+  doesn't know gets Enter, which sends; a terminal it doesn't know (PuTTY,
+  an editor's terminal panel) can run the line; on Windows a web form
+  field or an address bar isn't seen as one line, so Shift+Enter can
+  submit it; and on macOS (beta) only the app's name counts. All three
+  platforms.
 - **`voice-keyboard try [register:] <words…>`.** Prints what the keyboard
   would type for those words through your config's grammar — no microphone
   or daemon; `|` marks a pause between utterances, a leading `python:` (or
@@ -94,7 +114,8 @@ proven to be the daemon's.
   no-break space before `? ! : ;`; German quotes are „…“.
 - **`voice-keyboard learned add <spoken> = <written>`.** Teach a word now,
   without waiting for the miner: `learned add hyper furion = HyperFurion`.
-  A one-word written form also becomes a hotword for the recognizer.
+  A one-word written form is also saved as a hotword, which OpenAI, Groq,
+  Deepgram and AssemblyAI lean toward when `[stt] hotword_bias` is on.
 - **"Quote … unquote".** "She said quote ship it unquote" types
   `She said "ship it"`; "end quote" closes too. Only with words between,
   so "his quote unquote friend" stays prose, and only within one utterance.
@@ -113,10 +134,11 @@ proven to be the daemon's.
 - **"Cap that", "uppercase that", "lowercase that".** Said on their own,
   they recase the last utterance in place — no model, no selection.
   Mid-sentence ("let's cap that at ten") they stay words.
-- **"Select that".** Selects what you just said — one `shift+left` per
-  character of the last utterance — so the next words replace it, or a
-  rewrite ("VK, make that formal") works on it. Refused when nothing was
-  said yet, past 400 characters, across emoji, and in a terminal.
+- **"Select that"** (a caret command: `[nav]`). Selects what you just
+  said — one `shift+left` per character of the last utterance — so the
+  next words replace it, or a rewrite ("VK, make that formal") works on
+  it. Refused when nothing was said yet, past 400 characters, across
+  emoji, and in a terminal.
 - **"Undo that", "redo that", "paste that".** Caret commands, said on their
   own like the others: `ctrl+z`, `ctrl+shift+z` (`ctrl+y` on Windows),
   `ctrl+v`, and `cmd` on a Mac; "undo that twice" repeats. Refused in a
@@ -284,10 +306,11 @@ proven to be the daemon's.
 - **`voice-keyboard setup` asks about hands-free navigation** (off by
   default), after Kai and the history question, and says what it does and
   that Enter is never pressed.
-- **"Try saying" on the landing page.** Five chips under the mic name what
-  to say ("scratch that", "spell that n g i n x", "select previous word",
-  "delete previous word", "VK, make that formal"); while you dictate, the
-  one you just said lights the moment the engine acts on it, and while
+- **"Try saying" on the landing page.** Seven chips under the mic name what
+  to say ("scratch that", "spell that s i o b h a n", "select previous
+  word", "correct monday to friday", "twenty five percent by october
+  sixth", "VK, make that formal", "VK, run find every todo"); while you
+  dictate, the one you just said lights the moment the engine acts on it, and while
   nothing is recording a tap plays that one thing as a short scripted
   session.
 - **The landing page reads well to a screen reader**: the text field no
@@ -311,10 +334,10 @@ proven to be the daemon's.
   window, the fence, and navigation barriers behave identically. The
   scripted demo is now one continuous recording per register.
 - **A parity corpus** (`scripts/flow_corpus.py` → `tests/flow_corpus.json`):
-  67 dictations run through the Python `FlowEngine`, recorded, and
+  nearly 300 dictations run through the Python `FlowEngine`, recorded, and
   replayed through the page's port under `node --test docs/js/test` — same
   screens after every segment, same navigation actions, same final text,
-  corrections and scratch counts. Ten of them stream: timed interims,
+  corrections and scratch counts. 28 of them stream: timed interims,
   finals and ticks on a clock, so the stability window, the adaptive
   horizon (now ported too), the holdback expiry and the non-ASCII eager
   commit agree over time, not just at stop. A new `landing` CI job runs
@@ -360,11 +383,11 @@ proven to be the daemon's.
   paths that type outside a recording — `voice-keyboard type` (and so
   `recall`) and `voice-keyboard transform` — probe the focused app and
   refuse Enter there too when it is a terminal; an integrator that means
-  Enter presses it with `voice-keyboard key`. Only a hand sends, as the
-  landing page always said.
+  Enter presses it with `voice-keyboard key`. In a terminal it recognizes,
+  only your hand presses Enter, as the landing page always said.
 - **Python register: calls read like Python.** An opening paren or
-  bracket right after a name glues to it — "def get user open paren"
-  types `def get_user(`, "items open bracket zero close bracket" types
+  bracket right after a name glues to it — "def snake case get user open
+  paren" types `def get_user(`, "items open bracket zero close bracket" types
   `items[0]` — while keywords and operators keep their space (`x = (a +
   b)`, `if (x)`). "print open paren x close paren" no longer types
   `print((x)`: a spoken open paren right after a callable that already
@@ -389,6 +412,16 @@ proven to be the daemon's.
   then "previous word" after a pause, could be re-read as one navigation
   command at stop. A command is now decided against the segment it started
   in, so a split command is typed as the words it was.
+- **Kai's memory switch holds on every path.** With `[assistant]
+  memory_enabled = false` nothing is stored: a turn answered by a
+  configured xAI voice agent was logged on its own, ignoring the switch,
+  and the memory file was created even when nothing was written to it.
+- **Setup leads with your own key or server.** `voice-keyboard setup` lists
+  the hosted subscription, which isn't on sale, after a key and a local
+  server, labelled for existing subscribers; the Windows tray's sign-in
+  item, now below **Open settings file**, says the same.
+  Choosing a local speech server now asks for the model ids it serves and
+  whether it also speaks, instead of leaving OpenAI's names in place.
 
 ## [2.3.0] — 2026-10
 

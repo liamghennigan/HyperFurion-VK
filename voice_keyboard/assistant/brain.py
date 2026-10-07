@@ -94,8 +94,9 @@ class Brain:
         if self.has_voice_agent:
             try:
                 result = await self._realtime.ask_audio(pcm, sample_rate=sample_rate)
-                if transcript_hint:
-                    self._maybe_remember_text(transcript_hint)
+                # Nothing is logged here: the daemon records the turn once,
+                # through remember_interaction(), which honours
+                # [assistant] memory_enabled.
                 # The voice agent's own audio is the answer; its transcript
                 # is what it said. No action-drafting on this path (the
                 # builder agent isn't taught the ACTION grammar).
@@ -128,13 +129,9 @@ class Brain:
             warnings=warnings,
         )
 
-    def _maybe_remember_text(self, text: str) -> None:
-        try:
-            self._memory.log_interaction(text, "(spoken answer)")
-        except Exception:
-            pass
-
     def remember_interaction(self, user_text: str, answer_text: str) -> None:
+        """The one place a Kai turn is written to disk. With
+        [assistant] memory_enabled = false nothing is stored."""
         if not self._config.get("assistant", {}).get("memory_enabled", True):
             return
         try:
