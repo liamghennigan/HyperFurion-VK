@@ -174,14 +174,21 @@ class MacTextInjector:
                 logger.debug("keyboard layout lookup failed", exc_info=True)
         logger.info("Quartz keyboard injector ready")
         try:
-            from voice_keyboard.macos.permissions import accessibility_granted, notify_missing
+            from voice_keyboard.macos.permissions import (
+                accessibility_granted,
+                notify_missing,
+                prompt_accessibility,
+                responsible_app,
+            )
 
             if accessibility_granted() is False:
                 logger.warning(
                     "No Accessibility permission: macOS will drop every keystroke."
                     " System Settings → Privacy & Security → Accessibility → turn on"
-                    " the app that runs HyperFurion VK, then restart it."
+                    " %s, then restart HyperFurion VK.", responsible_app(),
                 )
+                # macOS's own prompt also puts the app in that list.
+                prompt_accessibility()
                 notify_missing("typing")
         except Exception:
             logger.debug("Accessibility check failed", exc_info=True)

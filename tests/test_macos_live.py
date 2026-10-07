@@ -47,6 +47,7 @@ class TestInjectorAgainstRealQuartz:
         recorder = RecordingQuartz(quartz)
         inj = MacTextInjector(layout=LayoutKeymap())
         with mock.patch.dict(sys.modules, {"Quartz": recorder}), \
+                mock.patch("voice_keyboard.macos.permissions.prompt_accessibility"), \
                 mock.patch("voice_keyboard.macos.permissions.notify_missing"):
             inj.start()
         return inj, recorder

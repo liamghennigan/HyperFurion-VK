@@ -288,13 +288,24 @@ class TestChords:
 
     def test_start_warns_without_accessibility(self, caplog) -> None:
         quartz = fake_quartz()
-        notify = mock.Mock()
+        notify, prompt = mock.Mock(), mock.Mock()
         with mock.patch.dict(sys.modules, {"Quartz": quartz}), \
                 mock.patch("voice_keyboard.macos.permissions.accessibility_granted", return_value=False), \
+                mock.patch("voice_keyboard.macos.permissions.prompt_accessibility", prompt), \
                 mock.patch("voice_keyboard.macos.permissions.notify_missing", notify):
             MacTextInjector(layout=NoLayout()).start()
         assert "Accessibility" in caplog.text
         notify.assert_called_once_with("typing")
+        prompt.assert_called_once()  # macOS's own prompt lists the app for us
+
+    def test_start_is_quiet_with_accessibility(self) -> None:
+        quartz = fake_quartz()
+        prompt = mock.Mock()
+        with mock.patch.dict(sys.modules, {"Quartz": quartz}), \
+                mock.patch("voice_keyboard.macos.permissions.accessibility_granted", return_value=True), \
+                mock.patch("voice_keyboard.macos.permissions.prompt_accessibility", prompt):
+            MacTextInjector(layout=NoLayout()).start()
+        prompt.assert_not_called()
 
 
 class TestKeyLayout:

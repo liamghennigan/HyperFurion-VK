@@ -310,9 +310,12 @@ def checklist_lines() -> list[str]:
     ]
 
 
-def request_all() -> None:  # pragma: no cover - shows macOS prompts
-    """Show the system prompts for every missing permission (each adds the
-    responsible app to its list, so turning it on is one click)."""
+def prompt_accessibility() -> None:
+    """Show macOS's own Accessibility prompt ("... would like to control this
+    computer"), which also adds this process's responsible app to the list,
+    so turning it on is one switch. Best-effort; never raises."""
+    if not _is_mac():
+        return
     try:
         import ApplicationServices
 
@@ -321,6 +324,12 @@ def request_all() -> None:  # pragma: no cover - shows macOS prompts
         )
     except Exception:
         logger.debug("Accessibility prompt failed", exc_info=True)
+
+
+def request_all() -> None:  # pragma: no cover - shows macOS prompts
+    """Show the system prompts for every missing permission (each adds the
+    responsible app to its list, so turning it on is one click)."""
+    prompt_accessibility()
     try:
         import Quartz
 
