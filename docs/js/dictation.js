@@ -392,7 +392,7 @@ export const Dictation = (() => {
   async function rewriteInPlace(instr) {
     const l = line;
     const text = l.committed();
-    if (!text) { log("nothing typed yet to rewrite · dictate first, then the wake word", "dim"); return; }
+    if (!text) { log("nothing typed yet to rewrite · dictate first, then say “" + settings.wakeWord.toUpperCase() + ", …”", "dim"); return; }
     const asked = instr.trim().replace(/[.,!?;:]+$/, "");
     const said = "“" + settings.wakeWord + (asked ? ", " + asked : "") + "”";
     if (!asked) { log(said + " with no instruction after it · nothing changed", "dim"); return; }
@@ -700,7 +700,7 @@ export const Dictation = (() => {
       if (line === l) line = null;   // a recording that began meanwhile keeps its engine
       r = { ...r, text: l.committed() };
     } else if (r.instruction) {
-      log("nothing typed yet to rewrite · dictate first, then the wake word", "dim");
+      log("nothing typed yet to rewrite · dictate first, then say “" + settings.wakeWord.toUpperCase() + ", …”", "dim");
     }
     Typist.setTarget({ frozen: r.text, molten: "" });
     await Typist.settled();

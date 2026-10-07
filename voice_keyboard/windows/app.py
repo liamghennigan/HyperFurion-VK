@@ -48,8 +48,11 @@ STARTER_CONFIG = """\
 # HyperFurion VK settings. Save this file and the app picks it up.
 # Every option, with comments: https://github.com/liamghennigan/HyperFurion-VK/blob/main/config.toml.example
 #
-# Easiest: the hosted service — run `voice-keyboard login you@example.com`
-# (or right-click the tray icon > Sign in). Or use your own provider key:
+# Put your speech provider key below. For your own speech server instead,
+# set [stt] and [tts] provider = "openai", base_url below, and the model
+# names your server knows (`voice-keyboard setup` asks for each of these).
+# Existing hosted-service subscribers can run `voice-keyboard login
+# you@example.com` instead; the subscription isn't on sale.
 
 [stt]
 provider = "xai"        # xai | openai | groq | deepgram | assemblyai | hyperfurion
@@ -62,7 +65,7 @@ api_key = "xai-your-api-key-here"
 
 # [providers.openai]
 # api_key = "sk-..."
-# base_url = "http://127.0.0.1:8000/v1"   # a local Whisper/Kokoro server: fully offline
+# base_url = "http://127.0.0.1:8000/v1"   # a local Whisper/Kokoro server: your audio goes only to it
 
 [hotkey]
 key = "control+alt+v"   # tap to toggle dictation, hold to talk
@@ -411,7 +414,7 @@ class WindowsApp:
         from voice_keyboard.config import load_config, validate_config
 
         if not _config_path().exists():
-            return None, "No settings yet — sign in, or add your provider API key"
+            return None, "No settings yet — add a speech key or your own server (subscribers: sign in)"
         try:
             config = load_config()
         except Exception as exc:
@@ -434,7 +437,7 @@ class WindowsApp:
             if first:
                 self._shell.notify(
                     f"{APP_NAME} needs setup",
-                    f"{reason}. Right-click the tray icon to sign in or open settings.",
+                    f"{reason}. Right-click the tray icon to open settings.",
                 )
         path = _config_path()
 

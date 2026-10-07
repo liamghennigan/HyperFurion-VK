@@ -141,7 +141,8 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
   .key[data-opt] .legend, .key .sub { display: none; }
   .key { padding: 0 0 calc(var(--u) * .1) calc(var(--u) * .12); }
 }
-@media (max-width: 360px) { .key[data-opt] { display: none; } .row:first-child { display: none; } }
+/* the top row is the board's second child (the plate comes first) */
+@media (max-width: 360px) { .key[data-opt] { display: none; } .plate + .row { display: none; } }
 /* a phone: a one-unit key is narrower than "ctrl" at the legend size —
    smaller mod legends, a one-unit key's legend centered, nothing spills
    onto the next key */
