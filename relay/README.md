@@ -58,26 +58,34 @@ WARNING so the flow still works in dev.
 
 ## Landing-page demo endpoints
 
-The landing page's terminal (`real`, `say`, `ask`, `demo` commands) uses a
-keyless demo surface — real xAI engines, defended in depth instead of
-authenticated:
+The landing page recognizes speech with a model in the visitor's tab and
+never calls the relay on its own. Its "opt in" sheet (in the privacy
+section) is the only way in: each endpoint below is reached only when the
+visitor presses that sheet's button for it. It is a keyless demo surface —
+real xAI engines, defended in depth instead of authenticated:
 
-- `WS /v1/demo/stt` — streaming Grok STT, hard-capped at 20 s per
-  dictation (finalized mid-stream at the cap, not dropped)
-- `POST /v1/demo/tts` — Grok `eve`, text truncated to 220 chars, the
-  voice is not client-selectable
-- `POST /v1/demo/ask` — docs-grounded Q&A via Grok chat, bounded
+- `GET /v1/demo/status` — "check the relay": liveness, caps, and
+  served-today counts, which the sheet shows; only a live answer unlocks
+  the other controls
+- `WS /v1/demo/stt` — the sheet's switch sends the visitor's next
+  dictation here, then turns itself off: streaming Grok STT, hard-capped
+  at 20 s per dictation (finalized mid-stream at the cap, not dropped)
+- `POST /v1/demo/ask` — the sheet's question box: Q&A via Grok chat from a
+  short fact sheet (`DOCS_CONTEXT` in `hyperfurion_relay/demo.py`), bounded
   completion
-- `GET /v1/demo/status` — liveness, caps, and served-today counts (the
-  page's `demo` command shows these as live telemetry)
+- `POST /v1/demo/tts` — "hear it in xAI's voice": Grok `eve`, text
+  truncated to 220 chars, the voice is not client-selectable
 
 Three layers keep it un-abusable: a **global daily budget** in USD
 (`DEMO_DAILY_BUDGET_USD`, default $1 — worst case ≈ $30/month, period),
 per-IP daily counters (8 dictations / 12 voice lines / 15 questions), and
 the per-request size caps above. When the budget is spent, everything
-refuses with a reason and the page falls back to the browser's engines,
-labeled honestly. Demo responses send `Access-Control-Allow-Origin: *` —
-they are public and rate-limited by design.
+refuses with a reason: the sheet says the hosted demo is unavailable, and
+the page keeps using the model in the tab. If a relay dictation fails
+midway, the page stops, keeps what was typed, and offers the in-tab model;
+it never switches to another engine on its own. Demo responses send
+`Access-Control-Allow-Origin: *` — they are public and rate-limited by
+design.
 
 ## Run it
 
