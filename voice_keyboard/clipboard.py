@@ -19,6 +19,8 @@ import sys
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 2.0
+# The longest selection read aloud through the macOS Accessibility API.
+READ_ALOUD_MAX_CHARS = 100_000
 
 
 def _run(command: list[str], *, input_text: str | None = None):
@@ -192,9 +194,10 @@ def selection_text(
     none. Linux reads the PRIMARY selection; Windows copies the selection
     (and restores the clipboard after; `registers` is the [registers]
     config, so terminals you mapped are never sent a copy key; why nothing
-    could be copied goes into `notes`). macOS has neither, so the clipboard
-    stands in — as it does on Windows when the copy yields nothing —
-    unless the caller opts out with clipboard_fallback=False. Clipboard
+    could be copied goes into `notes`). macOS asks the focused widget
+    through the Accessibility API. When that yields nothing (macOS,
+    Windows), the clipboard stands in unless the caller opts out with
+    clipboard_fallback=False. Clipboard
     content a password manager marked private never stands in."""
     if sys.platform == "win32":
         try:
@@ -206,7 +209,19 @@ def selection_text(
             text = None
         if text:
             return text
-    elif sys.platform != "darwin":
+    elif sys.platform == "darwin":
+        # The focused widget's selection through the Accessibility API (no
+        # copy, no keys pressed; never a password field).
+        try:
+            from voice_keyboard.macos.focus import probe_selection
+
+            read = probe_selection(READ_ALOUD_MAX_CHARS, editable_only=False, allow_terminal=True)
+        except Exception:
+            logger.debug("macOS selection read failed", exc_info=True)
+            read = None
+        if read and read[0].strip():
+            return read[0]
+    else:
         return get_primary_text() or ""
     if not clipboard_fallback:
         return ""
