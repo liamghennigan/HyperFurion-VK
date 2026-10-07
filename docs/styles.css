@@ -51,6 +51,8 @@ a { color: var(--sand-100); text-decoration-color: var(--glass-line-2); text-und
 a:hover { color: var(--saffron); }
 code, kbd, pre { font-family: var(--mono); font-feature-settings: "zero" 1; }
 code { font-size: .9em; color: var(--sand-100); background: var(--glass); border: 1px solid var(--glass-line); border-radius: 6px; padding: .05em .4em; }
+/* a code block is one surface, not a pill per line */
+pre code { font-size: inherit; color: inherit; background: none; border: 0; border-radius: 0; padding: 0; }
 kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-100); padding: .42em .6em .5em; margin: 0 2px;
   background: linear-gradient(165deg, var(--key-hi), var(--key-top) 45%, var(--key-lo)); border: 1px solid var(--plate-edge); border-radius: 6px;
   box-shadow: 0 2px 0 var(--key-side), inset 0 1px 0 var(--glass-hi); vertical-align: .15em; }
@@ -79,6 +81,7 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
 .btn.small { font-size: 13px; padding: 9px 14px 10px; border-radius: 10px; box-shadow: 0 2px 0 var(--key-side); }
 .btn.primary.small { box-shadow: 0 2px 0 var(--spice-deep); }
 .btn.quiet { background: transparent; box-shadow: none; }
+.btn:disabled { opacity: .5; cursor: default; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 22px 0 14px; }
 
 /* ─── nav ──────────────────────────────────────────────────────────────── */
@@ -185,7 +188,7 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
 @keyframes blink { 50% { opacity: 0; } }
 
 /* ─── stage bar: mic and controls ──────────────────────────────────────── */
-.stage-bar { display: flex; align-items: center; gap: 14px; }
+.stage-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .spacer { flex: 1; }
 .mic { width: 56px; height: 56px; flex: none; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: var(--sand-50);
   background: linear-gradient(180deg, var(--obsidian-3), var(--obsidian-2)); border: 1px solid var(--glass-line-2);
@@ -241,6 +244,7 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
 .pane-title { font-size: 11px; color: var(--sand-500); letter-spacing: .04em; }
 .pane-text { color: var(--sand-50); white-space: pre-wrap; word-break: break-word; min-height: 1.4em; }
 .pane[data-register="terminal"] .pane-text::before { content: "$ "; color: var(--live); }
+.pane[data-register="shell"] .pane-text::before { content: "$ "; color: var(--live); }
 .pane[data-register="python"] .pane-text::before { content: ">>> "; color: var(--sand-500); }
 .conf { margin: 0; font-size: 14px; line-height: 1.7; color: var(--sand-100); white-space: pre-wrap; }
 .conf .c { color: var(--sand-500); } .conf .s { color: var(--saffron); }
@@ -257,7 +261,8 @@ kbd { display: inline-block; font: 600 .78em/1 var(--mono); color: var(--sand-10
 .install-terminals { display: grid; gap: 16px; }
 .terminal { background: #0a090e; border: 1px solid var(--glass-line); border-radius: var(--r-md); overflow: hidden; }
 .terminal-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--glass-line); font: 11px var(--mono); letter-spacing: .06em; color: var(--sand-500); }
-.terminal pre { margin: 0; padding: 16px; font-size: 13px; line-height: 1.6; overflow-x: auto; color: var(--sand-100); }
+/* long commands wrap softly: what you select and copy is still one line */
+.terminal pre { margin: 0; padding: 16px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--sand-100); }
 .terminal .c { color: var(--sand-700); } .terminal .a { color: var(--saffron); }
 .copy { font: 500 11px var(--mono); color: var(--sand-300); background: transparent; border: 1px solid var(--glass-line); border-radius: var(--r-pill); padding: 4px 10px; cursor: pointer; }
 .copy.ok { color: var(--live); border-color: var(--live); }
@@ -277,6 +282,9 @@ tbody th { font-weight: 500; color: var(--sand-100); }
 tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
 td.yes { color: var(--live); } td.mid { color: var(--sand-300); } td.no { color: var(--sand-700); }
 td:nth-child(2) { font-weight: 600; }
+/* narrow screens scroll the table sideways: keep each row's name in view */
+@media (max-width: 1000px) { tbody th { position: sticky; left: 0; z-index: 1; background: var(--obsidian-1); min-width: 9em; } }
+.also { margin: 18px 0 10px; color: var(--sand-300); font-size: 15px; }
 .honest-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 40px; }
 @media (max-width: 900px) { .honest-grid { grid-template-columns: 1fr; gap: 10px; } }
 .edges { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; color: var(--sand-300); }

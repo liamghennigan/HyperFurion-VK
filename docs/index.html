@@ -3,15 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- enforced, not promised: this page may talk to its own origin, fetch the
-       speech model and its runtime when you ask, and reach the opt-in relay.
-       Nothing else. No analytics, no cookies, no storage of anything you say. -->
+  <!-- The policy below lets this page talk to its own origin, fetch the
+       speech model and its runtime once the mic is tapped, and reach the
+       opt-in relay. Nothing else. A browser's own speech service, which the
+       page offers by name only when the model can't run, is the browser's
+       connection, not the page's, so no page policy governs it; the page
+       starts it only on that click. No analytics, no cookies, and nothing
+       you say is stored. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob: https://cdn.jsdelivr.net 'wasm-unsafe-eval'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.hyperfurion.com wss://api.hyperfurion.com; worker-src 'self' blob:; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; base-uri 'self'; form-action 'self'" />
   <meta name="referrer" content="no-referrer" />
   <title>HyperFurion VK — Your voice is the keyboard</title>
-  <meta name="description" content="HyperFurion VK is an open-source voice keyboard for Linux and Windows. Speak, and real keystrokes land in whatever app has focus — editors, browsers, the terminal. Words appear while you talk and repair themselves in place. Runs fully offline. Never presses Enter to send. This page is a working instance: an open-source speech model runs on your GPU, in your browser." />
+  <meta name="description" content="Open-source voice keyboard for Linux and Windows: press Ctrl+Alt+V, talk, and your words are typed into any app, terminal included. Try it in your browser." />
   <meta property="og:title" content="HyperFurion VK — Your voice is the keyboard" />
-  <meta property="og:description" content="A voice keyboard, not a dictation app: your speech becomes real keystrokes in the app you already have focused — molten while you speak, frozen once sure. Works offline. Enter stays yours. Try it: this page listens, on your own GPU." />
+  <meta property="og:description" content="An open-source voice keyboard for Linux and Windows: your speech becomes real keystrokes in the app you're using, and it never presses Enter in a terminal it recognizes. Bring a speech key (xAI by default) or your own offline server. Try it in your browser." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/" />
   <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/" />
@@ -23,11 +27,11 @@
     "name": "HyperFurion VK",
     "operatingSystem": "Linux; Windows 10, 11; macOS (beta)",
     "applicationCategory": "UtilitiesApplication",
-    "softwareVersion": "2.3.0",
+    "softwareVersion": "2.4.0",
     "license": "https://opensource.org/licenses/MIT",
     "url": "https://liamghennigan.github.io/HyperFurion-VK/",
     "downloadUrl": "https://github.com/liamghennigan/HyperFurion-VK/releases/latest",
-    "description": "A system-wide voice keyboard for Linux and Windows. Press Ctrl+Alt+V and words type into the focused app while you speak — molten at first, repairing in place, frozen once stable. Spoken edit grammar, per-app registers that compile speech into code, a wake-word rewrite, read-aloud for any selection, and a push-to-talk assistant. Runs fully offline with a local model.",
+    "description": "A system-wide voice keyboard for Linux and Windows. Press Ctrl+Alt+V and your words type into the focused app while you speak, repairing themselves in place. A spoken edit grammar, per-app formatting with code registers you map, a wake-word rewrite through your language model, read-aloud for a selection, and a push-to-talk assistant. No speech model ships with it: it uses a cloud speech service with your key (xAI by default) or your own offline speech server.",
     "offers": [{ "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" }]
   }
   </script>
@@ -67,7 +71,7 @@
         <div class="hero-copy">
           <span class="eyebrow"><span class="dot live"></span>Linux · Windows · macOS beta · MIT</span>
           <h1>Your voice is <em>the keyboard.</em></h1>
-          <p class="lead">Speak, and real keystrokes land in whatever app has focus — editors, browsers, the terminal. Words appear while you talk. Works offline. Never presses Enter to send.</p>
+          <p class="lead">Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> and talk: your words become real keystrokes in whatever app has focus, terminal included, as you speak. Bring a key for a cloud speech service (xAI by default) or run your own offline speech server. The mic opens only when you ask, and it never presses Enter in a terminal it recognizes.</p>
           <div class="actions">
             <a class="btn primary" id="hero-dl" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
             <a class="btn" id="hero-try" href="#stage">Try it — tap the mic</a>
@@ -99,7 +103,7 @@
           <div class="stage-3d">
             <div class="board" id="board" aria-hidden="true"><div class="plate"></div></div>
           </div>
-          <p class="sr-only">A keyboard that presses its own keys as the words you speak are typed into the text field above it, and presses the arrow and modifier keys when you move the caret by voice. Enter is marked yours and is never pressed.</p>
+          <p class="sr-only">A keyboard that presses its own keys as the words you speak are typed into the text field above it, and presses the arrow and modifier keys when you move the caret by voice. Enter is marked “yours”, and this board never presses it; a line break you dictate here appears without it.</p>
 
           <div class="stage-bar">
             <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="Start or stop dictation">
@@ -111,7 +115,7 @@
             <button class="textbtn" id="autopilot" type="button" aria-pressed="false">watch a scripted demo</button>
           </div>
           <div class="hints" id="hints" aria-label="Things to say"></div>
-          <p class="sigcap stage-note">Recognition runs in your browser: <a href="https://github.com/usefulsensors/moonshine" rel="noopener">Moonshine tiny</a> (MIT, Useful Sensors, California), fetched once, about 55 MB. Words freeze when you pause; a period the recognizer puts at a pause stays revisable until the next words decide it. Nothing you say leaves this tab.</p>
+          <p class="sigcap stage-note">Speech is recognized in this tab by <a href="https://github.com/moonshine-ai/moonshine" rel="noopener">Moonshine tiny</a> (MIT, Moonshine AI): about 35 MB to download on your first tap (about 62 MB where WebGPU runs it), then kept in your browser's cache. It's a small model, so expect more mishearings than with the app's speech services. Here, words lock when you pause, and caret commands and “VK, run …” are on; in the app those two are off until you turn them on. Nothing you say leaves this tab unless you pick another engine: the hosted one below, or your browser's own, offered only if the model can't run here.</p>
         </div>
       </div>
     </section>
@@ -122,7 +126,7 @@
         <div>
           <span class="eyebrow">01 · molten dictation</span>
           <h2 id="molten-title">Words land while you speak.</h2>
-          <p>Each word stays molten for 1.5 seconds — long enough to repair itself in place — then freezes and is never touched again. Say “scratch that” to take a sentence back, “period” for punctuation, “new line” for a break, “new number” for a numbered list. Amounts, dates and phone numbers come out the way you'd write them — “twenty five percent by october sixth” types 25% by October 6 — and “emoji rocket” types 🚀. Misheard a name? “Spell that n g i n x” swaps the last word on screen, and “correct monday to friday” fixes a word anywhere in what you just said. Say a caret command on its own — “select previous word”, “go to end of line”, “delete the line” — and the keyboard presses the real keys for it after your words have landed.</p>
+          <p>In the app, each word stays molten for at least 1.5 seconds, long enough for the recognizer to repair it in place, then freezes: a later guess never retypes it, though your own spoken edits can. Say “scratch that” to take back what you just said, “period” for punctuation, “new line” for a break, “new number” for a numbered list. Amounts, dates and phone numbers come out the way you'd write them — “twenty five percent by october sixth” types 25% by October 6 — and “emoji rocket” types 🚀. Misheard a name? “Spell that s i o b h a n” swaps the last word on screen, so “Shivon” becomes “Siobhan”, and “correct monday to friday” fixes a word anywhere in this dictation. Turn on caret commands, say one on its own — “select previous word”, “go to end of line”, “delete the line” — and the keyboard presses the real keys for it after your words have landed.</p>
         </div>
         <figure class="fig">
           <p class="sample"><span class="frozen">Fixed the race condition in the </span><span class="molten repair">audio thread</span><span class="caret"></span></p>
@@ -136,12 +140,15 @@
         <div>
           <span class="eyebrow">02 · registers</span>
           <h2 id="registers-title">The same words, typed the way the app wants.</h2>
-          <p>It probes the focused app and picks a register: prose gets capitals and punctuation, a terminal gets digits and no caps, python, shell and javascript compile speech into code. The same probe picks the keys: an editor gets <kbd>ctrl</kbd><kbd>←</kbd> for “go back a word” (<kbd>option</kbd><kbd>←</kbd> on a Mac), a shell gets readline's <kbd>alt</kbd><kbd>b</kbd>. The panes show your last dictation through each.</p>
+          <p>It checks which app has focus and picks a register: prose gets capitals and punctuation, and a terminal it recognizes gets digits and no sentence capitals. Map an editor to python, shell or javascript in <code>[registers.map]</code> and speech compiles into code: “for i in range ten colon” types <code>for i in range(10):</code>. The same check picks the keys: an editor gets <kbd>ctrl</kbd><kbd>←</kbd> for “go back a word” (<kbd>option</kbd><kbd>←</kbd> on a Mac), a Linux shell gets readline's <kbd>alt</kbd><kbd>b</kbd>. The panes show your last dictation through each register.</p>
         </div>
         <figure class="fig" id="register-panes">
           <div class="pane" data-register="prose"><span class="pane-title">notes.md · prose</span><span class="pane-text"></span></div>
           <div class="pane" data-register="terminal"><span class="pane-title">~ · terminal</span><span class="pane-text"></span></div>
           <div class="pane" data-register="python"><span class="pane-title">main.py · python</span><span class="pane-text"></span></div>
+          <div class="pane" data-register="shell"><span class="pane-title">~ · shell</span><span class="pane-text"></span></div>
+          <div class="pane" data-register="javascript"><span class="pane-title">app.ts · javascript</span><span class="pane-text"></span></div>
+          <figcaption class="sigcap" id="register-said"></figcaption>
         </figure>
       </div>
     </section>
@@ -149,14 +156,15 @@
     <section class="section" id="consent" aria-labelledby="consent-title">
       <div class="wrap row-grid">
         <div>
-          <span class="eyebrow consent">03 · consent</span>
-          <h2 id="consent-title">Only a hand may send.</h2>
-          <p>In a terminal it drafts one line and stops. It never presses Enter to send — enforced in the injector, on every path, not promised in copy. No caret command can press it either: a shortcut that would (<code>ctrl+m</code>, <code>ctrl+j</code>) is refused before it reaches the keys.</p>
-          <p class="aphorism">The machine may draft. Only a hand may send.</p>
+          <span class="eyebrow consent">03 · your approval</span>
+          <h2 id="consent-title">Nothing starts until you ask.</h2>
+          <p>The mic opens only when you ask: <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> (tap to start and stop, or hold to talk), or Right Ctrl or the on-screen button for Kai. Nothing listens in the background unless you turn on the wake word. It types what you said, minus the “um”s, and rewrites your words only when you say “VK, …” or switch on a setting that does (a style per app, tidying self-corrections). A word you spell or correct is offered to your dictionary; nothing is learned until you accept it.</p>
+          <p>In a terminal it recognizes, it never presses Enter: a spoken “new line” types nothing, “VK, run …” (once you turn it on) drafts one line and stops, and no voice command presses Enter or a shortcut that acts like it (<code>ctrl+m</code>, <code>ctrl+j</code>, <code>ctrl+o</code>). Elsewhere “new line” presses what the field takes: Shift+Enter in chat apps and on most web pages, so a message doesn't send; nothing in a search box, a form field or a spreadsheet; Enter in documents, Google Docs included, and in other apps.</p>
+          <p>It goes by what it can see, and can guess wrong: a chat app it doesn't know gets Enter, which sends; a terminal it doesn't know (PuTTY, an editor's terminal panel, a shell in a browser tab) can run the line; on Windows a web form field or an address bar isn't seen as one line, so Shift+Enter can submit it; a web editor's own comment box gets Enter; and on macOS (beta) only the app's name counts. Name an app or a site in <code>[registers.newline]</code> to set its line breaks yourself.</p>
         </div>
         <figure class="fig">
-          <p class="sample term"><span class="frozen">rg -n "TODO|FIXME" .</span><span class="caret"></span></p>
-          <figcaption class="sigcap"><span class="held">⏎ enter — yours</span> drafted for review; the injector cannot send it · try it: “VK, run find every todo” in the shell tab above</figcaption>
+          <p class="sample term"><span class="frozen">grep -rn TODO .</span><span class="caret"></span></p>
+          <figcaption class="sigcap"><span class="held">⏎ enter — yours</span> drafted, not run · the “VK, run find every todo” chip above shows it in the shell tab, from this page's lookup table; the app asks your language model, once <code>[intent]</code> is on</figcaption>
         </figure>
       </div>
     </section>
@@ -164,17 +172,27 @@
     <section class="section" id="privacy" aria-labelledby="privacy-title">
       <div class="wrap row-grid">
         <div>
-          <span class="eyebrow">04 · private by default</span>
-          <h2 id="privacy-title">Your machine. Your keys. Nothing phones home.</h2>
-          <p>Point it at a local OpenAI-compatible server and it runs fully offline. Or bring a key for xAI, OpenAI, Groq, Deepgram or AssemblyAI. Zero analytics, ever. Audio is held in memory while transcribed and never written to disk.</p>
-          <p class="muted">This page keeps the same rule: no analytics, no cookies, no storage, and a Content-Security-Policy that forbids every request except this site, the speech model when you tap the mic, and our hosted engine if you <button class="linkbtn" id="relay" type="button">opt in</button>.</p>
+          <span class="eyebrow">04 · where your words go</span>
+          <h2 id="privacy-title">Cloud speech with your key, or fully offline.</h2>
+          <p>No speech model ships with the app. With a key for xAI (the default), OpenAI, Groq, Deepgram or AssemblyAI, your audio goes to that service while you dictate, and text you ask to hear goes to the voice service you choose. Point it at your own OpenAI-compatible server instead (Speaches, whisper.cpp) and your audio stays on your machine. A language model handles rewrites, Kai and the punctuation at your pauses: xAI's Grok with an xAI key, or a local one such as <code>llama-server</code>. No analytics. Audio is held in memory while it is transcribed and never written to disk.</p>
+          <p class="muted">This page follows the same rules: no analytics, no cookies. After your first tap your browser keeps the speech model in its cache (clear this site's data to remove it); nothing you say is stored. Its Content-Security-Policy lets it reach only this site, the speech model's hosts and our hosted engine. It fetches the model only once you tap the mic, and contacts the hosted engine only after you press a button in the <button class="linkbtn" id="relay" type="button">opt in</button> sheet.</p>
         </div>
         <figure class="fig">
           <pre class="conf"><span class="c"># ~/.config/voice-keyboard/config.toml</span>
 [providers.openai]
-base_url = <span class="s">"http://localhost:8000/v1"</span>
-<span class="c"># whisper · parakeet · voxtral · kokoro
-# no key · no network · nothing leaves</span></pre>
+base_url = <span class="s">"http://localhost:8000/v1"</span>  <span class="c"># your speech server</span>
+
+[stt]
+provider = <span class="s">"openai"</span>
+<span class="c"># model = "Systran/faster-whisper-large-v3"  # your server's model id</span>
+
+[tts]
+provider = <span class="s">"openai"</span>
+
+[llm]
+provider = <span class="s">"openai"</span>
+base_url = <span class="s">"http://localhost:8080/v1"</span>  <span class="c"># e.g. llama-server</span>
+<span class="c"># no key · nothing leaves your machine</span></pre>
         </figure>
       </div>
     </section>
@@ -183,21 +201,21 @@ base_url = <span class="s">"http://localhost:8000/v1"</span>
     <section class="section" id="install" aria-labelledby="install-title">
       <div class="wrap install-grid">
         <div class="install-copy">
-          <span class="eyebrow">v2.3.0 · two minutes to first words</span>
+          <span class="eyebrow">v2.4.0 · Linux · Windows 10/11</span>
           <h2 id="install-title">Install HyperFurion VK.</h2>
-          <p>Download it and run it as yourself — no sudo, no administrator. It installs for your user, then walks you through the settings: speech provider, hotkey, language, Kai. Running a local <code>llama-server</code>? Setup finds it and offers its model as your default.</p>
+          <p>Download it and run it as yourself, not with sudo or as administrator. On Linux it asks for your password for the system steps (audio libraries, the virtual keyboard, adding you to the <code>input</code> group), and after the first install you log out and back in once. Setup then asks how to transcribe your speech — a key for a cloud service, or your own server — and about your hotkey, language, Kai (the push-to-talk assistant) and caret commands. Running a local <code>llama-server</code>? Setup finds it and offers its model as your language model.</p>
           <div class="actions">
             <a class="btn primary" id="dl-primary" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
             <a class="btn" id="dl-secondary" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.cmd" download rel="noopener">Download for Windows</a>
           </div>
-          <p class="sigcap" id="dl-note">HyperFurion-VK-Setup.run · run it as yourself, no sudo for the app</p>
+          <p class="sigcap" id="dl-note">HyperFurion-VK-Setup.run · run it as yourself, not with sudo; it asks for your password only for the system steps (audio libraries, keyboard access)</p>
           <p class="muted"><strong>Free and open source.</strong> Every feature works with your own provider key or a local model; nothing is paywalled. macOS is in beta — <a href="https://github.com/liamghennigan/HyperFurion-VK#macos-beta" rel="noopener">install from a checkout</a>.</p>
           <details class="disclosure">
             <summary>What gets installed</summary>
             <ul>
-              <li><strong>Linux:</strong> a Python package in <code>~/.local/share/voice-keyboard-venv</code>, the <code>voice-keyboard</code> CLI, a systemd user service, a GNOME Shell overlay extension (45–50), and the <code>uinput</code> rule for the virtual keyboard. Your password is asked once, for the audio libraries and keyboard access.</li>
-              <li><strong>Windows 10/11:</strong> a tray app with a native overlay and the Kai orb. Installs Python for you if needed. Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> in any app.</li>
-              <li><strong>Config:</strong> <code>~/.config/voice-keyboard/config.toml</code>, mode 600. Password fields always force the verbatim register and are never logged.</li>
+              <li><strong>Linux:</strong> a Python package in <code>~/.local/share/voice-keyboard-venv</code>, the <code>voice-keyboard</code> CLI, a systemd user service, a GNOME Shell overlay extension (45–50), audio and clipboard libraries from your package manager, and the <code>uinput</code> rule for the virtual keyboard. It adds you to the <code>input</code> group, which the global hotkey needs; that group can read every keyboard and mouse.</li>
+              <li><strong>Windows 10/11:</strong> a tray app with a native overlay and an on-screen Kai button. Installs Python for you if needed. Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> in any app; <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>R</kbd> reads a selection aloud.</li>
+              <li><strong>Config:</strong> <code>~/.config/voice-keyboard/config.toml</code> on Linux, mode 600. On Linux, and in classic Windows edit boxes, a password field forces the verbatim register and is never written to the history.</li>
             </ul>
           </details>
         </div>
@@ -205,10 +223,9 @@ base_url = <span class="s">"http://localhost:8000/v1"</span>
           <div class="terminal">
             <div class="terminal-bar"><span>linux · one line</span><button class="copy" type="button" data-copy="linux">copy</button></div>
             <pre><code><span class="c"># downloads the release installer and runs it as you</span>
-curl -fsSL https://github.com/liamghennigan/HyperFurion-VK\
-/releases/latest/download/install-hyperfurion-vk.sh | bash
+curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash
 
-<span class="c"># then press</span> <span class="a">Ctrl + Alt + V</span> <span class="c">and speak</span>
+<span class="c"># first install: log out and back in, then press</span> <span class="a">Ctrl + Alt + V</span> <span class="c">and speak</span>
 
 <span class="c"># not typing? it names the fix</span>
 voice-keyboard doctor</code></pre>
@@ -216,8 +233,7 @@ voice-keyboard doctor</code></pre>
           <div class="terminal">
             <div class="terminal-bar"><span>windows · powershell</span><button class="copy" type="button" data-copy="win">copy</button></div>
             <pre><code><span class="c"># a tray app; installs Python if you need it</span>
-irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
-/main/packaging/windows/install-hyperfurion-vk.ps1 | iex</code></pre>
+irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex</code></pre>
           </div>
         </div>
       </div>
@@ -227,16 +243,16 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
     <section class="section" id="features" aria-labelledby="features-title">
       <div class="wrap">
         <span class="eyebrow">the full board</span>
-        <h2 id="features-title">Everything a keyboard does, spoken.</h2>
+        <h2 id="features-title">A keyboard you can talk to.</h2>
         <div class="feature-grid">
-          <article class="feature"><small>edit</small><h3>Spoken edits</h3><p>“Scratch that”, “new line”, “period”, “quote … unquote”, “new bullet”, “new number”, “new heading”, “new checkbox”, “emoji rocket” — a real edit grammar, parsed before anything is typed, with Spanish, French and German sets too (“punto”, “à la ligne”, “neue Zeile”). Say <code>literal</code> to type the next word as-is.</p></article>
+          <article class="feature"><small>edit</small><h3>Spoken edits</h3><p>“Scratch that”, “new line”, “period”, “quote … unquote”, “new bullet”, “new number”, “new heading”, “new checkbox”, “emoji rocket” — a real edit grammar, parsed before anything is typed. Spanish, French and German sets are one setting away (“punto”, “à la ligne”, “neue Zeile”). Say <code>literal</code> to type the next word as-is.</p></article>
           <article class="feature"><small>numbers</small><h3>Written the way you'd write it</h3><p>“Twenty three” is 23 in a terminal and words in prose — until a unit makes it certain: 25%, $5.50, $3.2 billion, 3:30 PM, June 5, 1999, room 402, Q3, 2.5 MB, 555-1234, example.com/docs. Lowercase recognizers get their I, OK and Monday capitalized.</p></article>
-          <article class="feature"><small>spell</small><h3>“Spell that n g i n x”</h3><p>Swaps the last word for the one you spelled — letters, NATO words, “capital k”, spoken digits — keeping its punctuation and its capital. Each fix is offered to your personal dictionary, never applied on its own.</p></article>
-          <article class="feature"><small>navigate</small><h3>Move the caret by voice</h3><p>“Go left three words”, “select that”, “go to end of line”, “undo that”, “paste that”, “press tab”. Said on its own, a command presses the app's own keys after your words land — editors get the shift and ctrl chords, shells get readline's. Enter is never one of them, and a terminal never gets a paste.</p></article>
-          <article class="feature"><small>fix</small><h3>“Correct monday to friday”</h3><p>Fixes a word anywhere in what you just said, its capital kept, and offers the pair to your dictionary. “Cap that”, “uppercase that”, “lowercase that” recase the last thing you said — no model, no selection.</p></article>
-          <article class="feature"><small>rewrite</small><h3>“VK, make that formal”</h3><p>The wake word sends what you just said through your language model and repairs it on screen, in place. Select any text in any app first, and it rewrites the selection instead.</p></article>
-          <article class="feature"><small>assistant</small><h3>Kai, in the keyboard</h3><p>Hold Right Ctrl and ask. In a terminal Kai drafts the command and stops. Anywhere else it answers aloud. A one-gigabyte local model is enough.</p></article>
-          <article class="feature"><small>read</small><h3>Read anything aloud</h3><p>Select text in any app and the keyboard speaks it — xAI, OpenAI, ElevenLabs, or a local voice.</p></article>
+          <article class="feature"><small>spell</small><h3>“Spell that s i o b h a n”</h3><p>Swaps the last word for the one you spelled — letters, NATO words, “capital k”, spoken digits — keeping its punctuation and its capital. Each fix is offered to your personal dictionary, never applied on its own.</p></article>
+          <article class="feature"><small>navigate</small><h3>Move the caret by voice</h3><p>“Go left three words”, “select that”, “go to end of line”, “undo that”, “paste that”, “press tab”. Said on its own, a command presses the app's own keys after your words land — editors get the shift and ctrl chords, Linux shells get readline's. Enter is never one of them, and a terminal never gets a paste. Off by default; one question in setup turns it on.</p></article>
+          <article class="feature"><small>fix</small><h3>“Correct monday to friday”</h3><p>Fixes a word anywhere in this dictation, its capital kept, and offers the pair to your dictionary. “Cap that”, “uppercase that”, “lowercase that” recase the last thing you said — no model, no selection.</p></article>
+          <article class="feature"><small>rewrite</small><h3>“VK, make that formal”</h3><p>The wake word sends what you just said, with your instruction, to your language model and repairs it on screen, in place. Select a paragraph in an app first, and it rewrites the selection instead. On this page a fixed stand-in does the rewriting; the app needs a language model (xAI's Grok with your key, or a local one).</p></article>
+          <article class="feature"><small>assistant</small><h3>Kai, in the keyboard</h3><p>Hold Right Ctrl and ask. In a terminal Kai drafts a command and leaves Enter to you; anywhere else it answers aloud. It runs on your language model (a one-gigabyte local model can draft the commands). Kai is on by default and keeps your questions and its answers on your computer until you turn its memory off.</p></article>
+          <article class="feature"><small>read</small><h3>Read anything aloud</h3><p>Select text and press your read-aloud key (<kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>R</kbd> on Windows; on Linux, a desktop shortcut you bind to <code>voice-keyboard tts</code>) to hear it in xAI's voice, OpenAI's, ElevenLabs', or a local one.</p></article>
           <article class="feature"><small>recall</small><h3>An opt-in memory</h3><p>A local ledger of what you dictated: list it, re-type it, search it. It also mines your corrections to learn your vocabulary. Off until you turn it on.</p></article>
         </div>
       </div>
@@ -245,37 +261,39 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
     <!-- ═══ compare ═══ -->
     <section class="section" id="compare" aria-labelledby="compare-title">
       <div class="wrap">
-        <span class="eyebrow">how it compares</span>
-        <h2 id="compare-title">Built for typing on Linux. Honest about the rest.</h2>
+        <span class="eyebrow">how it compares · checked October 2026</span>
+        <h2 id="compare-title">How it compares.</h2>
+        <p class="lead">Next to the voice tools Linux users already know, and Dragon on Windows. It doesn’t win every row: it ships no speech model, and Talon goes much further with hands-free control.</p>
         <div class="tblwrap">
           <table>
-            <thead><tr><th scope="col"></th><th scope="col">HyperFurion&nbsp;VK</th><th scope="col">Talon</th><th scope="col">Numen</th><th scope="col">nerd-dictation</th><th scope="col">Dragon</th></tr></thead>
+            <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col">HyperFurion&nbsp;VK</th><th scope="col">Talon</th><th scope="col">Numen</th><th scope="col">nerd-dictation</th><th scope="col">Dragon</th></tr></thead>
             <tbody>
-              <tr><th scope="row">Open source</th><td class="yes">MIT</td><td class="no">core closed</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">commercial</td></tr>
-              <tr><th scope="row">Linux, Wayland &amp; X11</th><td class="yes">first-class</td><td class="mid">supported</td><td class="yes">Linux-only</td><td class="mid">X11-focused</td><td class="no">Windows-only</td></tr>
-              <tr><th scope="row">Streaming “molten” dictation</th><td class="yes">yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-              <tr><th scope="row">Never auto-sends in a terminal</th><td class="yes">guaranteed</td><td class="mid">scriptable</td><td class="mid">scriptable</td><td class="no">n/a</td><td class="no">n/a</td></tr>
-              <tr><th scope="row">Caret commands by voice</th><td class="yes">editors &amp; readline</td><td class="yes">extensive</td><td class="yes">yes</td><td class="no">—</td><td class="yes">yes</td></tr>
-              <tr><th scope="row">Spoken edits (correct, select, cap)</th><td class="yes">built in</td><td class="mid">scriptable</td><td class="mid">scriptable</td><td class="no">—</td><td class="yes">built in</td></tr>
-              <tr><th scope="row">Per-app style via your own model</th><td class="yes">opt-in</td><td class="mid">scriptable</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-              <tr><th scope="row">Runs fully offline</th><td class="yes">local model</td><td class="yes">local</td><td class="yes">local</td><td class="yes">local</td><td class="yes">local</td></tr>
+              <tr><th scope="row">Open source</th><td class="yes">MIT</td><td class="no">no (free; Talon+ is paid)</td><td class="yes">AGPL-3.0</td><td class="yes">GPL-2.0+</td><td class="no">no (paid)</td></tr>
+              <tr><th scope="row">Needs no API key or server</th><td class="no">no: a key (xAI by default) or your own speech server</td><td class="yes">yes: free speech model</td><td class="yes">yes: free Vosk model</td><td class="yes">yes: free Vosk model</td><td class="yes">yes: model included</td></tr>
+              <tr><th scope="row">Works fully offline</th><td class="mid">only with your own speech server</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes (desktop)</td></tr>
+              <tr><th scope="row">Linux on Wayland</th><td class="yes">yes, and X11</td><td class="no">no: X11 only; 1.0 planned as the last free Linux release</td><td class="yes">yes</td><td class="mid">with a flag</td><td class="no">no Linux</td></tr>
+              <tr><th scope="row">Types as you speak</th><td class="yes">with xAI (the default) or your own server</td><td class="mid">new in 1.0 (“Hum”, GPU)</td><td class="no">no: types after each pause</td><td class="yes">yes, by default</td><td class="no">preview; types at each pause</td></tr>
+              <tr><th scope="row">Never presses Enter in a terminal</th><td class="yes">never in a terminal it recognizes, not even on “new line”</td><td class="mid">on “press enter” or “slap”</td><td class="mid">on “yes”</td><td class="yes">never, by design</td><td class="mid">on “new line” or “press Enter”</td></tr>
+              <tr><th scope="row">Spoken corrections</th><td class="yes">built in</td><td class="yes">in the community command set</td><td class="mid">“ditch”, “change”</td><td class="no">none</td><td class="yes">built in</td></tr>
+              <tr><th scope="row">Scripting and hands-free mouse</th><td class="mid">phrases in config; no mouse</td><td class="yes">extensive; eye tracking</td><td class="yes">phrase files; noises, click, scroll</td><td class="mid">a Python hook; no mouse</td><td class="yes">custom commands; MouseGrid</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="sigcap">reflects each project's stated design focus, not a benchmark · <a href="./compare.html">full comparison →</a> · out of date? <a href="https://github.com/liamghennigan/HyperFurion-VK/issues" rel="noopener">open an issue</a></p>
+        <p class="also">Not in the table: <b>Handy</b> (open source, offline, Windows, macOS and Linux), <b>Voice Access</b> (built into Windows&nbsp;11, works offline), and the AI dictation apps <b>Wispr Flow</b> and <b>Superwhisper</b> (Mac, Windows and phones) and <b>VoiceInk</b> (Mac). The full comparison has a line on each.</p>
+        <p class="sigcap">checked October 2026 against each project’s own docs and code · not a benchmark: nothing here measures accuracy · HyperFurion VK cells are v2.4.0 with default settings · <a href="./compare.html">full comparison →</a> · out of date? <a href="https://github.com/liamghennigan/HyperFurion-VK/issues" rel="noopener">open an issue</a></p>
       </div>
     </section>
 
-    <!-- ═══ honest edges ═══ -->
+    <!-- ═══ known limits ═══ -->
     <section class="section" id="honest" aria-labelledby="honest-title">
       <div class="wrap honest-grid">
-        <div><span class="eyebrow">the edges</span><h2 id="honest-title">Honest about the edges.</h2></div>
+        <div><span class="eyebrow">the edges</span><h2 id="honest-title">Known limits.</h2></div>
         <ul class="edges">
-          <li>Linux and Windows are first-class. macOS is in beta, installed from a checkout. iOS cannot host a system-wide keyboard like this.</li>
-          <li>Live, molten typing needs a streaming speech provider. Non-streaming providers type when you stop talking.</li>
-          <li>Repairs assume nothing else edits the field while you dictate. Click elsewhere mid-sentence and the text lands on your clipboard instead.</li>
-          <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend. Hands-free navigation is off by default in the daemon (<code>[nav] enabled = true</code>, or say yes in <code>voice-keyboard setup</code>); this page has it on, with your own platform's keys.</li>
-          <li>A spoken “new line” types a line break in prose and nothing in a terminal, where a line break would be Enter. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
+          <li>No speech model ships with the app: you need a key for a speech service or your own speech server.</li>
+          <li>Words land while you speak with xAI or your own server (re-transcribed every 2.5 seconds); with OpenAI, Groq, Deepgram or AssemblyAI they land when you stop talking.</li>
+          <li>Linux and Windows are first-class. macOS is in beta, installed from a checkout. iOS lets no app press keys in other apps, so this one can't run there.</li>
+          <li>Repairs assume nothing else edits the field while you dictate. If focus moves to another app mid-sentence, typing stops and the rest goes to your clipboard.</li>
+          <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend. Caret commands (<code>[nav]</code>) and “VK, run …” (<code>[intent]</code>) are off by default in the app; this page has both on, with your own platform's keys. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
         </ul>
       </div>
     </section>
@@ -284,10 +302,10 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
   <footer>
     <div class="wrap">
       <p class="sigcap"><span id="bytes">self-hosted · no third-party requests</span> · no analytics · no cookies · nothing you say is stored</p>
-      <p class="sigcap">the engine on this page is a port of the daemon's, and CI replays the same <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/tests/flow_corpus.json" rel="noopener">corpus</a> through both — same screens, same keys</p>
+      <p class="sigcap">the engine on this page is a port of the app's, and CI replays the same <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/tests/flow_corpus.json" rel="noopener">corpus</a> of test phrases through both: same text, same caret commands</p>
       <p class="sigcap" id="fetched" hidden></p>
       <div class="footer-grid">
-        <div>HyperFurion VK · MIT · a voice keyboard, not a dictation app · a hosted subscription may return; nothing is paywalled</div>
+        <div>HyperFurion VK · MIT · an open-source voice keyboard for Linux and Windows · every feature is free with your own key or server; the hosted subscription isn't on sale</div>
         <div class="footer-links">
           <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">GitHub</a>
           <a href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest" rel="noopener">releases</a>
@@ -301,12 +319,13 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK\
 
   <dialog class="sheet" id="relay-sheet" aria-labelledby="relay-title">
     <h3 id="relay-title">Use the hosted engine</h3>
-    <p>By default this page recognizes speech on your own machine and sends nothing anywhere. If you turn this on, your <strong>next dictation's audio</strong> goes to <code>api.hyperfurion.com</code> — our relay — and on to xAI's speech engine, exactly as the daemon would send it to a provider you configure. The relay keeps no audio and shares a small daily budget with everyone. The footer will count every request.</p>
-    <p class="sigcap" id="relay-status">not checked yet</p>
+    <p>By default this page recognizes speech with the model in this tab, and none of your audio leaves it. Nothing in this sheet sends anything until you press a button here: “check the relay” asks <code>api.hyperfurion.com</code>, our relay, whether the hosted demo is up. After that, the switch sends your <strong>next dictation's audio</strong> through the relay to xAI's speech engine, the way the app sends audio to a provider you configure, then switches itself off; “ask” sends your question to xAI's Grok; “hear it” has xAI's voice read the answer aloud. The relay keeps no audio and no text, and counts each IP address's requests per day to share a small daily budget. The footer counts every request.</p>
+    <p class="sigcap" id="relay-status">not checked yet: nothing has been sent</p>
+    <button class="btn small" id="relay-check" type="button">check the relay</button>
     <label class="switch"><input type="checkbox" id="relay-arm" disabled /> <span>send my next dictation through xAI via the relay</span></label>
-    <form class="ask" id="relay-ask"><input type="text" placeholder="ask Kai something…" aria-label="Ask Kai" disabled /><button class="btn small" type="submit">ask</button></form>
+    <form class="ask" id="relay-ask"><input type="text" placeholder="ask a question about HyperFurion VK…" aria-label="Ask a question about HyperFurion VK (answered by xAI's Grok via the relay)" disabled /><button class="btn small" type="submit" disabled>ask</button></form>
     <p class="answer" id="relay-answer"></p>
-    <div class="actions"><button class="btn small" id="relay-hear" type="button" disabled>hear it in the real voice</button><button class="btn small quiet" id="relay-close" type="button">close</button></div>
+    <div class="actions"><button class="btn small" id="relay-hear" type="button" disabled>hear it in xAI's voice</button><button class="btn small quiet" id="relay-close" type="button">close</button></div>
   </dialog>
 
   <script type="module" src="./main.js"></script>
