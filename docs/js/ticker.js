@@ -1,4 +1,6 @@
 // ═══ TICKER — one rAF loop owns every animation ═══════════════════════════
+// Under prefers-reduced-motion it never runs; nothing that matters waits on
+// it then (the keyboard drains its queue at once, see keyboard.js).
 import { reduced } from "./env.js";
 import { state } from "./state.js";
 

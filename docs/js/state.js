@@ -9,7 +9,7 @@ export const state = {
   typedChars: 0,      // keystrokes the board has pressed this session
   lastRaw: "",        // raw transcript of the last committed utterance
   lastError: "",
-  mark: 0,            // performance.now() of the latest speech result awaiting paint
-  latency: [],        // speech result -> first keystroke paint, ms (last 8)
+  mark: 0,            // performance.now() of the latest transcript awaiting its first keystroke
+  latency: [],        // transcript -> first keystroke paint, ms (last 8); recognition time not included
   ledger: [],         // page-session dictation history — dies on reload
 };

@@ -5,10 +5,12 @@ All notable changes to HyperFurion VK. The format follows
 [semantic versioning](https://semver.org/). A version bump in `pyproject.toml`
 on `main` cuts the GitHub release automatically.
 
-## [Unreleased]
+## [2.4.0] — 2026-10-06
 
 The landing page becomes a real text field, and the engine it runs is
-proven to be the daemon's.
+proven to be the daemon's. Kai, the voice assistant, now turns on by itself
+only when it runs locally; with xAI, the default, it waits until you turn it
+on (see Changed).
 
 ### Added
 
@@ -62,16 +64,41 @@ proven to be the daemon's.
 - **More symbols by name.** "asterisk", "hash sign", "less
   than sign", "greater than sign" and "caret sign". A word after `#` or `@`
   is never capitalized, so tags and mentions stay as said.
-- **Line breaks in chat apps are Shift+Enter.** In Slack, Discord, Teams,
-  Signal, Telegram, WhatsApp, Element, Mattermost and others, Enter sends —
-  so a spoken "new line", a list or a multi-line snippet no longer sends
-  half a message. All three platforms; add apps with `[registers] chat_apps`.
+- **A spoken line break presses what the field takes**
+  (`voice_keyboard/newline.py`). Every line break dictation types — "new
+  line", "new paragraph", a bullet, number, checkbox or heading — is a key
+  press, and in many fields Enter sends a message or submits a form. Each
+  recording now works out what it is typing into and presses: nothing in a
+  terminal it recognizes or where the focused app can't be identified (a
+  space is typed), nothing in a one-line field (seen through accessibility
+  on Linux, in classic Win32 edit boxes on Windows) or a spreadsheet;
+  Shift+Enter in chat apps where Enter sends (Slack, Discord, Teams,
+  Signal, Telegram, WhatsApp, Element, Mattermost, the ChatGPT and Claude
+  apps, …), on chat sites and on any other web page, so a spoken "new
+  line", a list or a multi-line snippet no longer sends half a message;
+  and Enter in web document editors (Google Docs, Notion, Word for the
+  web, …) and every other app. A page is known by its address on Linux
+  and by its tab title elsewhere. A switch to another tab or field of the
+  same app, while words type live or just before a dictation typed at
+  stop, only makes the choice stricter (Enter, then Shift+Enter, then
+  nothing).
+  Set your own per app, site or tab title in `[registers.newline]`
+  (`"enter"`, `"shift+enter"` or `"none"`); `[registers] chat_apps` adds
+  chat apps. It goes by what it can see and can guess wrong: a chat app it
+  doesn't know gets Enter, which sends; a terminal it doesn't know (PuTTY,
+  an editor's terminal panel) can run the line; on Windows a web form
+  field or an address bar isn't seen as one line, so Shift+Enter can
+  submit it; and on macOS (beta) only the app's name counts. All three
+  platforms.
 - **`voice-keyboard try [register:] <words…>`.** Prints what the keyboard
   would type for those words through your config's grammar — no microphone
   or daemon; `|` marks a pause between utterances, a leading `python:` (or
-  any register) picks the register, and caret commands and instructions are
-  noted. With no words it reads one dictation per line: an interactive
-  prompt, or a batch piped in.
+  any register) picks the register, inside the quotes or outside them
+  (`try "python: x equals five"`), and caret commands and instructions are
+  noted. It uses the daemon's own grammar builder, so words you accepted
+  with `voice-keyboard learned` apply, and "VK, <name>" shows the snippet
+  or macro it would type, with a `[snippet: name]` note. With no words it
+  reads one dictation per line: an interactive prompt, or a batch piped in.
 - **Polish per app (`[polish.map]`).** Map an app to a style — `slack =
   "casual"`, `thunderbird = "a clear, polite email"` — and each prose
   dictation of four words or more there is rewritten in it through `[llm]`,
@@ -84,7 +111,14 @@ proven to be the daemon's.
   config, the speech provider's API key (a cloud provider without one fails
   every dictation), microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
   access, the clipboard tool that types accents and emoji, the AT-SPI focus
-  probe — and prints the fix for each problem. Exits non-zero on a failure.
+  probe, the language model and what in your config uses it ("VK, …"
+  rewrites and pause review by default, and Kai while it is on: without
+  `[llm]` rewrites and Kai won't work and pause review uses its rules only;
+  a feature you switched on that needs it fails), whether Kai is on and
+  why, and on Linux whether the hotkey can read your keyboard
+  (`/dev/input/event*`: the `input` group joined, applied to this login,
+  and to the running daemon) — and prints the fix for each problem.
+  Exits non-zero on a failure.
 - **Spoken commands in Spanish, French and German.** `[flow] language =
   "es" | "fr" | "de"` adds that language's punctuation and layout
   commands to the English set — "punto", "coma", "abre interrogación"
@@ -94,7 +128,8 @@ proven to be the daemon's.
   no-break space before `? ! : ;`; German quotes are „…“.
 - **`voice-keyboard learned add <spoken> = <written>`.** Teach a word now,
   without waiting for the miner: `learned add hyper furion = HyperFurion`.
-  A one-word written form also becomes a hotword for the recognizer.
+  A one-word written form is also saved as a hotword, which OpenAI, Groq,
+  Deepgram and AssemblyAI lean toward when `[stt] hotword_bias` is on.
 - **"Quote … unquote".** "She said quote ship it unquote" types
   `She said "ship it"`; "end quote" closes too. Only with words between,
   so "his quote unquote friend" stays prose, and only within one utterance.
@@ -107,16 +142,18 @@ proven to be the daemon's.
   "new checkbox" type `# `, `## ` and `- [ ] ` on a line of their own —
   markdown, and live headings and to-dos in Notion and Obsidian.
 - **`voice-keyboard commands [filter]`**: everything you can say — commands,
-  punctuation, emoji, caret commands, formatters, wake-word channels and
-  your own vocabulary and snippets — built from the live grammar with your
-  config merged in, so it never drifts from what the engine does.
+  punctuation, emoji, caret commands, formatters, wake-word channels, your
+  own vocabulary, the words you taught it with `voice-keyboard learned`,
+  your snippets and the macros you named — built from the live grammar
+  with your config merged in, so it never drifts from what the engine does.
 - **"Cap that", "uppercase that", "lowercase that".** Said on their own,
   they recase the last utterance in place — no model, no selection.
   Mid-sentence ("let's cap that at ten") they stay words.
-- **"Select that".** Selects what you just said — one `shift+left` per
-  character of the last utterance — so the next words replace it, or a
-  rewrite ("VK, make that formal") works on it. Refused when nothing was
-  said yet, past 400 characters, across emoji, and in a terminal.
+- **"Select that"** (a caret command: `[nav]`). Selects what you just
+  said — one `shift+left` per character of the last utterance — so the
+  next words replace it, or a rewrite ("VK, make that formal") works on
+  it. Refused when nothing was said yet, past 400 characters, across
+  emoji, and in a terminal.
 - **"Undo that", "redo that", "paste that".** Caret commands, said on their
   own like the others: `ctrl+z`, `ctrl+shift+z` (`ctrl+y` on Windows),
   `ctrl+v`, and `cmd` on a Mac; "undo that twice" repeats. Refused in a
@@ -266,6 +303,23 @@ proven to be the daemon's.
 - **"Spell that NGINX".** A recognizer that hears spelled letters as one
   word writes it in capitals; after "spell" or "spell that" such a token
   ("NGINX", "K8S") now counts as the letters, spelled. Both engines.
+- **What a recognizer writes reads as what you said.** A number it joins
+  with hyphens folds like the words ("Twenty-five percent" → `25%`, "meet
+  at three-thirty" → `meet at 3:30`, "room four-oh-two" → `room 402`, "june
+  twenty-first" → `June 21`; "Twenty-five people" stays as written), and
+  so do "per cent" and, in prose, a letter "o" between digits ("room four
+  o two" → `room 402`); a phone number may end on the sentence's stop
+  (`Call 555-1234.`). The wake word counts as "V.K.", "V-K", "V K" or
+  "veekay", never a word that only sounds close; "cratch that" is "scratch
+  that"; "imoji rocket" is 🚀, and an emoji that opens an utterance takes
+  no sentence stop; quotes around a caret command ('Select "Previous
+  Word".') don't hide it; and a recognizer's period on "Correct Monday to
+  Friday." or "Spell that S I O B H A N." is not held as a pause. In
+  terminals and code the recognizer's prose goes: its sentence stops and
+  the capital it gave a sentence start ("List files." → `list files`;
+  "GitHub", "TODO" and a spoken "period" stay), and in `python` and
+  `javascript` its "I" is the loop variable ("For I in range ten colon" →
+  `for i in range(10):`). Both engines.
 - **The page keeps a period you paused on revisable.** `pauses.py` is
   ported too: with the page's utterance-per-pause recognizer, "I think.
   We should wait" is exactly the case the daemon's pause rules exist for,
@@ -284,10 +338,11 @@ proven to be the daemon's.
 - **`voice-keyboard setup` asks about hands-free navigation** (off by
   default), after Kai and the history question, and says what it does and
   that Enter is never pressed.
-- **"Try saying" on the landing page.** Five chips under the mic name what
-  to say ("scratch that", "spell that n g i n x", "select previous word",
-  "delete previous word", "VK, make that formal"); while you dictate, the
-  one you just said lights the moment the engine acts on it, and while
+- **"Try saying" on the landing page.** Seven chips under the mic name what
+  to say ("scratch that", "spell that s i o b h a n", "select previous
+  word", "correct monday to friday", "twenty five percent by october
+  sixth", "VK, make that formal", "VK, run find every todo"); while you
+  dictate, the one you just said lights the moment the engine acts on it, and while
   nothing is recording a tap plays that one thing as a short scripted
   session.
 - **The landing page reads well to a screen reader**: the text field no
@@ -311,15 +366,88 @@ proven to be the daemon's.
   window, the fence, and navigation barriers behave identically. The
   scripted demo is now one continuous recording per register.
 - **A parity corpus** (`scripts/flow_corpus.py` → `tests/flow_corpus.json`):
-  67 dictations run through the Python `FlowEngine`, recorded, and
+  nearly 300 dictations run through the Python `FlowEngine`, recorded, and
   replayed through the page's port under `node --test docs/js/test` — same
   screens after every segment, same navigation actions, same final text,
-  corrections and scratch counts. Ten of them stream: timed interims,
+  corrections and scratch counts. 28 of them stream: timed interims,
   finals and ticks on a clock, so the stability window, the adaptive
   horizon (now ported too), the holdback expiry and the non-ASCII eager
   commit agree over time, not just at stop. A new `landing` CI job runs
   it; `tests/test_flow_corpus.py` keeps the file current on the Python
   side and fails on any "committed items changed under reparse".
+
+### Changed
+
+- **Kai turns on by itself only when it runs locally.** `[assistant]
+  enabled` is now `"auto"` by default: Kai is on when its speech-to-text,
+  language model and voice are all servers on this computer or your own
+  network (and no xAI voice agent is set), and off otherwise. With xAI,
+  the default, it waits until you turn it on: `voice-keyboard kai on`, the
+  Kai question in `voice-keyboard setup`, or **Turn on Kai…** in the
+  Windows tray, each of which first lists the online services and what
+  each would receive (your recorded question; your question with related
+  notes and dictation history; its answer) and asks, No by default. With
+  everything local, `kai on` and the tray turn Kai on without asking.
+  `true` still means on, even with online services, and `false` off.
+  `voice-keyboard kai off` and the tray's **Turn off Kai** turn it off at
+  once, even when the settings file can't be written (it then stays off
+  until the daemon restarts, you turn it on, or you change Kai's settings
+  in the file). Going back to 2.3 or earlier: set `[assistant] enabled` to
+  true or false (older versions don't know `"auto"`).
+- **While Kai is off, nothing of it runs.** No language model is asked,
+  and its memory stays on your computer, neither read nor written. The orb
+  is hidden (Windows and GNOME), the wake word keeps the mic closed, and
+  Right Ctrl opens nothing: letting go shows a note that Kai is off (under
+  `"auto"`, with why and how to turn it on, at most once every ten
+  minutes). The Windows tray's one Kai item is **Turn on Kai…**, and
+  `voice-keyboard summon` exits with an error saying why.
+- **An `enabled = true` copied from an older example config counts as the
+  default.** From 2.1 to 2.3, `config.toml.example` shipped `[assistant]
+  enabled = true`, and the Linux and macOS installers (and the AUR
+  package's instructions) copy it. That copy now reads as `"auto"`, so Kai
+  is on only when it runs locally; the first start after updating says so.
+  A `true` you chose (through setup, `voice-keyboard kai on`, the Windows
+  tray, or by hand) stays on; `voice-keyboard kai` and `doctor` say when
+  yours counts as copied.
+- **Kai tells you when it turns on or off, or starts sending your questions
+  to a different service.** One notification each time, and it tries
+  again at the next start if none could be shown; on Linux, the next
+  dictation's notification doesn't replace it. Turning Kai off yourself is
+  never announced.
+- **Setup says where Kai's questions would go, and pressing Enter never
+  turns Kai on or off.** A `true` over services that are all local becomes
+  `"auto"`, so switching to an online service later turns Kai off and asks
+  again.
+- **`voice-keyboard kai`** says whether Kai is on and why, one line per
+  part: what hears you, thinks and speaks, and whether each is on this
+  computer, on your network or online. When the running daemon differs
+  from the file, it shows both. `voice-keyboard kai on --yes` is the
+  consent for scripts; without a terminal, `kai on` otherwise exits 2.
+  `kai on` and the tray refuse a settings file the daemon wouldn't accept,
+  and say what's wrong. `voice-keyboard doctor` has a `kai` line (and warns
+  when the wake word is on while Kai is off), and `voice-keyboard status`
+  shows `kai: on` or `kai: off`.
+- New `[assistant] local_hosts`: servers you count as your own (host
+  names, IP addresses or networks such as `100.64.0.0/10`), for deciding
+  whether Kai is local. They are reached directly too.
+- **Under the default, Kai searches your dictation history by keyword**
+  unless `[recall]` is local too. Turned on with online services, it uses
+  `[recall]`, which receives your question and up to 200 lines of
+  dictation history, and `voice-keyboard kai on` and setup name it first.
+- **A local server is always reached directly:** never through
+  `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` or the system proxy, and a
+  redirect from it is not followed. That holds for speech-to-text,
+  read-aloud and Kai's voice, `[llm]` and `[recall]`.
+- **A keyless local server must be addressed by IP, or by a `localhost`,
+  `.localhost`, `.local`, `.home.arpa` or `.internal` name.** Host names
+  that merely start with `127.`, `10.` or `192.168.` no longer count, nor
+  do URLs with a `user@` part, URLs that requests would send to a
+  different host, or a host ending in a dot (the system resolver asks DNS
+  for it). `[assistant] local_hosts` doesn't make a server keyless.
+- An Ollama model tag ending in `-cloud` or `:cloud` counts as online, and
+  so does the HyperFurion relay, even on `localhost` (it forwards to xAI).
+- New `[tts] provider = "none"`: nothing speaks (read-aloud says so, and
+  Kai shows its answers on screen).
 
 ### Fixed
 
@@ -360,11 +488,22 @@ proven to be the daemon's.
   paths that type outside a recording — `voice-keyboard type` (and so
   `recall`) and `voice-keyboard transform` — probe the focused app and
   refuse Enter there too when it is a terminal; an integrator that means
-  Enter presses it with `voice-keyboard key`. Only a hand sends, as the
-  landing page always said.
+  Enter presses it with `voice-keyboard key`. In a terminal it recognizes,
+  only your hand presses Enter, as the landing page always said.
+- **Safety: a dictation typed when you stop never lands in another app.**
+  With a provider that doesn't stream (OpenAI's cloud, Groq, Deepgram,
+  AssemblyAI) or `[flow] live = false`, the keyboard looks at focus again
+  just before it types. If you moved to another app, nothing is typed and
+  the transcript goes to the clipboard, as it does while words type live;
+  without a clipboard tool, nothing is typed at all. In another tab or
+  field of the same app, line breaks only get stricter, and where it can't
+  tell what has focus, a line break types a space. Before, it typed into
+  whatever had focus with the line-break choice made at the start, so "new
+  line" could press Enter in a chat and send. `voice-keyboard stop` now
+  says why nothing was typed instead of "No speech detected".
 - **Python register: calls read like Python.** An opening paren or
-  bracket right after a name glues to it — "def get user open paren"
-  types `def get_user(`, "items open bracket zero close bracket" types
+  bracket right after a name glues to it — "def snake case get user open
+  paren" types `def get_user(`, "items open bracket zero close bracket" types
   `items[0]` — while keywords and operators keep their space (`x = (a +
   b)`, `if (x)`). "print open paren x close paren" no longer types
   `print((x)`: a spoken open paren right after a callable that already
@@ -389,6 +528,73 @@ proven to be the daemon's.
   then "previous word" after a pause, could be re-read as one navigation
   command at stop. A command is now decided against the segment it started
   in, so a split command is typed as the words it was.
+- **Kai's memory switch holds on every path.** With `[assistant]
+  memory_enabled = false` nothing is stored and nothing is looked up: a
+  turn answered by a configured xAI voice agent was logged on its own,
+  ignoring the switch, the memory file was created even when nothing was
+  written to it, and each question still looked up your stored memories
+  and dictation history and sent them to `[llm]` with it.
+- **Turning Kai on or off in config.toml applies within two seconds**,
+  and at once with `voice-keyboard kai on` or `kai off`, not only after
+  the next dictation; an `enabled = false` written by hand applies even
+  while a typo elsewhere breaks the file. A question being asked when Kai
+  turns off is dropped, not sent: before, the next Right Ctrl could still
+  open the mic and send the question to speech-to-text.
+- A config reload during a Kai answer no longer changes which language
+  model or history search that answer uses.
+- `doctor` no longer calls a self-hosted HyperFurion relay on localhost
+  "local" (it forwards to xAI), nor a host name that merely looks like a
+  local address.
+- **Setup leads with your own key or server.** `voice-keyboard setup` lists
+  the hosted subscription, which isn't on sale, after a key and a local
+  server, labelled for existing subscribers; the Windows tray's sign-in
+  item, now below **Open settings file**, the Windows starter settings
+  file and `config.toml.example` (which lists the hosted provider last)
+  say the same, and so does the relay's README, which no longer reads as
+  an offer of a $5/month subscription.
+  Choosing a local speech server now asks for the model ids it serves and
+  whether it also speaks, instead of leaving OpenAI's names in place and
+  `[tts]` pointed at a server that may only transcribe (whisper.cpp). If it
+  doesn't speak, setup asks what should: nothing for now (the default,
+  `[tts] provider = "none"`), xAI or ElevenLabs, with that service's own
+  model and voice.
+- **The Linux installer works on Fedora.** `install.sh` asked dnf for
+  `python3-venv`, which Fedora doesn't have, and dnf5 refused the whole
+  install. It now also installs gcc on Fedora and Arch, where PyAudio and
+  evdev are compiled from source.
+- **The wake-word hints name the real package**: `pip install
+  "voice-keyboard[wake]"`, in HyperFurion VK's own environment (they said
+  `hyperfurion-vk[wake]`). `config.toml.example` adds openWakeWord's
+  one-time model download, and how to install it on Linux with Python
+  3.12 or newer, where openWakeWord 0.6 won't install as is.
+- **Installers say what they do.** A terminal install with only
+  `VOICE_KEYBOARD_API_KEY` set says the key is unused and that the
+  settings walkthrough will ask for it (name both providers to use it
+  unattended). The Windows installer's header says to pass `-Source .` to
+  install a checkout (without it, the latest release is installed), and
+  nothing calls `HyperFurion-VK-Setup.cmd` pinned any more: it installs the
+  latest release, with the tag it was built with as the fallback.
+- **The landing page does only what you ask, and says what it sends.**
+  Nothing is typed that you didn't say: when nothing was recognized it
+  used to type a scripted line in its place. When the in-tab speech model
+  can't run, the recording stops and the page says why; your browser's
+  own speech service is offered by name, with where it sends the audio,
+  and starts only when you pick it. When focus moves mid-dictation the
+  page no longer writes the transcript to your clipboard unasked; it stays
+  in the panes. The model downloads only once you tap the mic and allow
+  it, and capture starts
+  then, so what you say while it loads is still recognized; it runs on
+  WebGPU only when the browser hands out a GPU, on the CPU otherwise or
+  when the GPU fails, and the progress shown is bytes that really
+  arrived. The page reads that model's usual mishearings of "VK" and
+  "spell" ("The K", "Bell") as those words; the engine itself never
+  guesses. The footer counts every file fetched from another server and
+  names the hosts that answered; the read-aloud chip picks a voice on
+  your device and says so before it would use an online one; each "try
+  saying" chip plays alone on an empty field under a "scripted demo"
+  badge; a Mac gets the beta's install-from-a-checkout steps first; and
+  the relay's fact sheet for the page's "ask" is rewritten for 2.4.0 (it
+  offered a $5/month tier and an old install line).
 
 ## [2.3.0] — 2026-10
 
@@ -536,6 +742,8 @@ Windows becomes a first-class platform, and the whole repo gets a polish pass.
 
 - Stop button, mobile pass, automatic releases, macOS and Windows betas.
 
+[2.4.0]: https://github.com/liamghennigan/HyperFurion-VK/compare/v2.3.0...v2.4.0
+[2.3.0]: https://github.com/liamghennigan/HyperFurion-VK/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/liamghennigan/HyperFurion-VK/compare/v2.1.3...v2.2.0
 [2.1.3]: https://github.com/liamghennigan/HyperFurion-VK/releases/tag/v2.1.3
 [2.1.2]: https://github.com/liamghennigan/HyperFurion-VK/releases/tag/v2.1.2

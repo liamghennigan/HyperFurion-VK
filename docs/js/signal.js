@@ -2,16 +2,21 @@
 import { bus } from "./bus.js";
 
 export const Signal = (() => {
-  const a = { ctx: null, analyser: null, stream: null, buf: null, fbuf: null };
+  const a = { ctx: null, analyser: null, stream: null, buf: null, fbuf: null, error: "" };
   let simT = 0, frameId = -1e9, cached = null;
   const simFft = new Uint8Array(128);
 
+  // why the mic isn't live, for the page to say so: "" when it is,
+  // "unsupported", or the getUserMedia error's name (NotAllowedError, …)
   async function start() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    a.error = "";
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { a.error = "unsupported"; return; }
     try {
       a.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) { a.error = (e && e.name) || "NotAllowedError"; return; }
+    try {
       if (!a.ctx) a.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      if (a.ctx.state === "suspended") await a.ctx.resume();
+      if (a.ctx.state === "suspended") await a.ctx.resume().catch(() => {});
       const src = a.ctx.createMediaStreamSource(a.stream);
       a.analyser = a.ctx.createAnalyser();
       a.analyser.fftSize = 1024;
@@ -19,7 +24,7 @@ export const Signal = (() => {
       a.fbuf = new Uint8Array(a.analyser.frequencyBinCount);
       src.connect(a.analyser);
       bus.emit("signal:live", true);
-    } catch { /* every gauge falls back to the synthesized signal */ }
+    } catch { /* the stream is live; the gauges fall back to the synthesized signal */ }
   }
   function stop() {
     if (a.stream) a.stream.getTracks().forEach((t) => t.stop());
@@ -71,6 +76,7 @@ export const Signal = (() => {
   return {
     start, stop, frame, bands,
     isLive: () => !!a.analyser,
+    error: () => a.error,
     // the relay dictation path taps the same mic acquisition
     audio: () => ({ ctx: a.ctx, stream: a.stream }),
   };

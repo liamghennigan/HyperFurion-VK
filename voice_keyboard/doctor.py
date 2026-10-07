@@ -5,6 +5,7 @@ instead of failing the rest. Nothing here sends audio or text anywhere;
 the only connection made is to the local daemon's control socket.
 """
 
+import glob
 import os
 import shutil
 import subprocess
@@ -65,7 +66,9 @@ def check_audio(config: dict) -> Finding:
     return Finding(OK, "microphone", default["name"])
 
 
-def check_daemon(config: dict) -> Finding:
+def check_daemon(config: dict, seen: Optional[dict] = None) -> Finding:
+    """Is the daemon up? Its status answer goes into `seen` for the
+    checks that ask what the running daemon itself can do."""
     try:
         from voice_keyboard.ipc import IPCClient
 
@@ -76,6 +79,8 @@ def check_daemon(config: dict) -> Finding:
         return Finding(FAIL, "daemon", f"not reachable ({exc.__class__.__name__})", _daemon_start_hint())
     if response.get("status", "ok") != "ok":
         return Finding(FAIL, "daemon", str(response.get("message", "refused")), "restart the daemon")
+    if seen is not None:
+        seen.update(response)
     stt = response.get("stt_provider", "")
     return Finding(OK, "daemon", "running" + (f", speech: {stt}" if stt else ""))
 
@@ -93,30 +98,101 @@ def check_typing() -> Finding:
     return Finding(OK, "typing", "/dev/uinput is writable")
 
 
-def _uinput_fix() -> str:
-    """The step that is actually missing: the group, a fresh login, or the rule."""
+def _input_group_fix(device_gid: Optional[int]) -> str:
+    """When a device belongs to the input group: the step that is missing
+    to use it — joining the group, or a fresh login so this session has
+    it. "" when the group is not the problem (the device isn't the
+    group's, or this session has the group already)."""
     try:
         import grp
 
         group = grp.getgrnam("input")
     except (ImportError, KeyError):
-        group = None
+        return ""
+    if device_gid != group.gr_gid or group.gr_gid in os.getgroups():
+        return ""  # joining would not help, or it is joined and applied
+    user = os.environ.get("USER", "")
+    if user and user not in group.gr_mem:
+        return "sudo usermod -aG input $USER, then log out and back in"
+    return "log out and back in (your session predates joining the input group)"
+
+
+def _uinput_fix() -> str:
+    """The step that is actually missing: the group, a fresh login, or the rule."""
     try:
         device_gid = os.stat("/dev/uinput").st_gid
     except OSError:
         device_gid = None
-    if group is None or device_gid != group.gr_gid:
-        # The device isn't the input group's: joining it would not help.
-        group = None
-    user = os.environ.get("USER", "")
-    if group is not None and user and user not in group.gr_mem and group.gr_gid not in os.getgroups():
-        return "sudo usermod -aG input $USER, then log out and back in"
-    if group is not None and group.gr_gid not in os.getgroups():
-        return "log out and back in (your session predates joining the input group)"
-    return (
+    return _input_group_fix(device_gid) or (
         "echo 'KERNEL==\"uinput\", GROUP=\"input\", MODE=\"0660\"' | "
         "sudo tee /etc/udev/rules.d/99-uinput.rules && sudo udevadm trigger"
     )
+
+
+def _input_nodes() -> list[str]:
+    return sorted(glob.glob("/dev/input/event*"))
+
+
+def _readable_keyboards(hotkey: dict) -> Optional[int]:
+    """How many keyboards with the hotkey's keys this session can read,
+    found the way the daemon's listener finds them; None without evdev."""
+    from voice_keyboard.hotkey import HotkeyListener, list_devices
+
+    if list_devices is None:
+        return None
+    listener = HotkeyListener(
+        hotkey, on_toggle=lambda: None, on_hold_start=lambda: None, on_hold_stop=lambda: None
+    )
+    devices = listener._open_devices()
+    for device in devices:
+        try:
+            device.close()
+        except OSError:
+            pass
+    return len(devices)
+
+
+def check_hotkey(config: dict, daemon_status: Optional[dict] = None) -> Finding:
+    """Linux: the built-in hotkey reads the keyboard at /dev/input/event*,
+    which takes the input group — joined, and applied to your login.
+    `daemon_status`: what the running daemon says it can read (it may
+    have started before your login had the group)."""
+    from voice_keyboard.hotkey import pretty_binding
+
+    hotkey = dict(config.get("hotkey", {}) or {})
+    label = pretty_binding(str(hotkey.get("key", "control+alt+v")))
+    if not hotkey.get("enabled", True) or str(hotkey.get("mode", "auto")).lower() == "disabled":
+        return Finding(OK, "hotkey", "off ([hotkey] enabled = false)")
+    nodes = _input_nodes()
+    if not nodes:
+        return Finding(WARN, "hotkey", f"no keyboards under /dev/input: {label} has nothing to listen to",
+                       "start and stop dictation with `voice-keyboard toggle` (a desktop shortcut can run it)")
+    keyboards = _readable_keyboards(hotkey)
+    if keyboards is None:
+        return Finding(WARN, "hotkey", "python-evdev is missing: the hotkey can't read the keyboard",
+                       "reinstall: pip install --force-reinstall voice-keyboard")
+    if keyboards == 0:
+        gids = set()
+        for node in nodes:
+            try:
+                gids.add(os.stat(node).st_gid)
+            except OSError:
+                pass
+        fix = next((f for f in (_input_group_fix(gid) for gid in sorted(gids)) if f), "")
+        if fix:
+            return Finding(FAIL, "hotkey", f"can't read your keyboard, so {label} won't start dictation", fix)
+        if not any(os.access(node, os.R_OK) for node in nodes):
+            return Finding(FAIL, "hotkey", f"can't read your keyboard, so {label} won't start dictation",
+                           "your keyboard's /dev/input/event* files aren't readable by the input group:"
+                           " check them with `ls -l /dev/input/`")
+        return Finding(WARN, "hotkey", f"no keyboard it can read has the keys of {label}",
+                       "pick another [hotkey] key, or use `voice-keyboard toggle`")
+    if daemon_status and daemon_status.get("hotkey_keyboards") == 0:
+        return Finding(FAIL, "hotkey",
+                       f"you can read your keyboard, but the running daemon can't: {label} won't start dictation",
+                       "the daemon started before you joined the input group: log out and back in"
+                       " (or restart the computer)")
+    return Finding(OK, "hotkey", f"{label} (reads {keyboards} keyboard{'s' if keyboards != 1 else ''})")
 
 
 def check_clipboard() -> Finding:
@@ -155,10 +231,13 @@ def check_focus_probe() -> Finding:
 
 
 def check_speech(config: dict) -> Finding:
+    from voice_keyboard.assistant.locality import speech_hop
+
     stt = config.get("stt", {})
     provider = str(stt.get("provider", "xai")).lower()
-    base = str(config.get("providers", {}).get(provider, {}).get("base_url", "") or "")
-    local = any(host in base for host in ("localhost", "127.0.0.1", "[::1]"))
+    # The same test Kai's verdict uses: a local speech server is local; a
+    # HyperFurion relay is cloud even on localhost (it forwards to xAI).
+    local = speech_hop(config, "stt").local
     where = "local, nothing leaves the machine" if local else "cloud"
     if not local:
         from voice_keyboard.stt import _provider_api_key
@@ -170,33 +249,147 @@ def check_speech(config: dict) -> Finding:
     return Finding(OK, "speech", f"{provider} ({where})")
 
 
+def _and(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _voice_agent(config: dict) -> bool:
+    """Kai answers spoken questions through the xAI voice agent, not [llm]."""
+    from voice_keyboard.assistant.locality import uses_voice_agent
+
+    return uses_voice_agent(config)
+
+
 def check_llm(config: dict) -> Finding:
-    """Features that need [llm], and whether [llm] can answer."""
+    """Features that use [llm], and whether [llm] can answer. Some you
+    switch on, and they fail without it; some are on by default — Kai
+    (while it is on), "VK, …" rewrites, pause review — and do less without
+    it."""
     from voice_keyboard.llm import llm_ready
 
-    wants = []
+    flow = config.get("flow", {}) or {}
+    needs = []  # switched on by you: nothing without [llm]
     if (config.get("polish", {}) or {}).get("map"):
-        wants.append("[polish.map]")
-    if str(config.get("flow", {}).get("corrections", "off")).lower() == "llm":
-        wants.append("self-corrections")
+        needs.append("[polish.map]")
+    if str(flow.get("corrections", "off")).lower() == "llm":
+        needs.append("self-corrections")
     for section in ("intent", "ask"):  # recall searches by keyword without it
         if (config.get(section, {}) or {}).get("enabled"):
-            wants.append(f"[{section}]")
-    ready = llm_ready(config)
-    if not wants:
-        return Finding(OK, "llm", "ready (for \"VK, make that …\")" if ready else "not set (nothing needs it)")
-    if ready:
-        return Finding(OK, "llm", "ready for " + ", ".join(wants))
-    return Finding(FAIL, "llm", ", ".join(wants) + " need [llm], which has no model, endpoint or key",
-                   "set [llm] base_url, model and api_key (or point base_url at a local server)")
+            needs.append(f"[{section}]")
+    review = str(flow.get("pause_review", "auto")).strip().lower()
+    if review == "llm":
+        needs.append("pause review")
+    uses = []  # on by default: they don't work without [llm]
+    from voice_keyboard.assistant.locality import kai_state
+
+    assistant = config.get("assistant", {}) or {}
+    kai = ""
+    if kai_state(config).on:
+        name = str(assistant.get("name", "Kai")).strip() or "Kai"
+        # A voice agent answers out loud without [llm]; [llm] still turns
+        # a request in a terminal into a command (else Kai answers it).
+        kai = f"{name}'s terminal commands" if _voice_agent(config) else name
+        uses.append(kai)
+    wake = str(flow.get("wake_word", "vk")).strip()
+    if flow.get("enabled", True) and flow.get("grammar", True) and wake:
+        spoken = wake.upper() if len(wake) <= 3 else wake.capitalize()
+        uses.append(f'"{spoken}, …" rewrites')
+    if llm_ready(config):
+        wanted = needs + uses + (["pause review"] if review == "auto" else [])
+        return Finding(OK, "llm", "ready for " + ", ".join(wanted) if wanted else "ready (nothing uses it)")
+    fix = "set [llm] base_url, model and api_key (or point base_url at a local server)"
+    if kai:
+        from voice_keyboard.assistant.locality import turn_off_hint
+
+        fix += f"; or turn Kai off: {turn_off_hint()}"
+    if needs:
+        detail = ", ".join(needs) + " need [llm], which has no model, endpoint or key"
+        if uses:
+            detail += f" ({_and(uses)} won't work either)"
+        return Finding(FAIL, "llm", detail, fix)
+    if not uses and review != "auto":
+        return Finding(OK, "llm", "not set (nothing needs it)")
+    parts = [f"{_and(uses)} won't work"] if uses else []
+    if review == "auto":
+        parts.append("pause review uses rules only")
+    return Finding(WARN, "llm", "not set: " + "; ".join(parts), fix)
+
+
+_PROXY_VARIABLES = ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "all_proxy")
+
+
+def check_kai(config: dict, daemon_status: Optional[dict] = None) -> Finding:
+    """Kai, the voice assistant: on or off, and why. Under the default
+    ([assistant] enabled = "auto") it is on only when everything it uses
+    runs on this computer. `daemon_status`: what the running daemon decided
+    (it keeps [stt]/[tts] until a restart)."""
+    from voice_keyboard.assistant.locality import kai_state, turn_on_hint, turn_off_hint
+    from voice_keyboard.assistant.memory import memory_db_path
+
+    state = kai_state(config)
+    name = state.name
+    detail = state.why()
+    if state.from_example:
+        detail += (
+            " (the enabled = true in your settings was copied from an older example"
+            ' config, where it was the default, so it counts as "auto")'
+        )
+    if not state.on and state.setting == "auto" and state.can_answer:
+        detail += f"; to turn it on: {turn_on_hint()}"
+    recall = config.get("recall", {}) or {}
+    if (
+        state.on and state.setting == "auto" and not state.uses_embeddings
+        and str(recall.get("base_url", "") or "").strip() and str(recall.get("model", "") or "").strip()
+        and (config.get("assistant", {}) or {}).get("memory_enabled", True) is not False
+    ):
+        detail += "; its history search uses keywords: [recall] is online"
+    if not state.on:
+        try:
+            memory = memory_db_path()
+            if memory.exists():
+                detail += f"; its memory is kept at {memory}"
+        except Exception:
+            pass
+    wake = (config.get("wake", {}) or {}).get("enabled", False) is True
+    if wake and not state.on:
+        return Finding(WARN, "kai", f"the wake word is on, but {name} is off, so it isn't listening"
+                       f" ({detail})", f"{turn_on_hint()}, or [wake] enabled = false")
+    if daemon_status and "assistant" in daemon_status:
+        running = bool(daemon_status.get("assistant"))
+        if running != state.on:
+            from voice_keyboard.client import _daemon_restart_hint
+
+            now = "on" if running else "off"
+            why = daemon_status.get("assistant_why", "")
+            return Finding(
+                WARN, "kai",
+                f"the running daemon has {name} {now}" + (f" ({why})" if why else "")
+                + f", but your settings say {detail}",
+                f"it follows config.toml within seconds ({turn_on_hint() if state.on else turn_off_hint()}"
+                f" applies it at once); [stt] and [tts] changes need a restart: {_daemon_restart_hint()}",
+            )
+    if state.on and state.local:
+        proxy = next((v for v in _PROXY_VARIABLES if os.environ.get(v)), "")
+        if proxy:
+            return Finding(
+                WARN, "kai", f"{detail}; {proxy} is set, but {name} reaches its local servers"
+                " directly, never through the proxy",
+                "nothing to do while they answer: a local address is never sent through a"
+                " proxy, so a server reachable only through one won't answer Kai",
+            )
+    return Finding(OK, "kai", detail)
 
 
 def run(config_path: Path, config: Optional[dict]) -> list[Finding]:
     findings = [check_config(config_path)]
     checks: list[Callable[[], Finding]] = [check_typing, check_clipboard, check_focus_probe]
     if config is not None:
+        status: dict = {}  # the daemon's answer, once check_daemon has run
         checks = [lambda: check_speech(config), lambda: check_audio(config),
-                  lambda: check_daemon(config), lambda: check_llm(config)] + checks
+                  lambda: check_daemon(config, status), lambda: check_llm(config),
+                  lambda: check_kai(config, status)] + checks
+        if sys.platform == "linux":
+            checks.append(lambda: check_hotkey(config, status))
     for check in checks:
         try:
             findings.append(check())

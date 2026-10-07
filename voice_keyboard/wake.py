@@ -1,4 +1,4 @@
-"""Wake word: summon Kai hands-free by saying her name.
+"""Wake word: summon Kai hands-free by saying its name.
 
 openWakeWord runs a tiny local model over a rolling mic buffer — no
 transcription, nothing leaves the box — and fires a callback the instant it
@@ -10,6 +10,7 @@ so it lives behind an explicit switch: the hotkey stays the hard mute.
 """
 
 import logging
+import sys
 import threading
 import time
 from typing import Callable, Optional
@@ -55,12 +56,13 @@ class WakeListener:
 
         if self._model_path:
             return Model(wakeword_models=[self._model_path])
-        # No custom "Kai" model yet — fall back to openWakeWord's bundled
+        # No custom "Kai" model yet — fall back to openWakeWord's downloaded
         # pretrained words so wake can be exercised before training. Loud so
         # it is never mistaken for a real "Kai" detector.
         logger.warning(
-            "wake: no [wake] model_path set — using openWakeWord's bundled "
-            "models. Train a %r model with scripts/train_kai_wakeword.py.",
+            "wake: no [wake] model_path set — using openWakeWord's pretrained "
+            "words (testing only). Train a %r model with "
+            "scripts/train_kai_wakeword.py.",
             self._word,
         )
         return Model()
@@ -70,8 +72,12 @@ class WakeListener:
             self._model = self._load_model()
         except Exception:
             logger.exception(
-                "wake: could not load openWakeWord — is it installed? "
-                "(pip install 'hyperfurion-vk[wake]')"
+                "wake: could not load openWakeWord or its models. It needs the "
+                "[wake] extra in HyperFurion VK's environment (%s): "
+                'pip install "voice-keyboard[wake]", then its models, once: '
+                'python -c "import openwakeword.utils as u; u.download_models()" '
+                "(config.toml.example's [wake] has the steps)",
+                sys.prefix,
             )
             return
         self._thread = threading.Thread(target=self._run, name="vk-wake", daemon=True)

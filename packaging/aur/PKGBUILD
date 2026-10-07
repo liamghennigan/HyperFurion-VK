@@ -1,6 +1,6 @@
 # Maintainer: Liam Hennigan <liam@hyperfurion.com>
 pkgname=hyperfurion-vk
-pkgver=2.2.0
+pkgver=2.4.0
 pkgrel=1
 pkgdesc="Linux-first voice keyboard — molten dictation + a voice assistant; your speech becomes real keystrokes in any app"
 arch=('any')

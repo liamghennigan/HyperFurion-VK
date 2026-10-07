@@ -33,6 +33,8 @@ def prefetch_enabled(config: dict) -> bool:
     """Resolve [tts] prefetch: always | auto (local endpoint only) | off."""
     tts_cfg = config.get("tts", {})
     mode = str(tts_cfg.get("prefetch", "off")).strip().lower()
+    if str(tts_cfg.get("provider", "xai")).lower() == "none":
+        return False  # nothing speaks
     if mode == "always":
         return True
     if mode != "auto":

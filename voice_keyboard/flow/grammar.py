@@ -11,7 +11,7 @@ Everything is data-driven: command phrases, the punctuation table, and the
 user vocabulary all come from config and can be remapped or disabled.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
 from typing import Optional
 
@@ -38,6 +38,7 @@ from voice_keyboard.flow.numbers import (
     month_days,
     parse_cardinal,
     parse_day,
+    split_compound,
 )
 from voice_keyboard.flow.pauses import COMMON_LOWER
 from voice_keyboard.flow.spelling import (
@@ -76,6 +77,7 @@ DEFAULT_COMMANDS: dict[str, tuple[str, ...]] = {
     "scratch_that": (
         "scratch that", "delete that",
         "scratched that",  # how recognizers often write it
+        "cratch that",  # how a small recognizer hears it ("crutch that" is English)
     ),
     "new_line": ("new line",),
     "new_paragraph": ("new paragraph",),
@@ -264,6 +266,94 @@ def _core(token: str) -> str:
     return token.casefold().strip(_PUNCT_STRIP)
 
 
+# Quotation marks a recognizer puts around words it hears as a name or a
+# title: 'Select "Previous Word".' is still a command said on its own.
+_QUOTES = "\"'\u201c\u201d\u2018\u2019\u00ab\u00bb\u201e"
+
+# The wake word as a recognizer writes it: "VK", "V.K.", "V-K", "V K". Never
+# a name or a word that only sounds close ("Vicky", "decay", "the k", "BK"):
+# what follows a wake word is an instruction, never typed, so a false match
+# would swallow dictation and hand it to [llm].
+WAKE_ALIASES = {"vk": ("veekay",)}
+
+
+def _bare(core: str) -> str:
+    return core.replace(".", "").replace("-", "")
+
+
+def _sentence_case(text: str) -> bool:
+    """"List", "Twenty", "X": a capital the recognizer gave a sentence
+    start. Not "GitHub", "TODO", "OK" or "iPhone", which are spelled so."""
+    letters = [ch for ch in text if ch.isalpha()]
+    return bool(letters) and text[:1].isupper() and not any(ch.isupper() for ch in letters[1:])
+
+
+def kept_as_written(text: str) -> bool:
+    """A word the number folds may read as other words: "three-thirty",
+    "o". Once committed as written, it stays so (Grammar.parse unsplit)."""
+    return bool(split_compound(text)) or _core(text) == "o"
+
+
+def _number_before(item: Item) -> bool:
+    return item.kind == "word" and _clean(item.text) and _core(item.text) in NUMBER_WORDS - {"and", "point"}
+
+
+def _digit_after(item: Item) -> bool:
+    if item.kind != "word" or item.text.lstrip(_PUNCT_STRIP) != item.text:
+        return False
+    first = (split_compound(item.text) or [item.text])[0]
+    return _core(first) in DIGIT_WORDS | {"oh", "o"}
+
+
+def _split_compounds(items: list[Item], unsplit: frozenset = frozenset(), oh: bool = True) -> tuple[list[Item], dict]:
+    """Each "Twenty-five" as the words a speaker said, so the number folds
+    read it as they read "twenty five" ("Twenty-five percent" -> "25%"),
+    and in prose a letter "o" between digits as "oh" ("Room four o two").
+    _merge_compounds puts back together the parts of one that did not
+    fold."""
+    out: list[Item] = []
+    chains: dict[int, tuple[list[Item], Item]] = {}
+    for at, item in enumerate(items):
+        plain = (
+            item.kind == "word" and item.mode != "verbatim" and item.span[1] - item.span[0] == 1
+            and item.span[0] not in unsplit
+        )
+        words = split_compound(item.text) if plain else None
+        if words is not None and not oh and any(_core(word) == "oh" for word in words):
+            words = None
+        if (
+            words is None and plain and oh and _core(item.text) == "o" and item.text.lstrip(_PUNCT_STRIP) == item.text
+            and out and _number_before(out[-1]) and at + 1 < len(items) and _digit_after(items[at + 1])
+        ):
+            words = ["oh" + item.text[1:]]  # a recognizer's letter for the digit "oh"
+        if words is None:
+            out.append(item)
+            continue
+        parts = [Item(kind="word", text=word, mode=item.mode, span=item.span) for word in words]
+        out += parts
+        chains[id(parts[0])] = (parts, item)
+    return out, chains
+
+
+def _merge_compounds(items: list[Item], chains: dict) -> list[Item]:
+    out: list[Item] = []
+    index = 0
+    while index < len(items):
+        chain = chains.get(id(items[index]))
+        if chain is not None:
+            parts, original = chain
+            if all(index + k < len(items) and items[index + k] is part for k, part in enumerate(parts)):
+                out.append(original)  # "Twenty-five people": it stays as written
+                index += len(parts)
+                continue
+        out.append(items[index])
+        index += 1
+    return out
+
+
+_PRONOUN = frozenset({"i", "i'm", "i'll", "i'd", "i've", "i\u2019m", "i\u2019ll", "i\u2019d", "i\u2019ve"})
+
+
 DATE_MONTHS_SET = frozenset(DATE_MONTHS)
 
 
@@ -326,6 +416,8 @@ class Grammar:
         self._stutters = bool(self._fillers) and not code and str(language or "en").lower() == "en"
         self._nav = nav
         self._wake = (wake_word or "").strip().casefold()
+        # terminals and code: no sentence capitals, no sentence stops but spoken ones
+        self._code = code
         numbers = numbers if numbers in {"auto", "always", "off"} else "auto"
         self._numbers_on = numbers == "always" or (numbers == "auto" and numbers_on)
         self._numbers_min = 0 if numbers == "always" else numbers_min
@@ -369,11 +461,19 @@ class Grammar:
         for action, phrases in merged_commands.items():
             for phrase in phrases:
                 self._phrases[_phrase_tokens(phrase)] = ("command", action)
-        emoji = {} if code else DEFAULT_EMOJI  # no paste into a terminal, as above
+        # no paste into a terminal, as above; "Imoji rocket" is how a
+        # recognizer may hear "emoji rocket" (not an English word)
+        emoji = {} if code else {
+            **DEFAULT_EMOJI, **{"imoji" + phrase[5:]: glyph for phrase, glyph in DEFAULT_EMOJI.items()},
+        }
         for phrase, replacement in {**emoji, **(vocabulary or {})}.items():
             tokens = _phrase_tokens(str(phrase))
             if tokens:
                 self._phrases[tokens] = ("vocab", str(replacement))
+        # an emoji is a symbol, like a spoken period: said on its own it
+        # takes no sentence stop from the recognizer
+        user = {_phrase_tokens(str(phrase)) for phrase in (vocabulary or {})}
+        self._emoji = frozenset(t for t in map(_phrase_tokens, emoji) if t and t not in user)
 
         self._max_phrase = max(
             (len(p) for p in self._phrases), default=1
@@ -409,7 +509,7 @@ class Grammar:
             core = cores[cursor]
             if (
                 not core
-                or self.is_wake_word(tokens[cursor])
+                or self.wake_at(cores, cursor)
                 or core in self._fillers
                 or (words and core in self._formatter_stops)
                 or (cores[cursor], cores[cursor + 1] if cursor + 1 < len(cores) else "") in FORMATTERS
@@ -503,8 +603,21 @@ class Grammar:
             if ch in self._TRAILING_SPECS
         ]
 
-    def is_wake_word(self, token: str) -> bool:
-        return bool(self._wake) and _core(token) == self._wake
+    def wake_at(self, cores: list[str], index: int) -> int:
+        """How many tokens at `index` spell the wake word (0 = none)."""
+        wake = _bare(self._wake)
+        if not wake or index >= len(cores):
+            return 0
+        core = _bare(cores[index])
+        if core and (core == wake or core in WAKE_ALIASES.get(wake, ())):
+            return 1
+        if len(wake) == 2 and core == wake[0] and index + 1 < len(cores) and _bare(cores[index + 1]) == wake[1]:
+            return 2  # "V K"
+        return 0
+
+    def wake_in(self, tokens: list[str], index: int) -> int:
+        """How many of these raw tokens at `index` spell the wake word."""
+        return self.wake_at([_core(token) for token in tokens], index)
 
     def _match_phrase(
         self, cores: list[str], index: int, max_len: int
@@ -539,6 +652,7 @@ class Grammar:
         settled: int = 0,
         bounds: tuple[int, ...] = (),
         commits: tuple[int, ...] = (),
+        unsplit: tuple[int, ...] = (),
     ) -> ParseResult:
         """Parse raw tokens into items.
 
@@ -562,6 +676,11 @@ class Grammar:
         command is decided against the segment it started in, so a verb
         that closed one segment as a word stays a word when the next
         segment arrives — whatever that segment says.
+
+        `unsplit` are the tokens committed as written although they spell
+        a number with hyphens ("three-thirty" before "euros"): the context
+        that kept them from folding may be past the fence now, so they are
+        never read as numbers again.
         """
         if not self.enabled:
             items = [
@@ -594,11 +713,12 @@ class Grammar:
             # Wake word: everything after it is an instruction, never
             # typed. It resolves only at finalize; until then it holds the
             # tail back (the caption shows instruction-listening state).
-            if index >= frozen and self._wake and core == self._wake:
+            wake = self.wake_at(cores, index) if index >= frozen else 0
+            if wake:
                 if not flush:
                     pending_from = index
                     break
-                instruction = " ".join(tokens[index + 1:]).strip()
+                instruction = " ".join(tokens[index + wake:]).strip()
                 items.append(
                     Item(
                         kind="instruction",
@@ -697,8 +817,10 @@ class Grammar:
                     _clean(t) for t in tokens[index + 1:index + 2 + split]
                 ):
                     old = " ".join(t.lower() for t in tokens[index + 1:index + 1 + split])
-                    # the replacement as spoken: the engine renders it
-                    new = " ".join(tokens[index + 2 + split:limit]).strip()
+                    # the replacement as spoken: the engine renders it.
+                    # "Correct Monday to Friday.": the recognizer's own stop
+                    # ends the command, not the word ("period" said is kept)
+                    new = " ".join(tokens[index + 2 + split:limit]).strip().rstrip(_PUNCT_STRIP)
                     if old and new:
                         items.append(Item(kind="correct", text=new, mode=old, span=(index, limit)))
                         index = limit
@@ -729,11 +851,14 @@ class Grammar:
                     items.append(item)
                     continue
 
-            if self._nav and core in NAV_VERBS:
+            if self._nav and core.strip(_QUOTES) in NAV_VERBS:
                 limit, decided = self._limit(
                     index, len(tokens), frozen, settled, flush, bounds, item_end
                 )
-                command = parse_nav(cores[:limit], index, decided=decided)
+                # 'Select "Previous Word".': quotes a recognizer added are
+                # not part of a command (said mid-sentence it types as said)
+                unquoted = [_core(c.strip(_QUOTES)) for c in cores[:limit]]
+                command = parse_nav(unquoted, index, decided=decided)
                 if command == NAV_PENDING:
                     pending_from = index
                     break
@@ -794,7 +919,11 @@ class Grammar:
                     items.append(Item(kind="word", text=str(payload), span=span))
                     # Punctuation the provider attached to the phrase's last
                     # token survives the replacement ("hyper furion," -> ",").
-                    items.extend(self._trailing_punct(tokens[index + consumed - 1], span))
+                    trailing = self._trailing_punct(tokens[index + consumed - 1], span)
+                    if index in bounds and tuple(cores[index:index + consumed]) in self._emoji:
+                        # "Emoji rocket." opening an utterance: a symbol, not a sentence
+                        trailing = [p for p in trailing if not p.sentence_end]
+                    items.extend(trailing)
                 elif payload == "literal":
                     # Emit the next token verbatim, bypassing the grammar. A
                     # "literal" that was committed bare (its word never came
@@ -874,6 +1003,10 @@ class Grammar:
             items.append(Item(kind="word", text=token, span=(index, index + 1)))
             index += 1
 
+        compounds: dict[int, tuple[Item, Item]] = {}
+        if self._numbers_on or self._units_on:
+            # in a terminal "oh" is a word, so "four-oh-two" stays as written
+            items, compounds = _split_compounds(items, frozenset(unsplit), oh=not self._numbers_on)
         if self._numbers_on:
             items, number_pending = self._fold_numbers(
                 items,
@@ -888,8 +1021,42 @@ class Grammar:
                 items, frozen=frozen, item_end=item_end, pending_from=pending_from,
                 flush=flush, settled=settled,
             )
+        if compounds:
+            items = _merge_compounds(items, compounds)
+        if self._code and self.enabled:
+            items = self._unprose(items, tokens, bounds)
 
         return ParseResult(items=items, pending_from=pending_from)
+
+    def _unprose(self, items: list[Item], tokens: list[str], bounds: tuple[int, ...]) -> list[Item]:
+        """Terminals and code take what was said, not the recognizer's prose:
+        its sentence stops go ("List files." -> "list files"; a spoken
+        "period" stays), and so does the capital it gave a sentence start
+        ("For i in range" -> "for i in range"; "GitHub", "TODO" and "I"
+        keep theirs)."""
+        starts = set(bounds)
+        out: list[Item] = []
+        for item in items:
+            before = out[-1] if out else None
+            if item.kind == "punct" and item.text in (".", "?", "!") and before is not None and before.span == item.span:
+                continue  # a stop attached to the word before, not said
+            if item.kind != "word" or item.mode == "verbatim":
+                out.append(item)
+                continue
+            text = item.text
+            bare = text.rstrip(_SENTENCE_STOPS)
+            if bare.strip(_PUNCT_STRIP):
+                text = bare
+            start = item.span[0]
+            if (
+                item.span[1] - start == 1 and start < len(tokens) and item.text == tokens[start]
+                and (start == 0 or start in starts or tokens[start - 1].endswith(tuple(_SENTENCE_STOPS)))
+                and _sentence_case(text) and _core(text) not in _PRONOUN
+                and self._phrases.get((_core(text),), ("",))[0] != "vocab"
+            ):
+                text = text[:1].lower() + text[1:]
+            out.append(item if text == item.text else replace(item, text=text))
+        return out
 
     @staticmethod
     def _date(items: list[Item], at: int, check_after: bool = True) -> Optional[tuple[str, int]]:
@@ -1098,6 +1265,13 @@ class Grammar:
 
             unit = items[end] if end < size and items[end].kind == "word" else None
             unit_core = _core(unit.text) if unit is not None else ""
+            unit_end = end
+            if (
+                unit is not None and unit_core == "per" and _clean(unit.text) and end + 1 < size
+                and items[end + 1].kind == "word" and _core(items[end + 1].text) == "cent"
+                and items[end + 1].text.lstrip(_PUNCT_STRIP) == items[end + 1].text and inside(items[end + 1])
+            ):
+                unit_core, unit_end = "percent", end + 1  # "per cent", as a recognizer may write it
             if (
                 unit is not None and unit_core in UNIT_WORDS and inside(unit)
                 and unit.text.lstrip(_PUNCT_STRIP) == unit.text
@@ -1111,7 +1285,7 @@ class Grammar:
                     verb = False
                 folded = None if verb else fold_unit(words, unit_core)
                 if folded is not None:
-                    last, last_at = unit, end
+                    last, last_at = items[unit_end], unit_end
                     cents = Grammar._cents(items, end + 1) if folded[:1] in "$€" and "." not in folded else None
                     if cents is not None and inside(items[cents[1]]):
                         folded += cents[0]  # "five dollars and fifty cents" -> "$5.50"
@@ -1234,6 +1408,28 @@ class Grammar:
                     pass  # a count: "the floor ten people", "page twenty of thirty"
                 else:
                     numbered = fold_numbered(words)
+            if (
+                year is None and at_time is None and numbered is None
+                and all(w in DIGIT_WORDS or w == "oh" for w in words)
+            ):
+                # "call five five five one two three four.": a number read
+                # digit by digit may end on the sentence's stop
+                at, tail = end, []
+                if (
+                    at < size and items[at].kind == "word" and _clean(items[at].text)
+                    and _core(items[at].text) == "oh" and inside(items[at])
+                ):
+                    at, tail = at + 1, ["oh"]
+                closer = items[at] if at < size and items[at].kind == "word" and inside(items[at]) else None
+                if (
+                    closer is not None and not _clean(closer.text)
+                    and closer.text.lstrip(_PUNCT_STRIP) == closer.text
+                    and (phone := fold_digits(words + tail + [_core(closer.text)])) is not None
+                ):
+                    phone += closer.text[len(closer.text.rstrip(_PUNCT_STRIP)):]
+                    result.append(Item(kind="word", text=phone, span=(item.span[0], closer.span[1])))
+                    index = at + 1
+                    continue
             digits = fold_digits(words)
             if digits is None and numbered is not None:
                 digits = numbered

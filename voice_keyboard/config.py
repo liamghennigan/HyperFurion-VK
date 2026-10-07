@@ -1,6 +1,8 @@
 import codecs
 import copy
+import ipaddress
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -174,6 +176,9 @@ DEFAULT_CONFIG: dict = {
         "probe": True,
         # App -> register overrides, merged over the built-in terminal list.
         "map": {},
+        # What a dictated line break presses, per app, site or page title:
+        # "enter", "shift+enter" or "none" (see voice_keyboard/newline.py).
+        "newline": {},
     },
     "llm": {
         # Voice-transform channel; any OpenAI-compatible chat endpoint.
@@ -193,14 +198,21 @@ DEFAULT_CONFIG: dict = {
         "address_word": "",
     },
     "assistant": {
-        # The conversational MIND: "vk, …" (or the assistant hotkey)
-        # holds a conversation with memory, instead of typing. Brain is
-        # the xAI realtime voice agent when configured, else the local
-        # [llm]. Off by default; the daemon is a keyboard until you turn
-        # the mind on. On by default: it's push-to-talk, so nothing is
-        # captured until you press the hotkey (or the on-screen button) —
-        # the hotkey stays the hard mute.
-        "enabled": True,
+        # Kai, the voice assistant: hold the assistant hotkey (or click the
+        # orb), ask, release. It answers through the xAI realtime voice
+        # agent when one is configured, else through [llm].
+        #   "auto" = on only when everything Kai uses runs on this computer
+        #            or your own network: [stt], [llm] and [tts] are local
+        #            servers and no xAI voice agent is set (see
+        #            assistant/locality.py). Otherwise off until you turn it on.
+        #   true   = on, even with online services.   false = off.
+        # Push-to-talk either way: nothing is captured until you summon it.
+        "enabled": "auto",
+        # Servers you count as your own for "auto", besides localhost, names
+        # ending in .localhost, .local, .home.arpa or .internal, and loopback
+        # or private IP addresses: host names, IP addresses or networks, e.g.
+        # ["gpu-box", "100.64.0.0/10"].
+        "local_hosts": [],
         # What the mind calls itself — local brain persona + on-screen
         # copy. "Kai", from KairOS. (The spoken voice agent's own name is
         # set in the xAI Voice Agent Builder console.)
@@ -234,6 +246,9 @@ DEFAULT_CONFIG: dict = {
         # local = never send file contents; cloud = send excerpts of files
         # you explicitly name. Selection + memory are always allowed.
         "privacy_mode": "local",
+        # Kai remembers your questions and its answers on this computer, and
+        # looks up related memories and dictation history for a question,
+        # only while it is on. false = nothing stored, nothing looked up.
         "memory_enabled": True,
         "web_enabled": True,
         "max_memory_results": 5,
@@ -307,18 +322,21 @@ DEFAULT_CONFIG: dict = {
         "keys": {"editor": {}, "terminal": {}},
     },
     "wake": {
-        # Summon Kai hands-free by saying her name. A tiny LOCAL openWakeWord
+        # Summon Kai hands-free by saying its name; Kai must be on (while
+        # it is off the wake word doesn't listen). A tiny LOCAL openWakeWord
         # model scores a rolling mic buffer — no transcription, nothing
         # leaves the box — and only when it fires does normal capture begin.
         # OFF by default: this is the ONE path that keeps the mic warm, so
         # the hotkey stays the hard mute unless you arm this. Needs the
-        # optional dep: pip install 'hyperfurion-vk[wake]'.
+        # optional [wake] extra in HyperFurion VK's own environment
+        # (pip install "voice-keyboard[wake]") and openWakeWord's models,
+        # downloaded once; config.toml.example has the steps.
         "enabled": False,
         "engine": "openwakeword",
         "word": "kai",
         # Path to a trained "Kai" openWakeWord model. Empty = fall back to
-        # openWakeWord's bundled words (for testing); train one with
-        # scripts/train_kai_wakeword.py.
+        # openWakeWord's downloaded pretrained words (for testing); train
+        # one with scripts/train_kai_wakeword.py.
         "model_path": "",
         "threshold": 0.5,
         # Ignore repeat fires within this many seconds.
@@ -469,9 +487,11 @@ def load_config(path: Optional[Path] = None) -> dict:
     config = _default_config_with_paths()
     config_path = path if path is not None else _config_dir() / "config.toml"
     if config_path.exists():
-        user_config = tomllib.loads(read_config_text(config_path))
+        text = read_config_text(config_path)
+        user_config = tomllib.loads(text)
         config = _deep_merge(config, user_config)
         _yield_default_hotkeys(config, user_config)
+        _retire_example_kai_default(config, user_config, text)
 
     # Sections written as plain values are reported by validate_config;
     # nothing here may trip over them first.
@@ -493,6 +513,189 @@ def load_config(path: Optional[Path] = None) -> dict:
     return config
 
 
+# The comment the 2.4 writers (setup, `voice-keyboard kai on|off`, the tray)
+# leave directly above [assistant] enabled; config.toml.example ends its
+# [assistant] comment with the same last line. A `true` under it is a choice
+# someone made, not a copy of an older example's default.
+KAI_ENABLED_MARKER = "# `voice-keyboard kai` says which, and why."
+_NEW_ENABLED_COMMENT = (
+    '# Kai, the voice assistant: "auto" = on only when everything it uses runs\n'
+    "# on this computer; true = on, even with online services; false = off.\n"
+    f"{KAI_ENABLED_MARKER}\n"
+)
+# Wording of the example's own [assistant] comment before 2.4 ("On by
+# default…" from 2.1, "Off by default…" in 2.0): a block saying either is
+# replaced when a writer sets the value under it.
+_OLD_EXAMPLE_WORDING = ("On by default", "Off by default")
+
+
+def _toml_line_is_comment(line: str) -> bool:
+    return line.lstrip().startswith("#")
+
+
+# The keys config.toml.example has under [assistant] (2.1 to 2.4): a table
+# with most of them was copied from the example, not typed by hand.
+_EXAMPLE_ASSISTANT_KEYS = ("name", "agent_id", "api_key", "brain", "hotkey", "mode", "earcon", "button")
+# Set in the effective [assistant] table when enabled = true came from a
+# copy of an older example (read as "auto"); `doctor` and `voice-keyboard
+# kai` say so.
+FROM_EXAMPLE = "_enabled_from_installer"
+
+
+def _assistant_enabled_block(text: str) -> Optional[list]:
+    """The comment lines directly above `enabled = …` in the [assistant]
+    table (blank lines end the block), or None when the value isn't written
+    as a plain line under an [assistant] header."""
+    lines = text.split("\n")
+    header = next((i for i, ln in enumerate(lines) if ln.strip() == "[assistant]"), None)
+    if header is None:
+        return None
+    for i in range(header + 1, len(lines)):
+        stripped = lines[i].lstrip()
+        if stripped.startswith("["):
+            return None
+        if re.match(r"enabled\s*=", stripped):
+            top = i
+            while top > header + 1 and _toml_line_is_comment(lines[top - 1]):
+                top -= 1
+            return [ln.strip() for ln in lines[top:i]]
+    return None
+
+
+def enabled_true_is_a_choice(user_config: dict, text: str) -> bool:
+    """Whether `[assistant] enabled = true` in this file was chosen, rather
+    than copied with the rest of config.toml.example from 2.1 to 2.4, which
+    shipped it as the default (install.sh, the macOS installer and the AUR
+    package's instructions all copy the example). Chosen when:
+
+    (a) the comment directly above it ends with the line the 2.4 writers
+        leave (setup, `voice-keyboard kai on`, the tray);
+    (b) that comment says "Off by default" (2.0's example: true there is the
+        user's own change);
+    (c) that comment doesn't say "On by default" and the [assistant] table
+        has fewer than 5 of the example's keys (typed by hand, or the old
+        setup's appended `[assistant] enabled = true`).
+
+    Anything else is the example's default and counts as "auto"."""
+    table = user_config.get("assistant")
+    if not isinstance(table, dict) or table.get("enabled") is not True:
+        return True
+    block = _assistant_enabled_block(text)
+    if block is None:
+        return True  # a dotted key or an inline table: not the example's shape
+    if block and block[-1] == KAI_ENABLED_MARKER:
+        return True
+    comment = "\n".join(block)
+    if "Off by default" in comment:
+        return True
+    keys = sum(1 for key in _EXAMPLE_ASSISTANT_KEYS if key in table)
+    return "On by default" not in comment and keys < 5
+
+
+def _retire_example_kai_default(config: dict, user_config: dict, text: str) -> None:
+    """An `enabled = true` copied from an older example is the old default,
+    not a choice: it reads as "auto" (on only when Kai runs locally)."""
+    if enabled_true_is_a_choice(user_config, text):
+        return
+    assistant = config.get("assistant")
+    if isinstance(assistant, dict):
+        assistant["enabled"] = "auto"
+        assistant[FROM_EXAMPLE] = True
+
+
+def kai_off_in_broken_text(text: str) -> bool:
+    """config.toml doesn't parse, but its [assistant] table alone does and
+    says `enabled = false`: turning Kai off by hand must not wait for a typo
+    elsewhere in the file to be fixed. Never reads anything as on."""
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == "[assistant]"), None)
+    if start is None:
+        return False
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+        len(lines),
+    )
+    try:
+        table = tomllib.loads("\n".join(lines[start + 1:end]))
+    except tomllib.TOMLDecodeError:
+        return False
+    return table.get("enabled") is False
+
+
+def set_kai_enabled(text: str, value) -> str:
+    """config.toml text with [assistant] enabled set to True, False or
+    "auto", under the 2.4 writers' comment, everything else kept verbatim.
+    Raises ValueError when the result would not read back as that value
+    (a dotted `assistant.enabled` key, an inline table, a broken file)."""
+    from voice_keyboard.assistant.locality import kai_setting
+    from voice_keyboard.client import _set_toml_value
+
+    if value not in (True, False, "auto"):
+        raise ValueError(f"[assistant] enabled can't be {value!r}")
+    text = _set_toml_value(text, "assistant", "enabled", value)
+    lines = text.split("\n")
+    header = next((i for i, ln in enumerate(lines) if ln.strip() == "[assistant]"), None)
+    if header is not None:
+        end = next(
+            (i for i in range(header + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+            len(lines),
+        )
+        at = next(
+            (
+                i for i in range(header + 1, end)
+                if lines[i].lstrip().startswith(("enabled ", "enabled="))
+            ),
+            None,
+        )
+        if at is not None:
+            top = at
+            while top > header + 1 and _toml_line_is_comment(lines[top - 1]):
+                top -= 1
+            block = lines[top:at]
+            if not (block and block[-1].strip() == KAI_ENABLED_MARKER):
+                new = _NEW_ENABLED_COMMENT.rstrip("\n").split("\n")
+                if any(w in ln for ln in block for w in _OLD_EXAMPLE_WORDING):
+                    lines[top:at] = new  # the old example's description goes
+                else:
+                    lines[at:at] = new  # the user's own comments stay above
+            text = "\n".join(lines)
+    try:
+        written = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"edit [assistant] enabled by hand: {exc}") from None
+    expected = {True: "on", False: "off", "auto": "auto"}[value]
+    if kai_setting(written) != expected or written.get("assistant", {}).get("enabled") != value:
+        raise ValueError(
+            "edit [assistant] enabled by hand: the file sets it in a way this"
+            " writer doesn't change (a dotted key or an inline table)"
+        )
+    return text
+
+
+def write_config_text(path: Path, text: str) -> None:
+    """Replace config.toml atomically, readable only by you. Written beside
+    the real file when config.toml is a link (a dotfile manager's), so the
+    link stays. Raises OSError (read-only file, missing folder rights)."""
+    import os
+    import tempfile
+
+    target = Path(path).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".config-", suffix=".toml")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        if os.name == "posix":
+            os.chmod(tmp, 0o600)
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _active_provider_api_key(config: dict, provider: str) -> str:
     entry = _table(config, "providers").get(provider, {})
     api_key = str(entry.get("api_key", "") if isinstance(entry, dict) else "").strip()
@@ -501,25 +704,134 @@ def _active_provider_api_key(config: dict, provider: str) -> str:
     return api_key
 
 
-def _is_local_endpoint(url: str) -> bool:
-    """True for loopback / link-local / private-network hosts — the only
-    endpoints allowed to run keyless (a local Whisper/Kokoro server). A
-    remote authenticated gateway still needs a real key, so a placeholder
-    fails fast at startup instead of 401ing at runtime."""
-    from urllib.parse import urlparse
-
-    host = (urlparse(url).hostname or "").lower()
-    if host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"} or host.endswith(".local"):
-        return True
-    return (
-        host.startswith("127.")
-        or host.startswith("10.")
-        or host.startswith("192.168.")
-        or any(host.startswith(f"172.{n}.") for n in range(16, 32))
+# Names reserved for this computer or a private network (RFC 6761, 6762,
+# 8375 and ICANN's .internal). Any other name may resolve anywhere.
+_LOCAL_NAME_SUFFIXES = (".localhost", ".local", ".home.arpa", ".internal")
+# An explicit allow-list, not ipaddress.is_private: that also covers 6to4
+# and Teredo addresses, which reach public hosts.
+_LOCAL_NETWORKS = tuple(
+    ipaddress.ip_network(net)
+    for net in (
+        "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
+        "::1/128", "fc00::/7", "fe80::/10",
     )
+)
+_HOST_NAME = re.compile(r"^[a-z0-9_]([a-z0-9_.-]*[a-z0-9_])?$")
+
+
+def _endpoint_host(url: str) -> Optional[str]:
+    """The one host `url` connects to, lowercased, or None when there is no
+    host or it is ambiguous: a userinfo part, a backslash in the authority,
+    or urllib.parse and urllib3 (which requests connects with) reading
+    different hosts."""
+    from urllib.parse import unquote, urlsplit
+
+    try:
+        parts = urlsplit(str(url).strip())
+        netloc = parts.netloc
+        host = parts.hostname
+    except ValueError:
+        return None
+    if not netloc or not host or "@" in netloc or "\\" in netloc:
+        return None
+    try:
+        from urllib3.util import parse_url
+
+        other = parse_url(str(url).strip()).host
+    except Exception:
+        return None
+    if not other:
+        return None
+    host = unquote(host).lower()
+    other = unquote(other).strip("[]").lower()
+    if host != other:
+        return None
+    if host.endswith("."):
+        # "127.0.0.1." or "localhost.": the system resolver reads neither an
+        # IP address nor /etc/hosts there, it asks DNS, so whatever DNS
+        # answers would get the request.
+        return None
+    if _parse_ip(host) is None and not _HOST_NAME.match(host):
+        return None
+    return host
+
+
+def _parse_ip(host: str):
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        return None
+
+
+def _ip_is_local(ip) -> bool:
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    if ip.is_unspecified:  # 0.0.0.0 and :: mean this computer
+        return True
+    return any(ip.version == net.version and ip in net for net in _LOCAL_NETWORKS)
+
+
+def _in_local_hosts(host: str, extra) -> bool:
+    ip = _parse_ip(host)
+    for entry in extra or ():
+        if not isinstance(entry, str):
+            continue
+        entry = entry.strip().lower().rstrip(".")
+        if not entry:
+            continue
+        if "/" in entry:
+            try:
+                network = ipaddress.ip_network(entry, strict=False)
+            except ValueError:
+                continue
+            if ip is not None and ip.version == network.version and ip in network:
+                return True
+        elif ip is not None:
+            if _parse_ip(entry) == ip:
+                return True
+        elif entry == host:
+            return True
+    return False
+
+
+def _is_local_endpoint(url: str, extra=()) -> bool:
+    """True only for an endpoint on this computer or your own network:
+    `localhost` (or a name ending in .localhost, .local, .home.arpa or
+    .internal), a loopback, private or link-local IP address, or a name, IP
+    or network listed in `extra` ([assistant] local_hosts, for Kai's verdict
+    only). Any other host name counts as online, even one that looks like an
+    IP address (127.evil.com), and so does a URL whose host is ambiguous or
+    ends in a dot (which the system resolver hands to DNS).
+
+    It also decides which endpoints may run keyless (a local Whisper/Kokoro
+    server; no `extra` there): a remote authenticated gateway still needs a
+    real key, so a placeholder fails fast at startup instead of 401ing."""
+    host = _endpoint_host(url)
+    if host is None:
+        return False
+    if host == "localhost" or host.endswith(_LOCAL_NAME_SUFFIXES):
+        return True
+    ip = _parse_ip(host)
+    if ip is not None and _ip_is_local(ip):
+        return True
+    return _in_local_hosts(host, extra)
+
+
+def local_hosts(config: dict) -> list:
+    """[assistant] local_hosts: the servers you declare as your own."""
+    value = _table(config, "assistant").get("local_hosts", [])
+    return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
+
+
+def is_direct_endpoint(config: dict, url: str) -> bool:
+    """A local endpoint, which HyperFurion VK reaches directly: never through
+    a proxy, never following a redirect (see netpolicy.py)."""
+    return bool(url) and _is_local_endpoint(url, extra=local_hosts(config))
 
 
 def _validate_api_key(config: dict, provider: str) -> None:
+    if provider == "none":  # [tts]: nothing speaks, nothing to sign in to
+        return
     if provider == "openai":
         # Only a LOCAL OpenAI-compatible endpoint may run without a key.
         base_url = str(
@@ -637,6 +949,7 @@ def validate_config(config: dict) -> None:
     chat_apps = (config.get("registers", {}) or {}).get("chat_apps", [])
     if not isinstance(chat_apps, list) or not all(isinstance(a, str) and a.strip() for a in chat_apps):
         raise RuntimeError('registers.chat_apps must be a list of app names, e.g. ["mychat"]')
+    _validate_newline_config(config)
     polish_map = (config.get("polish", {}) or {}).get("map", {})
     if not isinstance(polish_map, dict) or not all(
         isinstance(v, str) and v.strip() for v in polish_map.values()
@@ -648,6 +961,25 @@ def validate_config(config: dict) -> None:
     _validate_remote_mic_config(config)
     _validate_assistant_config(config)
     _validate_wake_config(config)
+
+
+def _validate_newline_config(config: dict) -> None:
+    from voice_keyboard.newline import newline_table, normalize_key
+
+    table = (config.get("registers", {}) or {}).get("newline", {})
+    if not isinstance(table, dict):
+        raise RuntimeError(
+            'registers.newline must be a table of app, site or title = "enter" | "shift+enter" | "none",'
+            ' e.g. "web.whatsapp.com" = "shift+enter"'
+        )
+    # A site written without quotes is a dotted key: nested tables in TOML.
+    for name, value in newline_table(table):
+        if not str(name).strip():
+            raise RuntimeError("registers.newline: an empty app, site or title name")
+        if normalize_key(value) is None:
+            raise RuntimeError(
+                f'registers.newline.{name!r} must be "enter", "shift+enter" or "none"'
+            )
 
 
 def _validate_wake_config(config: dict) -> None:
@@ -671,8 +1003,19 @@ def _validate_wake_config(config: dict) -> None:
 
 def _validate_assistant_config(config: dict) -> None:
     cfg = config.get("assistant", {})
+    enabled = cfg.get("enabled", "auto")
+    if not isinstance(enabled, bool) and not (
+        isinstance(enabled, str) and enabled.strip().lower() == "auto"
+    ):
+        raise RuntimeError('assistant.enabled must be true, false or "auto"')
+    hosts = cfg.get("local_hosts", [])
+    if not isinstance(hosts, list) or not all(_valid_local_host(h) for h in hosts):
+        raise RuntimeError(
+            "assistant.local_hosts must be a list of host names, IP addresses or"
+            ' networks, e.g. ["gpu-box", "192.0.2.10", "100.64.0.0/10"]'
+        )
     for key in (
-        "enabled", "memory_enabled", "web_enabled", "can_act",
+        "memory_enabled", "web_enabled", "can_act",
         "earcon", "button", "terminal_fallback",
     ):
         if not isinstance(cfg.get(key, False), bool):
@@ -709,6 +1052,22 @@ def _validate_assistant_config(config: dict) -> None:
             raise RuntimeError(
                 "assistant.hotkey must differ from the dictation hotkey.key"
             )
+
+
+def _valid_local_host(entry) -> bool:
+    """A host name, an IP address or a network; not a URL."""
+    if not isinstance(entry, str):
+        return False
+    entry = entry.strip().lower().rstrip(".")
+    if not entry:
+        return False
+    if "/" in entry:
+        try:
+            ipaddress.ip_network(entry, strict=False)
+        except ValueError:
+            return False
+        return True
+    return _parse_ip(entry) is not None or bool(_HOST_NAME.match(entry))
 
 
 def _validate_ambient_config(config: dict) -> None:

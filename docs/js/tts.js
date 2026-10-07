@@ -1,4 +1,11 @@
 // ═══ TTS — the reverse lane, with word-by-word highlight ══════════════════
+// Select text on this page and the chip reads it aloud with your browser's
+// speech synthesis. It picks a voice that runs on this device; an online
+// voice (Chrome's "Google …" voices) would send the text to its maker, so
+// the page uses one only when the browser has nothing else, and the chip
+// says so before you tap it. A browser that lists no voices at all (yet)
+// speaks with its default voice, which may be an online one: the chip
+// says that too, and only the chip speaks then.
 import { favicon, synth, coarse, baseTitle, FAV_IDLE, FAV_SPK } from "./env.js";
 import { bus } from "./bus.js";
 import { settings } from "./settings.js";
@@ -6,6 +13,22 @@ import { Dictation } from "./dictation.js";
 
 export const TTS = (() => {
   let chip = null;
+  // a voice on this device, in the page's language when there is one;
+  // online=true when the browser only has online voices; maybe=true when
+  // it lists none (yet), so its default voice could be an online one
+  function pickVoice() {
+    if (settings.tts.voice) return { voice: settings.tts.voice, online: !settings.tts.voice.localService };
+    const all = synth ? synth.getVoices() : [];
+    if (!all.length) return { voice: null, online: true, maybe: true };   // not listed (yet): the browser's default, wherever it runs
+    const lang = String(settings.lang || "en").toLowerCase(), base = lang.slice(0, 2);
+    const fits = (v) => String(v.lang || "").toLowerCase().replace("_", "-").startsWith(base);
+    const local = all.filter((v) => v.localService);
+    const voice = local.find((v) => v.default && fits(v)) || local.find((v) => String(v.lang || "").toLowerCase() === lang) ||
+      local.find(fits) || local.find((v) => v.default) || local[0] || null;
+    if (voice) return { voice, online: false };
+    return { voice: all.find((v) => v.default && fits(v)) || all.find(fits) || all[0], online: true };
+  }
+  if (synth) { try { synth.getVoices(); } catch {} }  // asking once starts loading the list
   function removeChip() { if (chip) { chip.remove(); chip = null; } }
   function clearHighlight() {
     if (window.Highlight && CSS.highlights) CSS.highlights.delete("vk-tts");
@@ -51,8 +74,11 @@ export const TTS = (() => {
     document.title = on ? "🔊 speaking — " + baseTitle : baseTitle;
     favicon.href = on ? FAV_SPK : FAV_IDLE;
   }
-  function speakSelection() {
+  function speakSelection(e) {
     if (!synth) return;
+    const pick = pickVoice();
+    // an online voice only from the chip that says so: the shortcut shows the chip first
+    if (pick.online && !(e && e.currentTarget === chip && chip)) { maybeShowChip(); return; }
     const sel = getSelection();
     let raw = sel && sel.rangeCount ? sel.toString() : "";
     let range = raw.trim() ? sel.getRangeAt(0).cloneRange() : null;
@@ -69,7 +95,7 @@ export const TTS = (() => {
     const u = new SpeechSynthesisUtterance(raw);
     u.rate = settings.tts.rate;
     u.pitch = settings.tts.pitch;
-    if (settings.tts.voice) u.voice = settings.tts.voice;
+    if (pick.voice) u.voice = pick.voice;
     u.onstart = () => { bus.emit("tts:start"); setSpeaking(true); };
     u.onboundary = (ev) => {
       if (ev.name && ev.name !== "word") return;
@@ -83,6 +109,7 @@ export const TTS = (() => {
     const end = () => { clearHighlight(); bus.emit("tts:end"); setSpeaking(false); };
     u.onend = end;
     u.onerror = end;
+    if (pick.online) bus.emit("tts:online", { maybe: !!pick.maybe });   // the footer counts it: the text goes (or may go) to the voice's maker
     synth.speak(u);
     removeChip();
   }
@@ -99,15 +126,15 @@ export const TTS = (() => {
     chip = document.createElement("button");
     chip.className = "ttschip";
     chip.type = "button";
-    chip.textContent = coarse ? "read aloud" : "read aloud · ctrl+alt+t";
-    chip.style.left = Math.min(
-      Math.max(8, r.left + scrollX), scrollX + innerWidth - 170
-    ) + "px";
+    const pick = pickVoice();
+    chip.textContent = (coarse ? "read aloud" : "read aloud · ctrl+alt+r") +
+      (pick.maybe ? " · may use an online voice: the text may leave this tab" : pick.online ? " · online voice: the text leaves this tab" : "");
     chip.style.top = (r.bottom + scrollY + (coarse ? 14 : 6)) + "px";
     chip.addEventListener("mousedown", (e) => e.preventDefault());
     chip.addEventListener("pointerdown", (e) => e.preventDefault());
     chip.addEventListener("click", speakSelection);
     document.body.appendChild(chip);
+    chip.style.left = Math.max(8, Math.min(r.left + scrollX, scrollX + innerWidth - chip.offsetWidth - 8)) + "px";
   }
   let chipRange = null, chipText = "", selT = 0;
   document.addEventListener("mouseup", () => setTimeout(maybeShowChip, 0));

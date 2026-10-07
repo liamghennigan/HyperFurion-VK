@@ -11,7 +11,9 @@ built by [`build-downloads.sh`](build-downloads.sh) in `release.yml`:
   release source that runs `install.sh`; double-clicked from a file manager,
   it reopens itself in a terminal. Refuses to run as root.
 - **`HyperFurion-VK-Setup.cmd`** (Windows) — a batch/PowerShell polyglot that
-  runs the pinned PowerShell installer with no execution-policy step.
+  runs the PowerShell installer with no execution-policy step. It installs
+  the latest release when it runs; the tag it was built with is only the
+  fallback when GitHub can't be asked.
   Downloaded files carry the mark of the web, so Windows asks once
   ("More info › Run anyway") until a signed EXE replaces it (see below).
 
@@ -39,8 +41,9 @@ looks for a running llama.cpp server and offers its model as the default
 1. **PowerShell installer (default)** —
    `packaging/windows/install-hyperfurion-vk.ps1`, run as
    `irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex`
-   (it installs the latest release) or attached to each release with its
-   version pinned. Per-user, no admin rights: installs Python 3.12 if needed,
+   (it installs the latest release) or attached to each release, stamped
+   with that release's tag as the fallback when GitHub can't be asked (it
+   too installs the latest release). Per-user, no admin rights: installs Python 3.12 if needed,
    a venv under `%LOCALAPPDATA%\HyperFurion-VK`, a Start menu entry,
    start-with-Windows, and a Settings › Apps entry with an uninstaller. CI
    (`windows-installer.yml`) installs, runs, upgrades, and uninstalls it on a

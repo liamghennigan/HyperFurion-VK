@@ -51,6 +51,7 @@ export const Typist = (() => {
     for (const ch of full.slice(p)) ops.push({ kind: "ch", ch });
     const presses = toPresses(ops, { heat });
     for (const pr of presses) if (pr.kind === "ch" || pr.kind === "bs") pr.onDown = apply;
+    if (!ops.length) state.mark = 0;   // a result that changed nothing on screen has no first keystroke
     Keyboard.replaceQueue(presses);
     Window.instr(snap.instr || "");
     checkFreeze();
@@ -63,13 +64,16 @@ export const Typist = (() => {
     state.typedChars++;
     bus.emit("type:char", { ch: p.ch, kind: p.kind });
     if (state.mark) {
-      // the first keystroke painted after a speech result: that is the latency
+      // from the recognizer handing over a transcript to the frame that
+      // paints its first keystroke — VK's own share of the delay, the
+      // daemon's "first transcript → first keystroke"; recognition itself
+      // comes before it and is not counted
       const m = state.mark; state.mark = 0;
-      requestAnimationFrame((ts) => {
-        const ms = Math.max(0, ts - m);
+      requestAnimationFrame(() => {
+        const ms = performance.now() - m;
         state.latency.push(ms);
         if (state.latency.length > 8) state.latency.shift();
-        Window.setLatency(ms);
+        Window.setLatencyNote(Math.round(ms) + " ms from transcript to first keystroke");
       });
     }
     checkFreeze();

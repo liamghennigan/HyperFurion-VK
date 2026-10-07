@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HyperFurion VK vs Talon, Numen &amp; Dragon — open-source voice control for Linux</title>
-  <meta name="description" content="An honest comparison of Linux voice typing and voice-control tools: HyperFurion VK, Talon, Numen, nerd-dictation, and Dragon. Open source, Linux Wayland and X11, streaming dictation, offline operation, and who presses Enter." />
+  <title>HyperFurion VK compared with Talon, Numen, nerd-dictation and Dragon</title>
+  <meta name="description" content="HyperFurion VK, an open-source voice keyboard for Linux and Windows, next to Talon, Numen, nerd-dictation and Dragon, including where they win." />
   <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/compare.html" />
-  <meta property="og:title" content="HyperFurion VK vs Talon, Numen &amp; Dragon — voice control for Linux" />
-  <meta property="og:description" content="Open-source, Linux-first voice keyboard: molten streaming dictation, terminal-safe command drafting, fully offline option — compared honestly with Talon, Numen, nerd-dictation and Dragon." />
+  <meta property="og:title" content="HyperFurion VK compared with Talon, Numen, nerd-dictation and Dragon" />
+  <meta property="og:description" content="Speech model, offline use, Wayland, live typing, Enter in a terminal, corrections and scripting: an open-source voice keyboard for Linux and Windows next to four alternatives, with the rows where they win. Checked October 2026." />
   <meta property="og:type" content="website" />
   <meta name="theme-color" content="#07060a" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='8' y='8' width='84' height='84' rx='20' fill='%231b1820' stroke='%23e9a23b' stroke-width='4'/%3E%3Ctext x='50' y='64' font-family='monospace' font-size='40' font-weight='700' text-anchor='middle' fill='%23f3ead9'%3EVK%3C/text%3E%3C/svg%3E" />
@@ -17,6 +17,12 @@
     @font-face { font-family: "JetBrains Mono"; src: url("./fonts/jetbrains-mono-var.woff2") format("woff2-variations"); font-weight: 100 800; font-display: swap; }
     :root { color-scheme: dark; --obsidian-0: #07060a; --sand-50: #f3ead9; }
     html { background: var(--obsidian-0); color: var(--sand-50); }
+    /* the full table has longer cells than the home page's: give it room, and keep the row names in view while it scrolls sideways on a phone */
+    #table table { min-width: 960px; }
+    #table tbody th { min-width: 150px; }
+    @media (max-width: 1000px) { #table tbody th, #table thead th:first-child { position: sticky; left: 0; z-index: 1; min-width: 120px; background: var(--obsidian-1, #0d0b11); } }
+    .also { margin: 24px 0 8px; }
+    .also b { color: var(--sand-50); }
   </style>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -26,7 +32,7 @@
     <div class="wrap nav-inner">
       <a class="brand" href="./"><span class="brand-key" aria-hidden="true">VK</span><span>HyperFurion&nbsp;VK</span></a>
       <div class="nav-links">
-        <a href="./#molten">how it works</a>
+        <a href="./">try it</a>
         <a href="./#install">install</a>
         <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">GitHub</a>
         <a class="btn primary small" href="./#install">Download</a>
@@ -36,12 +42,12 @@
 
   <main class="page">
     <section class="wrap cmp-hero">
-      <span class="eyebrow">voice control for Linux · an honest comparison</span>
-      <h1 style="font-size: clamp(34px, 5.5vw, 64px);">The open, Linux-native voice keyboard.</h1>
-      <p class="lead" style="margin: 0 auto; max-width: 52ch;">Most voice tools are built for macOS and Windows, or for hands-free <em>commands</em> rather than everyday typing. HyperFurion VK is MIT-licensed, Linux-first and dictation-first: your speech becomes real keystrokes in any app, it can run fully offline, and it never presses Enter to send. It runs natively on Windows too.</p>
+      <span class="eyebrow">comparison · checked October 2026</span>
+      <h1 style="font-size: clamp(34px, 5.5vw, 64px);">How HyperFurion VK compares.</h1>
+      <p class="lead" style="margin: 0 auto; max-width: 56ch;">HyperFurion VK is an MIT-licensed voice keyboard for Linux and Windows. It types what you say into whatever app has focus, a terminal included; in a terminal it recognizes, no spoken phrase presses Enter. It ships no speech model: you bring a cloud key (xAI by default) or your own speech server. Here it is next to Talon, Numen, nerd-dictation and Dragon, including the rows where they win.</p>
       <div class="actions">
         <a class="btn primary" href="./#install">Install HyperFurion VK</a>
-        <a class="btn" href="./">See it type, live</a>
+        <a class="btn" href="./">Try it in your browser</a>
       </div>
     </section>
 
@@ -49,50 +55,63 @@
       <h2><span class="num">01</span>At a glance</h2>
       <div class="tblwrap glass">
         <table>
-          <thead><tr><th scope="col">Approach</th><th scope="col">HyperFurion&nbsp;VK</th><th scope="col">Talon</th><th scope="col">Numen</th><th scope="col">nerd-dictation</th><th scope="col">Dragon</th></tr></thead>
+          <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col">HyperFurion&nbsp;VK</th><th scope="col">Talon</th><th scope="col">Numen</th><th scope="col">nerd-dictation</th><th scope="col">Dragon Professional</th></tr></thead>
           <tbody>
-            <tr><th scope="row">Open source</th><td class="yes">MIT</td><td class="no">core closed</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">commercial</td></tr>
-            <tr><th scope="row">Linux (Wayland &amp; X11)</th><td class="yes">first-class</td><td class="mid">supported</td><td class="yes">Linux-only</td><td class="mid">X11-focused</td><td class="no">Windows-only</td></tr>
-            <tr><th scope="row">Windows</th><td class="yes">native tray app</td><td class="yes">supported</td><td class="no">—</td><td class="no">—</td><td class="yes">yes</td></tr>
-            <tr><th scope="row">Primary strength</th><td class="mid">dictation + commands</td><td class="mid">hands-free coding</td><td class="mid">voice commands</td><td class="mid">offline dictation</td><td class="mid">accuracy (Windows)</td></tr>
-            <tr><th scope="row">Streaming “molten” dictation</th><td class="yes">yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-            <tr><th scope="row">Types into any app (incl. terminal)</th><td class="yes">uinput</td><td class="yes">yes</td><td class="yes">uinput</td><td class="yes">yes</td><td class="yes">yes</td></tr>
-            <tr><th scope="row">Runs fully offline</th><td class="yes">local model</td><td class="yes">local</td><td class="yes">local (VOSK)</td><td class="yes">local (VOSK)</td><td class="yes">local</td></tr>
-            <tr><th scope="row">Never auto-sends in a terminal</th><td class="yes">guaranteed</td><td class="mid">scriptable</td><td class="mid">scriptable</td><td class="no">n/a</td><td class="no">n/a</td></tr>
-            <tr><th scope="row">Spoken edits (correct, select, cap)</th><td class="yes">“correct X to Y”, “select that”, “cap that”</td><td class="mid">scriptable</td><td class="mid">scriptable</td><td class="no">—</td><td class="yes">built in</td></tr>
-            <tr><th scope="row">Per-app style via your own model</th><td class="yes">opt-in, any OpenAI-compatible LLM</td><td class="mid">scriptable</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-            <tr><th scope="row">Commands in other languages</th><td class="mid">es · fr · de</td><td class="mid">community</td><td class="mid">configurable</td><td class="mid">VOSK models</td><td class="yes">many</td></tr>
-            <tr><th scope="row">Built-in voice assistant</th><td class="yes">Kai</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-            <tr><th scope="row">Setup</th><td class="mid">download and run</td><td class="mid">installer + scripts</td><td class="mid">config file</td><td class="mid">manual</td><td class="mid">installer</td></tr>
+            <tr><th scope="row">Licence and price</th><td class="yes">MIT, free (a cloud speech provider bills you for what you use)</td><td class="no">closed source; free, and Talon+ is paid (Patreon)</td><td class="yes">AGPL-3.0, free</td><td class="yes">GPL-2.0 or later, free</td><td class="no">commercial, paid</td></tr>
+            <tr><th scope="row">Needs no API key or server</th><td class="no">no: needs a key (xAI by default; OpenAI, Groq, Deepgram, AssemblyAI) or your own speech server</td><td class="yes">yes: free speech model</td><td class="yes">yes: a free Vosk model (about 40&nbsp;MB) from its install script</td><td class="yes">yes: a free Vosk model you download once</td><td class="yes">yes: model included</td></tr>
+            <tr><th scope="row">Works fully offline</th><td class="mid">only with your own OpenAI-compatible speech server (Speaches, for one); rewrites and Kai need a local language model too (llama-server, for one)</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes (the desktop edition)</td></tr>
+            <tr><th scope="row">Linux on Wayland</th><td class="yes">yes, and X11 (types through the kernel’s uinput)</td><td class="no">no: X11 only, and it warns on Wayland. Talon 1.0 is planned as the last public Linux release; ongoing Linux support is a paid Talon+ feature</td><td class="yes">yes, through dotool (also X11 and the text console)</td><td class="mid">with a flag (dotool, ydotool or wtype); X11’s xdotool by default</td><td class="no">no Linux version</td></tr>
+            <tr><th scope="row">Windows and macOS</th><td class="mid">Windows 10/11 tray app; macOS in beta, installed from a source checkout</td><td class="yes">Windows and macOS</td><td class="no">no: Linux only</td><td class="no">no: Linux only</td><td class="mid">Windows 10/11; no macOS</td></tr>
+            <tr><th scope="row">Types as you speak</th><td class="yes">with xAI (the default), or every 2.5&nbsp;s with your own server at a local address (localhost, a private IPv4 address or a .local name); a word can still change for at least 1.5&nbsp;s, then stays put. Other providers type when you stop</td><td class="mid">new in Talon 1.0: “Hum” streaming dictation (GPU-accelerated)</td><td class="no">no: each phrase is typed after you pause</td><td class="yes">yes, by default, retyping words as Vosk revises them</td><td class="no">shows a preview, types when you pause</td></tr>
+            <tr><th scope="row">Never presses Enter in a terminal</th><td class="yes">never in a terminal it recognizes, not even on “new line”; a terminal it doesn’t know (PuTTY, an editor’s terminal panel) gets Enter</td><td class="mid">presses it on “press enter”, “slap” or “paste enter” (you can remove them)</td><td class="mid">presses Return on “yes” (you can remove it)</td><td class="yes">never, by design</td><td class="mid">presses it on “new line” and “press Enter”</td></tr>
+            <tr><th scope="row">Spoken corrections</th><td class="yes">built in: “scratch that”, “correct X to Y”, “cap that”, “spell that”</td><td class="yes">in the standard community command set: “scratch that”, “select that”, “cap that”, “spell that”</td><td class="mid">“ditch” erases the last phrase, “change” picks another reading</td><td class="no">none (a Python hook can rewrite text)</td><td class="yes">built in: “correct …”, “select …”, “scratch that”, “cap that”</td></tr>
+            <tr><th scope="row">Cursor commands by voice</th><td class="mid">in editors and terminals; off until you turn it on (setup asks)</td><td class="yes">extensive</td><td class="yes">yes: short words for keys and arrows</td><td class="no">none</td><td class="yes">yes</td></tr>
+            <tr><th scope="row">Custom commands and scripting</th><td class="mid">rename or remove phrases, add words and snippets in config; no scripting language</td><td class="yes">extensive: .talon files and Python</td><td class="yes">phrase files that press keys and run shell commands</td><td class="mid">a Python hook that rewrites the text</td><td class="yes">custom commands and macros</td></tr>
+            <tr><th scope="row">Hands-free mouse</th><td class="no">none</td><td class="yes">eye tracking; pop to click, hiss to scroll</td><td class="mid">noises (blow, hiss) and click and scroll words</td><td class="no">none</td><td class="yes">MouseGrid</td></tr>
+            <tr><th scope="row">Rewrite or restyle text with a language model</th><td class="mid">“VK, make that formal” rewrites what you just said; a style per app is opt-in. Both use your language model (xAI by default, or your own)</td><td class="no">not built in</td><td class="no">not built in</td><td class="no">not built in</td><td class="no">not built in</td></tr>
+            <tr><th scope="row">Voice assistant</th><td class="mid">Kai, push-to-talk on Right Ctrl. On by default with your own speech server and language model; with xAI (the default) or another online service, off until you turn it on</td><td class="no">none</td><td class="no">none</td><td class="no">none</td><td class="no">none</td></tr>
+            <tr><th scope="row">Setup</th><td class="mid">one installer; setup asks for a speech provider and key, or your server’s address</td><td class="mid">download and run; most people add the community command set</td><td class="mid">a distro package (Alpine, AUR, Nix) or build from source</td><td class="mid">by hand: install Vosk, download a model, run the script</td><td class="mid">Windows installer</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="sigcap">Comparison reflects each project's stated design focus, not a benchmark. Tools evolve fast — spot something out of date? <a href="https://github.com/liamghennigan/HyperFurion-VK/issues" rel="noopener">Open an issue</a> and we'll fix it.</p>
+      <p class="sigcap">Checked October 2026 against each project’s own documentation and code. Not a benchmark: nothing here measures recognition accuracy. HyperFurion VK cells describe v2.4.0 with default settings. Dragon means the desktop edition, Dragon Professional v16; Nuance’s “Anywhere” editions are separate cloud products. Spot something out of date? <a href="https://github.com/liamghennigan/HyperFurion-VK/issues" rel="noopener">Open an issue</a>.</p>
     </section>
 
     <section class="wrap">
-      <h2><span class="num">02</span>Where each one shines</h2>
+      <h2><span class="num">02</span>Also worth a look</h2>
+      <p class="also">The table covers four tools, not the whole field. If you want a speech model in the box, or you’re on a Mac or a phone, look at these too.</p>
+      <ul class="edges">
+        <li><b>Handy</b>: free and open source (MIT) for Windows, macOS and Linux. Runs a Whisper or Parakeet model on your computer, fully offline, and pastes the text when you stop recording. Its Wayland support is limited and needs a helper such as wtype or dotool.</li>
+        <li><b>Windows Voice Access</b>: built into Windows 11 (22H2 and later) and works without an internet connection, with “correct that” and “spell that”. Windows voice typing (Win+H) is built in too, but uses Microsoft’s online speech service.</li>
+        <li><b>Wispr Flow</b>: for Mac, Windows, iPhone and Android, with a writing style per app. Transcription always happens in Wispr’s cloud. Free up to 2,000 words a week on a computer and 1,000 on a phone, then paid.</li>
+        <li><b>Superwhisper</b>: for macOS, Windows, iOS and Android, with offline or cloud models and custom modes that set how it writes. Free and paid plans.</li>
+        <li><b>VoiceInk</b>: open source (GPL-3.0) for macOS 15 and later, with offline models and modes that switch by app or website. The prebuilt app is paid, with a free trial.</li>
+      </ul>
+    </section>
+
+    <section class="wrap">
+      <h2><span class="num">03</span>Where each one shines</h2>
       <div class="shine">
-        <div><h3>Choose HyperFurion VK</h3><p>You want <b>everyday dictation on Linux</b> that works in any app, words that appear and self-correct as you speak, a terminal mode that drafts commands without running them, and a local-first voice assistant — downloaded and run in two minutes, MIT-licensed.</p></div>
-        <div><h3>Choose Talon</h3><p>You want the deepest <b>hands-free coding</b> toolkit — a mature scripting language, eye-tracking, and a large voice-command community — and you're comfortable investing in setup and its scripting model.</p></div>
-        <div><h3>Choose Numen</h3><p>You want a <b>lightweight, fully offline voice-command</b> layer for Linux/Wayland, grammar-driven, with minimal moving parts.</p></div>
-        <div><h3>Choose nerd-dictation / Dragon</h3><p><b>nerd-dictation</b> for a simple offline VOSK dictation script on Linux; <b>Dragon</b> if you're on Windows and need its accuracy and don't need Linux or open source.</p></div>
+        <div><h3>Choose HyperFurion VK</h3><p>You’re on <b>Linux (Wayland or X11) or Windows</b> and want to type by voice in any app, a terminal included, and correct by voice (“correct monday to friday”, “scratch that”). It only acts when you ask: it listens only after you press a hotkey or, once Kai is on, its on-screen button (Kai’s wake word is off until you turn it on), never presses Enter in a terminal it recognizes, and in the chat apps and chat sites it recognizes a spoken line break is Shift+Enter, so the message doesn’t send. You’ll need a speech provider key or your own speech server.</p></div>
+        <div><h3>Choose Talon</h3><p>You want the deepest <b>hands-free control</b>: coding by voice, a scripting language, eye tracking and noise commands, with a shared community command set. It runs on macOS, Windows and Linux under X11, and Talon 1.0 is planned as its last public Linux release.</p></div>
+        <div><h3>Choose Numen</h3><p>You want a <b>small, fully offline voice-control layer for Linux</b> that works on Wayland, X11 and the text console, driven by short spoken words for keys, with a free Vosk model. Dictation is a phrase at a time.</p></div>
+        <div><h3>Choose nerd-dictation or Dragon</h3><p><b>nerd-dictation</b> for a single-file, offline Python script on Linux that types as you speak and that you shape in Python (Vosk’s output is all lower-case). <b>Dragon</b> if you’re on Windows and want a paid dictation suite with its model in the box, voice correction, custom commands and MouseGrid.</p></div>
       </div>
     </section>
 
     <section class="wrap" style="padding-bottom: 80px;">
-      <h2><span class="num">03</span>The short version</h2>
-      <p class="lead">If you live on Linux and want your <b>voice to be the keyboard</b> — real typing in every app, private by default, with the trigger always in your hands — that's what HyperFurion VK is built for.</p>
+      <h2><span class="num">04</span>The short version</h2>
+      <p class="lead">If you’re on Linux or Windows, want to type by voice in every app, terminal included, and can bring a speech key or run your own speech server, HyperFurion VK is built for that. For a speech model in the box, try Handy, Numen or nerd-dictation; for deep hands-free control, Talon; on a Mac or a phone, the apps above.</p>
       <div class="actions">
         <a class="btn primary" href="./#install">Install it</a>
-        <a class="btn" href="./">Watch the live demo</a>
+        <a class="btn" href="./">Try it in your browser</a>
       </div>
     </section>
   </main>
 
   <footer>
     <div class="wrap footer-grid">
-      <div>HyperFurion VK · MIT · a voice keyboard, not a dictation app</div>
+      <div>HyperFurion VK · MIT · an open-source voice keyboard for Linux and Windows</div>
       <div class="footer-links">
         <a href="./">home</a>
         <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">GitHub</a>
