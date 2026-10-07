@@ -369,3 +369,31 @@ class TestFocusprobeDispatch:
                 mock.patch.object(clipboard, "get_text", return_value="old clip"):
             assert clipboard.selection_text() == "old clip"  # nothing selected: the clipboard
             assert clipboard.selection_text(clipboard_fallback=False) == ""
+
+
+class TestAXValueShapes:
+    """pyobjc returns some AXValue payloads as structs and a CFRange as a
+    plain tuple; the backend must read both (seen on the macOS CI runner)."""
+
+    class _Hi:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def AXValueGetValue(self, value, kind, _out):
+            return True, self.payload
+
+    def _backend(self, payload):
+        from voice_keyboard.macos.ax import AXBackend
+
+        return AXBackend(self._Hi(payload), None)
+
+    def test_a_cfrange_tuple(self) -> None:
+        assert self._backend((7, 3)).text_range(object()) == (7, 3)
+
+    def test_a_cfrange_struct(self) -> None:
+        @dataclass
+        class Range:
+            location: int
+            length: int
+
+        assert self._backend(Range(7, 3)).text_range(object()) == (7, 3)

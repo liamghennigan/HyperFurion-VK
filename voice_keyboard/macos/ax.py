@@ -166,7 +166,14 @@ class AXBackend:
         found = self._unpack(value, "kAXValueCFRangeType", _AX_VALUE_CFRANGE)
         if found is None:
             return None
-        return int(found.location), int(found.length)
+        # pyobjc hands a CFRange back as a plain (location, length) tuple,
+        # not a struct with named fields
+        location = getattr(found, "location", None)
+        if location is None:
+            location, length = found[0], found[1]
+        else:
+            length = found.length
+        return int(location), int(length)
 
     def make_range(self, location: int, length: int):
         kind = self._const("kAXValueCFRangeType", _AX_VALUE_CFRANGE)

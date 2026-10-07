@@ -5,6 +5,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -49,6 +50,12 @@ def test_the_installers_plist_template_is_valid() -> None:
     assert "__" not in filled
 
 
+# The dev setup script is a macOS shell script: its shell-level checks need a
+# POSIX shell and sed (Windows' bash.exe is the WSL launcher, not a shell).
+POSIX_SHELL = pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell script")
+
+
+@POSIX_SHELL
 @pytest.mark.skipif(shutil.which("sed") is None, reason="needs sed")
 def test_bug_reports_mask_api_keys() -> None:
     expression = re.search(r"sed -E '([^']+)'", SCRIPT.read_text()).group(1)
@@ -60,6 +67,7 @@ def test_bug_reports_mask_api_keys() -> None:
     assert "xai-[masked]" in masked and "ok-short" in masked
 
 
+@POSIX_SHELL
 def test_the_script_parses() -> None:
     if shutil.which("bash") is None:
         pytest.skip("needs bash")
@@ -73,7 +81,8 @@ def test_an_empty_config_gets_both(tmp_path) -> None:
     data = tomllib.loads(path.read_text())
     assert data["assistant"]["hotkey"] == "rightcmd"
     assert data["tts"]["hotkey"] == "control+alt+r"
-    assert path.stat().st_mode & 0o777 == 0o600
+    if sys.platform != "win32":  # POSIX file modes
+        assert path.stat().st_mode & 0o777 == 0o600
 
 
 def test_the_starter_right_ctrl_is_replaced_but_comments_stay(tmp_path) -> None:
