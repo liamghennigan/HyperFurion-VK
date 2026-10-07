@@ -177,6 +177,11 @@ def _stop_overlay() -> None:
         if _local_shell is not None:
             _local_shell.hide()
         return
+    if sys.platform == "darwin":
+        from voice_keyboard.macos.overlay import hide as mac_hide
+
+        mac_hide()
+        return
     _call_shell_overlay("Hide", timeout=0.4)
 
 
@@ -186,6 +191,8 @@ def _set_overlay_button(visible: bool) -> None:
         if _local_shell is not None:
             _local_shell.set_button(visible)
         return
+    if sys.platform == "darwin":
+        return  # no Kai orb on macOS yet (see MACOS.md)
     _call_shell_overlay("SetButton", "true" if visible else "false", timeout=0.5)
 
 
@@ -271,6 +278,13 @@ def _show_overlay(
     timeout_ms: int = 0,
     anchor: tuple[int, int] | None = None,
 ) -> None:
+    if sys.platform == "darwin":
+        # No native overlay yet: a tone per dictation and a banner for
+        # failures only — never one notification per live caption.
+        from voice_keyboard.macos.overlay import show as mac_show
+
+        mac_show(state, detail=detail, timeout_ms=timeout_ms, anchor=anchor)
+        return
     # A caller with a cached anchor (the daemon's live caption at ~4 Hz)
     # passes it in; re-probing AT-SPI on every update would be too heavy.
     x, y = anchor if anchor is not None else _focused_anchor()
@@ -329,7 +343,10 @@ def _daemon_start_hint() -> str:
     if sys.platform == "win32":
         return 'start "HyperFurion VK" from the Start menu (it lives in the notification area)'
     if sys.platform == "darwin":
-        return "launchctl kickstart -k gui/$(id -u)/com.hyperfurion.voice-keyboard"
+        return (
+            "launchctl kickstart -k gui/$(id -u)/com.hyperfurion.voice-keyboard"
+            " (or run voice-keyboard-daemon in a terminal)"
+        )
     return "systemctl --user start voice-keyboard-daemon"
 
 
@@ -862,6 +879,8 @@ def _run_login(config: dict, argv: list) -> None:
     if sys.platform == "win32":
         print("  Apply it:  right-click the HyperFurion VK tray icon → Restart")
         print("             (if it was waiting for setup, it starts by itself)")
+    elif sys.platform == "darwin":
+        print(f"  Apply it:  restart the daemon — {_daemon_start_hint()}")
     else:
         print("  Apply it:  systemctl --user restart voice-keyboard-daemon")
     print("  Lost your key or on a new machine? Just run `voice-keyboard login` again.")

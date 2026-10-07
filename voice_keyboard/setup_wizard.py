@@ -501,6 +501,12 @@ class Wizard:
             self.out("Saved, but HyperFurion VK can't start yet: it still needs a speech provider.")
             self.out("Run `voice-keyboard setup` again, or `voice-keyboard login` for the hosted service.")
         self.out("Change these any time with `voice-keyboard setup`, or edit the settings file.")
+        if sys.platform == "darwin":
+            from voice_keyboard.macos.permissions import checklist_lines
+
+            self.out("")
+            for line in checklist_lines():
+                self.out(line)
 
 
 def _defaults() -> dict:
