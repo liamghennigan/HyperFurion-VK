@@ -76,8 +76,10 @@ proven to be the daemon's.
   line", a list or a multi-line snippet no longer sends half a message;
   and Enter in web document editors (Google Docs, Notion, Word for the
   web, …) and every other app. A page is known by its address on Linux
-  and by its tab title elsewhere. While words type live, a switch to
-  another tab or field of the same app only makes the choice stricter.
+  and by its tab title elsewhere. A switch to another tab or field of the
+  same app, while words type live or just before a dictation typed at
+  stop, only makes the choice stricter (Enter, then Shift+Enter, then
+  nothing).
   Set your own per app, site or tab title in `[registers.newline]`
   (`"enter"`, `"shift+enter"` or `"none"`); `[registers] chat_apps` adds
   chat apps. It goes by what it can see and can guess wrong: a chat app it
@@ -89,9 +91,12 @@ proven to be the daemon's.
 - **`voice-keyboard try [register:] <words…>`.** Prints what the keyboard
   would type for those words through your config's grammar — no microphone
   or daemon; `|` marks a pause between utterances, a leading `python:` (or
-  any register) picks the register, and caret commands and instructions are
-  noted. With no words it reads one dictation per line: an interactive
-  prompt, or a batch piped in.
+  any register) picks the register, inside the quotes or outside them
+  (`try "python: x equals five"`), and caret commands and instructions are
+  noted. It uses the daemon's own grammar builder, so words you accepted
+  with `voice-keyboard learned` apply, and "VK, <name>" shows the snippet
+  or macro it would type, with a `[snippet: name]` note. With no words it
+  reads one dictation per line: an interactive prompt, or a batch piped in.
 - **Polish per app (`[polish.map]`).** Map an app to a style — `slack =
   "casual"`, `thunderbird = "a clear, polite email"` — and each prose
   dictation of four words or more there is rewritten in it through `[llm]`,
@@ -104,7 +109,13 @@ proven to be the daemon's.
   config, the speech provider's API key (a cloud provider without one fails
   every dictation), microphone (and `[audio] device_name`), the daemon, `/dev/uinput`
   access, the clipboard tool that types accents and emoji, the AT-SPI focus
-  probe — and prints the fix for each problem. Exits non-zero on a failure.
+  probe, the language model and what in your config uses it (Kai, "VK, …"
+  rewrites and pause review, by default: without `[llm]` the first two
+  won't work and pause review uses its rules only; a feature you switched
+  on that needs it fails), and on Linux whether the hotkey can read your
+  keyboard (`/dev/input/event*`: the `input` group joined, applied to this
+  login, and to the running daemon) — and prints the fix for each problem.
+  Exits non-zero on a failure.
 - **Spoken commands in Spanish, French and German.** `[flow] language =
   "es" | "fr" | "de"` adds that language's punctuation and layout
   commands to the English set — "punto", "coma", "abre interrogación"
@@ -128,9 +139,10 @@ proven to be the daemon's.
   "new checkbox" type `# `, `## ` and `- [ ] ` on a line of their own —
   markdown, and live headings and to-dos in Notion and Obsidian.
 - **`voice-keyboard commands [filter]`**: everything you can say — commands,
-  punctuation, emoji, caret commands, formatters, wake-word channels and
-  your own vocabulary and snippets — built from the live grammar with your
-  config merged in, so it never drifts from what the engine does.
+  punctuation, emoji, caret commands, formatters, wake-word channels, your
+  own vocabulary, the words you taught it with `voice-keyboard learned`,
+  your snippets and the macros you named — built from the live grammar
+  with your config merged in, so it never drifts from what the engine does.
 - **"Cap that", "uppercase that", "lowercase that".** Said on their own,
   they recase the last utterance in place — no model, no selection.
   Mid-sentence ("let's cap that at ten") they stay words.
@@ -288,6 +300,23 @@ proven to be the daemon's.
 - **"Spell that NGINX".** A recognizer that hears spelled letters as one
   word writes it in capitals; after "spell" or "spell that" such a token
   ("NGINX", "K8S") now counts as the letters, spelled. Both engines.
+- **What a recognizer writes reads as what you said.** A number it joins
+  with hyphens folds like the words ("Twenty-five percent" → `25%`, "meet
+  at three-thirty" → `meet at 3:30`, "room four-oh-two" → `room 402`, "june
+  twenty-first" → `June 21`; "Twenty-five people" stays as written), and
+  so do "per cent" and, in prose, a letter "o" between digits ("room four
+  o two" → `room 402`); a phone number may end on the sentence's stop
+  (`Call 555-1234.`). The wake word counts as "V.K.", "V-K", "V K" or
+  "veekay", never a word that only sounds close; "cratch that" is "scratch
+  that"; "imoji rocket" is 🚀, and an emoji that opens an utterance takes
+  no sentence stop; quotes around a caret command ('Select "Previous
+  Word".') don't hide it; and a recognizer's period on "Correct Monday to
+  Friday." or "Spell that S I O B H A N." is not held as a pause. In
+  terminals and code the recognizer's prose goes: its sentence stops and
+  the capital it gave a sentence start ("List files." → `list files`;
+  "GitHub", "TODO" and a spoken "period" stay), and in `python` and
+  `javascript` its "I" is the loop variable ("For I in range ten colon" →
+  `for i in range(10):`). Both engines.
 - **The page keeps a period you paused on revisable.** `pauses.py` is
   ported too: with the page's utterance-per-pause recognizer, "I think.
   We should wait" is exactly the case the daemon's pause rules exist for,
@@ -385,6 +414,17 @@ proven to be the daemon's.
   refuse Enter there too when it is a terminal; an integrator that means
   Enter presses it with `voice-keyboard key`. In a terminal it recognizes,
   only your hand presses Enter, as the landing page always said.
+- **Safety: a dictation typed when you stop never lands in another app.**
+  With a provider that doesn't stream (OpenAI's cloud, Groq, Deepgram,
+  AssemblyAI) or `[flow] live = false`, the keyboard looks at focus again
+  just before it types. If you moved to another app, nothing is typed and
+  the transcript goes to the clipboard, as it does while words type live;
+  without a clipboard tool, nothing is typed at all. In another tab or
+  field of the same app, line breaks only get stricter, and where it can't
+  tell what has focus, a line break types a space. Before, it typed into
+  whatever had focus with the line-break choice made at the start, so "new
+  line" could press Enter in a chat and send. `voice-keyboard stop` now
+  says why nothing was typed instead of "No speech detected".
 - **Python register: calls read like Python.** An opening paren or
   bracket right after a name glues to it — "def snake case get user open
   paren" types `def get_user(`, "items open bracket zero close bracket" types
@@ -419,9 +459,49 @@ proven to be the daemon's.
 - **Setup leads with your own key or server.** `voice-keyboard setup` lists
   the hosted subscription, which isn't on sale, after a key and a local
   server, labelled for existing subscribers; the Windows tray's sign-in
-  item, now below **Open settings file**, says the same.
+  item, now below **Open settings file**, the Windows starter settings
+  file and `config.toml.example` (which lists the hosted provider last)
+  say the same, and so does the relay's README, which no longer reads as
+  an offer of a $5/month subscription.
   Choosing a local speech server now asks for the model ids it serves and
   whether it also speaks, instead of leaving OpenAI's names in place.
+- **The Linux installer works on Fedora.** `install.sh` asked dnf for
+  `python3-venv`, which Fedora doesn't have, and dnf5 refused the whole
+  install. It now also installs gcc on Fedora and Arch, where PyAudio and
+  evdev are compiled from source.
+- **The wake-word hints name the real package**: `pip install
+  "voice-keyboard[wake]"`, in HyperFurion VK's own environment (they said
+  `hyperfurion-vk[wake]`). `config.toml.example` adds openWakeWord's
+  one-time model download, and how to install it on Linux with Python
+  3.12 or newer, where openWakeWord 0.6 won't install as is.
+- **Installers say what they do.** A terminal install with only
+  `VOICE_KEYBOARD_API_KEY` set says the key is unused and that the
+  settings walkthrough will ask for it (name both providers to use it
+  unattended). The Windows installer's header says to pass `-Source .` to
+  install a checkout (without it, the latest release is installed), and
+  nothing calls `HyperFurion-VK-Setup.cmd` pinned any more: it installs the
+  latest release, with the tag it was built with as the fallback.
+- **The landing page does only what you ask, and says what it sends.**
+  Nothing is typed that you didn't say: when nothing was recognized it
+  used to type a scripted line in its place. When the in-tab speech model
+  can't run, the recording stops and the page says why; your browser's
+  own speech service is offered by name, with where it sends the audio,
+  and starts only when you pick it. When focus moves mid-dictation the
+  page no longer writes the transcript to your clipboard unasked; it stays
+  in the panes. The model downloads only once you tap the mic and allow
+  it, and capture starts
+  then, so what you say while it loads is still recognized; it runs on
+  WebGPU only when the browser hands out a GPU, on the CPU otherwise or
+  when the GPU fails, and the progress shown is bytes that really
+  arrived. The page reads that model's usual mishearings of "VK" and
+  "spell" ("The K", "Bell") as those words; the engine itself never
+  guesses. The footer counts every file fetched from another server and
+  names the hosts that answered; the read-aloud chip picks a voice on
+  your device and says so before it would use an online one; each "try
+  saying" chip plays alone on an empty field under a "scripted demo"
+  badge; a Mac gets the beta's install-from-a-checkout steps first; and
+  the relay's fact sheet for the page's "ask" is rewritten for 2.4.0 (it
+  offered a $5/month tier and an old install line).
 
 ## [2.3.0] — 2026-10
 
@@ -569,6 +649,8 @@ Windows becomes a first-class platform, and the whole repo gets a polish pass.
 
 - Stop button, mobile pass, automatic releases, macOS and Windows betas.
 
+[2.4.0]: https://github.com/liamghennigan/HyperFurion-VK/compare/v2.3.0...v2.4.0
+[2.3.0]: https://github.com/liamghennigan/HyperFurion-VK/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/liamghennigan/HyperFurion-VK/compare/v2.1.3...v2.2.0
 [2.1.3]: https://github.com/liamghennigan/HyperFurion-VK/releases/tag/v2.1.3
 [2.1.2]: https://github.com/liamghennigan/HyperFurion-VK/releases/tag/v2.1.2

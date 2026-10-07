@@ -1145,6 +1145,11 @@ def main() -> None:
                         timeout_ms=4000,
                     )
                     print(f"Transcribed: {text}")
+                elif response.get("note"):
+                    # The daemon already showed it (focus moved: the
+                    # transcript is on the clipboard, nothing typed).
+                    _notify("Voice Keyboard", response["note"], timeout_ms=4000)
+                    print(response["note"])
                 else:
                     _show_overlay("empty", timeout_ms=2200)
                     _notify("Voice Keyboard", "No speech detected", timeout_ms=4000)

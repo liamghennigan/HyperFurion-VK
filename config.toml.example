@@ -1,19 +1,11 @@
 [providers.xai]
 api_key = "xai-your-api-key-here"
 
-# Hosted subscription — one key, no provider accounts. See relay/README.md.
-# No setup: run `voice-keyboard login <your email>` and this fills itself in
-# (emails you a code, writes the key, switches stt/tts here). Lose the key or
-# move machines? Just log in again — there's nothing to save by hand.
-[providers.hyperfurion]
-api_key = "hfk-your-subscription-key-here"
-# Only set base_url if you run your own relay.
-# base_url = "https://api.hyperfurion.com"
-
 [providers.openai]
 api_key = "openai-your-api-key-here"
-# Any OpenAI-compatible server works — a local one (Speaches, whisper.cpp,
-# vLLM) makes dictation fully offline, and needs no api_key.
+# Any OpenAI-compatible server works. A local one (Speaches, whisper.cpp,
+# vLLM) needs no api_key, and your audio goes only to it. Fully offline
+# also needs [tts] and [llm] pointed at local servers (README: Fully Offline).
 # base_url = "http://localhost:8000/v1"
 
 [providers.groq]
@@ -28,8 +20,18 @@ api_key = "assemblyai-your-api-key-here"
 [providers.elevenlabs]
 api_key = "elevenlabs-your-api-key-here"
 
+# HyperFurion hosted service: not on sale right now (existing subscribers
+# only), so it comes last. See relay/README.md. A subscriber runs
+# `voice-keyboard login <email>`, which emails a sign-in code, fills in this
+# key and switches stt/tts here; logging in again replaces a lost key.
+[providers.hyperfurion]
+api_key = "hfk-your-subscription-key-here"
+# Only set base_url if you run your own relay.
+# base_url = "https://api.hyperfurion.com"
+
 [stt]
-# Choices: xai, hyperfurion, openai, groq, deepgram, assemblyai
+# Choices: xai, openai, groq, deepgram, assemblyai, and hyperfurion (the
+# hosted service; existing subscribers only)
 provider = "xai"
 # Defaults by provider:
 # xai / hyperfurion = the provider's default (grok-voice-transcribe-2.0)
@@ -48,7 +50,8 @@ interim_results = true
 hotword_bias = false
 
 [tts]
-# Choices: xai, hyperfurion, openai, elevenlabs
+# Choices: xai, openai, elevenlabs, and hyperfurion (the hosted service;
+# existing subscribers only)
 provider = "xai"
 # Defaults by provider:
 # openai = "gpt-4o-mini-tts"
@@ -440,13 +443,24 @@ enabled = false
 # scores a rolling mic buffer — no transcription, nothing leaves the box —
 # and only when it fires does normal capture begin. OFF by default: this is
 # the ONE summon path that keeps the mic warm, so the hotkey stays the hard
-# mute unless you arm this. Needs the optional dep:
-#   pip install 'hyperfurion-vk[wake]'
+# mute unless you arm this.
+# It needs openWakeWord (the optional [wake] extra of the voice-keyboard
+# package) in HyperFurion VK's own environment, and openWakeWord's shared
+# models, downloaded once. After the Linux installer, with
+# VENV=~/.local/share/voice-keyboard-venv:
+#   $VENV/bin/pip install "voice-keyboard[wake]"
+#   $VENV/bin/python -c "import openwakeword.utils as u; u.download_models()"
+# On Linux with Python 3.12 or newer the extra won't install (openWakeWord
+# 0.6 requires tflite-runtime, which has no wheels past 3.11). Install it
+# without that, then download the models as above:
+#   $VENV/bin/pip install --no-deps openwakeword
+#   $VENV/bin/pip install onnxruntime scipy scikit-learn tqdm requests
 enabled = false
 engine = "openwakeword"
 word = "kai"
-# Path to a trained "Kai" openWakeWord model. Empty = openWakeWord's bundled
-# words (for testing only); train a real one with:
+# Path to a trained "Kai" openWakeWord model. Empty = openWakeWord's
+# pretrained words from that download (for testing only); train a real one
+# with:
 #   python scripts/train_kai_wakeword.py
 model_path = ""
 # Detection confidence (0..1) required to fire, and a re-fire cooldown.

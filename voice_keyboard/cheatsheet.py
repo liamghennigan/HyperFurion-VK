@@ -1,15 +1,21 @@
 """`voice-keyboard commands`: everything you can say, from the live tables.
 
 Built from the same Grammar the daemon builds — your [flow] commands,
-punctuation and vocabulary merged in — plus the caret commands, snippets
-and wake-word channels your config enables, so the list can never drift
-from what the engine does.
+punctuation and vocabulary merged in, and the words you accepted with
+`voice-keyboard learned` — plus the caret commands, snippets, named
+macros and wake-word channels your config enables, so the list can never
+drift from what the engine does.
 """
 
+import logging
 from typing import Optional
 
-from voice_keyboard.flow.grammar import FORMATTERS, grammar_from_config
+from voice_keyboard import dictionary
+from voice_keyboard.flow.grammar import FORMATTERS
 from voice_keyboard.flow.registers import REGISTERS
+from voice_keyboard.trial import dictation_grammar
+
+logger = logging.getLogger(__name__)
 
 _COMMAND_NOTES = {
     "scratch_that": "take back the last utterance",
@@ -57,7 +63,28 @@ _FOLDS = [
 
 
 def _grammar(config: dict):
-    return grammar_from_config(config, REGISTERS["prose"])
+    # the daemon's own builder: [flow] plus the accepted learned words
+    return dictation_grammar(config, REGISTERS["prose"])
+
+
+def _learned(config: dict) -> set:
+    """The spoken keys `voice-keyboard learned` added to dictation (an
+    explicit [flow.vocabulary] entry wins, so it is listed there)."""
+    if not config.get("flow", {}).get("personal_dictionary", True):
+        return set()
+    try:
+        return {str(k).strip().casefold() for k in dictionary.vocabulary_overrides()}
+    except Exception:
+        logger.exception("Could not load the personal dictionary")
+        return set()
+
+
+def _macros() -> list:
+    try:
+        return sorted(dictionary.load_dictionary().get("macros") or {})
+    except Exception:
+        logger.exception("Could not load the personal dictionary")
+        return []
 
 
 def render(config: dict, query: Optional[str] = None) -> str:
@@ -66,6 +93,7 @@ def render(config: dict, query: Optional[str] = None) -> str:
     wake = str(flow.get("wake_word", "vk")).strip() or "vk"
     phrases = _grammar(config).phrases()
     user_vocab = {str(k).strip().casefold() for k in (flow.get("vocabulary") or {})}
+    learned = _learned(config) - user_vocab
 
     sections: list[tuple[str, list[tuple[str, str]]]] = []
     order = list(_COMMAND_NOTES)
@@ -81,12 +109,16 @@ def render(config: dict, query: Optional[str] = None) -> str:
     sections.append(("Punctuation", punct))
     sections.append(("Numbers, dates, addresses (prose)", _FOLDS))
     emoji = sorted((phrase, str(payload)) for phrase, kind, payload in phrases
-                   if kind == "vocab" and phrase.startswith("emoji ") and phrase not in user_vocab)
+                   if kind == "vocab" and phrase.startswith("emoji ") and phrase not in user_vocab | learned)
     sections.append(("Emoji", emoji))
     vocab = sorted((phrase, str(payload)) for phrase, kind, payload in phrases
                    if kind == "vocab" and phrase in user_vocab)
     if vocab:
         sections.append(("Your vocabulary ([flow.vocabulary])", vocab))
+    taught = sorted((phrase, str(payload)) for phrase, kind, payload in phrases
+                    if kind == "vocab" and phrase in learned)
+    if taught:
+        sections.append(("Words you taught it (voice-keyboard learned)", taught))
     if config.get("nav", {}).get("enabled", False):
         sections.append(("Caret commands (said on their own; never Enter)", _NAV))
     else:
@@ -101,8 +133,13 @@ def render(config: dict, query: Optional[str] = None) -> str:
         verb = (cfg.get("verbs") or [section])[0]
         state = label if cfg.get("enabled", False) else f"off: set [{section}] enabled = true"
         channels.append((f"{wake}, {verb} …", state))
-    for name in sorted(config.get("snippets", {}) or {}):
+    snippets = sorted(config.get("snippets", {}) or {})
+    for name in snippets:
         channels.append((f"{wake}, {name}", "types your snippet"))
+    named = {str(name).strip().strip(".,!?;:").casefold() for name in snippets}
+    for name in _macros():
+        if name not in named:  # a [snippets] entry of the same name wins
+            channels.append((f"{wake}, {name}", "types your macro (voice-keyboard learned)"))
     sections.append(("Wake word", channels))
 
     needle = (query or "").strip().casefold()

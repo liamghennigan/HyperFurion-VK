@@ -195,6 +195,7 @@ voice_id = <span class="s">"af_heart"</span>
 [llm]
 provider = <span class="s">"openai"</span>
 base_url = <span class="s">"http://localhost:8080/v1"</span>  <span class="c"># llama-server</span>
+model = <span class="s">"your-model-id"</span>  <span class="c"># what its /v1/models lists</span>
 <span class="c"># no key · nothing leaves your machine</span></pre>
         </figure>
       </div>
@@ -295,7 +296,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packagin
           <li>No speech model ships with the app: you need a key for a speech service or your own speech server.</li>
           <li>Words land while you speak with xAI, or with your own server at a local address (localhost, a private IPv4 address or a <code>.local</code> name), re-transcribed every 2.5 seconds; with OpenAI, Groq, Deepgram or AssemblyAI, or a server anywhere else, they land when you stop talking.</li>
           <li>Linux and Windows are first-class. macOS is in beta, installed from a checkout. iOS lets no app press keys in other apps, so this one can't run there.</li>
-          <li>Repairs assume nothing else edits the field while you dictate. If focus moves to another app mid-sentence, typing stops there and the whole transcript goes to your clipboard, replacing what was on it.</li>
+          <li>Repairs assume nothing else edits the field while you dictate. If focus moves to another app mid-sentence, typing stops there and the whole transcript goes to your clipboard, replacing what was on it; a dictation typed when you stop looks again just before it types, and types nothing into another app either.</li>
           <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend. Caret commands (<code>[nav]</code>) and “VK, run …” (<code>[intent]</code>) are off by default in the app; this page has both on, with your own platform's keys. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
         </ul>
       </div>

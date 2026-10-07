@@ -149,9 +149,11 @@ through your `[llm]` and repairs it on screen.
 - **Start or stop dictation:** press `Ctrl+Alt+V`, or run `voice-keyboard`
   / `voice-keyboard toggle`.
 - **Not working?** `voice-keyboard doctor` checks the config, your speech
-  provider's key, the microphone, the daemon, the language model, typing
-  permissions, the clipboard tool and the focus probe, and prints the fix for
-  each problem it finds.
+  provider's key, the microphone, the daemon, the language model (and what
+  uses it: Kai, "VK, …" rewrites and pause review by default), typing
+  permissions, the clipboard tool, the focus probe and, on Linux, whether
+  the hotkey can read your keyboard, and prints the fix for each problem it
+  finds.
 - **Hold-to-talk:** hold `Ctrl+Alt+V`; release it to stop.
 - **Watch words appear as you speak:** on by default with xAI (the default
   provider) or your own local speech server; with OpenAI, Groq, Deepgram or
@@ -214,7 +216,10 @@ packages, uinput setup, and input-device access (Windows: see
 - GNOME overlay extension in
   `~/.local/share/gnome-shell/extensions/voice-keyboard-overlay@liam-hennigan`
 - Audio and clipboard packages from `apt-get`, `dnf` or `pacman` (PortAudio,
-  libsndfile, libnotify, wl-clipboard, xclip, Tk, Python venv and headers)
+  libsndfile, libnotify, wl-clipboard, xclip, Tk, Python venv and headers),
+  and a C compiler, because PyAudio and evdev are compiled from source: gcc
+  on Fedora and Arch; on Debian and Ubuntu it comes with `python3-pip`
+  (its recommended `build-essential`)
 - The `uinput` module (loaded now and at boot), a udev rule giving the `input`
   group `/dev/uinput`, and `input` group membership for your user (the global
   hotkey needs it; that group can read every keyboard and mouse)
@@ -240,7 +245,9 @@ Linux (Windows needs only Windows 10/11 — see [Windows](#windows)):
 - systemd user services for the default daemon installation
 - Access to `/dev/uinput` for virtual keyboard injection
 - Read access to `/dev/input/event*` for the built-in global hotkey listener
-- PortAudio and PyAudio for microphone capture
+- PortAudio and PyAudio for microphone capture (PyAudio and evdev are
+  compiled at install time: a C compiler and the PortAudio and Python
+  headers; the installer adds them)
 - libsndfile, `sounddevice`, and `numpy` for TTS playback
 - `notify-send` for fallback status notifications
 - `wl-clipboard` on Wayland, or `xclip` on X11, for reading selected text and
@@ -282,9 +289,9 @@ chmod +x install.sh
 ```
 
 The installer supports `apt-get`, `dnf`, and `pacman`. On other distributions
-it skips the package step with a warning: install PortAudio (with headers),
-Python's venv and dev headers, Tk, libsndfile, notify-send and wl-clipboard or
-xclip yourself first, and it does the rest.
+it skips the package step with a warning: install a C compiler (gcc),
+PortAudio (with headers), Python's venv and dev headers, Tk, libsndfile,
+notify-send and wl-clipboard or xclip yourself first, and it does the rest.
 
 ### Non-Interactive Install
 
@@ -394,7 +401,8 @@ packaging\windows\install-hyperfurion-vk.ps1 -Source .` installs that checkout
 - walks you through the settings (`voice-keyboard setup`): a running
   llama.cpp model offered as your default language model (otherwise xAI's
   Grok or a local server you name), how to transcribe — paste your own API
-  key(s) (typed hidden), point at a local offline server, sign in with an
+  key(s) (typed hidden), point at your own local speech server (with the
+  model ids it serves), sign in with an
   existing hosted subscription (it isn't on sale right now), or skip for
   now — the hotkey, the language, Kai, dictation history, caret commands and
   self-corrections, then starts the app. Re-running it upgrades in place and
@@ -832,12 +840,14 @@ gets Enter, which runs the line: map it to `terminal` in
 While words type live, a focus check looks every 1.5 seconds: once it
 sees a different app, typing freezes and at stop the whole transcript goes
 to the clipboard, replacing what was on it (a few words can land in the
-other app before it looks). A
-dictation typed when you stop goes to whatever has focus then, formatted
-for the app you started in. On Linux, and in classic Win32 edit boxes on
-Windows, the probe also sees the focused *widget*: a password field there
-forces `verbatim`, is never written to the history ledger, and never
-contributes biasing context.
+other app before it looks). A dictation typed when you stop (a provider
+that doesn't stream, or `[flow] live = false`) looks at focus once more
+right before it types: if another app has focus, nothing is typed and the
+whole transcript goes to the clipboard, replacing what was on it (with no
+clipboard tool, nothing is typed at all). On Linux, and in classic Win32
+edit boxes on Windows, the probe also sees the focused *widget*: a
+password field there forces `verbatim`, is never written to the history
+ledger, and never contributes biasing context.
 
 #### Line breaks: Enter or Shift+Enter
 
@@ -880,7 +890,10 @@ live, if you switch to another tab or field of the same app, line breaks
 only ever get stricter (Enter → Shift+Enter → nothing) for the rest of
 that recording, once the focus check notices (it looks every 1.5
 seconds); a switch to another app freezes typing, as above. A dictation
-typed when you stop keeps the choice made when it started. One-line
+typed when you stop looks once more just before it types: another tab or
+field of the same app only makes line breaks stricter, focus it can't
+identify gets a space, and another app gets nothing (the transcript goes
+to the clipboard). One-line
 fields (and search boxes with suggestions) are recognized on Linux through
 accessibility and on Windows in classic Win32 edit boxes; elsewhere (most
 web forms and the address bar on Windows) a browser's Shift+Enter can
@@ -974,9 +987,11 @@ ask), and it keeps a local memory. See `ROADMAP.md` for the doctrine and
   otherwise through `[llm]` and your read-aloud voice. Kai keeps your
   questions and its answers on this computer
   (`assistant-memory.sqlite3` in `~/.local/state/voice-keyboard/`, or
-  `%LOCALAPPDATA%\voice-keyboard\` on Windows), and its
-  memory also searches the ledger when history is on; set
-  `memory_enabled = false` under `[assistant]` to stop it keeping them.
+  `%LOCALAPPDATA%\voice-keyboard\` on Windows); set
+  `memory_enabled = false` under `[assistant]` and nothing is stored (not
+  even the file). When dictation history is on, Kai also looks up the
+  ledger entries related to your question and sends them to `[llm]` with
+  it, as context.
   An earcon confirms the mic is live; the turn runs off the hotkey path, so
   a second tap barges in
   and cuts Kai off. Voice in, voice or a drafted command out — you never
@@ -987,10 +1002,15 @@ ask), and it keeps a local memory. See `ROADMAP.md` for the doctrine and
   mic warm, so it stays behind an explicit switch; the hotkey remains the
   hard mute. No "Kai" model ships yet: make one with
   `scripts/train_kai_wakeword.py` and set `model_path` (until then
-  openWakeWord's own bundled words stand in, for testing). It needs the
-  openWakeWord package in the keyboard's environment; after the Linux
-  installer, that is
-  `~/.local/share/voice-keyboard-venv/bin/pip install openwakeword`.
+  openWakeWord's pretrained words stand in, for testing). It needs
+  openWakeWord in the keyboard's own environment, and openWakeWord's
+  models, downloaded once; after the Linux installer, with
+  `VENV=~/.local/share/voice-keyboard-venv`, that is
+  `$VENV/bin/pip install "voice-keyboard[wake]"` then
+  `$VENV/bin/python -c "import openwakeword.utils as u; u.download_models()"`.
+  On Linux with Python 3.12 or newer the first step fails (openWakeWord 0.6
+  needs `tflite-runtime`, which stops at 3.11): `config.toml.example`'s
+  `[wake]` section has the route that works there.
 - **Total recall** (`[recall]`, `voice-keyboard find "…"`) — search what
   you dictated while `history = true` (the last 500 ledger entries).
   Keyword search out of the box; point it at a local Ollama `/embeddings`
@@ -1045,12 +1065,17 @@ non-ASCII is dropped with a warning.
   type for those words with your config — no microphone needed; `|` is a
   pause, so quote it in a shell
   (`try "see you monday | correct monday to friday"`), and a leading
-  register picks one (`try python: x equals five`; keep `python:` outside
-  any quotes). With no words it reads one
+  register picks one, inside the quotes or outside them
+  (`try "python: x equals five"`). Words you accepted with
+  `voice-keyboard learned` apply, as in dictation (with `[flow]
+  personal_dictionary` on, the default; `[flow.vocabulary]` wins), and
+  "VK, my email" shows the snippet or macro it would type, with a
+  `[snippet: my email]` note. With no words it reads one
   dictation per line: a prompt to play at, or a batch from a pipe
   (`voice-keyboard try < phrases.txt`).
 - `voice-keyboard commands [filter]` prints everything you can say, built
-  from the same tables the engine uses with your config merged in —
+  from the same tables the engine uses with your config, the words you
+  taught it and your named macros merged in —
   `voice-keyboard commands percent` shows just the matching lines.
 - `voice-keyboard stats` shows latency percentiles (p50/p95/max) over the
   last 200 dictations:
@@ -1109,13 +1134,6 @@ daemon sections:
 [providers.xai]
 api_key = "xai-your-api-key-here"
 
-# Hosted subscription: not on sale right now (existing subscribers only).
-# See relay/README.md.
-[providers.hyperfurion]
-api_key = "hfk-your-subscription-key-here"
-# Only set base_url if you run your own relay.
-# base_url = "https://api.hyperfurion.com"
-
 [providers.openai]
 api_key = "openai-your-api-key-here"
 # Point at any OpenAI-compatible server; one at a local address needs no
@@ -1135,8 +1153,16 @@ api_key = "assemblyai-your-api-key-here"
 [providers.elevenlabs]
 api_key = "elevenlabs-your-api-key-here"
 
+# Hosted subscription: not on sale right now (existing subscribers only),
+# so it comes last. See relay/README.md.
+[providers.hyperfurion]
+api_key = "hfk-your-subscription-key-here"
+# Only set base_url if you run your own relay.
+# base_url = "https://api.hyperfurion.com"
+
 [stt]
-# Choices: xai, hyperfurion, openai, groq, deepgram, assemblyai
+# Choices: xai, openai, groq, deepgram, assemblyai, and hyperfurion (the
+# hosted service; existing subscribers only)
 provider = "xai"
 # Leave empty for the provider default.
 model = ""
@@ -1144,7 +1170,8 @@ language = "en"
 interim_results = true
 
 [tts]
-# Choices: xai, hyperfurion, openai, elevenlabs
+# Choices: xai, openai, elevenlabs, and hyperfurion (the hosted service;
+# existing subscribers only)
 provider = "xai"
 # Leave empty for the provider default.
 model = ""
@@ -1257,7 +1284,8 @@ Whisper and Kokoro. Leave `model` or `voice_id` unset and OpenAI's own names
 server may not serve. Words still land while you speak: the recording is
 re-transcribed every 2.5 seconds (`[flow] live_rest = "auto"`).
 `voice-keyboard setup` can write the speech-server part for you, model ids
-included, and offers a running llama-server's model as your `[llm]`.
+included, and sets `[llm]` to a running llama-server's model, or to a local
+server you name.
 
 Open models and servers that work well locally:
 
@@ -1453,7 +1481,10 @@ journalctl --user -u voice-keyboard-daemon -n 100 --no-pager
 
 If logs say no readable keyboard devices were found, your current session
 probably lacks access to `/dev/input/event*`. Log out and back in after the
-installer adds your user to the `input` group.
+installer adds your user to the `input` group. `voice-keyboard doctor`
+checks this and names the missing step: joining the group (`sudo usermod
+-aG input $USER`), logging out and back in, or restarting a daemon that
+started before your login had the group.
 
 Also check whether your desktop or focused app already captures `Ctrl+Alt+V`.
 You can change the hotkey in config or use manual commands:
@@ -1472,7 +1503,10 @@ journalctl --user -u voice-keyboard-daemon -f
 
 The daemon types through a virtual keyboard, so the destination app must have
 keyboard focus. If focus moved to another app while words were typing live,
-typing stopped and the whole transcript is on your clipboard instead. ASCII
+typing stopped and the whole transcript is on your clipboard instead; a
+dictation typed when you stop does the same when another app has focus
+just before it types, and `voice-keyboard stop` (or `toggle`) says so:
+"Focus changed — nothing typed; the transcript is on the clipboard". ASCII
 is typed through the uinput key path; anything else (accents, CJK, emoji, smart quotes)
 is pasted through the clipboard, which requires `wl-copy` (Wayland) or `xclip`
 (X11). If neither tool is installed, non-ASCII characters are skipped with
@@ -1579,7 +1613,8 @@ status UI, IPC, playback, and keyboard injection are already local.
   `[polish.map]` restyle, a "VK, run …" or `voice-keyboard intent` request, a
   `voice-keyboard ask` question with your selection, a
   dictation with a correction cue when `[flow] corrections = "llm"`, Kai's
-  questions with your current selection and related memory, and, with
+  questions with your current selection (and, when dictation history is on,
+  the ledger entries related to the question), and, with
   `[flow] pause_review = "auto"` (the default), the two words around a pause
   its rules can't settle. Point `[llm]` at a local model to keep all of that on
   your machine; `pause_review = "rules"` alone stops the pause words.
@@ -1636,8 +1671,9 @@ status UI, IPC, playback, and keyboard injection are already local.
 - Live molten injection assumes the field is not edited by hand mid-dictation
   (see [Flow limitations](#flow-limitations-honest-ones)). If focus moves to
   another app while words type live, typing stops and the whole transcript
-  goes to your clipboard, replacing what was on it; a dictation typed when
-  you stop goes to whatever has focus then.
+  goes to your clipboard, replacing what was on it (a few words can land in
+  the other app first); a dictation typed when you stop types nothing into
+  another app either: the transcript goes to the clipboard.
 - A spoken line break goes by the app and field it can see, and can guess
   wrong: a chat app it doesn't know gets Enter, which sends; a terminal it
   doesn't know (PuTTY, an editor's terminal panel) can run the line; on

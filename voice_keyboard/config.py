@@ -315,13 +315,15 @@ DEFAULT_CONFIG: dict = {
         # leaves the box — and only when it fires does normal capture begin.
         # OFF by default: this is the ONE path that keeps the mic warm, so
         # the hotkey stays the hard mute unless you arm this. Needs the
-        # optional dep: pip install 'hyperfurion-vk[wake]'.
+        # optional [wake] extra in HyperFurion VK's own environment
+        # (pip install "voice-keyboard[wake]") and openWakeWord's models,
+        # downloaded once; config.toml.example has the steps.
         "enabled": False,
         "engine": "openwakeword",
         "word": "kai",
         # Path to a trained "Kai" openWakeWord model. Empty = fall back to
-        # openWakeWord's bundled words (for testing); train one with
-        # scripts/train_kai_wakeword.py.
+        # openWakeWord's downloaded pretrained words (for testing); train
+        # one with scripts/train_kai_wakeword.py.
         "model_path": "",
         "threshold": 0.5,
         # Ignore repeat fires within this many seconds.

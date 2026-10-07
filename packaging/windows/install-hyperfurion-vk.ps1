@@ -3,8 +3,9 @@
 # One line, in PowerShell (installs the latest release):
 #   irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
 #
-# From a checkout (installs that checkout):
-#   powershell -ExecutionPolicy Bypass -File packaging\windows\install-hyperfurion-vk.ps1
+# From a checkout, pass -Source to install that checkout (without -Source,
+# even run from a checkout, it installs the latest release):
+#   powershell -ExecutionPolicy Bypass -File packaging\windows\install-hyperfurion-vk.ps1 -Source .
 #
 # Options (file form):  -Version v2.2.0   -Source C:\path\to\checkout
 #                       -NonInteractive   -NoLaunch   -NoAutostart

@@ -1,9 +1,7 @@
 import asyncio
 import contextlib
-import datetime
 import json
 import logging
-import re
 import signal
 import sys
 import threading
@@ -19,7 +17,6 @@ from voice_keyboard.flow import FlowConfig, FlowEngine, Grammar, InjectionWorker
 from voice_keyboard.flow import nav
 from voice_keyboard.flow.engine import FinalResult, NavAction, risky_backspace
 from voice_keyboard.flow import corrections
-from voice_keyboard.flow.grammar import grammar_from_config
 from voice_keyboard.focusprobe import MAX_SELECTION_CHARS
 from voice_keyboard.flow.registers import (
     RenderState,
@@ -47,6 +44,15 @@ from voice_keyboard.newline import (
 from voice_keyboard.prefetch import SelectionWatcher, prefetch_enabled
 from voice_keyboard.remotemic import RemoteAudioSource, RemoteMicServer
 from voice_keyboard.stt import create_stt_client
+
+# Shared with `voice-keyboard try`, so what it shows is what dictation
+# types (expand_placeholders is re-exported: it lived here before).
+from voice_keyboard.trial import (  # noqa: F401
+    dictation_grammar,
+    expand_placeholders,
+    snippet_gap,
+    snippet_text,
+)
 
 # Re-exported for backwards compatibility: these lived here before they
 # moved to voice_keyboard.transcript.
@@ -105,22 +111,6 @@ def polish_plausible(original: str, polished: str) -> bool:
         return False  # a polish adds no line breaks (in a chat, one sends)
     lowered = polished.lower()
     return not (polished.startswith("```") or lowered.startswith(("sure", "here is", "here's")))
-
-_PLACEHOLDER = re.compile(r"\{(date|isodate|time|weekday)\}")
-
-
-def expand_placeholders(text: str, now: Optional[datetime.datetime] = None) -> str:
-    """A [snippets] entry's {date} (October 6, 2026), {isodate}
-    (2026-10-06), {time} (14:05) and {weekday} (Tuesday), filled in when
-    it is typed. Any other braces are typed as written."""
-    now = now or datetime.datetime.now()
-    values = {
-        "date": f"{now:%B} {now.day}, {now.year}",
-        "isodate": f"{now:%Y-%m-%d}",
-        "time": f"{now:%H:%M}",
-        "weekday": f"{now:%A}",
-    }
-    return _PLACEHOLDER.sub(lambda m: values[m.group(1)], text)
 
 def _surely_not_a_terminal(focus) -> bool:
     """Focus was identified, and it is neither a known terminal app nor a
@@ -210,6 +200,9 @@ class Daemon:
             self._config.get("registers", {}).get("default", "prose")
         )
         self._focus_lost = False
+        # When a type-at-stop session last looked at focus before its keys
+        # (monotonic; 0 = not yet this session).
+        self._focus_checked_at = 0.0
         self._session_secret = False
         self._ambient_gate: Optional[AmbientGate] = None
         self._silence_gate: Optional[SilenceGate] = None
@@ -225,6 +218,9 @@ class Daemon:
         self._last_caption = ""
         self._last_typed = ""
         self._overlay_said = False  # the stop path already showed its outcome
+        # What the last stop said instead of typing (focus moved: the
+        # transcript is on the clipboard), for `voice-keyboard stop`.
+        self._stop_note = ""
         # Where the last dictation left the caret: the app, the register,
         # and the last character typed — so the next recording can continue
         # the sentence instead of gluing itself to it ([flow] rejoin).
@@ -725,6 +721,10 @@ class Daemon:
                             "message": "recording stopped",
                             "text": result,
                         }
+                        if not result and self._stop_note:
+                            # Not "no speech": it was heard, and kept
+                            # out of an app it wasn't dictated into.
+                            response["note"] = self._stop_note
 
                 elif command == "tts":
                     text = payload.get("text", "")
@@ -924,7 +924,7 @@ class Daemon:
 
     def _status_response(self) -> dict:
         flow_cfg = self._config.get("flow", {})
-        return {
+        response = {
             "status": "ok",
             "recording": self._recording,
             "stt_provider": str(self._config.get("stt", {}).get("provider", "")),
@@ -942,6 +942,18 @@ class Daemon:
             "last_error": self._last_error,
             "uptime_s": int(time.monotonic() - self._started_at),
         }
+        listener = self._hotkey_listener
+        if (
+            sys.platform == "linux"
+            and listener is not None
+            and getattr(listener, "_enabled", False)
+            and getattr(listener, "_mode", "") != "disabled"
+        ):
+            # How many keyboards the hotkey reads (/dev/input/event*): none
+            # means this process lacks the input group (`voice-keyboard
+            # doctor` says so, and why).
+            response["hotkey_keyboards"] = len(getattr(listener, "_devices", None) or [])
+        return response
 
     def _stt_completion_timeout(self) -> float:
         try:
@@ -993,18 +1005,9 @@ class Daemon:
     # ------------------------------------------------------- flow session
 
     def _build_grammar(self, register: Register) -> Grammar:
-        flow_cfg = self._config.get("flow", {})
-        vocabulary = dict(flow_cfg.get("vocabulary") or {})
-        if flow_cfg.get("personal_dictionary", True):
-            # Accepted `voice-keyboard learned` entries; explicit config wins.
-            try:
-                for spoken, replacement in dictionary.vocabulary_overrides().items():
-                    vocabulary.setdefault(spoken, replacement)
-            except Exception:
-                logger.exception("Could not load the personal dictionary")
-        return grammar_from_config(
-            self._config, register, vocabulary=vocabulary, nav=self._nav_enabled()
-        )
+        # [flow] plus the accepted `voice-keyboard learned` entries
+        # (explicit config wins): the same builder `voice-keyboard try` uses.
+        return dictation_grammar(self._config, register, nav=self._nav_enabled())
 
     def _nav_enabled(self) -> bool:
         """[nav] is on and this platform's injector can press chords (all
@@ -1048,6 +1051,7 @@ class Daemon:
 
     async def _setup_flow_session(self, probe_task: Optional[asyncio.Task]) -> None:
         self._focus_lost = False
+        self._focus_checked_at = 0.0
         self._session_secret = False
         self._auto_stop_started = False
         self._levels = []
@@ -1332,6 +1336,7 @@ class Daemon:
                 # Keys pressed before the text lands would act mid-word.
                 abandoned = worker.abandoned or typed != result.text
             else:
+                await self._check_focus_before_typing()
                 abandoned = self._focus_lost
                 if result.text and not abandoned:
                     await asyncio.to_thread(self._injector.type_text, result.text)
@@ -1540,6 +1545,7 @@ class Daemon:
             return ""
 
         self._recording = False
+        self._stop_note = ""
         self._mark_latency("stop")
 
         # Let any in-flight PyAudio read complete before closing the stream.
@@ -1642,6 +1648,10 @@ class Daemon:
         result = engine.finalize(merged, now=time.monotonic())
         worker = self._flow_worker
         try:
+            if worker is None:
+                # Type-at-stop: nothing has gone out yet, and no watchdog
+                # watched focus while you spoke. Look before any key does.
+                await self._check_focus_before_typing()
             if result.action is not None:
                 result = await self._finish_nav_at_stop(engine, result, worker)
             final = result.text
@@ -1786,10 +1796,22 @@ class Daemon:
             return await self._transform_previous_or_report(instruction)
 
         if final:
+            # A model rewrite above may have taken seconds: look again.
+            await self._check_focus_before_typing()
             if self._focus_lost:
+                # Like a live session that lost focus: the other app gets
+                # nothing, never even a line break — the transcript goes
+                # to the clipboard, or nowhere if there is no clipboard.
                 if clipboard.set_text(final):
                     logger.info("Focus changed; transcript is on the clipboard")
-                    return ""
+                    detail = "Focus changed — nothing typed; the transcript is on the clipboard"
+                else:
+                    logger.warning("Focus changed and the clipboard is unavailable; nothing typed")
+                    detail = "Focus changed — nothing typed (no clipboard tool to hold the transcript)"
+                await self._show_hotkey_overlay("error", detail=detail, timeout_ms=3200)
+                self._overlay_said = True
+                self._stop_note = detail
+                return ""
             await asyncio.to_thread(self._injector.type_text, final)
             self._mark_latency("first_key")
             self._mark_latency("settled")
@@ -1994,15 +2016,56 @@ class Daemon:
         stricter than the session's (Enter, then Shift+Enter, then
         nothing), switch to it. Never back: a re-probe that misses the
         field must not bring Enter back."""
-        current = self._session_newline
-        if current is None or focus is None or self._flow_engine is None:
+        if focus is None:
             return
-        choice = self._newline_choice(focus, self._session_register)
+        self._stricter_newline(self._newline_choice(focus, self._session_register), "focus moved within the app")
+
+    def _stricter_newline(self, choice: NewlineChoice, why: str) -> None:
+        """Switch this session's line breaks to `choice` if it is
+        stricter than the current one; never to a looser one."""
+        current = self._session_newline
+        if current is None or self._flow_engine is None:
+            return
         if STRICTNESS[choice.key] <= STRICTNESS[current.key]:
             return
         self._session_newline = choice
         self._arm_newline(choice)
-        logger.info("Line breaks now %s (%s): focus moved within the app", choice.key, choice.reason)
+        logger.info("Line breaks now %s (%s): %s", choice.key, choice.reason, why)
+
+    async def _check_focus_before_typing(self) -> None:
+        """A type-at-stop session (a provider that doesn't stream, or
+        [flow] live = false) has no focus watchdog: nothing types while
+        you speak. Its keys all go out at stop, so look at focus right
+        before they do, and follow the live path's rules. Another app:
+        nothing is typed and the transcript goes to the clipboard
+        (_focus_lost). Another tab or field of the same app: line breaks
+        only ever get stricter. Focus it can't identify (a terminal
+        without accessibility, say): a line break is a space, as it is
+        anywhere focus can't be identified. So a line break never
+        presses Enter, or Shift+Enter, where the choice made at the
+        start of the recording didn't. A look is good for as long as
+        the live watchdog's interval; after a slow model rewrite, look
+        again."""
+        focus = self._session_focus
+        if self._focus_lost or focus is None or not focus.identity:
+            return  # focus unknown from the start: line breaks are spaces already
+        if self._focus_checked_at and time.monotonic() - self._focus_checked_at < FOCUS_WATCHDOG_S:
+            return
+        current = await asyncio.to_thread(probe_focus)
+        self._focus_checked_at = time.monotonic()
+        if current is None or not current.identity:
+            self._stricter_newline(
+                self._newline_choice(None, self._session_register), "focus can't be identified before typing"
+            )
+        elif current.identity == focus.identity:
+            self._tighten_newline(current)
+        else:
+            self._focus_lost = True
+            logger.warning(
+                "Focus moved from %r to %r before typing at stop; nothing typed",
+                focus.identity,
+                current.identity,
+            )
 
     @contextlib.asynccontextmanager
     async def _line_breaks_for_focused_app(self):
@@ -2603,21 +2666,12 @@ class Daemon:
 
     def _snippet(self, name: str) -> Optional[str]:
         """The text saved under a spoken name: a [snippets] entry, else a
-        macro you named via `voice-keyboard learned`. None when unknown.
-        Names match without case or trailing punctuation ("My email.")."""
-        key = name.strip().strip(".,!?;:").casefold()
-        if not key:
-            return None
-        for spoken, text in (self._config.get("snippets") or {}).items():
-            if str(spoken).strip().strip(".,!?;:").casefold() == key:
-                return expand_placeholders(str(text))
-        return dictionary.macro_text(name)
+        macro you named via `voice-keyboard learned`. None when unknown."""
+        return snippet_text(self._config, name)
 
     @staticmethod
     def _snippet_gap(before: str, snippet: str) -> str:
-        if not before or before[-1:].isspace() or snippet[:1] in ".,;:!?)":
-            return ""
-        return " "
+        return snippet_gap(before, snippet)
 
     async def _run_macro(self, text: str) -> str:
         """Procedural memory: type a user-named macro verbatim. The body

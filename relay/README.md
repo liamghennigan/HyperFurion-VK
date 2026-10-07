@@ -1,5 +1,10 @@
 # HyperFurion relay
 
+> **The hosted subscription is not on sale right now.** The hosted relay
+> serves existing subscribers only, and nothing in this README is an offer.
+> It is operator documentation: how the relay meters and authenticates, how
+> to run your own, and how billing is wired up should sales reopen.
+
 A metered subscription relay in front of xAI STT/TTS. Subscribers get one
 `hfk_` key instead of a provider account; the relay authenticates it,
 enforces per-tier monthly quotas, and forwards traffic to xAI on the
@@ -20,10 +25,15 @@ Stripe webhooks (checkout → key issued, invoice → usage reset,
 
 ## Tiers
 
-| Tier  | Price | Streaming STT | TTS characters | Worst-case upstream cost |
-|-------|-------|---------------|----------------|--------------------------|
-| basic | $5/mo | 20 h/month    | 10,000/month   | ~$4.15 (median user ~$1) |
-| pro   | $10/mo| 40 h/month    | 50,000/month   | ~$8.75 (median ~$2)      |
+These are the tiers the relay meters, as defined in
+`hyperfurion_relay/tiers.py`. They are not on sale right now: the prices are
+what the caps were derived from, and what Stripe checkout amounts map to on
+a relay that sells them, not a current offer.
+
+| Tier  | Price the caps assume | Streaming STT | TTS characters | Worst-case upstream cost |
+|-------|-----------------------|---------------|----------------|--------------------------|
+| basic | $5/month              | 20 h/month    | 10,000/month   | ~$4.15 (median user ~$1) |
+| pro   | $10/month             | 40 h/month    | 50,000/month   | ~$8.75 (median ~$2)      |
 
 Caps are hard: STT refuses (and cuts off mid-session) past the limit, TTS
 returns 429, both with a message naming the reset date. A subscriber cannot
@@ -47,14 +57,14 @@ exceeds what the subscription nets after Stripe fees. Re-derive in
 Auth everywhere: `Authorization: Bearer hfk_…`. Keys are stored as SHA-256
 hashes; the plaintext exists only in the moment it is issued.
 
-**Seamless login (no key to lose).** The hosted tier is the "no setup"
-option, so the key is never a secret the user must save. Identity is the
-Stripe email; `voice-keyboard login <email>` proves it with a one-time code
-and writes the (re)issued key into `config.toml`. Lose a key or move
-machines → just log in again. Sending the code needs an email transport,
-pluggable and env-driven (see the config table): set `RESEND_API_KEY`
-(recommended) or `SMTP_HOST`+creds. With neither set, the code is logged at
-WARNING so the flow still works in dev.
+**Seamless login (no key to lose).** The hosted service is meant to need
+no setup, so the key is never a secret the subscriber must save. Identity
+is the Stripe email; `voice-keyboard login <email>` proves it with a
+one-time code and writes the (re)issued key into `config.toml`. Lose a key
+or move machines → just log in again. Sending the code needs an email
+transport, pluggable and env-driven (see the config table): set
+`RESEND_API_KEY` (recommended) or `SMTP_HOST`+creds. With neither set, the
+code is logged at WARNING so the flow still works in dev.
 
 ## Landing-page demo endpoints
 
@@ -114,8 +124,8 @@ api.hyperfurion.com {
 }
 ```
 
-Any $5 VPS or a Fly.io free-tier machine is plenty — a few hundred
-subscribers is a few requests per second at peak.
+A small VPS is plenty — a few hundred subscribers is a few requests per
+second at peak.
 
 ## Environment
 
@@ -136,26 +146,29 @@ subscribers is a few requests per second at peak.
 | `DEMO_TRUST_FORWARDED` | `` (off) | set to `1` only behind a trusted reverse proxy — then per-IP demo caps read `X-Forwarded-For`; otherwise the peer address is used so the header can't be spoofed to evade caps |
 | `RELAY_HOST` / `RELAY_PORT` | `0.0.0.0` / `8787` | bind address |
 
-## Selling subscriptions
+## Issuing keys and billing (operators)
 
-### Phase 0 — validate first (no Stripe, no code)
+The hosted subscription is not on sale right now, and there is no public
+checkout. This section is for operators: whoever runs a relay (the project
+for its existing subscribers, or you on your own server) issues keys by
+hand, and the Stripe wiring below is what the relay supports if a relay
+ever sells subscriptions.
 
-Hand-issue keys to early sponsors:
+### Issuing keys by hand (no Stripe)
 
 ```bash
-hyperfurion-relay-admin issue --tier basic --email fan@example.com
+hyperfurion-relay-admin issue --tier basic --email someone@example.com
 hyperfurion-relay-admin list
 hyperfurion-relay-admin revoke --id 3
 ```
 
-Add a $5 GitHub Sponsors tier that says "hosted voice tier — I'll email
-your key", and issue keys as sponsorships arrive. If people bite, wire up
-Stripe.
+This is all a self-hosted relay for yourself or a small group needs.
 
-### Phase 1 — Stripe automation
+### Stripe automation (if you sell subscriptions on your own relay)
 
-1. In Stripe, create a **subscription product** per tier ($5 basic,
-   $10 pro), then a **Payment Link** for each with:
+1. In Stripe, create a **subscription product** per tier (the prices in
+   [Tiers](#tiers)), then a **Payment Link** for each with (on your own
+   relay, your domain in place of `api.hyperfurion.com`):
    - metadata: `tier = basic` (or `pro`)
    - confirmation redirect:
      `https://api.hyperfurion.com/welcome?session_id={CHECKOUT_SESSION_ID}`
@@ -194,14 +207,15 @@ checkout→welcome→working-key flow, and 30-day quota rollover.
 
 ## Operator's honesty notes
 
-- The subscription sells convenience and funds the project — nothing
+- A subscription sells convenience and funds the project — nothing
   else. Subscribers gain no abilities over bring-your-own-key users;
   every capability is open source and free forever. Say this plainly
-  wherever the tier is sold (the landing page and README already do).
+  wherever a tier is sold. (The project's landing page and README say the
+  hosted subscription isn't on sale right now.)
 
 - Subscriber audio transits this relay to xAI. It is never written to
-  disk, but you become a data processor — say so wherever you sell this,
-  and publish a privacy statement before charging strangers.
+  disk, but you become a data processor — say so wherever you sell a
+  subscription, and publish a privacy statement before charging strangers.
 - If the relay is down, subscribers' dictation is down. Keep the
   bring-your-own-key providers first-class; this is a convenience tier,
   not a lock-in.
