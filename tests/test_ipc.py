@@ -34,8 +34,15 @@ pytestmark = pytest.mark.skipif(
 
 class TestIPC:
     @pytest.fixture
-    def socket_path(self, tmp_path: Path) -> str:
-        return str(tmp_path / "voice-keyboard.sock")
+    def socket_path(self, tmp_path: Path):
+        path = str(tmp_path / "voice-keyboard.sock")
+        if len(path.encode()) < 100:
+            yield path
+            return
+        # macOS caps a Unix socket path at 104 bytes, and pytest's tmp_path
+        # under /var/folders/... on a Mac runner is longer than that.
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="vk") as short:
+            yield str(Path(short) / "vk.sock")
 
     def test_server_client_round_trip(self, socket_path: str) -> None:
         server = IPCServer(socket_path)
