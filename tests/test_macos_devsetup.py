@@ -38,6 +38,17 @@ def test_the_scripts_launchd_plists_are_valid() -> None:
     assert daemon["LimitLoadToSessionType"] == "Aqua"
 
 
+def test_the_installers_plist_template_is_valid() -> None:
+    template = SCRIPT.parent.parent / "packaging" / "macos" / "com.hyperfurion.voice-keyboard.plist"
+    filled = (template.read_text().replace("__BIN__", "/Users/me/venv/bin")
+              .replace("__HOME__", "/Users/me").replace("__BREW__", "/opt/homebrew"))
+    plist = plistlib.loads(filled.encode())
+    assert plist["Label"] == "com.hyperfurion.voice-keyboard"
+    assert plist["ProgramArguments"] == ["/Users/me/venv/bin/voice-keyboard-daemon"]
+    assert plist["KeepAlive"] == {"SuccessfulExit": False}
+    assert "__" not in filled
+
+
 @pytest.mark.skipif(shutil.which("sed") is None, reason="needs sed")
 def test_bug_reports_mask_api_keys() -> None:
     expression = re.search(r"sed -E '([^']+)'", SCRIPT.read_text()).group(1)
