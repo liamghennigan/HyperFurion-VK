@@ -5,7 +5,7 @@ All notable changes to HyperFurion VK. The format follows
 [semantic versioning](https://semver.org/). A version bump in `pyproject.toml`
 on `main` cuts the GitHub release automatically.
 
-## [Unreleased]
+## [2.4.0] — 2026-10-06
 
 The landing page becomes a real text field, and the engine it runs is
 proven to be the daemon's.
