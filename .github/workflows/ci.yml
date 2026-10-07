@@ -1,9 +1,9 @@
 name: CI
 
 # Tests on every push and pull request: the daemon on Linux (every
-# supported Python) and on real Windows (where the live Win32 tests type
-# into a real edit box), the landing page's engine port against the
-# daemon's, the hosted relay, and a lint pass.
+# supported Python), on real Windows (where the live Win32 tests type
+# into a real edit box) and on Apple Silicon macOS, the landing page's
+# engine port against the daemon's, the hosted relay, and a lint pass.
 
 on:
   push:
@@ -60,6 +60,34 @@ jobs:
         env:
           HFVK_REQUIRE_DESKTOP: "1"  # the runner has a desktop: never skip the live tests
         run: python -m pytest -q -rs
+
+  macos:
+    # Apple Silicon. The whole suite (platform guards, imports, the macOS
+    # backends' logic through fakes) plus tests/test_macos_live.py, which
+    # drives the real Quartz, Accessibility, Carbon and AVFoundation calls
+    # without posting a key or showing a prompt. Lint runs here too, so a
+    # macOS-only name error can't hide behind a Linux-only branch.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: System libraries (PortAudio for PyAudio)
+        run: brew install portaudio
+      - name: Install
+        run: |
+          # PyAudio builds from source on macOS; point it at Homebrew's PortAudio.
+          export CFLAGS="-I$(brew --prefix portaudio)/include"
+          export LDFLAGS="-L$(brew --prefix portaudio)/lib"
+          pip install -e ".[dev]" ruff
+      - run: ruff check .
+      - name: Tests (including the live macOS API checks)
+        run: python -m pytest -q -rs
+      - name: The dev setup script parses
+        run: bash -n scripts/macos-dev-setup.sh
 
   downloads:
     # The download-and-run setup files build, and the Linux one unpacks

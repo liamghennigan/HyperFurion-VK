@@ -84,8 +84,16 @@ def check_typing() -> Finding:
     if sys.platform == "win32":
         return Finding(OK, "typing", "SendInput (no setup needed)")
     if sys.platform == "darwin":
-        return Finding(WARN, "typing", "needs Accessibility permission",
-                       "System Settings → Privacy & Security → Accessibility: allow your terminal or the app")
+        from voice_keyboard.macos.permissions import accessibility_granted, responsible_app
+
+        fix = (f"System Settings → Privacy & Security → Accessibility → turn on {responsible_app()},"
+               " then restart HyperFurion VK")
+        granted = accessibility_granted()
+        if granted:
+            return Finding(OK, "typing", "Accessibility granted")
+        if granted is None:
+            return Finding(WARN, "typing", "needs Accessibility permission (can't check)", fix)
+        return Finding(FAIL, "typing", "no Accessibility permission: macOS drops every keystroke", fix)
     if not os.path.exists("/dev/uinput"):
         return Finding(FAIL, "typing", "/dev/uinput is missing", "sudo modprobe uinput")
     if not os.access("/dev/uinput", os.W_OK):
@@ -119,6 +127,59 @@ def _uinput_fix() -> str:
     )
 
 
+# What each macOS permission check is called in the doctor's list.
+_MAC_LABELS = {
+    "accessibility": "typing",
+    "input monitoring": "hotkey",
+    "microphone": "mic access",
+    "secure input": "secure input",
+}
+LAUNCH_AGENT = Path.home() / "Library" / "LaunchAgents" / "com.hyperfurion.voice-keyboard.plist"
+
+
+def check_macos_permissions(checks=None, agent: Optional[Path] = None) -> list[Finding]:
+    """macOS, besides Accessibility (check_typing): Input Monitoring (the
+    hotkey), Microphone, and Secure Keyboard Entry — for the app this
+    doctor runs in, which is the app a daemon started from it inherits.
+    A login agent runs as Python and needs its own switches."""
+    if checks is None:
+        from voice_keyboard.macos.permissions import checks as permission_checks
+
+        checks = permission_checks()
+    findings = []
+    for check in checks:
+        if check.name == "accessibility":
+            continue  # check_typing reports it
+        status = OK if check.ok else (FAIL if check.ok is False else WARN)
+        if check.name == "secure input":
+            status = WARN  # it comes and goes with password fields
+        findings.append(Finding(status, _MAC_LABELS.get(check.name, check.name), check.detail, check.fix))
+    agent = LAUNCH_AGENT if agent is None else agent
+    if agent.exists():
+        python = _launch_agent_python(agent)
+        findings.append(Finding(
+            WARN, "login agent",
+            "installed: it runs as Python, not as your terminal, so it needs its own switches",
+            f"turn on {python or 'Python'} under Accessibility, Input Monitoring and Microphone too"
+            " (or remove the agent while you run the daemon from a terminal)",
+        ))
+    return findings
+
+
+def _launch_agent_python(agent: Path) -> str:
+    """The interpreter the login agent runs (the switch to turn on)."""
+    import plistlib
+
+    try:
+        program = plistlib.loads(agent.read_bytes()).get("ProgramArguments", [""])[0]
+        first = Path(program).read_text(encoding="utf-8", errors="replace").splitlines()[0]
+    except Exception:
+        return ""
+    if not first.startswith("#!"):
+        return ""
+    return os.path.realpath(first[2:].strip().split()[0])
+
+
 def check_clipboard() -> Finding:
     """Non-ASCII text (é, emoji) is pasted, so a clipboard tool matters."""
     if sys.platform in ("win32", "darwin"):
@@ -134,6 +195,13 @@ def check_clipboard() -> Finding:
 
 def check_focus_probe() -> Finding:
     """AT-SPI lets the keyboard see which app has focus (registers, safety)."""
+    if sys.platform == "darwin":
+        from voice_keyboard.macos.permissions import accessibility_granted
+
+        if accessibility_granted():
+            return Finding(OK, "focus", "Accessibility API (app, field, password fields, caret)")
+        return Finding(WARN, "focus", "app names only until Accessibility is on: password fields"
+                       " aren't recognized", "turn on Accessibility (see typing)")
     if sys.platform != "linux":
         return Finding(OK, "focus", "built in")
     python = "/usr/bin/python3"
@@ -193,13 +261,16 @@ def check_llm(config: dict) -> Finding:
 
 def run(config_path: Path, config: Optional[dict]) -> list[Finding]:
     findings = [check_config(config_path)]
-    checks: list[Callable[[], Finding]] = [check_typing, check_clipboard, check_focus_probe]
+    checks: list[Callable] = [check_typing, check_clipboard, check_focus_probe]
+    if sys.platform == "darwin":
+        checks = [check_typing, check_macos_permissions, check_clipboard, check_focus_probe]
     if config is not None:
         checks = [lambda: check_speech(config), lambda: check_audio(config),
                   lambda: check_daemon(config), lambda: check_llm(config)] + checks
     for check in checks:
         try:
-            findings.append(check())
+            result = check()
+            findings.extend(result if isinstance(result, list) else [result])
         except Exception as exc:  # a broken check never hides the others
             findings.append(Finding(WARN, getattr(check, "__name__", "check"), f"could not run ({exc})"))
     return findings

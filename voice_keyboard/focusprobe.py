@@ -245,6 +245,14 @@ def _probe_linux(timeout: float) -> Optional[FocusInfo]:
 
 
 def _probe_macos() -> Optional[FocusInfo]:
+    # The Accessibility API first (app, role, secure field, caret, window
+    # title: voice_keyboard/macos/focus.py); the app name from the window
+    # list when it can't answer (no Accessibility permission yet).
+    from voice_keyboard.macos.focus import probe_focus_info
+
+    found = probe_focus_info(FocusInfo)
+    if found is not None:
+        return found
     try:
         import Quartz  # pyobjc-framework-Quartz; darwin only
 
@@ -420,6 +428,10 @@ def probe_selection(timeout: float = PROBE_TIMEOUT_S) -> Optional[tuple[str, int
     length in characters — ("", n) when it is longer than
     MAX_SELECTION_CHARS, ("", 0) when there is none; None when the
     accessibility tree can't be asked."""
+    if sys.platform == "darwin":
+        from voice_keyboard.macos.focus import probe_selection as probe_macos_selection
+
+        return probe_macos_selection(MAX_SELECTION_CHARS)
     try:
         result = subprocess.run(
             ["/usr/bin/python3", "-c", f"LIMIT = {MAX_SELECTION_CHARS}\n" + SELECTION_PROBE_SCRIPT],
