@@ -29,7 +29,7 @@ VOCAB = (
     "literal snake case user id dot com at example slash million dollars people double equals not less than value error type and greater than triple or um "
     # as a recognizer writes: capitals, its own stops, hyphens, quotes, the wake word
     "Twenty-five three-thirty four-oh-two Monday. Friday. Correct Select \"previous word\". Emoji rocket. "
-    "Vk V K, run to do. List files. For I GitHub TODO six. four, Shivon. S I"
+    "Vk V K, run to do. List files. For I GitHub TODO six. four, Shivon. S I o O Cratch per cent"
 ).split()
 
 

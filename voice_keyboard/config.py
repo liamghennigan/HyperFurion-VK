@@ -174,6 +174,9 @@ DEFAULT_CONFIG: dict = {
         "probe": True,
         # App -> register overrides, merged over the built-in terminal list.
         "map": {},
+        # What a dictated line break presses, per app, site or page title:
+        # "enter", "shift+enter" or "none" (see voice_keyboard/newline.py).
+        "newline": {},
     },
     "llm": {
         # Voice-transform channel; any OpenAI-compatible chat endpoint.
@@ -637,6 +640,7 @@ def validate_config(config: dict) -> None:
     chat_apps = (config.get("registers", {}) or {}).get("chat_apps", [])
     if not isinstance(chat_apps, list) or not all(isinstance(a, str) and a.strip() for a in chat_apps):
         raise RuntimeError('registers.chat_apps must be a list of app names, e.g. ["mychat"]')
+    _validate_newline_config(config)
     polish_map = (config.get("polish", {}) or {}).get("map", {})
     if not isinstance(polish_map, dict) or not all(
         isinstance(v, str) and v.strip() for v in polish_map.values()
@@ -648,6 +652,25 @@ def validate_config(config: dict) -> None:
     _validate_remote_mic_config(config)
     _validate_assistant_config(config)
     _validate_wake_config(config)
+
+
+def _validate_newline_config(config: dict) -> None:
+    from voice_keyboard.newline import newline_table, normalize_key
+
+    table = (config.get("registers", {}) or {}).get("newline", {})
+    if not isinstance(table, dict):
+        raise RuntimeError(
+            'registers.newline must be a table of app, site or title = "enter" | "shift+enter" | "none",'
+            ' e.g. "web.whatsapp.com" = "shift+enter"'
+        )
+    # A site written without quotes is a dotted key: nested tables in TOML.
+    for name, value in newline_table(table):
+        if not str(name).strip():
+            raise RuntimeError("registers.newline: an empty app, site or title name")
+        if normalize_key(value) is None:
+            raise RuntimeError(
+                f'registers.newline.{name!r} must be "enter", "shift+enter" or "none"'
+            )
 
 
 def _validate_wake_config(config: dict) -> None:

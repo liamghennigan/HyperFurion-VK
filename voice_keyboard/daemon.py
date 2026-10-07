@@ -25,7 +25,6 @@ from voice_keyboard.flow.registers import (
     RenderState,
     continuation_state,
     Register,
-    is_chat_app,
     register_for_app,
     resolve_register,
     TERMINAL,
@@ -37,6 +36,14 @@ from voice_keyboard.hotkey import HotkeyListener, create_hotkey_listener, pretty
 from voice_keyboard.injector import TextInjector, create_injector
 from voice_keyboard.ipc import IPCServer, recv_all
 from voice_keyboard.llm import create_llm_client, llm_ready
+from voice_keyboard.newline import (
+    NONE,
+    SHIFT_ENTER,
+    STRICTNESS,
+    NewlineChoice,
+    choose_newline,
+    newline_overrides,
+)
 from voice_keyboard.prefetch import SelectionWatcher, prefetch_enabled
 from voice_keyboard.remotemic import RemoteAudioSource, RemoteMicServer
 from voice_keyboard.stt import create_stt_client
@@ -197,6 +204,8 @@ class Daemon:
         self._pause_reviewer = None
         self._pause_tasks: set = set()
         self._session_focus: Optional[FocusInfo] = None
+        # What a dictated line break presses this session (newline.py).
+        self._session_newline: Optional[NewlineChoice] = None
         self._session_register: Register = resolve_register(
             self._config.get("registers", {}).get("default", "prose")
         )
@@ -924,6 +933,7 @@ class Daemon:
             "flow_enabled": bool(flow_cfg.get("enabled", True)),
             "flow_live": bool(flow_cfg.get("live", True)),
             "focused_app": self._session_focus.app if self._session_focus else "",
+            "newline": self._session_newline.key if self._session_newline else "",
             "pending_rewrite": self._pending_rewrite is not None,
             "ambient": self._ambient_gate is not None,
             "assistant": self._brain is not None,
@@ -1058,6 +1068,7 @@ class Daemon:
                     focus = None
             self._session_focus = focus
             self._session_register = self._register_for(focus)
+            self._session_newline = None
             self._flow_engine = None
             self._flow_worker = None
             # A hands-free question ends itself on silence; a hold ends on
@@ -1072,6 +1083,7 @@ class Daemon:
             self._flow_engine = None
             self._flow_worker = None
             self._session_focus = None
+            self._session_newline = None
             self._silence_gate = None
             if probe_task is not None:
                 probe_task.cancel()
@@ -1103,16 +1115,13 @@ class Daemon:
         # In a terminal a line break IS Enter, and Enter runs the line. The
         # grammar already drops a spoken "new line" there; the injector
         # refuses Enter for the whole session as well, on every path — and
-        # so it does wherever a terminal can't be ruled out: focus we could
-        # not identify, or a terminal app mapped to another register.
-        if hasattr(self._injector, "suppress_enter"):
-            self._injector.suppress_enter = bool(register.terminal) or not _surely_not_a_terminal(focus)
-        if hasattr(self._injector, "shift_newline"):
-            # Slack, Discord, Teams…: Enter sends, so a line break is Shift+Enter.
-            chat_extra = (self._config.get("registers", {}) or {}).get("chat_apps", []) or []
-            self._injector.shift_newline = bool(
-                focus is not None and _surely_not_a_terminal(focus) and is_chat_app(focus.app, chat_extra)
-            )
+        # so it does wherever a terminal can't be ruled out (focus we could
+        # not identify, a terminal app mapped to another register) and in a
+        # one-line field, where Enter submits. In a chat (a desktop chat
+        # app, a chat site) or any web page Enter may send, so a line break
+        # is Shift+Enter; in documents and other apps it is Enter.
+        self._session_newline = self._newline_choice(focus, register)
+        self._arm_newline(self._session_newline)
 
         # A secret widget gets maximum protection: verbatim register (set
         # above via the role), no ledger entry, no vocabulary bias.
@@ -1162,12 +1171,16 @@ class Daemon:
             else None
         )
         logger.info(
-            "Flow session: register=%s app=%r live=%s pause_review=%s",
+            "Flow session: register=%s app=%r newline=%s (%s) live=%s pause_review=%s",
             register.name,
             focus.app if focus else "",
+            self._session_newline.key,
+            self._session_newline.reason,
             bool(self._flow_worker),
             self._flow_engine._cfg.pause_review,
         )
+        # Which site matched says where you were browsing: debug only.
+        logger.debug("Line breaks this session: %s", self._session_newline.describe())
 
     async def _teardown_flow_session(self) -> None:
         if hasattr(self._injector, "suppress_enter"):
@@ -1403,22 +1416,26 @@ class Daemon:
                 current = await asyncio.to_thread(probe_focus)
                 if current is None or not current.identity:
                     continue
-                if current.identity != baseline:
-                    self._focus_lost = True
-                    worker = self._flow_worker
-                    if worker is not None:
-                        worker.abandon()
-                    logger.warning(
-                        "Focus moved from %r to %r during dictation; typing frozen",
-                        baseline,
-                        current.identity,
-                    )
-                    await self._show_hotkey_overlay(
-                        "error",
-                        detail="Focus changed — typing frozen; transcript goes to the clipboard",
-                        timeout_ms=2600,
-                    )
-                    break
+                if current.identity == baseline:
+                    # Another tab or field of the same app: never let a
+                    # line break chosen for a document send in a chat.
+                    self._tighten_newline(current)
+                    continue
+                self._focus_lost = True
+                worker = self._flow_worker
+                if worker is not None:
+                    worker.abandon()
+                logger.warning(
+                    "Focus moved from %r to %r during dictation; typing frozen",
+                    baseline,
+                    current.identity,
+                )
+                await self._show_hotkey_overlay(
+                    "error",
+                    detail="Focus changed — typing frozen; transcript goes to the clipboard",
+                    timeout_ms=2600,
+                )
+                break
         except asyncio.CancelledError:
             pass
 
@@ -1644,11 +1661,11 @@ class Daemon:
                 final = await self._finish_live(worker, final, result.instruction)
             else:
                 final = await self._finish_classic(final, result.instruction)
-            if "\n" in final and not self._session_register.terminal and not _surely_not_a_terminal(self._session_focus):
-                # Say why "new line" typed a space: unknown focus could be a terminal.
+            why = self._newline_space_reason() if "\n" in final else ""
+            if why:
+                # Say why "new line" typed a space.
                 await self._show_hotkey_overlay(
-                    "listening", detail="Line break typed as a space: this app couldn't be identified",
-                    timeout_ms=2500,
+                    "listening", detail=f"Line break typed as a space: {why}", timeout_ms=2500,
                 )
             segment = final
             if result.typed_before:
@@ -1937,25 +1954,83 @@ class Daemon:
             if before is not None:
                 injector.suppress_enter = before
 
-    @contextlib.asynccontextmanager
-    async def _enter_refused_in_a_terminal(self):
-        """Outside a recording session — typing for `voice-keyboard type`,
-        `recall` or `transform` — probe the focused app, and when it is a
-        terminal, refuse Enter on every injector path while typing: there
-        a newline would run the line. (A session arms this itself.)"""
+    def _newline_choice(self, focus, register: Register) -> NewlineChoice:
+        """What a line break presses in `focus` (see voice_keyboard/newline.py)."""
+        return choose_newline(
+            focus,
+            register_terminal=bool(register.terminal),
+            overrides=newline_overrides(self._config.get("registers", {})),
+        )
+
+    def _arm_newline(self, choice: NewlineChoice) -> None:
+        """Set the injector up to type line breaks as `choice` says: "none"
+        refuses Enter on every path (a newline types a space),
+        "shift+enter" presses Shift+Enter, "enter" a plain Enter."""
         injector = self._injector
-        before = getattr(injector, "suppress_enter", None)
-        terminal = False
-        if before is not None and self._config.get("registers", {}).get("probe", True):
-            focus = await asyncio.to_thread(probe_focus)
-            terminal = self._register_for(focus).terminal
-        if terminal:
-            injector.suppress_enter = True
+        if hasattr(injector, "suppress_enter"):
+            injector.suppress_enter = choice.key == NONE
+        if hasattr(injector, "shift_newline"):
+            injector.shift_newline = choice.key == SHIFT_ENTER
+
+    def _newline_space_reason(self) -> str:
+        """Why this session typed line breaks as spaces, for the overlay;
+        "" when it didn't (or a terminal register dropped them anyway)."""
+        choice = self._session_newline
+        if choice is None or choice.key != NONE or self._session_register.terminal:
+            return ""
+        if choice.reason == "single-line":
+            return "a one-line field, where Enter would submit it"
+        if choice.reason == "spreadsheet":
+            return "a spreadsheet, where Enter would commit the cell"
+        if choice.reason == "override":
+            return f'[registers.newline] says none for "{choice.detail}"'
+        if choice.reason == "terminal":
+            return "this app is a terminal"
+        return "this app couldn't be identified"
+
+    def _tighten_newline(self, focus: Optional[FocusInfo]) -> None:
+        """Mid-session, focus moved inside the same app (another browser
+        tab, a search box): when what a line break should press there is
+        stricter than the session's (Enter, then Shift+Enter, then
+        nothing), switch to it. Never back: a re-probe that misses the
+        field must not bring Enter back."""
+        current = self._session_newline
+        if current is None or focus is None or self._flow_engine is None:
+            return
+        choice = self._newline_choice(focus, self._session_register)
+        if STRICTNESS[choice.key] <= STRICTNESS[current.key]:
+            return
+        self._session_newline = choice
+        self._arm_newline(choice)
+        logger.info("Line breaks now %s (%s): focus moved within the app", choice.key, choice.reason)
+
+    @contextlib.asynccontextmanager
+    async def _line_breaks_for_focused_app(self):
+        """Outside a recording session — typing for the `type` IPC command
+        (`voice-keyboard recall`, integrators) or `transform` — probe the
+        focused app and type line breaks the way
+        a session would there: refused (a space) in a terminal, a one-line
+        field, a spreadsheet, or where focus can't be identified (it may be
+        a terminal: Enter would run the line); Shift+Enter in a chat or a
+        web page; Enter in a document or another app. Enter itself stays
+        the `key` command's. (A session arms this itself.)"""
+        injector = self._injector
+        before = (getattr(injector, "suppress_enter", None), getattr(injector, "shift_newline", None))
+        choice: Optional[NewlineChoice] = None
+        if before[0] is not None:
+            focus = None
+            if self._config.get("registers", {}).get("probe", True):
+                focus = await asyncio.to_thread(probe_focus)
+            choice = self._newline_choice(focus, self._register_for(focus))
+        if choice is not None:
+            self._arm_newline(choice)
         try:
-            yield terminal
+            yield choice
         finally:
-            if terminal and not self._recording:  # a session that began meanwhile keeps its guard
-                injector.suppress_enter = before
+            if choice is not None and not self._recording:  # a session that began meanwhile keeps its guard
+                injector.suppress_enter = before[0]
+                if before[1] is not None:
+                    injector.shift_newline = before[1]
 
     async def _transform_last(self, instruction: str) -> str:
         """IPC `transform`: rewrite the last dictation in place."""
@@ -1964,7 +2039,7 @@ class Daemon:
         async with self._hotkey_lock:
             if self._recording:
                 raise RuntimeError("stop recording before transforming")
-            async with self._enter_refused_in_a_terminal():
+            async with self._line_breaks_for_focused_app():
                 text = await self._run_transform(instruction, worker=None)
             self._remember_typed(text)
             return text
@@ -2081,7 +2156,7 @@ class Daemon:
             return ""
         else:
             # Read now, because the user asked: the always-on focus probe
-            # never reads what is on screen.
+            # never reads the text in a field.
             read = await asyncio.to_thread(probe_selection)
             if read is None:
                 return ""
@@ -2631,7 +2706,7 @@ class Daemon:
         a hand, or explicitly with the `key` command."""
         if self._recording:
             raise RuntimeError("cannot type while recording")
-        async with self._enter_refused_in_a_terminal():
+        async with self._line_breaks_for_focused_app():
             await asyncio.to_thread(self._injector.type_text, text)
 
     async def _press_keys(self, names: list) -> None:

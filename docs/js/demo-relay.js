@@ -1,7 +1,8 @@
 // ═══ AUDIO OUT — mobile-safe playback for fetched speech ══════════════════
 // Mobile browsers gate playback behind a user gesture. unlock() runs
-// synchronously inside one (the Enter keystroke); after that, WebAudio
-// can play fetched audio whenever it arrives. HTMLAudio is the fallback.
+// synchronously inside one (the click on "ask" or "hear it"); after that,
+// WebAudio can play fetched audio whenever it arrives. HTMLAudio is the
+// fallback.
 export const AudioOut = (() => {
   let actx = null, analyser = null, abuf = null;
   function unlock() {
@@ -14,8 +15,8 @@ export const AudioOut = (() => {
       const audio = await actx.decodeAudioData(await blob.arrayBuffer());
       const src = actx.createBufferSource();
       src.buffer = audio;
-      // tap the playback through an analyser so the field can react to the
-      // real eve voice the same way it reacts to the microphone
+      // tap the playback through an analyser: level() reports how loud
+      // the voice is at any moment
       if (!analyser) {
         analyser = actx.createAnalyser();
         analyser.fftSize = 512;
@@ -45,9 +46,11 @@ export const AudioOut = (() => {
 
 // ═══ DEMO — the hosted relay: real xAI engines, opt-in, always labeled ═════
 // The page never touches the network on its own. Every request here
-// happens because you ran a command (`real`, `ask`, `say`, `demo`) or
-// tapped the mic with `real` armed — and only ever to the relay host
-// below. `?relay=http://…` overrides the host (used by the test rig).
+// happens because you pressed a button in the hosted-engine sheet (check
+// the relay, ask, hear it) or tapped the mic after switching the relay on
+// there — and only ever to the relay host below. `?relay=http://…`
+// overrides the host (a test rig's; the page's CSP allows only
+// api.hyperfurion.com).
 export const Demo = (() => {
   const base = new URLSearchParams(location.search).get("relay") || "https://api.hyperfurion.com";
   const D = { want: false, status: null, base, wsBase: base.replace(/^http/, "ws") };

@@ -165,7 +165,8 @@ class WinTextInjector:
         # The intent channel types commands but must never run them: while
         # set, no newline in the text can become an Enter keystroke.
         self.suppress_enter = False
-        # A chat app: a line break is Shift+Enter (plain Enter sends).
+        # Enter may send here (a chat app or site, any web page): a line
+        # break is Shift+Enter. Set per session by voice_keyboard/newline.py.
         self.shift_newline = False
         self._warned_short_send = False
 

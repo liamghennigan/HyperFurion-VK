@@ -28,6 +28,7 @@ const COMMANDS = {
   // "undo that", "strike that" are everyday words ("I can't undo that
   // decision"); "scratched that" is how recognizers write the command
   "scratch that": "scratch", "scratched that": "scratch", "delete that": "scratch",
+  "cratch that": "scratch",  // how a small recognizer hears it ("crutch that" is English)
   "new line": "\n", "new paragraph": "\n\n", "new bullet": "bullet", "new number": "number",
   "new heading": "heading", "new subheading": "subheading", "new checkbox": "checkbox",
   // recase the last utterance, said on its own (grammar.py _RECASE)
@@ -602,8 +603,8 @@ const JS_KEYWORDS = new Set(("await break case catch class const continue debugg
   "finally for function if import in instanceof let new of return super switch this throw try " +
   "typeof var void while with yield async static get set").split(" "));
 const COMPILERS = {
-  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS, pairs: PY_PAIRS, prefixes: STRING_PREFIXES },
-  javascript: { glyphs: JS_GLYPHS, callables: new Set(), dashHold: false, glueCalls: true, pairs: JS_PAIRS, keywords: JS_KEYWORDS },
+  python: { glyphs: PY_GLYPHS, callables: PY_CALLABLES, dashHold: false, glueCalls: true, constants: PY_CONSTANTS, pairs: PY_PAIRS, prefixes: STRING_PREFIXES, variableI: true },
+  javascript: { glyphs: JS_GLYPHS, callables: new Set(), dashHold: false, glueCalls: true, pairs: JS_PAIRS, keywords: JS_KEYWORDS, variableI: true },
   shell:  { glyphs: SH_GLYPHS, callables: new Set(), dashHold: true, glued: SH_GLUED, pairs: SH_PAIRS, dotHold: true },
 };
 // a name an opening paren or bracket glues to ("get_user (" -> get_user();
@@ -611,7 +612,7 @@ const COMPILERS = {
 const PY_KEYWORDS = new Set(("False None True and as assert async await break class continue def del elif else except " +
   "finally for from global if import in is lambda nonlocal not or pass raise return try while with yield _ case match type").split(" "));
 const isName = (t, keywords = PY_KEYWORDS) => /^[A-Za-z_][\w.]*$/.test(t) && !keywords.has(t);
-function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, constants = null, glued = null, pairs = null, dotHold = false, keywords = PY_KEYWORDS, prefixes = new Set() }) {
+function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, constants = null, glued = null, pairs = null, dotHold = false, keywords = PY_KEYWORDS, prefixes = new Set(), variableI = false }) {
   const out = [];
   let atStart = state.atStart, glueNext = state.glueNext, pending = state.pending || "", afterName = !!state.afterName;
   let openCalls = state.openCalls || 0, innerParens = state.innerParens || 0, lastAtom = state.lastAtom || "";
@@ -628,6 +629,7 @@ function compileCode(items, state, { glyphs, callables, dashHold, glueCalls, con
     else emit(glyph, false);
   };
   const word = (text, plain = false) => {
+    if (variableI && text === "I") text = "i";  // "for I in range": a recognizer's pronoun is the loop variable
     const c = text.toLowerCase();
     if (pending === "call-open") pending = "call";
     const g = Object.hasOwn(glyphs, c) ? glyphs[c] : null;
@@ -1086,11 +1088,26 @@ export function splitCompound(text) {
   parts[parts.length - 1] += text.slice(body.length);
   return parts;
 }
+// a word the folds may read as other words ("three-thirty", "o"): once
+// committed as written, it stays so (parse's unsplit; grammar.py kept_as_written)
+export const keptAsWritten = (text) => !!splitCompound(text) || core(text) === "o";
+const numberBefore = (it) => it.kind === "word" && clean(it.text) && NUMBER_WORDS.has(core(it.text)) && core(it.text) !== "and" && core(it.text) !== "point";
+function digitAfter(it) {
+  if (it.kind !== "word" || PUNCT_HEAD.test(it.text)) return false;
+  const first = core((splitCompound(it.text) || [it.text])[0]);
+  return Object.hasOwn(DIGITS, first) || first === "oh" || first === "o";
+}
 function splitCompounds(items, chains, unsplit, oh) {
   const out = [];
-  for (const it of items) {
-    const words = it.kind === "word" && it.mode !== "verbatim" && it.e - it.s === 1 && !unsplit.has(it.s) ? splitCompound(it.text) : null;
-    if (!words || (!oh && words.some((w) => core(w) === "oh"))) { out.push(it); continue; }
+  for (let at = 0; at < items.length; at++) {
+    const it = items[at];
+    const plain = it.kind === "word" && it.mode !== "verbatim" && it.e - it.s === 1 && !unsplit.has(it.s);
+    let words = plain ? splitCompound(it.text) : null;
+    if (words && !oh && words.some((w) => core(w) === "oh")) words = null;
+    if (!words && plain && oh && core(it.text) === "o" && !PUNCT_HEAD.test(it.text) &&
+        out.length && numberBefore(out[out.length - 1]) && at + 1 < items.length && digitAfter(items[at + 1]))
+      words = ["oh" + it.text.slice(1)];  // a recognizer's letter for the digit "oh": "Room four o two"
+    if (!words) { out.push(it); continue; }
     const parts = words.map((w) => ({ ...it, text: w }));
     out.push(...parts);
     chains.set(parts[0], [parts, it]);
@@ -1547,7 +1564,7 @@ export function moltenLine({ register, cfg, state } = {}) {
                               bounds: [...segmentBounds].sort((a, b) => a - b),
                               commits: committed.map((it) => it.e),
                               // "three-thirty" typed as written stays so below the fence
-                              unsplit: committed.filter((it) => it.kind === "word" && it.e - it.s === 1 && splitCompound(it.text)).map((it) => it.s),
+                              unsplit: committed.filter((it) => it.kind === "word" && it.e - it.s === 1 && keptAsWritten(it.text)).map((it) => it.s),
                               register: reg, cfg });
     items = r.items; pendingFrom = r.pendingFrom;
     // a recognizer's period on a command ("Undo that.", "Correct Monday to

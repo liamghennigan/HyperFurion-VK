@@ -71,7 +71,12 @@ export const MODIFIER_NAMES = new Set(["ctrl", "control", "shift", "alt", "optio
 // ops: [{kind:"bs"} | {kind:"ch", ch}] -> presses the board can drain.
 // A press: { code, kind: ch|bs|hold|release|key, ch, heat, ghost }
 //   hold/release wrap a Shift chord (consecutive capitals share one hold);
-//   "\n" never presses Enter (ghost:"newline" — the window inserts the break);
+//   "\n" is a ghost (ghost:"newline"): the window inserts the break and the
+//   board only lights Enter, because this board never pushes Enter. The
+//   daemon does press a key for it — Enter in an editor or a document,
+//   Shift+Enter in a chat or a web page — and nothing in a terminal or a
+//   one-line field, where Enter would run or submit (the grammar drops it
+//   in a terminal register before it gets here);
 //   anything the board has no key for is what the daemon pastes on Linux
 //   (full Unicode via clipboard) — shown as a brief Ctrl+V chord.
 export function toPresses(ops, { heat = "molten" } = {}) {
@@ -102,8 +107,9 @@ export function toPresses(ops, { heat = "molten" } = {}) {
 }
 
 // a navigation chord -> presses: hold the modifiers, tap the key, let go.
-// Enter is refused here as well as on the board: a chord naming it taps
-// nothing (the board only rings the key).
+// No caret command presses Enter, here or in the daemon (nav.js refuses
+// any chord with it); should one name it anyway, it taps nothing and the
+// board only lights the key.
 export function chordToPresses(names, { heat = "nav", onDown = null } = {}) {
   const mods = names.filter((n) => MODIFIER_NAMES.has(String(n).toLowerCase()));
   const key = names.find((n) => !MODIFIER_NAMES.has(String(n).toLowerCase()));

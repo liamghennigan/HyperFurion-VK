@@ -62,9 +62,14 @@ test("the chips' examples as a recognizer writes them", () => {
   assert.equal(say("prose", ["I'll send it to Shivon.", "Spell that S I O B H A N."]), "I'll send it to Siobhan.");
   assert.equal(say("prose", ["i'll send it to Shivon", "spell that s i o b h a n"]), "I'll send it to Siobhan");
   assert.equal(say("prose", ["We launched today.", "Emoji rocket."]), "We launched today. 🚀");
+  assert.equal(say("prose", ["We launched today.", "Imoji rocket."]), "We launched today. 🚀");
+  assert.equal(say("prose", ["Room four o two.", "Call 555-1234.", "Call five five five one two three four."]), "Room 402. Call 555-1234. Call 555-1234.");
+  assert.equal(say("prose", ["Twenty five per cent."]), "25%.");
+  assert.equal(say("prose", ["The fix lands on Thursday.", "Cratch that,", "The fix lands on Friday period."]), "The fix lands on Friday.");
   assert.equal(say("prose", ["The fix lands on Thursday.", "Scratch that.", "The fix lands on Friday period."]), "The fix lands on Friday.");
   assert.equal(say("terminal", ["Twenty-three failed tests, rerun the flaky ones."]), "23 failed tests, rerun the flaky ones");
   assert.equal(say("python", ["For i in range ten colon."]), "for i in range(10):");
+  assert.equal(say("python", ["For I in range ten colon."]), "for i in range(10):");
   assert.equal(say("shell", ["List files pipe grep dash i error."]), "list files | grep -i error");
   assert.equal(say("javascript", ["Const total equals count plus one."]), "const total = count + 1");
 });

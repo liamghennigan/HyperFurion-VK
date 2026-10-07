@@ -214,15 +214,42 @@ default = "prose"
 # macOS, Win32 on Windows) to pick the register automatically.
 probe = true
 
-# Chat apps (Slack, Discord, Teams, Signal, Telegram, WhatsApp, Element,
-# Mattermost, …) type a spoken line break as Shift+Enter, because Enter
-# sends there. Add your own; a chat in a browser tab can't be told apart.
+# A spoken line break ("new line", "new paragraph", a new bullet, number,
+# checkbox or heading) is pressed the way the focused field needs:
+#   - nothing (a space is typed) in a terminal, where focus can't be
+#     identified, in a one-line field such as a search box or form
+#     input, and in a spreadsheet (Excel, LibreOffice Calc, Google
+#     Sheets, …), where Enter would run, send, submit or commit a cell;
+#   - Shift+Enter in chat apps (Slack, Discord, Teams, Signal, Telegram,
+#     WhatsApp, Element, Mattermost, the ChatGPT and Claude desktop apps,
+#     …) and in a browser: on chat sites
+#     (WhatsApp Web, Slack, Discord, ChatGPT, Claude, Gemini, …) and on any
+#     page it doesn't know, so a line break never sends;
+#   - Enter in document editors in a browser (Google Docs and Slides,
+#     Notion, Word, Confluence, Dropbox Paper, Coda, Quip) and in every
+#     other app, so paragraphs and lists keep working.
+# Shorthand for "shift+enter" in these apps (also matches a browser tab
+# whose title has this name between its separators):
 # chat_apps = ["mychat"]
 
 [registers.map]
 # App -> register overrides, merged over the built-in terminal list.
 # kitty = "terminal"
 # code = "verbatim"
+
+[registers.newline]
+# Your own rules: "enter", "shift+enter" or "none". A key is an app
+# ("obsidian", "notepad.exe"), a site in a browser ("notion.so" covers
+# www.notion.so; "docs.google.com/spreadsheets" is one part of a site),
+# or a name in a browser tab's title, between its separators ("Jira"
+# for "PROJ-1 Fix it - Jira"). A site beats a title, a title beats an
+# app, and a longer site beats a shorter one. Rules can't make a terminal
+# or a one-line field press Enter, and an "enter" title rule is skipped on
+# a chat page unless it names that chat. These win over chat_apps.
+# "notion.so" = "shift+enter"
+# "mail.google.com" = "none"
+# excel = "enter"            # "new line" moves down a row
+# firefox = "enter"          # every tab in Firefox, the old behaviour
 
 [llm]
 # The interactive brain: "vk, ..." rewrites, `voice-keyboard

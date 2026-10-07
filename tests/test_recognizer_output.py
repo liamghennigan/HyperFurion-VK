@@ -91,6 +91,22 @@ class TestHyphenatedNumbers:
         assert typed(["Call five five five one two three four."]) == "Call 555-1234."
         assert typed(["Call five five five one two three four, then hang up."]) == "Call 555-1234, then hang up."
 
+    def test_per_cent_is_percent(self) -> None:
+        assert typed(["Twenty five per cent by October sixth."]) == "25% by October 6."
+        assert typed(["Paid per cent."]) == "Paid per cent."
+
+    def test_a_letter_o_between_digits_is_oh(self) -> None:
+        assert typed(["Room four o two.", "Born in nineteen o five."]) == "Room 402. Born in 1905."
+        assert typed(["O Captain, my captain.", "Room four o two people."]) == "O Captain, my captain. Room four o two people."
+
+    def test_a_letter_o_committed_as_written_stays_so(self, caplog: pytest.LogCaptureFixture) -> None:
+        engine = FlowEngine(FlowConfig(), Grammar(), PROSE)
+        with caplog.at_level(logging.WARNING, logger="voice_keyboard.flow.engine"):
+            engine.on_transcript("room four o two people", is_final=True, now=1.0)
+            result = engine.finalize("room four o two people", now=2.0)
+        assert result.text == "Room four o two people"
+        assert not caplog.records
+
     def test_a_hyphenated_word_committed_as_written_stays_so(self, caplog: pytest.LogCaptureFixture) -> None:
         # "euros" kept "three-thirty" from becoming a time; at the stop the
         # word after it is past the fence, and it must not fold then
@@ -139,6 +155,14 @@ class TestCommandsAsARecognizerWritesThem:
     def test_quoted_words_inside_a_sentence_type_as_said(self) -> None:
         assert typed(['I said "select previous word" twice.'], nav=True) == 'I said "select previous word" twice.'
 
+    def test_cratch_that(self) -> None:
+        said = ["The fix lands on Thursday.", "Cratch that,", "The fix lands on Friday period."]
+        assert typed(said, pause_review="rules") == "The fix lands on Friday."
+        assert typed(["It is a crutch that works."]) == "It is a crutch that works."
+
+    def test_imoji(self) -> None:
+        assert typed(["We launched today.", "Imoji rocket."]) == "We launched today. 🚀"
+
     def test_an_emoji_said_alone_takes_no_stop(self) -> None:
         assert typed(["Emoji rocket."]) == "🚀"
         assert typed(["We launched today.", "Emoji rocket."], pause_review="rules") == "We launched today. 🚀"
@@ -184,6 +208,11 @@ class TestWakeWord:
 class TestCodeRegisters:
     def test_python(self) -> None:
         assert typed(["For i in range ten colon.", "Print i close paren."], PYTHON) == "for i in range(10): print(i)"
+
+    def test_a_recognizers_I_is_the_loop_variable(self) -> None:
+        assert typed(["For I in range ten colon."], PYTHON) == "for i in range(10):"
+        assert typed(["Let I equals zero."], JAVASCRIPT) == "let i = 0"
+        assert typed(["Echo I am here."], SHELL) == "echo I am here"
 
     def test_javascript(self) -> None:
         assert typed(["Const total equals count plus one."], JAVASCRIPT) == "const total = count + 1"

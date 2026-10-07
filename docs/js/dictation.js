@@ -63,17 +63,22 @@ export const Dictation = (() => {
   const log = (text, cls) => Window.log(text, cls);
 
   // ── whose speech service: named plainly, with where the audio goes ──────
-  // Chrome's SpeechRecognition streams audio to Google, Edge's to
-  // Microsoft; Safari's goes through Apple's speech recognition, which may
-  // run on Apple's servers. Anything else is named generically.
+  // Chrome's SpeechRecognition streams audio to Google (on Android it may
+  // stay on the device), desktop Edge's to Microsoft; Safari and every iOS
+  // browser go through Apple's, which may run on Apple's servers. Anything
+  // else is named generically.
   const vendor = (() => {
     const brands = ((navigator.userAgentData && navigator.userAgentData.brands) || []).map((b) => b.brand);
     const ua = navigator.userAgent || "";
-    if (brands.includes("Microsoft Edge") || /\bEdg(A|iOS)?\//.test(ua)) return { service: "Edge's speech service", goes: "sends your audio to Microsoft" };
-    if (brands.includes("Google Chrome")) return { service: "Chrome's speech service", goes: "sends your audio to Google" };
-    if (/AppleWebKit/.test(ua) && /Apple/.test(navigator.vendor || "") && !brands.length && !/Chrome\/|Chromium/.test(ua))
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const android = /Android/.test(ua);
+    const generic = "your browser's speech service";
+    if (ios) return { service: /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua) ? generic : "Safari's speech service", goes: "may send your audio to Apple" };
+    if (brands.includes("Microsoft Edge") && !android) return { service: "Edge's speech service", goes: "sends your audio to Microsoft" };
+    if (brands.includes("Google Chrome")) return { service: "Chrome's speech service", goes: (android ? "may send" : "sends") + " your audio to Google" };
+    if (/Safari\//.test(ua) && /Apple/.test(navigator.vendor || "") && !/Chrome\/|Chromium/.test(ua))
       return { service: "Safari's speech service", goes: "may send your audio to Apple" };
-    return { service: "your browser's speech service", goes: "may send your audio to your browser maker's servers" };
+    return { service: generic, goes: "may send your audio to your browser maker's servers" };
   })();
 
   function engineLabel() {
@@ -507,11 +512,17 @@ export const Dictation = (() => {
       : code === "not-allowed" || code === "service-not-allowed" ? "the browser didn't allow it (microphone or speech permission)"
       : code === "audio-capture" ? "no microphone was available to it"
       : code === "language-not-supported" ? "it doesn't support " + (settings.lang || "this language")
-      : code === "timeout" ? "it never started listening"
+      : code === "timeout" ? "it never answered"
       : "it ended with an error";
+    const started = listening;
     if (D.recording) halt();
     browserChosen = false;
-    Choice.show({ text: vendor.service[0].toUpperCase() + vendor.service.slice(1) + " stopped: " + why + ".", detail: code, local: true });
+    const name = vendor.service[0].toUpperCase() + vendor.service.slice(1);
+    Choice.show({
+      text: started ? name + " stopped: " + why + "." + (sessionCommits || raw() ? " What it typed stays." : "")
+        : name + " didn't start: " + why + ". Nothing was transcribed.",
+      detail: code, local: true,
+    });
   }
 
   // — the hosted-relay dictation path: mic PCM → relay → xai grok stt —

@@ -590,7 +590,7 @@ English.
 | You say | You get |
 | --- | --- |
 | `scratch that` / `delete that` | deletes the last utterance segment (works on already-typed text); said alone in a new recording, takes back the previous dictation — same app, within 30 seconds |
-| `new line` / `new paragraph` | `\n` / `\n\n` — nothing in a terminal or shell, where a line break is Enter and would run the line |
+| `new line` / `new paragraph` | `\n` / `\n\n`, pressed the way the field needs it ([line breaks](#line-breaks-enter-or-shiftenter)): Enter in documents and most apps, Shift+Enter in chats and web pages, and nothing in a terminal or shell (where a line break is Enter and would run the line), a one-line field or a spreadsheet |
 | `quote ship it unquote`, `quote … end quote` | `"ship it"` — only with words between ("his quote unquote friend" stays prose), within one utterance |
 | `correct monday to friday` (said on its own) | the last "monday" in this dictation becomes "Friday", capitals kept — and the pair goes to `voice-keyboard learned`; with nothing to correct, it is typed as words |
 | `cap that`, `uppercase that`, `lowercase that` (said on their own) | the last utterance in Title Case, UPPER or lower, fixed in place |
@@ -639,7 +639,9 @@ selection (typing replaces a selection everywhere); the app's own undo
 restores the original. One paragraph at a time: a multi-line selection is
 refused, because typing its line breaks would press Enter. On Linux the selection is read from the focused
 widget through accessibility, and only when you ask — the probe that runs
-at every recording never reads what is on screen, and the PRIMARY
+at every recording never reads the text in a field (only the app, the
+window title and a browser page's address, to choose how a line break
+is pressed), and the PRIMARY
 selection, which can belong to another window, is never used — and on
 Windows it is copied from the focused app with your clipboard put back. Terminals and password fields never
 take part, a single-line selection never gains an Enter (in a chat box
@@ -706,15 +708,82 @@ into `python` or `shell`). A line break is never typed where a terminal
 can't be ruled out: in a known terminal (whatever register you map it
 to), and wherever the focused app couldn't be identified — there "new
 line" types a space. If that happens everywhere on Linux, the AT-SPI
-bindings are missing; `voice-keyboard doctor` says so. In chat apps where Enter sends (Slack, Discord,
-Teams, Signal, Telegram, WhatsApp, Element, Mattermost, …) a line break is
-typed as Shift+Enter, so "new line" never sends half a message; add others
-with `[registers] chat_apps`. (A chat in a browser tab looks like the browser.) If focus moves to a different app
+bindings are missing; `voice-keyboard doctor` says so. If focus moves to a different app
 mid-dictation, typing freezes immediately and the transcript lands on the
 clipboard instead — dictation never types into the wrong window. On Linux
 the probe also sees the focused *widget*: a password field always forces
 `verbatim`, is never written to the history ledger, and never contributes
 biasing context.
+
+#### Line breaks: Enter or Shift+Enter
+
+Every line break dictation types (`new line`, `new paragraph`, a new bullet,
+number, checkbox or heading) is a key press, and in many fields Enter does
+something else: it sends a chat message or submits a form. So each recording
+first works out what it is typing into and presses, for a line break:
+
+1. **Nothing** in a terminal or where the focused app couldn't be identified
+   (a space is typed, as above), and **nothing** in a one-line field (a
+   search box, a form input, an address bar), where Enter would submit it.
+2. **Your rules** in `[registers.newline]` (below), and `[registers] chat_apps`.
+3. **Shift+Enter** in chat apps where Enter sends (Slack, Discord, Teams,
+   Signal, Telegram, WhatsApp, Element, Mattermost, Messenger, Zoom, the
+   ChatGPT and Claude desktop apps, …), so "new line" never sends half a
+   message or prompt.
+4. **Nothing** in a spreadsheet (Excel, LibreOffice Calc, Gnumeric; Google
+   Sheets, Excel for the web, Zoho Sheet and Smartsheet in a browser):
+   there Enter, and Shift+Enter, commit the cell and move the selection,
+   and the rest of the dictation would replace the next cell.
+5. In a **web browser** (Chrome, Chromium, Edge, Firefox, Brave, Vivaldi,
+   Opera, LibreWolf, Zen, GNOME Web, Safari, …), by the page: **Shift+Enter**
+   on chat sites (WhatsApp Web, Slack, Discord, Teams, Messenger, Telegram
+   Web, Google Chat and Messages, Element, Mattermost, Zulip, Rocket.Chat,
+   ChatGPT, Claude, Gemini, Copilot, Perplexity, LinkedIn, X, Instagram);
+   **Enter** in document editors (Google Docs and Slides, Notion, Word for
+   the web, Confluence, Dropbox Paper, Coda, Quip), so paragraphs and lists
+   work; and **Shift+Enter** on any other page: a plain line break in a text
+   box, a soft break in a rich editor, and never a send.
+6. **Enter** in every other app.
+
+The page is recognised by its address where the browser exposes it to
+accessibility (Linux: Firefox and Chromium), otherwise by the tab title in
+the window title (Windows, and Linux as a fallback), matching a site's name
+only as a whole part of the title, so a Google Doc called "Slack notes"
+stays a document. When a page could be more than one of these, the safer
+choice wins: a sheet over a chat, a chat over a document. If you switch to
+another tab or field of the same app mid-dictation, line breaks only ever
+get stricter (Enter → Shift+Enter → nothing) for the rest of that
+recording, once the focus check notices (it looks every 1.5 seconds); a
+switch to another app freezes typing, as above. One-line
+fields (and search boxes with suggestions) are recognised on Linux through
+accessibility and on Windows in classic Win32 edit boxes; elsewhere (most
+web forms on Windows) a browser's Shift+Enter still submits a one-line
+form, as Enter did before. On macOS (beta) only the app is known: chat apps
+and browsers get Shift+Enter, other apps Enter. The title and address are
+used for this choice only, and never logged or stored. Text typed outside
+a recording (`voice-keyboard recall`, `voice-keyboard transform`, and the
+`type` IPC command) follows the same rules, including a space where focus
+can't be identified; an integrator presses Enter itself with the `key` IPC
+command.
+
+Set your own with `[registers.newline]`: an app, a site, or a name from a
+browser tab's title, mapped to `"enter"`, `"shift+enter"` or `"none"`. A site
+beats a title, a title beats an app, and rules can't make a terminal or a
+one-line field press Enter. A title rule that says `"enter"` is skipped on
+a chat page unless it names that chat: `notion = "enter"` doesn't send in
+a Slack workspace called Notion, while `slack = "enter"` applies in Slack.
+
+```toml
+[registers.newline]
+"notion.so" = "shift+enter"             # soft breaks in Notion
+"mail.google.com" = "none"
+obsidian = "shift+enter"
+excel = "enter"                         # "new line" moves down a row
+firefox = "enter"                       # every Firefox tab: the old behaviour
+```
+
+`chat_apps = ["mychat"]` under `[registers]` still works, as shorthand for
+`mychat = "shift+enter"`.
 
 ### The next-level channels
 

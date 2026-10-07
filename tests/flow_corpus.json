@@ -6643,6 +6643,153 @@
   ]
  },
  {
+  "name": "a recognizer's letter o is the digit oh",
+  "register": "prose",
+  "segments": [
+   "Room four o two.",
+   "Born in nineteen o five.",
+   "Meet at twelve o five.",
+   "Call five five five o one two three."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "Room 402."
+   ],
+   [
+    "screen",
+    "Room 402. Born in 1905."
+   ],
+   [
+    "screen",
+    "Room 402. Born in 1905. Meet at 12:05."
+   ],
+   [
+    "screen",
+    "Room 402. Born in 1905. Meet at 12:05. Call 555-0123."
+   ],
+   [
+    "final",
+    "Room 402. Born in 1905. Meet at 12:05. Call 555-0123.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a letter o elsewhere stays a letter",
+  "register": "prose",
+  "segments": [
+   "O Captain, my captain.",
+   "Five, o two.",
+   "Room four o two people."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "O Captain, my captain."
+   ],
+   [
+    "screen",
+    "O Captain, my captain. Five, o two."
+   ],
+   [
+    "screen",
+    "O Captain, my captain. Five, o two. Room four o two people."
+   ],
+   [
+    "final",
+    "O Captain, my captain. Five, o two. Room four o two people.",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "cratch that is how a small recognizer hears scratch that",
+  "register": "prose",
+  "segments": [
+   "The fix lands on Thursday.",
+   "Cratch that,",
+   "The fix lands on Friday period."
+  ],
+  "options": {
+   "pause_review": "rules"
+  },
+  "events": [
+   [
+    "screen",
+    "The fix lands on Thursday."
+   ],
+   [
+    "screen",
+    ""
+   ],
+   [
+    "screen",
+    "The fix lands on Friday."
+   ],
+   [
+    "final",
+    "The fix lands on Friday.",
+    "",
+    "",
+    1,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a recognizer's I is a loop variable in code",
+  "register": "python",
+  "segments": [
+   "For I in range ten colon."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "for i in range(10):"
+   ],
+   [
+    "final",
+    "for i in range(10):",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
+  "name": "a recognizer's I in a shell stays",
+  "register": "shell",
+  "segments": [
+   "Echo I am here."
+  ],
+  "options": {},
+  "events": [
+   [
+    "screen",
+    "echo I am here"
+   ],
+   [
+    "final",
+    "echo I am here",
+    "",
+    "",
+    0,
+    []
+   ]
+  ]
+ },
+ {
   "name": "per cent is percent",
   "register": "prose",
   "segments": [

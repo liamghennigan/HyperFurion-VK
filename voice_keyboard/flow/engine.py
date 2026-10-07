@@ -39,9 +39,8 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 from voice_keyboard.flow import pauses
-from voice_keyboard.flow.grammar import Grammar, Item
+from voice_keyboard.flow.grammar import Grammar, Item, kept_as_written
 from voice_keyboard.flow.nav import FRESH_FIELD, GLUED
-from voice_keyboard.flow.numbers import split_compound
 from voice_keyboard.flow.code import flush_code
 from voice_keyboard.flow.registers import (
     Register,
@@ -584,7 +583,7 @@ class FlowEngine:
             # "three-thirty" typed as written stays so below the fence
             unsplit=tuple(
                 item.span[0] for item in committed
-                if item.kind == "word" and item.span[1] - item.span[0] == 1 and split_compound(item.text)
+                if item.kind == "word" and item.span[1] - item.span[0] == 1 and kept_as_written(item.text)
             ),
         )
         if result.items[:self._committed_items] != self._items[:self._committed_items]:

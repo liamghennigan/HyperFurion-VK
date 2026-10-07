@@ -77,6 +77,7 @@ DEFAULT_COMMANDS: dict[str, tuple[str, ...]] = {
     "scratch_that": (
         "scratch that", "delete that",
         "scratched that",  # how recognizers often write it
+        "cratch that",  # how a small recognizer hears it ("crutch that" is English)
     ),
     "new_line": ("new line",),
     "new_paragraph": ("new paragraph",),
@@ -287,21 +288,45 @@ def _sentence_case(text: str) -> bool:
     return bool(letters) and text[:1].isupper() and not any(ch.isupper() for ch in letters[1:])
 
 
+def kept_as_written(text: str) -> bool:
+    """A word the number folds may read as other words: "three-thirty",
+    "o". Once committed as written, it stays so (Grammar.parse unsplit)."""
+    return bool(split_compound(text)) or _core(text) == "o"
+
+
+def _number_before(item: Item) -> bool:
+    return item.kind == "word" and _clean(item.text) and _core(item.text) in NUMBER_WORDS - {"and", "point"}
+
+
+def _digit_after(item: Item) -> bool:
+    if item.kind != "word" or item.text.lstrip(_PUNCT_STRIP) != item.text:
+        return False
+    first = (split_compound(item.text) or [item.text])[0]
+    return _core(first) in DIGIT_WORDS | {"oh", "o"}
+
+
 def _split_compounds(items: list[Item], unsplit: frozenset = frozenset(), oh: bool = True) -> tuple[list[Item], dict]:
     """Each "Twenty-five" as the words a speaker said, so the number folds
-    read it as they read "twenty five" ("Twenty-five percent" -> "25%").
+    read it as they read "twenty five" ("Twenty-five percent" -> "25%"),
+    and in prose a letter "o" between digits as "oh" ("Room four o two").
     _merge_compounds puts back together the parts of one that did not
     fold."""
     out: list[Item] = []
     chains: dict[int, tuple[list[Item], Item]] = {}
-    for item in items:
-        words = (
-            split_compound(item.text)
-            if item.kind == "word" and item.mode != "verbatim" and item.span[1] - item.span[0] == 1
+    for at, item in enumerate(items):
+        plain = (
+            item.kind == "word" and item.mode != "verbatim" and item.span[1] - item.span[0] == 1
             and item.span[0] not in unsplit
-            else None
         )
-        if words is None or (not oh and any(_core(word) == "oh" for word in words)):
+        words = split_compound(item.text) if plain else None
+        if words is not None and not oh and any(_core(word) == "oh" for word in words):
+            words = None
+        if (
+            words is None and plain and oh and _core(item.text) == "o" and item.text.lstrip(_PUNCT_STRIP) == item.text
+            and out and _number_before(out[-1]) and at + 1 < len(items) and _digit_after(items[at + 1])
+        ):
+            words = ["oh" + item.text[1:]]  # a recognizer's letter for the digit "oh"
+        if words is None:
             out.append(item)
             continue
         parts = [Item(kind="word", text=word, mode=item.mode, span=item.span) for word in words]
@@ -577,9 +602,6 @@ class Grammar:
             for ch in suffix
             if ch in self._TRAILING_SPECS
         ]
-
-    def is_wake_word(self, token: str) -> bool:
-        return self.wake_at([_core(token)], 0) == 1
 
     def wake_at(self, cores: list[str], index: int) -> int:
         """How many tokens at `index` spell the wake word (0 = none)."""
