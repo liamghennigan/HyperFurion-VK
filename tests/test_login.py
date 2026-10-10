@@ -80,3 +80,25 @@ class TestRelayBase:
     def test_v1_suffix_stripped(self) -> None:
         cfg = {"providers": {"hyperfurion": {"base_url": "https://api.hyperfurion.com/v1"}}}
         assert _relay_base(cfg) == "https://api.hyperfurion.com"
+
+
+def test_login_says_a_local_kai_turns_off(tmp_path, monkeypatch, capsys) -> None:
+    """Kai on because everything was local: the hosted service forwards to
+    xAI, so Kai turns off at the next start, and login says so."""
+    from voice_keyboard import client
+    from voice_keyboard.config import load_config
+
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[providers.openai]\nbase_url = "http://127.0.0.1:8000/v1"\n\n'
+        '[stt]\nprovider = "openai"\n\n[tts]\nprovider = "openai"\n\n'
+        '[llm]\nprovider = "openai"\nbase_url = "http://127.0.0.1:8080/v1"\nmodel = "qwen"\n',
+        encoding="utf-8",
+    )
+    before = load_config(path)
+    path.write_text(client._apply_hosted_login(path.read_text(encoding="utf-8"), "hf-key"),
+                    encoding="utf-8")
+    client._say_kai_after_login(before, path)
+    out = capsys.readouterr().out
+    assert "Kai turns off at the next start: the hosted service is online" in out
+    assert "voice-keyboard kai on" in out

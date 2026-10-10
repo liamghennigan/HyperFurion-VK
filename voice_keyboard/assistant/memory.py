@@ -63,17 +63,30 @@ def _terms(text: str) -> list[str]:
 
 
 class AssistantMemory:
+    """The file is created on the first write, so with [assistant]
+    memory_enabled = false (nothing is ever written) no file appears."""
+
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or memory_db_path()
-        self.db_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-        self._init_db()
+        self._ready = False
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _rows(self, sql: str, params: tuple = ()) -> list:
+        """Read-only query; nothing stored yet reads as nothing."""
+        if not self._ready and not self.db_path.exists():
+            return []
+        self._init_db()
+        with self._connect() as conn:
+            return conn.execute(sql, params).fetchall()
+
     def _init_db(self) -> None:
+        if self._ready:
+            return
+        self.db_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         with self._connect() as conn:
             conn.execute(
                 """CREATE TABLE IF NOT EXISTS memories (
@@ -91,6 +104,7 @@ class AssistantMemory:
             self.db_path.chmod(0o600)
         except OSError:
             pass
+        self._ready = True
 
     def remember(self, text: str, *, kind: str = "fact", source: str = "user") -> Optional[MemoryRecord]:
         cleaned = " ".join(text.strip().split())
@@ -99,6 +113,7 @@ class AssistantMemory:
         # created_at is passed in from the caller's clock (the daemon), so
         # this module never calls time.* — keeps it deterministic to test.
         created_at = _now_iso()
+        self._init_db()
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO memories(kind, text, source, created_at) VALUES (?, ?, ?, ?)",
@@ -108,6 +123,7 @@ class AssistantMemory:
         return MemoryRecord(memory_id, kind, cleaned, source, created_at)
 
     def log_interaction(self, user_text: str, assistant_text: str) -> None:
+        self._init_db()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO interactions(user_text, assistant_text, created_at) VALUES (?, ?, ?)",
@@ -115,18 +131,14 @@ class AssistantMemory:
             )
 
     def list_recent(self, limit: int = 20) -> list[MemoryRecord]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM memories ORDER BY id DESC LIMIT ?", (limit,)
-            ).fetchall()
+        rows = self._rows("SELECT * FROM memories ORDER BY id DESC LIMIT ?", (limit,))
         return [_row_to_record(row) for row in rows]
 
     def search(self, query: str, limit: int = 5) -> list[MemoryRecord]:
         terms = _terms(query)
         if not terms:
             return self.list_recent(limit)
-        with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM memories ORDER BY id DESC LIMIT 500").fetchall()
+        rows = self._rows("SELECT * FROM memories ORDER BY id DESC LIMIT 500")
         scored: list[MemoryRecord] = []
         for row in rows:
             text = str(row["text"]).lower()
@@ -140,13 +152,15 @@ class AssistantMemory:
         return scored[:limit]
 
     def relevant_chunks(
-        self, query: str, limit: int, *, config: Optional[dict] = None
+        self, query: str, limit: int, *, embedder: Optional[recall.Embedder] = None
     ) -> list[ContextChunk]:
         """The unified recall: durable memories PLUS dictation-ledger hits.
 
         Memories come first (explicit, durable); ledger entries fold in so
         the brain can recall anything you dictated. Ledger search reuses
-        the daemon's recall (keyword, or semantic when configured)."""
+        the daemon's recall: keyword, or semantic with the `embedder` the
+        brain chose (only when [recall] is local, or Kai was turned on with
+        online services; see assistant/locality.py)."""
         chunks: list[ContextChunk] = []
         for record in self.search(query, limit):
             chunks.append(
@@ -160,7 +174,6 @@ class AssistantMemory:
             )
         try:
             entries = history.last_entries(500)
-            embedder = recall.create_embedder(config or {})
             for hit in recall.search(entries, query, embedder=embedder, limit=limit):
                 chunks.append(
                     ContextChunk(

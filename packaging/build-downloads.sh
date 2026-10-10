@@ -5,8 +5,10 @@
 #                             this source tree; it runs install.sh (in a
 #                             terminal window if it was double-clicked).
 #   HyperFurion-VK-Setup.cmd  Windows: double-click to run the PowerShell
-#                             installer (packaging/windows/install-hyperfurion-vk.ps1,
-#                             which installs the release it is pinned to).
+#                             installer (packaging/windows/install-hyperfurion-vk.ps1),
+#                             which installs the latest release at the time it
+#                             runs; the tag release.yml stamps into it is only
+#                             the fallback when GitHub can't be asked.
 #
 # Both install for the user who runs them and end in the settings
 # walkthrough (`voice-keyboard setup`).
@@ -101,7 +103,7 @@ echo "built $RUN"
 CMD="$OUT/HyperFurion-VK-Setup.cmd"
 {
     cat <<HEADER
-<# : HyperFurion VK v$VERSION - setup for Windows. Double-click to install.
+<# : HyperFurion VK setup for Windows - installs the latest release - built with v$VERSION. Double-click to install.
 @echo off
 setlocal
 set "HFVK_SETUP_FILE=%~f0"

@@ -124,6 +124,7 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
         this._timeoutId = 0;
         this._pulseId = 0;
         this._button = null;
+        this._cancellable = new Gio.Cancellable();
         this._dbus = Gio.DBusExportedObject.wrapJSObject(DBUS_XML, this);
         this._dbus.export(Gio.DBus.session, OBJECT_PATH);
         this._ownName = Gio.DBus.session.own_name(
@@ -131,12 +132,21 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             Gio.BusNameOwnerFlags.NONE,
             null,
             () => this._hide());
-        // The always-on Kai orb defaults visible; the daemon hides it via
-        // SetButton(false) when [assistant].button (or the mind) is off.
-        this._showButton();
+        // The Kai orb is hidden until the daemon says Kai is on: it pushes
+        // SetButton(true) at its start and when Kai turns on, and this asks
+        // it now, since GNOME Shell runs enable() again at every unlock.
+        // Kai is off by default unless it runs on this computer, so the orb
+        // never shows for a Kai that is off. (Only the default socket is
+        // asked: with a custom [daemon] socket_path the orb comes back
+        // after an unlock at the daemon's next push.)
+        this._queryButton();
     }
 
     disable() {
+        if (this._cancellable) {
+            this._cancellable.cancel();
+            this._cancellable = null;
+        }
         this._hide();
         this._hideButton();
         if (this._ownName) {
@@ -247,6 +257,86 @@ export default class VoiceKeyboardOverlayExtension extends Extension {
             });
         } catch (e) {
             logError(e, 'Kai orb: summon failed');
+        }
+    }
+
+    _queryButton() {
+        // Ask the daemon's `status` over its Unix socket (JSON, half-close
+        // to signal EOF, then read its reply to EOF) and show the orb when
+        // Kai is on and [assistant] button is set. No daemon: stay hidden.
+        const cancellable = this._cancellable;
+        try {
+            const client = new Gio.SocketClient();
+            const addr = new Gio.UnixSocketAddress({path: SOCKET_PATH});
+            client.connect_async(addr, cancellable, (src, res) => {
+                let conn;
+                try {
+                    conn = src.connect_finish(res);
+                } catch (e) {
+                    return;  // the daemon isn't running; it pushes when it starts
+                }
+                const payload = new TextEncoder().encode(
+                    JSON.stringify({command: 'status'}));
+                const chunks = [];
+                const close = () => {
+                    try {
+                        conn.close(null);
+                    } catch (e) {
+                        // ignore
+                    }
+                };
+                const done = () => {
+                    close();
+                    if (cancellable.is_cancelled())
+                        return;  // disabled meanwhile
+                    let reply = {};
+                    try {
+                        const size = chunks.reduce((n, c) => n + c.length, 0);
+                        const all = new Uint8Array(size);
+                        let at = 0;
+                        for (const c of chunks) {
+                            all.set(c, at);
+                            at += c.length;
+                        }
+                        reply = JSON.parse(new TextDecoder().decode(all));
+                    } catch (e) {
+                        return;
+                    }
+                    if (reply.assistant && reply.assistant_button)
+                        this._showButton();
+                };
+                const input = conn.get_input_stream();
+                const readMore = () => {
+                    input.read_bytes_async(65536, GLib.PRIORITY_DEFAULT, cancellable, (s, r) => {
+                        let bytes;
+                        try {
+                            bytes = s.read_bytes_finish(r);
+                        } catch (e) {
+                            close();
+                            return;
+                        }
+                        if (bytes.get_size() === 0) {
+                            done();
+                            return;
+                        }
+                        chunks.push(bytes.toArray());
+                        readMore();
+                    });
+                };
+                const os = conn.get_output_stream();
+                os.write_all_async(payload, GLib.PRIORITY_DEFAULT, cancellable, (s, r) => {
+                    try {
+                        s.write_all_finish(r);
+                        conn.get_socket().shutdown(false, true);
+                    } catch (e) {
+                        close();
+                        return;
+                    }
+                    readMore();
+                });
+            });
+        } catch (e) {
+            logError(e, 'Kai orb: status query failed');
         }
     }
 

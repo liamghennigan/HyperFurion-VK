@@ -5,7 +5,9 @@
 // drains it at a human cadence. A navigation command appends a chord —
 // modifiers held, one key tapped — the way the daemon's press_combo does.
 // The Enter key is guarded in code: the page can light it, never press it
-// — the daemon's suppress_enter, on screen.
+// — the daemon's suppress_enter, on screen. With reduced motion the board
+// stays still and the queue drains at once: every keystroke still lands in
+// the text field, only the animation is gone.
 import { board, reduced } from "./env.js";
 import { bus } from "./bus.js";
 import { Ticker } from "./ticker.js";
@@ -84,12 +86,27 @@ export const Keyboard = (() => {
     const chords = queue.filter((p) => p.chord);
     queue = chords.concat(presses);
     if (!nextAt) nextAt = performance.now();
-    Ticker.wake();
+    run();
   }
   function appendQueue(presses) {
     queue = queue.concat(presses);
     if (!nextAt) nextAt = performance.now();
-    Ticker.wake();
+    run();
+  }
+  // the ticker never runs under reduced motion: drain in one task instead,
+  // in order, and let every key back up before anything paints
+  let drainT = 0;
+  function run() {
+    if (!reduced) { Ticker.wake(); return; }
+    if (!drainT) drainT = setTimeout(drainAll, 0);
+  }
+  function drainAll() {
+    drainT = 0;
+    let n = 0;
+    while (queue.length) { perform(queue.shift()); n++; }
+    for (const code of [...downUntil.keys()]) if (!held.has(code)) up(code);
+    nextAt = 0;
+    if (n) { lastDrainEmpty = true; bus.emit("queue:empty", {}); }
   }
   function clearQueue() { queue = queue.filter((p) => p.chord); }
   function tick() {
@@ -123,6 +140,7 @@ export const Keyboard = (() => {
     if (!keys.has(code)) return false;
     if (hold) { held.add(code); down(code, heat, 1e9); return true; }
     down(code, heat, 90);
+    if (reduced) setTimeout(() => { if (!held.has(code)) up(code); }, 90);   // no ticker to let it up
     return true;
   }
   function release(code) { held.delete(code); up(code); }

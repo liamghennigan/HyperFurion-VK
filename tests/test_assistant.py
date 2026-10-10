@@ -52,6 +52,16 @@ def _config(**assistant) -> dict:
     return cfg
 
 
+def _local_config(**assistant) -> dict:
+    """Everything Kai uses runs on this computer."""
+    cfg = _config(**assistant)
+    cfg["providers"]["openai"]["base_url"] = "http://127.0.0.1:8000/v1"
+    cfg["stt"]["provider"] = "openai"
+    cfg["tts"]["provider"] = "openai"
+    cfg["llm"].update(provider="openai", base_url="http://127.0.0.1:8080/v1", model="qwen")
+    return cfg
+
+
 class RecordingInjector:
     def __init__(self):
         self.typed: list[str] = []
@@ -253,12 +263,29 @@ class TestRealtimeFactory:
 
 
 class TestConverseIntegration:
-    def test_enabled_by_default(self) -> None:
-        # Kai ships ON: it's push-to-talk, so nothing is captured until you
-        # summon it — the hotkey stays the hard mute.
+    def test_off_by_default_with_online_speech(self) -> None:
+        # The default speech and language model are xAI's, online: Kai stays
+        # off until you turn it on ("Nothing starts until you ask").
         daemon = _daemon(_config())
+        assert daemon._brain is None
+        status = daemon._status_response()
+        assert status["assistant"] is False
+        assert status["assistant_setting"] == "auto"
+        assert status["assistant_local"] is False
+        assert "xAI" in status["assistant_why"]
+        assert status["assistant_button"] is False
+        assert {hop["role"] for hop in status["assistant_hops"]} == {
+            "hears you", "thinks", "speaks"
+        }
+
+    def test_on_by_default_when_everything_is_local(self) -> None:
+        daemon = _daemon(_local_config())
         assert daemon._brain is not None
-        assert daemon._status_response()["assistant"] is True
+        status = daemon._status_response()
+        assert status["assistant"] is True
+        assert status["assistant_local"] is True
+        assert status["assistant_why"] == "on: everything Kai uses runs on this computer"
+        assert status["assistant_button"] is True
 
     def test_explicit_disable_has_no_brain(self) -> None:
         daemon = _daemon(_config(enabled=False))
@@ -300,8 +327,10 @@ class TestConverseIntegration:
         daemon._focus_changed_since_session = mock.AsyncMock(return_value=False)
         llm = mock.Mock()
         llm.route_terminal_request.return_value = "git status"
-        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
+        daemon._brain.llm = llm
+        with mock.patch("voice_keyboard.daemon.create_llm_client") as fresh:
             result = asyncio.run(daemon._run_converse_audio(b"pcm", "show me the git status"))
+        fresh.assert_not_called()  # the brain's own client, never a fresh one
         assert result == "git status"
         assert daemon._injector.typed == ["git status"]
         assert daemon._injector.flag_at_type == [True]
@@ -319,8 +348,8 @@ class TestConverseIntegration:
         daemon._focus_changed_since_session = mock.AsyncMock(return_value=False)
         llm = mock.Mock()
         llm.route_terminal_request.return_value = "ls -R ~"
-        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
-            result = asyncio.run(daemon._run_converse_audio(b"pcm", "list all folders in home"))
+        daemon._brain.llm = llm
+        result = asyncio.run(daemon._run_converse_audio(b"pcm", "list all folders in home"))
         assert result == "ls -R ~"
         assert daemon._injector.typed == ["ls -R ~"]
         assert daemon._injector.flag_at_type == [True]  # Enter suppressed
@@ -341,8 +370,8 @@ class TestConverseIntegration:
         daemon._run_tts = mock.AsyncMock()
         llm = mock.Mock()
         llm.route_terminal_request.return_value = None  # question
-        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
-            result = asyncio.run(daemon._run_converse_audio(b"pcm", "capital of France"))
+        brain.llm = llm
+        result = asyncio.run(daemon._run_converse_audio(b"pcm", "capital of France"))
         assert result == "Paris."
         assert daemon._injector.typed == []
 
@@ -360,8 +389,8 @@ class TestConverseIntegration:
         daemon._run_tts = mock.AsyncMock()
         llm = mock.Mock()
         llm.route_terminal_request.return_value = "rm -rf /"  # must NOT run
-        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
-            asyncio.run(daemon._run_converse_audio(b"pcm", "delete everything"))
+        brain.llm = llm
+        asyncio.run(daemon._run_converse_audio(b"pcm", "delete everything"))
         llm.route_terminal_request.assert_not_called()
         assert daemon._injector.typed == []
 
@@ -377,10 +406,10 @@ class TestConverseIntegration:
         daemon._brain = brain
         llm = mock.Mock()
         llm.route_terminal_request.return_value = None  # it's a question
-        with mock.patch("voice_keyboard.daemon.create_llm_client", return_value=llm):
-            result = asyncio.run(
-                daemon._run_converse_audio(b"pcm", "what is the capital of France")
-            )
+        brain.llm = llm
+        result = asyncio.run(
+            daemon._run_converse_audio(b"pcm", "what is the capital of France")
+        )
         assert result == "Paris."
         assert daemon._injector.typed == []  # nothing typed into the terminal
         daemon._tts_client.play_pcm.assert_called_once_with(b"SPOKEN", mock.ANY, cancel=mock.ANY)
@@ -442,7 +471,7 @@ class TestSummonUX:
         daemon = self._kai(_config(enabled=True))
         order: list[str] = []
         daemon._start_recording = mock.AsyncMock(
-            side_effect=lambda: order.append("connect")
+            side_effect=lambda **kw: order.append("connect")
         )
         client._show_overlay.side_effect = lambda state, **kw: order.append(state)
         asyncio.run(daemon._converse_start())
