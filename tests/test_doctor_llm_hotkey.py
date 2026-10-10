@@ -87,7 +87,7 @@ GID_INPUT = 104
 def linux(monkeypatch: pytest.MonkeyPatch):
     """A Linux box with two keyboards in the input group; the test says
     how many this session can read and whether it has the group."""
-    import grp
+    grp = pytest.importorskip("grp", reason="the input group is Linux-only (no grp module on Windows)")
 
     state = SimpleNamespace(keyboards=0, members=["liam"], session_groups=[1000], readable=False)
     monkeypatch.setattr(doctor, "_input_nodes", lambda: ["/dev/input/event0", "/dev/input/event1"])
