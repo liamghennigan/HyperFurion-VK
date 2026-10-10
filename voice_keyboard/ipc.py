@@ -265,6 +265,11 @@ class IPCServer:
                 )
             except (ConnectionRefusedError, FileNotFoundError):
                 pass
+            except OSError as exc:
+                # A leftover file that isn't a socket: Linux refuses the
+                # connection, macOS says ENOTSOCK. Either way it is stale.
+                if exc.errno != errno.ENOTSOCK:
+                    raise
 
         socket_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         if socket_path.exists():

@@ -9,10 +9,27 @@
   <array>
     <string>__BIN__/voice-keyboard-daemon</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:__BREW__/bin</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
+  <!-- Restart after a crash, not after `voice-keyboard quit`. -->
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
   <key>StandardOutPath</key>
   <string>__HOME__/Library/Logs/voice-keyboard-daemon.log</string>
   <key>StandardErrorPath</key>

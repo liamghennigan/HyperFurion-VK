@@ -152,9 +152,13 @@ class TestHotkey:
         monkeypatch.setattr(sys, "platform", "linux")
         labels = [f.label for f in doctor.run(tmp_path / "config.toml", _defaults())]
         assert "hotkey" in labels
+        # On macOS "hotkey" is the Input Monitoring check; the Linux
+        # input-group check itself must not run there.
+        ran = []
+        monkeypatch.setattr(doctor, "check_hotkey", lambda *a, **k: ran.append(1) or doctor.Finding(doctor.OK, "hotkey"))
         monkeypatch.setattr(sys, "platform", "darwin")
-        labels = [f.label for f in doctor.run(tmp_path / "config.toml", _defaults())]
-        assert "hotkey" not in labels
+        doctor.run(tmp_path / "config.toml", _defaults())
+        assert ran == []
 
     def test_it_counts_keyboards_the_way_the_listener_does(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from voice_keyboard import hotkey

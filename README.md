@@ -208,7 +208,9 @@ through your `[llm]` and repairs it on screen.
 - **Windows 10/11:** first-class too: a tray app with its own overlay, Kai
   orb, and one-line installer. See [Windows](#windows).
 - **macOS (beta):** Quartz keystroke injection + event-tap hotkeys —
-  `./packaging/macos/install-macos.sh` from a checkout. See [macOS](#macos-beta).
+  `./packaging/macos/install-macos.sh` from a checkout, or
+  `./scripts/macos-dev-setup.sh` to work on it. See [macOS](#macos-beta) and
+  [MACOS.md](MACOS.md).
 - **Best overlay support:** GNOME Shell 45–50 on Wayland (developed on 50), and
   Windows (native). Other desktops fall back to ordinary desktop notifications.
 - **Works fully offline** — bring your own local servers; no speech model
@@ -358,10 +360,13 @@ release installer or `curl … | bash`.
 ## macOS (Beta)
 
 The daemon runs on macOS with native backends: keystroke injection uses
-Quartz CGEvents (full Unicode — accents, CJK, emoji — typed as keystrokes,
-where the Linux build pastes anything non-ASCII through the clipboard), the
-global hotkey uses a listen-only keyboard event tap,
-and the daemon runs as a launchd agent. From a checkout:
+Quartz CGEvents (full Unicode — accents, CJK, emoji, which the Linux uinput
+backend cannot do; Return and Tab are real keys), the global hotkey is a
+keyboard event tap that swallows its trigger key, and the Accessibility API
+tells it which app and field have focus (terminals by bundle id, VS Code's
+terminal pane, password fields). To work on it, `./scripts/macos-dev-setup.sh
+--run` sets up a `.venv` and your settings, then runs the daemon in that
+terminal. To install it with a login agent, from a checkout:
 
 ```bash
 git clone https://github.com/liamghennigan/HyperFurion-VK
@@ -369,28 +374,21 @@ cd HyperFurion-VK
 ./packaging/macos/install-macos.sh
 ```
 
-It needs Homebrew (for PortAudio) and, as `python3`, a Python 3.11 or newer
-that allows `pip install --user` (python.org's installer does; Homebrew's
-Python refuses it under PEP 668). The commands land in
-`$(python3 -m site --user-base)/bin`, which may not be on your `PATH`. The
-config starts as a copy of `config.toml.example` in
-`~/.config/voice-keyboard/config.toml`: add your speech key (or point it at a
-local server), or run `voice-keyboard setup`, then restart the agent with
-`launchctl kickstart -k gui/$(id -u)/com.hyperfurion.voice-keyboard`.
+macOS needs three switches under System Settings → Privacy & Security, for
+the app that runs HyperFurion VK (your terminal app, or Python for the login
+agent): **Accessibility** (typing, the focused field, the hotkey), **Input
+Monitoring** (the hotkey) and **Microphone**. `voice-keyboard doctor` checks
+all three and names the switch. There is no overlay yet: a rising tone marks
+the start of a dictation, a falling one the end, and a notification appears
+only when something fails. On a MacBook (no Right Ctrl) the setup puts Kai on
+Right Command; like everywhere, Kai stays off until you turn it on unless it
+runs entirely on your Mac (see [Kai](#kai-the-voice-assistant)).
 
-macOS will require two permissions for your Python binary under
-System Settings → Privacy & Security: **Accessibility** (hotkeys and
-typing) and **Microphone**. There is no GNOME-style overlay or Kai orb; status
-arrives as notification-center toasts. Right Ctrl can't summon Kai on macOS
-(a bare modifier can't be a hotkey there): once Kai is on, ask it with
-`voice-keyboard summon`, or set `[assistant] hotkey` to a chord such as
-`control+alt+k`. The focus check sees only the front
-app's name, so password fields aren't detected and the register and what a
-spoken "new line" presses are chosen by app name alone. Read-aloud reads the
-clipboard on macOS: copy first.
-
-Beta means beta: the platform layer is unit-tested, but it has not had the
-months of daily driving the Linux build has. Issues welcome.
+Beta means beta: the platform layer is unit-tested (and its macOS API calls
+checked in CI on a Mac), but it has not had the months of daily driving the
+Linux build has. [MACOS.md](MACOS.md) has the plan, the permissions and
+dogfood checklists, and a fully offline recipe for Apple Silicon. Issues
+welcome.
 
 ## Windows
 
@@ -850,11 +848,11 @@ at every recording never reads the text in a field (only the app, the
 window title and a browser page's address, to choose how a line break
 is pressed), and the PRIMARY
 selection, which can belong to another window, is never used — and on
-Windows it is copied from the focused app with your clipboard put back. Terminals and password fields never
+Windows it is copied from the focused app with your clipboard put back; on
+macOS it is read through the Accessibility API. Terminals and password fields never
 take part, a single-line selection never gains an Enter (in a chat box
-that would send it), and a selection over 4000 characters is refused. Not on macOS
-yet; there, an instruction alone rewrites your previous dictation, as it
-does everywhere when nothing is selected.
+that would send it), and a selection over 4000 characters is refused. With nothing
+selected, an instruction alone rewrites your previous dictation.
 
 ### Caret commands (hands-free navigation)
 
@@ -1463,7 +1461,9 @@ Supported modifier names:
 
 Supported trigger keys include common aliases such as `space`, `enter`,
 `return`, and `tab`, plus names that map to Linux `KEY_*` codes through
-`evdev` (`f9`, `period`, `rightctrl`, …). The same names work on Windows.
+`evdev` (`f9`, `period`, `rightctrl`, …). The same names work on Windows
+and macOS; macOS also takes `cmd`/`command`, `option`, and the bare keys
+`rightcmd`, `rightoption` and `fn`.
 Keyboards plugged in after the daemon starts are picked up within a few
 seconds.
 
@@ -1860,7 +1860,7 @@ HyperFurion-VK/
 |   |   |-- vad.py         # RMS levels, VU meter, silence auto-stop
 |   |   `-- worker.py      # Injection convergence loop (type/backspace bursts)
 |   |-- transcript.py      # Streaming transcript merge heuristics
-|   |-- focusprobe.py      # Focused-app probe (AT-SPI / Quartz / Win32)
+|   |-- focusprobe.py      # Focused-app probe (AT-SPI / Accessibility API / Win32)
 |   |-- newline.py         # What a spoken line break presses, per app and site
 |   |-- clipboard.py       # Clipboard get/set (wl-copy, xclip, pbcopy, ...)
 |   |-- llm.py             # OpenAI-compatible chat client: rewrites, intent, pauses
@@ -1875,7 +1875,7 @@ HyperFurion-VK/
 |   |-- config.py          # Config loading and validation
 |   |-- setup_wizard.py    # voice-keyboard setup
 |   |-- doctor.py          # voice-keyboard doctor
-|   |-- macos/             # Quartz injector + event-tap hotkeys (beta)
+|   |-- macos/             # Quartz injector, event-tap hotkeys, AX focus probe, permissions (beta)
 |   `-- windows/
 |       |-- app.py         # Tray app hosting the daemon (pythonw -m voice_keyboard.windows)
 |       |-- shell.py       # Overlay pill, Kai orb, tray icon (ctypes Win32)

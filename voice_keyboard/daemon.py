@@ -729,6 +729,8 @@ class Daemon:
             return ""
         if sys.platform == "win32":
             return "Mic sent pure silence — Settings › Privacy & security › Microphone"
+        if sys.platform == "darwin":
+            return "Mic sent pure silence — System Settings › Privacy & Security › Microphone"
         return "Mic sent pure silence — is it muted?"
 
     def _ipc_loop(self) -> None:
@@ -2632,11 +2634,10 @@ class Daemon:
                 return ""
             chars = len(text or "")
             text = text if chars <= MAX_SELECTION_CHARS else ""
-        elif sys.platform == "darwin":
-            return ""
         else:
-            # Read now, because the user asked: the always-on focus probe
-            # never reads the text in a field.
+            # Linux (AT-SPI) and macOS (the Accessibility API) ask the
+            # focused widget itself. Read now, because the user asked: the
+            # always-on focus probe never reads the text in a field.
             read = await asyncio.to_thread(probe_selection)
             if read is None:
                 return ""

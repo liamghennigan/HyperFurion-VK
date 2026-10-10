@@ -669,6 +669,12 @@ class Wizard:
             self.out("Run `voice-keyboard setup` again to add a key or your own server")
             self.out("(existing subscribers to the hosted service: `voice-keyboard login`).")
         self.out("Change these any time with `voice-keyboard setup`, or edit the settings file.")
+        if sys.platform == "darwin":
+            from voice_keyboard.macos.permissions import checklist_lines
+
+            self.out("")
+            for line in checklist_lines():
+                self.out(line)
 
 
 def _defaults() -> dict:

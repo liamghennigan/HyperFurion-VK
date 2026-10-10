@@ -131,7 +131,7 @@ class TestKeymaps:
         assert nav.chords_for("select:all", 1, table) is None
 
     def test_editor_chords_and_repeats(self) -> None:
-        table = nav.keymap(terminal=False)
+        table = nav.keymap(terminal=False, platform="linux")  # macOS: option+arrows
         assert nav.chords_for("select:word:left", 2, table) == [
             ["shift", "ctrl", "left"],
             ["shift", "ctrl", "left"],
@@ -334,7 +334,9 @@ class TestDaemon:
                 return await daemon._stop_recording()
 
         final = asyncio.run(run())
-        assert injector.combos == [["shift", "ctrl", "left"]]
+        # A word is option+arrow on macOS, ctrl+arrow elsewhere.
+        word = "alt" if sys.platform == "darwin" else "ctrl"
+        assert injector.combos == [["shift", word, "left"]]
         assert screens == ["Hello world"]  # the text landed before the keys
         assert injector.screen == "Hello worldplanet"  # (the fake has no caret)
         assert final == "Hello world planet"

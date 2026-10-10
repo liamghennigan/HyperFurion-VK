@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import socket
@@ -5,6 +6,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -34,8 +36,15 @@ pytestmark = pytest.mark.skipif(
 
 class TestIPC:
     @pytest.fixture
-    def socket_path(self, tmp_path: Path) -> str:
-        return str(tmp_path / "voice-keyboard.sock")
+    def socket_path(self, tmp_path: Path):
+        path = str(tmp_path / "voice-keyboard.sock")
+        if len(path.encode()) < 100:
+            yield path
+            return
+        # macOS caps a Unix socket path at 104 bytes, and pytest's tmp_path
+        # under /var/folders/... on a Mac runner is longer than that.
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="vk") as short:
+            yield str(Path(short) / "vk.sock")
 
     def test_server_client_round_trip(self, socket_path: str) -> None:
         server = IPCServer(socket_path)
@@ -119,6 +128,25 @@ class TestIPC:
         Path(socket_path).touch()
         server = IPCServer(socket_path)
         server.start()
+        assert os.path.exists(socket_path)
+        server.stop()
+
+    def test_server_removes_a_stale_non_socket_on_macos(self, socket_path: str) -> None:
+        # macOS answers a connect() to a plain file with ENOTSOCK where Linux
+        # refuses the connection; both mean the file is stale.
+        parent = Path(socket_path).parent
+        parent.mkdir(parents=True, exist_ok=True)
+        Path(socket_path).touch()
+        server = IPCServer(socket_path)
+        real_connect = socket.socket.connect
+
+        def connect(sock, address):
+            if address == socket_path:
+                raise OSError(errno.ENOTSOCK, "Socket operation on non-socket")
+            return real_connect(sock, address)
+
+        with mock.patch.object(socket.socket, "connect", connect):
+            server.start()
         assert os.path.exists(socket_path)
         server.stop()
 
