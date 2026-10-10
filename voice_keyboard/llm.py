@@ -11,6 +11,8 @@ from typing import Optional
 
 import requests
 
+from voice_keyboard.netpolicy import refuse_redirect, request_kwargs
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URLS = {
@@ -182,10 +184,15 @@ def llm_ready(config: dict) -> bool:
 
 def create_llm_client(config: dict) -> Optional["LLMClient"]:
     """Build the transform client from [llm]; None when not configured."""
+    from voice_keyboard.config import is_direct_endpoint
+
     base_url, api_key, model = _llm_settings(config)
     if not base_url or not model:
         return None
-    return LLMClient(base_url=base_url, api_key=api_key, model=model)
+    return LLMClient(
+        base_url=base_url, api_key=api_key, model=model,
+        direct=is_direct_endpoint(config, base_url),
+    )
 
 
 class LLMClient:
@@ -196,11 +203,34 @@ class LLMClient:
         api_key: str,
         model: str,
         timeout: float = 20.0,
+        direct: Optional[bool] = None,
     ):
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
         self._timeout = timeout
+        if direct is None:
+            from voice_keyboard.config import _is_local_endpoint
+
+            direct = _is_local_endpoint(base_url)
+        # A local server is reached directly: no proxy, no redirects.
+        self._direct = bool(direct)
+
+    def _post(self, payload: dict, timeout: float):
+        """POST to /chat/completions; raises requests.RequestException."""
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        response = requests.post(
+            f"{self._base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+            **request_kwargs(self._direct),
+        )
+        refuse_redirect(response, self._direct)
+        response.raise_for_status()
+        return response
 
     def rewrite(self, text: str, instruction: str) -> str:
         """Apply `instruction` to `text`; returns the rewritten text.
@@ -208,9 +238,6 @@ class LLMClient:
         Raises RuntimeError with a readable message on any failure —
         callers surface it on the overlay and leave the typed text alone.
         """
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
         payload = {
             "model": self._model,
             "temperature": 0.2,
@@ -223,13 +250,7 @@ class LLMClient:
             ],
         }
         try:
-            response = requests.post(
-                f"{self._base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=self._timeout,
-            )
-            response.raise_for_status()
+            response = self._post(payload, self._timeout)
             body = response.json()
             content = body["choices"][0]["message"]["content"]
         except requests.RequestException as exc:
@@ -248,9 +269,6 @@ class LLMClient:
         Raises RuntimeError with a readable message on any failure,
         like `rewrite`.
         """
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
         if context:
             user = f"Question: {question}\n\nText:\n{context}"
         else:
@@ -264,13 +282,7 @@ class LLMClient:
             ],
         }
         try:
-            response = requests.post(
-                f"{self._base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=self._timeout,
-            )
-            response.raise_for_status()
+            response = self._post(payload, self._timeout)
             body = response.json()
             content = body["choices"][0]["message"]["content"]
         except requests.RequestException as exc:
@@ -286,22 +298,13 @@ class LLMClient:
     def complete(self, prompt: str) -> str:
         """A single-turn completion of a fully-built prompt — the local
         brain path for the assistant. Raises RuntimeError on failure."""
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
         payload = {
             "model": self._model,
             "temperature": 0.3,
             "messages": [{"role": "user", "content": prompt}],
         }
         try:
-            response = requests.post(
-                f"{self._base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=self._timeout,
-            )
-            response.raise_for_status()
+            response = self._post(payload, self._timeout)
             body = response.json()
             content = body["choices"][0]["message"]["content"]
         except requests.RequestException as exc:
@@ -364,9 +367,6 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         timeout: Optional[float] = None,
     ) -> str:
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
         payload = {
             "model": self._model,
             "temperature": temperature,
@@ -378,13 +378,7 @@ class LLMClient:
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
         try:
-            response = requests.post(
-                f"{self._base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=timeout or self._timeout,
-            )
-            response.raise_for_status()
+            response = self._post(payload, timeout or self._timeout)
             body = response.json()
             content = body["choices"][0]["message"]["content"]
         except requests.RequestException as exc:

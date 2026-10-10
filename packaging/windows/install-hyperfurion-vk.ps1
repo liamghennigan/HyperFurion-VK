@@ -3,8 +3,9 @@
 # One line, in PowerShell (installs the latest release):
 #   irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
 #
-# From a checkout (installs that checkout):
-#   powershell -ExecutionPolicy Bypass -File packaging\windows\install-hyperfurion-vk.ps1
+# From a checkout, pass -Source to install that checkout (without -Source,
+# even run from a checkout, it installs the latest release):
+#   powershell -ExecutionPolicy Bypass -File packaging\windows\install-hyperfurion-vk.ps1 -Source .
 #
 # Options (file form):  -Version v2.2.0   -Source C:\path\to\checkout
 #                       -NonInteractive   -NoLaunch   -NoAutostart
@@ -230,7 +231,8 @@ function Install-HyperFurionVK {
     Write-Host ""
     Write-Host "=== Done: $AppName $installed ===" -ForegroundColor Green
     Write-Host "  Dictate:        Ctrl+Alt+V  (tap to start/stop, or hold to talk)"
-    Write-Host "  Ask Kai:        hold Right Ctrl, or click the orb"
+    Write-Host "  Ask Kai:        hold Right Ctrl, or click the orb, once Kai is on"
+    Write-Host "                  (to turn it on: right-click the tray icon > Turn on Kai...)"
     Write-Host "  Read aloud:     select text, press Ctrl+Alt+R"
     Write-Host "  Settings:       right-click the tray icon (notification area)"
     Write-Host "  Settings file:  $ConfigFile"

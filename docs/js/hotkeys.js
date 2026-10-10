@@ -18,8 +18,10 @@ import { Keyboard } from "./keyboard.js";
 
   let keyDown = false, holdStarted = false, holdTimer = 0;
   addEventListener("keydown", (e) => {
-    // tts hotkey: ctrl+alt+t on a selection
-    if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && e.code === "KeyT") {
+    // tts hotkey: ctrl+alt+r on a selection — the app's read-aloud key
+    // on Windows (on Linux you bind one to `voice-keyboard tts`). Not in a
+    // text field, where AltGr layouts type through ctrl+alt.
+    if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && e.code === "KeyR" && !inField(e)) {
       e.preventDefault();
       TTS.speakSelection();
       return;

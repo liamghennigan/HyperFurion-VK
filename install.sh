@@ -247,15 +247,20 @@ prompt_api_key() {
 
 # ── System dependencies ──────────────────────────────────────────────
 echo "[1/6] Installing system dependencies..."
+# PyAudio and evdev ship no Linux wheels, so pip compiles them: that needs a C
+# compiler and the PortAudio and Python headers. apt gets the compiler from
+# python3-pip's recommended build-essential; Fedora and Arch need gcc named.
+# Fedora and Arch have no separate venv package (venv ships with python3 /
+# python), and dnf refuses the whole transaction over one unknown name.
 if command -v apt-get &>/dev/null; then
     sudo apt-get update -qq
     sudo apt-get install -y portaudio19-dev python3-dev python3-pip python3-venv python3-tk libsndfile1 libnotify-bin wl-clipboard xclip
 elif command -v dnf &>/dev/null; then
-    sudo dnf install -y portaudio-devel python3-devel python3-pip python3-venv python3-tkinter libsndfile libnotify wl-clipboard xclip
+    sudo dnf install -y gcc portaudio-devel python3-devel python3-pip python3-tkinter libsndfile libnotify wl-clipboard xclip
 elif command -v pacman &>/dev/null; then
-    sudo pacman -S --noconfirm portaudio python-pip python-virtualenv tk libsndfile libnotify wl-clipboard xclip
+    sudo pacman -S --needed --noconfirm gcc portaudio python python-pip tk libsndfile libnotify wl-clipboard xclip
 else
-    echo "WARNING: Unrecognized package manager. Install portaudio, python3-venv, Python dev headers, Tkinter, and notify-send manually."
+    echo "WARNING: Unrecognized package manager. Install a C compiler (gcc), PortAudio with its headers, Python's venv and dev headers, Tkinter, libsndfile, notify-send, and wl-clipboard or xclip manually."
 fi
 
 # ── uinput setup ─────────────────────────────────────────────────────
@@ -359,6 +364,12 @@ if [ -z "${VOICE_KEYBOARD_STT_PROVIDER:-}${VOICE_KEYBOARD_TTS_PROVIDER:-}" ] \
     # The settings walkthrough: a local llama.cpp model if one is running,
     # speech provider, hotkey, language, Kai. Re-run any time with
     # `voice-keyboard setup`. An upgrade that already works only asks.
+    # The key variables only go with named providers: say so rather than
+    # dropping a key someone passed in without a word.
+    if [ -n "${VOICE_KEYBOARD_API_KEY:-}" ]; then
+        echo "NOTE: VOICE_KEYBOARD_API_KEY is used only with VOICE_KEYBOARD_STT_PROVIDER and"
+        echo "      VOICE_KEYBOARD_TTS_PROVIDER set; the settings walkthrough asks for your key instead."
+    fi
     RUN_SETUP=1
     if config_is_usable "$CONFIG_DIR/config.toml"; then
         printf "Walk through your settings again? (y/N): " > /dev/tty

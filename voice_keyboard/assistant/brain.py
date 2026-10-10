@@ -10,11 +10,14 @@ failure with brain=auto, it falls back to local rather than going silent.
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 from typing import Optional
 
+from voice_keyboard import recall
 from voice_keyboard.assistant.citations import make_citations
 from voice_keyboard.assistant.context import ContextProvider
+from voice_keyboard.assistant.locality import KaiState, kai_state
 from voice_keyboard.assistant.memory import AssistantMemory
 from voice_keyboard.assistant.models import ConverseResult
 from voice_keyboard.assistant.prompting import (
@@ -27,6 +30,14 @@ from voice_keyboard.llm import create_llm_client
 
 logger = logging.getLogger(__name__)
 
+# What a brain reads: copied when it is built, so a turn keeps the settings
+# Kai's verdict was made on even if the daemon's config is reloaded mid-turn.
+SNAPSHOT_SECTIONS = ("assistant", "llm", "recall", "providers", "stt", "tts", "xai")
+
+
+def _snapshot(config: dict) -> dict:
+    return {name: copy.deepcopy(config.get(name, {})) for name in SNAPSHOT_SECTIONS}
+
 
 class Brain:
     def __init__(
@@ -35,8 +46,11 @@ class Brain:
         config: dict,
         memory: AssistantMemory,
         context_provider: ContextProvider,
+        state: Optional[KaiState] = None,
     ):
-        self._config = config
+        self._config = _snapshot(config)
+        # The verdict this brain was built under (see assistant/locality.py).
+        self.state = state if state is not None else kai_state(self._config)
         self._memory = memory
         self._context = context_provider
         assistant_cfg = config.get("assistant", {})
@@ -46,14 +60,34 @@ class Brain:
         self._privacy_mode = str(assistant_cfg.get("privacy_mode", "local")).strip().lower()
         self._max_memory = int(assistant_cfg.get("max_memory_results", 5))
         self._name = str(assistant_cfg.get("name", "Kai")).strip() or "Kai"
-        self._realtime = create_realtime_client(config)
-        self._llm = create_llm_client(config)
+        self._memory_enabled = assistant_cfg.get("memory_enabled", True) is not False
+        self._realtime = create_realtime_client(self._config)
+        self._llm = create_llm_client(self._config)
+        # Semantic history search only where the verdict allows it: a local
+        # [recall], or Kai turned on with online services. Otherwise keywords.
+        self._embedder = (
+            recall.create_embedder(self._config) if self.state.uses_embeddings else None
+        )
+
+    @property
+    def llm(self):
+        """The [llm] client this brain answers with (None without [llm]);
+        the daemon's terminal route uses it too, never a fresh one."""
+        return self._llm
+
+    def built_from(self, config: dict) -> bool:
+        """True when `config` holds the settings this brain was built from."""
+        return all(self._config.get(name) == config.get(name, {}) for name in SNAPSHOT_SECTIONS)
 
     def _gather_context(self, user_text: str):
         chunks = list(self._context.selection_chunk())
-        chunks.extend(
-            self._memory.relevant_chunks(user_text, self._max_memory, config=self._config)
-        )
+        if self._memory_enabled:
+            # memory_enabled = false: no stored memories, no dictation history.
+            chunks.extend(
+                self._memory.relevant_chunks(
+                    user_text, self._max_memory, embedder=self._embedder
+                )
+            )
         file_chunks, warnings = self._context.collect(user_text)
         chunks.extend(file_chunks)
         return chunks, warnings
@@ -94,8 +128,9 @@ class Brain:
         if self.has_voice_agent:
             try:
                 result = await self._realtime.ask_audio(pcm, sample_rate=sample_rate)
-                if transcript_hint:
-                    self._maybe_remember_text(transcript_hint)
+                # Nothing is logged here: the daemon records the turn once,
+                # through remember_interaction(), which honours
+                # [assistant] memory_enabled.
                 # The voice agent's own audio is the answer; its transcript
                 # is what it said. No action-drafting on this path (the
                 # builder agent isn't taught the ACTION grammar).
@@ -128,14 +163,10 @@ class Brain:
             warnings=warnings,
         )
 
-    def _maybe_remember_text(self, text: str) -> None:
-        try:
-            self._memory.log_interaction(text, "(spoken answer)")
-        except Exception:
-            pass
-
     def remember_interaction(self, user_text: str, answer_text: str) -> None:
-        if not self._config.get("assistant", {}).get("memory_enabled", True):
+        """The one place a Kai turn is written to disk. With
+        [assistant] memory_enabled = false nothing is stored."""
+        if not self._memory_enabled:
             return
         try:
             self._memory.log_interaction(user_text, answer_text)
@@ -145,7 +176,7 @@ class Brain:
     def maybe_remember(self, user_text: str) -> bool:
         from voice_keyboard.assistant.memory import extract_memory_candidate
 
-        if not self._config.get("assistant", {}).get("memory_enabled", True):
+        if not self._memory_enabled:
             return False
         candidate = extract_memory_candidate(user_text)
         if not candidate:
@@ -158,16 +189,22 @@ class Brain:
 
 
 def create_brain(config: dict) -> Optional["Brain"]:
-    """Build the brain when [assistant] is enabled; None otherwise."""
+    """Build the brain when Kai is on; None otherwise. Under the default
+    ([assistant] enabled = "auto") Kai is on only when everything it uses
+    runs on this computer (assistant/locality.py); true turns it on anyway,
+    false keeps it off. While it is off nothing is built, so its memory is
+    neither read nor written."""
     from pathlib import Path
 
-    assistant_cfg = config.get("assistant", {})
-    if not assistant_cfg.get("enabled", False):
+    state = kai_state(config)
+    if not state.on:
         return None
+    snapshot = _snapshot(config)
+    assistant_cfg = snapshot.get("assistant", {})
     home_root = Path(str(assistant_cfg.get("home_root", "")).strip() or Path.home())
     memory = AssistantMemory()
     context_provider = ContextProvider(
         home_root=home_root,
         privacy_mode=str(assistant_cfg.get("privacy_mode", "local")).strip().lower(),
     )
-    return Brain(config=config, memory=memory, context_provider=context_provider)
+    return Brain(config=snapshot, memory=memory, context_provider=context_provider, state=state)

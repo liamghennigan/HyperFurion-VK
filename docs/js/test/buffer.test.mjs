@@ -16,6 +16,29 @@ test("an editor: words, selection, typing over it", () => {
   b.press(["ctrl", "end"]); b.press(["ctrl", "backspace"]);
   assert.equal(b.text, "Update: Hello ");
 });
+test("an editor: a sentence mark stuck to a word moves with it", () => {
+  const b = createBuffer();
+  type(b, "Trip it on Friday.");
+  b.press(["shift", "ctrl", "left"]);
+  assert.equal(b.selected(), "Friday.");
+  type(b, "Monday.");
+  assert.equal(b.text, "Trip it on Monday.");
+  b.press(["ctrl", "backspace"]);
+  assert.equal(b.text, "Trip it on ");
+  const c = createBuffer();
+  type(c, "wait... what?! (yes) ok, fine");
+  c.press(["ctrl", "left"]); assert.equal(c.caret, "wait... what?! (yes) ok, ".length);
+  c.press(["ctrl", "left"]); assert.equal(c.caret, "wait... what?! (yes) ".length);   // "ok," is one word
+  c.press(["ctrl", "left"]); assert.equal(c.caret, "wait... what?! (yes".length);    // ")" is not a sentence mark
+  c.press(["ctrl", "left"]); assert.equal(c.caret, "wait... what?! (".length);
+  c.press(["ctrl", "left"]); assert.equal(c.caret, "wait... what?! ".length);
+  c.press(["ctrl", "left"]); assert.equal(c.caret, "wait... ".length);             // "what?!"
+  c.press(["ctrl", "left"]); assert.equal(c.caret, 0);                              // "wait..."
+  const d = createBuffer();
+  type(d, "... ,");
+  d.press(["ctrl", "left"]); assert.equal(d.caret, 4);   // punctuation on its own is still its own word
+  d.press(["ctrl", "left"]); assert.equal(d.caret, 0);
+});
 test("an editor: lines", () => {
   const b = createBuffer();
   type(b, "line one\nline two");

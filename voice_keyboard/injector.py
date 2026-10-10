@@ -125,7 +125,8 @@ class TextInjector:
         # text, or newline smuggled through a clipboard paste. Pressing
         # Enter stays a human act.
         self.suppress_enter = False
-        # A chat app: a line break is Shift+Enter (plain Enter sends).
+        # Enter may send here (a chat app or site, any web page): a line
+        # break is Shift+Enter. Set per session by voice_keyboard/newline.py.
         self.shift_newline = False
         self._warned_no_clipboard = False
 

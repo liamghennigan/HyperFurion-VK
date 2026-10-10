@@ -16,8 +16,12 @@ Usage:
     # then follow the printed openWakeWord training step, and point
     # [wake] model_path at the resulting .onnx / .tflite.
 
-Requires: piper on PATH, and (for the training step) the [wake] extra:
-    pip install 'hyperfurion-vk[wake]'
+Requires: piper on PATH, and (for the training step) the [wake] extra,
+installed in HyperFurion VK's own environment (the package isn't on PyPI):
+    pip install "voice-keyboard[wake]"
+On Linux with Python 3.12 or newer that extra won't install (openWakeWord
+0.6 needs tflite-runtime, which stops at 3.11); config.toml.example's
+[wake] section has the --no-deps route and the one-time model download.
 """
 
 import argparse

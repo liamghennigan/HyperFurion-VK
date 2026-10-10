@@ -147,3 +147,23 @@ def _no_internet(monkeypatch):
     monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
     yield
     assert not reached, f"test tried to reach {sorted(set(reached))}: mock the client instead"
+
+
+@pytest.fixture(autouse=True)
+def kai_notices(monkeypatch, tmp_path_factory):
+    """Kai's on/off notices (assistant/announce.py) never reach the real
+    desktop or the real state folder: the record lives in a temp folder and
+    the notice is collected, not shown. Tests of the notices patch these
+    themselves."""
+    from voice_keyboard.assistant import announce
+
+    folder = tmp_path_factory.mktemp("kai-notice")
+    shown: list = []
+
+    def show(title, body):
+        shown.append((title, body))
+        return True
+
+    monkeypatch.setattr(announce, "record_path", lambda: folder / announce.RECORD_NAME)
+    monkeypatch.setattr(announce, "show", show)
+    yield shown

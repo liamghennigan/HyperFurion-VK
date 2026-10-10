@@ -72,3 +72,33 @@ def test_box_layouts_go_through_the_version_shim() -> None:
     text = _EXT.read_text(encoding="utf-8")
     assert text.count("new St.BoxLayout(") == 2  # the two branches inside boxLayout()
     assert "SHELL_MAJOR >= 48" in text
+
+
+def _method(text: str, name: str) -> str:
+    """The body of a top-level class method `name(...) {` … `\n    }`."""
+    found = re.search(rf"\n    {name}\([^)]*\) \{{(.*?)\n    \}}\n", text, re.S)
+    assert found, f"{name}() missing from extension.js"
+    return found.group(1)
+
+
+def test_orb_starts_hidden() -> None:
+    # Kai is off by default unless it runs locally: the orb must not show
+    # until the daemon says Kai is on (SetButton(true), or the status reply).
+    enable = _method(_EXT.read_text(encoding="utf-8"), "enable")
+    assert "this._showButton();" not in enable
+
+
+def test_enable_asks_the_daemon_whether_to_show_the_orb() -> None:
+    # GNOME Shell runs enable() again at every unlock (the extension declares
+    # no session-modes), and the daemon only pushes SetButton at its own start
+    # and when Kai turns on or off: without asking, the orb is lost at the
+    # first screen lock.
+    text = _EXT.read_text(encoding="utf-8")
+    assert "this._queryButton();" in _method(text, "enable")
+    query = _method(text, "_queryButton")
+    assert "'status'" in query
+    assert "assistant_button" in query
+    assert "shutdown(false, true)" in query  # half-close: the daemon replies at EOF
+    # A reply that arrives after disable() must not draw an orb.
+    assert "this._cancellable" in query
+    assert "this._cancellable.cancel()" in _method(text, "disable")

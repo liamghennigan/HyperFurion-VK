@@ -48,24 +48,34 @@ STARTER_CONFIG = """\
 # HyperFurion VK settings. Save this file and the app picks it up.
 # Every option, with comments: https://github.com/liamghennigan/HyperFurion-VK/blob/main/config.toml.example
 #
-# Easiest: the hosted service — run `voice-keyboard login you@example.com`
-# (or right-click the tray icon > Sign in). Or use your own provider key:
+# Put your speech provider key below. For your own speech server instead,
+# set [stt] and [tts] provider = "openai", base_url below, and the model
+# names your server knows (`voice-keyboard setup` asks for each of these).
+# Existing hosted-service subscribers can run `voice-keyboard login
+# you@example.com` instead; the subscription isn't on sale.
 
 [stt]
 provider = "xai"        # xai | openai | groq | deepgram | assemblyai | hyperfurion
 
 [tts]
-provider = "xai"        # xai | openai | elevenlabs | hyperfurion
+provider = "xai"        # xai | openai | elevenlabs | hyperfurion | none
 
 [providers.xai]
 api_key = "xai-your-api-key-here"
 
 # [providers.openai]
 # api_key = "sk-..."
-# base_url = "http://127.0.0.1:8000/v1"   # a local Whisper/Kokoro server: fully offline
+# base_url = "http://127.0.0.1:8000/v1"   # a local Whisper/Kokoro server: your audio goes only to it
 
 [hotkey]
 key = "control+alt+v"   # tap to toggle dictation, hold to talk
+
+[assistant]
+# Turn Kai on or off from the tray icon's menu.
+# Kai, the voice assistant: "auto" = on only when everything it uses runs
+# on this computer; true = on, even with online services; false = off.
+# `voice-keyboard kai` says which, and why.
+enabled = "auto"
 """
 
 
@@ -135,6 +145,57 @@ def hotkey_labels(config: dict) -> dict:
         "assistant_hotkey": pretty_binding(kai_key) if kai_key else "",
         "read_hotkey": pretty_binding(read_key) if read_key else "",
     }
+
+
+def welcome_text(config: dict, state=None) -> str:
+    """The first-run balloon: how to dictate, and how to ask Kai while it
+    is on, or that it is off and how to turn it on. At most 255 characters
+    (a Windows balloon's limit)."""
+    from voice_keyboard.assistant.locality import kai_state
+
+    state = state if state is not None else kai_state(config)
+    labels = hotkey_labels(config)
+    dictate = f"Press {labels['dictation_hotkey']} to dictate into any app."
+    name = state.name
+    if state.on:
+        kai = labels["assistant_hotkey"]
+        ask = f"Hold {kai} to ask {name}." if kai else f"Click the orb to ask {name}."
+        return f"{dictate} {ask} Right-click the tray icon for settings."
+    if state.setting == "off" or state.unreadable:
+        return f"{dictate} Right-click the tray icon for settings."
+    if not state.can_answer:
+        why = "it has no language model to answer with ([llm])"
+    else:
+        why = f"it would send your questions to {state.online()}"
+    text = (
+        f"{dictate} {name}, the voice assistant, is off: {why}. To turn it on,"
+        f" right-click the tray icon → Turn on {name}…"
+    )
+    if len(text) > 255:
+        text = f"{dictate} {name} is off. To turn it on, right-click the tray icon → Turn on {name}…"
+    return text
+
+
+def kai_consent_text(name: str, hops, config: dict) -> str:
+    """The Yes/No question before Kai is turned on with online services:
+    which service receives what."""
+    from voice_keyboard.assistant.locality import _and, hop_payload
+
+    lines = [f"{name}, the voice assistant, would use online services:", ""]
+    companies: list = []
+    for hop in hops:
+        role = hop.role[:1].upper() + hop.role[1:]
+        lines.append(f"• {role}: {hop.service} receives {hop_payload(hop, config, 'win32')}")
+        company = hop.company or hop.service
+        if company not in companies:
+            companies.append(company)
+    lines += [
+        "",
+        f"To keep {name} on this PC instead, use a local speech server and a local model.",
+        "",
+        f"Turn on {name} and send these to {_and(companies)}?",
+    ]
+    return "\n".join(lines)
 
 
 def _version() -> str:
@@ -312,14 +373,134 @@ class WindowsApp:
     # Callbacks for the shell (UI thread; must not block) ---------------
 
     def _status(self) -> dict:
+        from voice_keyboard.assistant.locality import KaiState
+
         daemon = self._daemon
         if daemon is None:
             return {}
-        return {
+        status = {
             "recording": bool(getattr(daemon, "recording", False)),
             "conversing": bool(getattr(daemon, "conversing", False)),
-            "assistant": bool(getattr(daemon, "assistant_enabled", True)),
+            # Off unless the daemon says Kai is on.
+            "assistant": bool(getattr(daemon, "assistant_enabled", False)),
         }
+        state = getattr(daemon, "kai_state", None)
+        if isinstance(state, KaiState):
+            status.update(
+                assistant_setting=state.setting,
+                assistant_local=state.local,
+                assistant_why=state.why(),
+                assistant_hops=[
+                    {"role": hop.role, "service": hop.service, "local": hop.local,
+                     "section": hop.section}
+                    for hop in state.hops
+                ],
+            )
+        return status
+
+    def _set_kai(self, on: bool) -> None:
+        """The tray's Turn on Kai… / Turn off Kai: never on the UI thread
+        (it may ask a question and writes the settings file)."""
+        threading.Thread(
+            target=self._apply_kai, args=(on,), name="vk-kai", daemon=True
+        ).start()
+
+    def _apply_kai(self, on: bool, *, confirm=None, alert=None) -> bool:
+        """Turn Kai on or off: write [assistant] enabled, then apply it to
+        the running daemon. Off applies at once, even if the file can't be
+        written. On asks first (No by default) when Kai would use online
+        services, now or after a restart. True when the file now says so."""
+        from voice_keyboard.assistant import announce
+        from voice_keyboard.assistant.locality import KaiState, kai_state
+        from voice_keyboard.config import load_config, validate_config
+
+        shell = self._shell
+        if confirm is None:
+            confirm = shell.confirm if shell is not None else (lambda title, body: False)
+        if alert is None:
+            alert = shell.alert if shell is not None else (lambda title, body: None)
+        path = _config_path()
+        daemon = self._daemon
+        try:
+            config = load_config(path)
+            if on:
+                # A file the daemon refuses can't turn Kai on: say so now.
+                validate_config(config)
+        except Exception as exc:
+            config = None
+            if on:
+                alert("Kai stays off", f"The settings file has an error: {exc}\n\nFix it first.")
+                return False
+
+        def with_enabled(value) -> KaiState:
+            if config is None:
+                return KaiState(on=False, setting="off", local=False)
+            return kai_state({**config, "assistant": {**config.get("assistant", {}), "enabled": value}})
+
+        if not on:
+            off = with_enabled(False)
+            announce.write_record(off)
+            written = self._write_kai(path, False, alert, name=off.name)
+            if daemon is not None:
+                daemon.kai_off()  # off now, whatever the file write did
+            return written
+
+        file_auto, file_on = with_enabled("auto"), with_enabled(True)
+        name = file_on.name
+        running = getattr(daemon, "kai_state", None) if daemon is not None else None
+        if not isinstance(running, KaiState):
+            running = None
+        if not file_on.can_answer:
+            alert(f"{name} stays off", f"{name} has no language model to answer with: set [llm] in the settings file first.")
+            return False
+        if file_auto.local and (running is None or running.local):
+            value, state = "auto", file_auto
+        else:
+            # Every online service it would use: the running daemon's
+            # (speech settings change only at a restart) and the file's.
+            hops = list(file_on.online_hops())
+            seen = {(hop.role, hop.service) for hop in hops}
+            for hop in running.online_hops() if running is not None else ():
+                if (hop.role, hop.service) not in seen:
+                    hops.append(hop)
+                    seen.add((hop.role, hop.service))
+            if not confirm(f"Turn on {name}?", kai_consent_text(name, hops, config)):
+                return False
+            value, state = True, file_on
+        announce.write_record(state)
+        if not self._write_kai(path, value, alert, name=name):
+            return False
+        if daemon is not None:
+            daemon.reload_config()
+            if not getattr(daemon, "assistant_enabled", False):
+                now = getattr(daemon, "kai_state", None)
+                why = now.why() if isinstance(now, KaiState) else "off"
+                alert(
+                    f"{name} is still off",
+                    f"The running {APP_NAME} still has {name} {why}.\n\nSpeech settings"
+                    " change at a restart: right-click the tray icon → Restart.",
+                )
+        return True
+
+    def _write_kai(self, path: Path, value, alert, *, name: str = "Kai") -> bool:
+        from voice_keyboard.config import read_config_text, set_kai_enabled, write_config_text
+
+        shown = {True: "true", False: "false", "auto": '"auto"'}[value]
+        try:
+            text = read_config_text(path) if path.exists() else STARTER_CONFIG
+            write_config_text(path, set_kai_enabled(text, value))
+        except ValueError as exc:
+            alert(f"{name}'s setting wasn't changed", f"{exc}\n\nIn {path}, set [assistant] enabled = {shown}.")
+            return False
+        except OSError as exc:
+            after = f"\n\n{name} is off until {APP_NAME} restarts." if value is False else ""
+            alert(
+                "Can't write the settings file",
+                f"Can't write {path} ({exc}): set [assistant] enabled = {shown} where your"
+                f" config comes from.{after}",
+            )
+            return False
+        return True
 
     def _action(self, name: str):
         def run() -> None:
@@ -397,6 +578,7 @@ class WindowsApp:
             set_autostart=self._set_autostart,
             open_help=self._open_help,
             status=self._status,
+            set_kai=self._set_kai,
         )
         return WinShell(
             callbacks,
@@ -411,7 +593,7 @@ class WindowsApp:
         from voice_keyboard.config import load_config, validate_config
 
         if not _config_path().exists():
-            return None, "No settings yet — sign in, or add your provider API key"
+            return None, "No settings yet — add a speech key or your own server (subscribers: sign in)"
         try:
             config = load_config()
         except Exception as exc:
@@ -434,7 +616,7 @@ class WindowsApp:
             if first:
                 self._shell.notify(
                     f"{APP_NAME} needs setup",
-                    f"{reason}. Right-click the tray icon to sign in or open settings.",
+                    f"{reason}. Right-click the tray icon to open settings.",
                 )
         path = _config_path()
 
@@ -481,17 +663,16 @@ class WindowsApp:
         return "could not start"
 
     def _welcome(self, config: dict) -> None:
+        from voice_keyboard.assistant import announce
+        from voice_keyboard.assistant.locality import kai_state
+
         marker = paths.state_dir() / "welcomed"
         if marker.exists() or self._shell is None:
             return
-        labels = hotkey_labels(config)
-        kai = labels["assistant_hotkey"]
-        ask = f"Hold {kai} to ask Kai." if kai else "Click the orb to ask Kai."
-        self._shell.notify(
-            f"{APP_NAME} is running",
-            f"Press {labels['dictation_hotkey']} to dictate into any app. {ask}"
-            " Right-click the tray icon for settings.",
-        )
+        state = kai_state(config)
+        self._shell.notify(f"{APP_NAME} is running", welcome_text(config, state))
+        # It said where Kai stands: the daemon needn't say it again.
+        announce.write_record(state)
         try:
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text("1", encoding="utf-8")

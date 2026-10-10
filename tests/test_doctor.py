@@ -51,9 +51,13 @@ def test_llm_features_without_llm_fail(monkeypatch) -> None:
     monkeypatch.setattr(llm, "llm_ready", lambda config: False)
     finding = doctor.check_llm({"polish": {"map": {"slack": "casual"}}, "flow": {}})
     assert finding.status == doctor.FAIL and "[polish.map]" in finding.detail
-    assert doctor.check_llm({"flow": {}}).status == doctor.OK
+    # "VK, …" rewrites and pause review use [llm] by default.
+    assert doctor.check_llm({"flow": {}}).status == doctor.WARN
+    assert doctor.check_llm({"flow": {"wake_word": "", "pause_review": "rules"}}).status == doctor.OK
     monkeypatch.setattr(llm, "llm_ready", lambda config: True)
-    assert doctor.check_llm({"flow": {"corrections": "llm"}}).detail == "ready for self-corrections"
+    assert doctor.check_llm({"flow": {"corrections": "llm", "wake_word": "", "pause_review": "rules"}}).detail == (
+        "ready for self-corrections"
+    )
 
 
 def test_a_cloud_provider_without_a_key_is_a_failure() -> None:

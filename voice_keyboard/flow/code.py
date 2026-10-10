@@ -153,6 +153,7 @@ def _compile(
     dot_hold: bool = False,
     keywords: frozenset = _KEYWORDS,
     prefixes: frozenset = frozenset(),
+    variable_i: bool = False,
 ) -> tuple[str, RenderState]:
     out: list[str] = []
     at_start = state.at_start
@@ -215,6 +216,8 @@ def _compile(
 
     def word(text: str, *, plain: bool = False) -> None:
         nonlocal pending, glue_next, open_calls
+        if variable_i and text == "I":
+            text = "i"  # "for I in range": a recognizer's pronoun is the loop variable
         core = text.casefold()
         if pending == "call-open":
             pending = "call"
@@ -374,6 +377,7 @@ def compile_python(
         constants=_PYTHON_CONSTANTS,
         pairs=_PYTHON_PAIRS,
         prefixes=_STRING_PREFIXES,
+        variable_i=True,
     )
 
 
@@ -389,6 +393,7 @@ def compile_javascript(
         glue_calls=True,
         pairs=_JS_PAIRS,
         keywords=_JS_KEYWORDS,
+        variable_i=True,
     )
 
 

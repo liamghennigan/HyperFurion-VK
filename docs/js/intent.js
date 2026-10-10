@@ -25,8 +25,13 @@ const TABLE = [
 const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
   twenty: 20, fifty: 50, hundred: 100, eighty: 80 };
 const count = (w) => (/^\d+$/.test(w) ? w : String(WORDS[w] || w));
-// "todo" and "fixme" are what people grep for in capitals
-const term = (t) => { const w = t.trim(); return /^(todo|fixme|hack|xxx)s?$/i.test(w) ? w.replace(/s$/i, "").toUpperCase() : JSON.stringify(w); };
+// "todo" and "fixme" are what people grep for in capitals — however the
+// recognizer wrote them: "to do", "to-dos", "fix me"
+const term = (t) => {
+  const w = t.trim();
+  const marker = w.toLowerCase().replace(/[\s-]+/g, "").replace(/s$/, "");
+  return /^(todo|fixme|hack|xxx)$/.test(marker) ? marker.toUpperCase() : JSON.stringify(w);
+};
 
 export const VERBS = ["run", "command", "execute"];
 // the daemon: an instruction whose first word is an [intent] verb is a
