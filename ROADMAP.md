@@ -2,6 +2,8 @@
 
 Where HyperFurion VK goes from here. This is direction, not a schedule —
 items land when they are ready, and each one is shippable on its own.
+A proposal for version 3, which picks one spine through the rungs
+below, is in [V3.md](V3.md). It is a proposal.
 
 > **Status 2026-10 (2.4.0):** the spoken grammar grew into an editor —
 > "correct monday to friday", "select that", "cap that", "undo/redo/paste
