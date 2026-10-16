@@ -4,8 +4,8 @@
 // Windows downloads still a click away.
 import { $, os } from "./env.js";
 
-const REL = "https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/";
-const MAC = "https://github.com/liamghennigan/HyperFurion-VK#macos-beta";
+const REL = "https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/";
+const MAC = "https://github.com/liamghennigan/Hyperfurion-VK#macos-beta";
 const DL = {
   linux:   { label: "Download for Linux",   href: REL + "HyperFurion-VK-Setup.run", download: true,
              note: "HyperFurion-VK-Setup.run · run it as yourself, not with sudo; it asks for your password only for the system steps (audio libraries, keyboard access)" },
@@ -15,8 +15,8 @@ const DL = {
              note: "macOS is in beta: clone the repository and run packaging/macos/install-macos.sh, then allow Accessibility and Microphone for Python — the README has the steps" },
 };
 const CMDS = {
-  linux: "curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash",
-  win: "irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex",
+  linux: "curl -fsSL https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash",
+  win: "irm https://raw.githubusercontent.com/liamghennigan/Hyperfurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex",
 };
 
 (() => {

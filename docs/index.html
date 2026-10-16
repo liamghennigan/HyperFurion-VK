@@ -12,25 +12,25 @@
        you say is stored. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob: https://cdn.jsdelivr.net 'wasm-unsafe-eval'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.hyperfurion.com wss://api.hyperfurion.com; worker-src 'self' blob:; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; base-uri 'self'; form-action 'self'" />
   <meta name="referrer" content="no-referrer" />
-  <title>HyperFurion VK — Your voice is the keyboard</title>
+  <title>Hyperfurion VK — Your voice is the keyboard</title>
   <meta name="description" content="Open-source voice keyboard for Linux and Windows: press Ctrl+Alt+V, talk, and your words are typed into any app, terminal included. Try it in your browser." />
-  <meta property="og:title" content="HyperFurion VK — Your voice is the keyboard" />
+  <meta property="og:title" content="Hyperfurion VK — Your voice is the keyboard" />
   <meta property="og:description" content="An open-source voice keyboard for Linux and Windows: your speech becomes real keystrokes in the app you're using, and it never presses Enter in a terminal it recognizes. Bring a speech key (xAI by default) or your own offline server. Try it in your browser." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://liamghennigan.github.io/HyperFurion-VK/" />
-  <link rel="canonical" href="https://liamghennigan.github.io/HyperFurion-VK/" />
+  <meta property="og:url" content="https://liamghennigan.github.io/Hyperfurion-VK/" />
+  <link rel="canonical" href="https://liamghennigan.github.io/Hyperfurion-VK/" />
   <meta name="theme-color" content="#07060a" />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "HyperFurion VK",
+    "name": "Hyperfurion VK",
     "operatingSystem": "Linux; Windows 10, 11; macOS (beta)",
     "applicationCategory": "UtilitiesApplication",
     "softwareVersion": "2.4.0",
     "license": "https://opensource.org/licenses/MIT",
-    "url": "https://liamghennigan.github.io/HyperFurion-VK/",
-    "downloadUrl": "https://github.com/liamghennigan/HyperFurion-VK/releases/latest",
+    "url": "https://liamghennigan.github.io/Hyperfurion-VK/",
+    "downloadUrl": "https://github.com/liamghennigan/Hyperfurion-VK/releases/latest",
     "description": "A system-wide voice keyboard for Linux and Windows. Press Ctrl+Alt+V and your words type into the focused app while you speak, repairing themselves in place. A spoken edit grammar, per-app formatting with code registers you map, a spoken “VK, …” rewrite through your language model, read-aloud for a selection, and a push-to-talk assistant. No speech model ships with it: it uses a cloud speech service with your key (xAI by default) or your own offline speech server.",
     "offers": [{ "@type": "Offer", "name": "Open source — bring your own key", "price": "0", "priceCurrency": "USD" }]
   }
@@ -53,12 +53,12 @@
 
   <nav class="nav" aria-label="Primary">
     <div class="wrap nav-inner">
-      <a class="brand" href="#top"><span class="brand-key" aria-hidden="true">VK</span><span>HyperFurion&nbsp;VK</span></a>
+      <a class="brand" href="#top"><span class="brand-key" aria-hidden="true">VK</span><span>Hyperfurion&nbsp;VK</span></a>
       <div class="nav-links">
         <a href="#molten">how it works</a>
         <a href="#install">install</a>
         <a href="#compare">compare</a>
-        <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">GitHub</a>
+        <a href="https://github.com/liamghennigan/Hyperfurion-VK" rel="noopener">GitHub</a>
         <a class="btn primary small" id="nav-dl" href="#install">Download</a>
       </div>
     </div>
@@ -73,7 +73,7 @@
           <h1>Your voice is <em>the keyboard.</em></h1>
           <p class="lead">Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>V</kbd> and talk: your words become real keystrokes in whatever app has focus, terminal included, as you speak. Bring a key for a cloud speech service (xAI by default) or run your own offline speech server. The mic opens only when you ask, and it never presses Enter in a terminal it recognizes.</p>
           <div class="actions">
-            <a class="btn primary" id="hero-dl" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
+            <a class="btn primary" id="hero-dl" href="https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
             <a class="btn" id="hero-try" href="#stage">Try it — tap the mic</a>
           </div>
         </div>
@@ -206,14 +206,14 @@ model = <span class="s">"your-model-id"</span>  <span class="c"># what its /v1/m
       <div class="wrap install-grid">
         <div class="install-copy">
           <span class="eyebrow">v2.4.0 · Linux · Windows 10/11</span>
-          <h2 id="install-title">Install HyperFurion VK.</h2>
+          <h2 id="install-title">Install Hyperfurion VK.</h2>
           <p>Download it and run it as yourself, not with sudo or as administrator. On Linux it asks for your password for the system steps (audio libraries, the virtual keyboard, adding you to the <code>input</code> group), and after the first install you log out and back in once. Setup then asks how to transcribe your speech — a key for a cloud service, or your own server (its hosted-service choice needs a subscription, which isn't on sale) — and about your hotkey, language, Kai (the push-to-talk assistant: setup says where its questions would go, and it is off unless it runs locally or you turn it on) and caret commands. Running a local <code>llama-server</code>? Setup finds it and offers its model as your language model.</p>
           <div class="actions">
-            <a class="btn primary" id="dl-primary" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
-            <a class="btn" id="dl-secondary" href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.cmd" download rel="noopener">Download for Windows</a>
+            <a class="btn primary" id="dl-primary" href="https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/HyperFurion-VK-Setup.run" download rel="noopener">Download for Linux</a>
+            <a class="btn" id="dl-secondary" href="https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/HyperFurion-VK-Setup.cmd" download rel="noopener">Download for Windows</a>
           </div>
           <p class="sigcap" id="dl-note">HyperFurion-VK-Setup.run · run it as yourself, not with sudo; it asks for your password only for the system steps (audio libraries, keyboard access)</p>
-          <p class="muted"><strong>Free and open source.</strong> Every feature works with your own provider key or a local model; nothing is paywalled. macOS is in beta — <a href="https://github.com/liamghennigan/HyperFurion-VK#macos-beta" rel="noopener">install from a checkout</a>.</p>
+          <p class="muted"><strong>Free and open source.</strong> Every feature works with your own provider key or a local model; nothing is paywalled. macOS is in beta — <a href="https://github.com/liamghennigan/Hyperfurion-VK#macos-beta" rel="noopener">install from a checkout</a>.</p>
           <details class="disclosure">
             <summary>What gets installed</summary>
             <ul>
@@ -227,7 +227,7 @@ model = <span class="s">"your-model-id"</span>  <span class="c"># what its /v1/m
           <div class="terminal">
             <div class="terminal-bar"><span>linux · one line</span><button class="copy" type="button" data-copy="linux">copy</button></div>
             <pre><code><span class="c"># downloads the release installer and runs it as you</span>
-curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash
+curl -fsSL https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash
 
 <span class="c"># first install: log out and back in, then press</span> <span class="a">Ctrl + Alt + V</span> <span class="c">and speak</span>
 
@@ -237,7 +237,7 @@ voice-keyboard doctor</code></pre>
           <div class="terminal">
             <div class="terminal-bar"><span>windows · powershell</span><button class="copy" type="button" data-copy="win">copy</button></div>
             <pre><code><span class="c"># a tray app; installs Python if you need it</span>
-irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex</code></pre>
+irm https://raw.githubusercontent.com/liamghennigan/Hyperfurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex</code></pre>
           </div>
         </div>
       </div>
@@ -270,7 +270,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packagin
         <p class="lead">Next to the voice tools Linux users already know, and Dragon on Windows. It doesn’t win every row: it ships no speech model, and Talon goes much further with hands-free control.</p>
         <div class="tblwrap">
           <table>
-            <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col">HyperFurion&nbsp;VK</th><th scope="col">Talon</th><th scope="col">Numen</th><th scope="col">nerd-dictation</th><th scope="col">Dragon</th></tr></thead>
+            <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col">Hyperfurion&nbsp;VK</th><th scope="col">Talon</th><th scope="col">Numen</th><th scope="col">nerd-dictation</th><th scope="col">Dragon</th></tr></thead>
             <tbody>
               <tr><th scope="row">Open source</th><td class="yes">MIT</td><td class="no">no (free; Talon+ is paid)</td><td class="yes">AGPL-3.0</td><td class="yes">GPL-2.0+</td><td class="no">no (paid)</td></tr>
               <tr><th scope="row">Needs no API key or server</th><td class="no">no: a key (xAI by default) or your own speech server</td><td class="yes">yes: free speech model</td><td class="yes">yes: free Vosk model</td><td class="yes">yes: free Vosk model</td><td class="yes">yes: model included</td></tr>
@@ -284,7 +284,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packagin
           </table>
         </div>
         <p class="also">Not in the table: <b>Handy</b> (open source, offline, Windows, macOS and Linux), <b>Voice Access</b> (built into Windows&nbsp;11, works offline), and the AI dictation apps <b>Wispr Flow</b> and <b>Superwhisper</b> (Mac, Windows and phones) and <b>VoiceInk</b> (Mac). The full comparison has a line on each.</p>
-        <p class="sigcap">checked October 2026 against each project’s own docs and code · not a benchmark: nothing here measures accuracy · HyperFurion VK cells are v2.4.0 with default settings · <a href="./compare.html">full comparison →</a> · out of date? <a href="https://github.com/liamghennigan/HyperFurion-VK/issues" rel="noopener">open an issue</a></p>
+        <p class="sigcap">checked October 2026 against each project’s own docs and code · not a benchmark: nothing here measures accuracy · Hyperfurion VK cells are v2.4.0 with default settings · <a href="./compare.html">full comparison →</a> · out of date? <a href="https://github.com/liamghennigan/Hyperfurion-VK/issues" rel="noopener">open an issue</a></p>
       </div>
     </section>
 
@@ -297,7 +297,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packagin
           <li>Words land while you speak with xAI, or with your own server at a local address (localhost, a private IPv4 address or a <code>.local</code> name), re-transcribed every 2.5 seconds; with OpenAI, Groq, Deepgram or AssemblyAI, or a server anywhere else, they land when you stop talking.</li>
           <li>Linux and Windows are first-class. macOS is in beta, installed from a checkout. iOS lets no app press keys in other apps, so this one can't run there.</li>
           <li>Repairs assume nothing else edits the field while you dictate. If focus moves to another app mid-sentence, typing stops there and the whole transcript goes to your clipboard, replacing what was on it; a dictation typed when you stop looks again just before it types, and types nothing into another app either.</li>
-          <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend. Caret commands (<code>[nav]</code>) and “VK, run …” (<code>[intent]</code>) are off by default in the app; this page has both on, with your own platform's keys. <a href="https://github.com/liamghennigan/HyperFurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
+          <li>A caret command needs a pause before and after it; said mid-sentence it is typed as words. Terminals have no selection to extend. Caret commands (<code>[nav]</code>) and “VK, run …” (<code>[intent]</code>) are off by default in the app; this page has both on, with your own platform's keys. <a href="https://github.com/liamghennigan/Hyperfurion-VK#limitations" rel="noopener">Full list on GitHub →</a></li>
         </ul>
       </div>
     </section>
@@ -306,14 +306,14 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packagin
   <footer>
     <div class="wrap">
       <p class="sigcap"><span id="bytes">self-hosted · no third-party requests</span> · no analytics · no cookies · nothing you say is stored</p>
-      <p class="sigcap">the engine on this page is a port of the app's, and CI replays the same <a href="https://github.com/liamghennigan/HyperFurion-VK/blob/main/tests/flow_corpus.json" rel="noopener">corpus</a> of test phrases through both: same text, same caret commands</p>
+      <p class="sigcap">the engine on this page is a port of the app's, and CI replays the same <a href="https://github.com/liamghennigan/Hyperfurion-VK/blob/main/tests/flow_corpus.json" rel="noopener">corpus</a> of test phrases through both: same text, same caret commands</p>
       <p class="sigcap" id="fetched" hidden></p>
       <div class="footer-grid">
-        <div>HyperFurion VK · MIT · an open-source voice keyboard for Linux and Windows · every feature is free with your own key or server; the hosted subscription isn't on sale</div>
+        <div>Hyperfurion VK · MIT · an open-source voice keyboard for Linux and Windows · every feature is free with your own key or server; the hosted subscription isn't on sale</div>
         <div class="footer-links">
-          <a href="https://github.com/liamghennigan/HyperFurion-VK" rel="noopener">GitHub</a>
-          <a href="https://github.com/liamghennigan/HyperFurion-VK/releases/latest" rel="noopener">releases</a>
-          <a href="https://github.com/liamghennigan/HyperFurion-VK/tree/main/relay" rel="noopener">relay source</a>
+          <a href="https://github.com/liamghennigan/Hyperfurion-VK" rel="noopener">GitHub</a>
+          <a href="https://github.com/liamghennigan/Hyperfurion-VK/releases/latest" rel="noopener">releases</a>
+          <a href="https://github.com/liamghennigan/Hyperfurion-VK/tree/main/relay" rel="noopener">relay source</a>
           <a href="./compare.html">compare</a>
           <a href="#top">back to top</a>
         </div>
@@ -327,7 +327,7 @@ irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packagin
     <p class="sigcap" id="relay-status">not checked yet: nothing has been sent</p>
     <button class="btn small" id="relay-check" type="button">check the relay</button>
     <label class="switch"><input type="checkbox" id="relay-arm" disabled /> <span>send my next dictation through xAI via the relay</span></label>
-    <form class="ask" id="relay-ask"><input type="text" placeholder="ask a question about HyperFurion VK…" aria-label="Ask a question about HyperFurion VK (answered by xAI's Grok via the relay)" disabled /><button class="btn small" type="submit" disabled>ask</button></form>
+    <form class="ask" id="relay-ask"><input type="text" placeholder="ask a question about Hyperfurion VK…" aria-label="Ask a question about Hyperfurion VK (answered by xAI's Grok via the relay)" disabled /><button class="btn small" type="submit" disabled>ask</button></form>
     <p class="answer" id="relay-answer"></p>
     <div class="actions"><button class="btn small" id="relay-hear" type="button" disabled>hear it in xAI's voice</button><button class="btn small quiet" id="relay-close" type="button">close</button></div>
   </dialog>

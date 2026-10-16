@@ -79,7 +79,7 @@ const PUNCT = {
   "greater than sign": [">", "none", false], "caret sign": ["^", "none", false],
 };
 // [flow.vocabulary] — the documented example ships live on this page
-const VOCAB = { "hyper furion": "HyperFurion" };
+const VOCAB = { "hyper furion": "Hyperfurion" };
 
 // phrase table: tokens -> ["punct", spec] | ["cmd", action] | ["vocab", text]
 const PHRASES = new Map();

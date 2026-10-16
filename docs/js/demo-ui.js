@@ -26,8 +26,8 @@ export const DemoUI = (() => {
   })();
   if (askInput && /kai/i.test(askInput.placeholder)) {
     // it is not Kai: it is xAI's Grok, answering from a short fact sheet on the relay
-    askInput.placeholder = "ask a question about HyperFurion VK…";
-    askInput.setAttribute("aria-label", "Ask a question about HyperFurion VK (answered by xAI's Grok via the relay)");
+    askInput.placeholder = "ask a question about Hyperfurion VK…";
+    askInput.setAttribute("aria-label", "Ask a question about Hyperfurion VK (answered by xAI's Grok via the relay)");
   }
   if (hear && /real voice/i.test(hear.textContent)) hear.textContent = "hear it in xAI's voice";
   if (hear) hear.title = "Sends the answer above (or a sample sentence) to the relay, which has xAI's “eve” voice read it.";
@@ -104,7 +104,7 @@ export const DemoUI = (() => {
     bus.emit("relay:request", {});
   });
   if (hear) hear.addEventListener("click", async () => {
-    const text = answer || "This is xAI's eve voice, the one HyperFurion VK reads selected text aloud with by default.";
+    const text = answer || "This is xAI's eve voice, the one Hyperfurion VK reads selected text aloud with by default.";
     AudioOut.unlock();
     hear.disabled = true;
     bus.emit("relay:asked", { what: "tts" });

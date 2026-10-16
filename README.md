@@ -1,12 +1,12 @@
-# HyperFurion VK — your voice is the keyboard
+# Hyperfurion VK — your voice is the keyboard
 
-[![Latest release](https://img.shields.io/github/v/release/liamghennigan/HyperFurion-VK)](https://github.com/liamghennigan/HyperFurion-VK/releases)
+[![Latest release](https://img.shields.io/github/v/release/liamghennigan/Hyperfurion-VK)](https://github.com/liamghennigan/Hyperfurion-VK/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Linux and Windows](https://img.shields.io/badge/Linux%20·%20Windows-Wayland%20%26%20X11%20·%20Windows%2010%2F11-informational)](https://liamghennigan.github.io/HyperFurion-VK/)
-[![CI](https://github.com/liamghennigan/HyperFurion-VK/actions/workflows/ci.yml/badge.svg)](https://github.com/liamghennigan/HyperFurion-VK/actions/workflows/ci.yml)
-[![Stars](https://img.shields.io/github/stars/liamghennigan/HyperFurion-VK?style=social)](https://github.com/liamghennigan/HyperFurion-VK/stargazers)
+[![Linux and Windows](https://img.shields.io/badge/Linux%20·%20Windows-Wayland%20%26%20X11%20·%20Windows%2010%2F11-informational)](https://liamghennigan.github.io/Hyperfurion-VK/)
+[![CI](https://github.com/liamghennigan/Hyperfurion-VK/actions/workflows/ci.yml/badge.svg)](https://github.com/liamghennigan/Hyperfurion-VK/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/liamghennigan/Hyperfurion-VK?style=social)](https://github.com/liamghennigan/Hyperfurion-VK/stargazers)
 
-**Type with your voice in any app on Linux or Windows — including the terminal.** HyperFurion
+**Type with your voice in any app on Linux or Windows — including the terminal.** Hyperfurion
 VK is a system-wide voice keyboard: your speech becomes real keystrokes,
 pressed into whatever app your cursor is already in. Words land *while you
 speak* (with xAI, the default, or your own local speech server) and repair
@@ -16,7 +16,7 @@ run your own speech server and a local language model and it works **fully
 offline**. The mic opens only when you ask, and it **never presses Enter in a
 terminal it recognizes — that stays yours.**
 
-▶ **See it work:** **<https://liamghennigan.github.io/HyperFurion-VK/>** — the
+▶ **See it work:** **<https://liamghennigan.github.io/Hyperfurion-VK/>** — the
 landing page is a working instance: an open-source speech model runs in
 your browser, the words land in a real text field, and a 3D keyboard
 presses every key — the spelling fixes, the caret commands, never Enter.
@@ -25,15 +25,15 @@ through both (`tests/flow_corpus.json`).
 
 <!-- TODO(demo): drop a 30–45s screen capture here once recorded — it is the
      single most shareable asset.
-![HyperFurion VK typing into a terminal by voice](docs/media/demo.gif)
+![Hyperfurion VK typing into a terminal by voice](docs/media/demo.gif)
 -->
 
 ### Download and run
 
 | | Download | Run it |
 | --- | --- | --- |
-| **Linux** | [HyperFurion-VK-Setup.run](https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.run) | `sh ~/Downloads/HyperFurion-VK-Setup.run`, or make it executable and double-click it |
-| **Windows** | [HyperFurion-VK-Setup.cmd](https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/HyperFurion-VK-Setup.cmd) | double-click it (if Windows warns about a downloaded file: **More info › Run anyway**) |
+| **Linux** | [HyperFurion-VK-Setup.run](https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/HyperFurion-VK-Setup.run) | `sh ~/Downloads/HyperFurion-VK-Setup.run`, or make it executable and double-click it |
+| **Windows** | [HyperFurion-VK-Setup.cmd](https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/HyperFurion-VK-Setup.cmd) | double-click it (if Windows warns about a downloaded file: **More info › Run anyway**) |
 
 Run it as yourself, not with `sudo` or as administrator. On Linux it asks for
 your password for the system steps (audio and clipboard packages, the virtual
@@ -51,7 +51,7 @@ punctuation). Change any of it later with `voice-keyboard setup`.
 ### Install on Linux — one line
 
 ```bash
-curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash
+curl -fsSL https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash
 ```
 
 Sets up a local daemon, the `uinput` virtual keyboard, and a systemd user
@@ -66,7 +66,7 @@ key to manage) is for existing subscribers; it isn't on sale right now.
 In PowerShell (no administrator rights needed):
 
 ```powershell
-irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
+irm https://raw.githubusercontent.com/liamghennigan/Hyperfurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
 ```
 
 A tray app with a native overlay and an on-screen Kai orb; it installs Python
@@ -112,7 +112,7 @@ for you if you don't have it. Press **Ctrl+Alt+V** in any app. See
 
 ---
 
-HyperFurion VK runs a local daemon. When you record speech, the daemon captures
+Hyperfurion VK runs a local daemon. When you record speech, the daemon captures
 microphone audio, sends it to the configured speech-to-text provider, and types
 the returned text into the currently focused app through a virtual keyboard.
 When you ask for text-to-speech, it reads the text you have selected (the
@@ -188,7 +188,7 @@ through your `[llm]` and repairs it on screen.
 - **Teach it your vocabulary:** `voice-keyboard learned` lists the words you
   spelled or corrected by voice and the corrections mined from the opt-in
   history; nothing applies until you accept it. Or add a word now:
-  `voice-keyboard learned add hyper furion = HyperFurion` (a one-word
+  `voice-keyboard learned add hyper furion = Hyperfurion` (a one-word
   written form is also saved as a hotword, which OpenAI, Groq, Deepgram and
   AssemblyAI lean toward once you set `[stt] hotword_bias = true`).
 - **Polish per app:** `[polish.map]` maps an app to a style (`slack =
@@ -288,7 +288,7 @@ Dictation, TTS, manual commands, and fallback notifications are not GNOME-only.
 Download and run the release installer:
 
 ```bash
-curl -L https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
+curl -L https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/install-hyperfurion-vk.sh -o install-hyperfurion-vk.sh
 chmod +x install-hyperfurion-vk.sh
 ./install-hyperfurion-vk.sh
 ```
@@ -369,13 +369,13 @@ terminal pane, password fields). To work on it, `./scripts/macos-dev-setup.sh
 terminal. To install it with a login agent, from a checkout:
 
 ```bash
-git clone https://github.com/liamghennigan/HyperFurion-VK
-cd HyperFurion-VK
+git clone https://github.com/liamghennigan/Hyperfurion-VK
+cd Hyperfurion-VK
 ./packaging/macos/install-macos.sh
 ```
 
 macOS needs three switches under System Settings → Privacy & Security, for
-the app that runs HyperFurion VK (your terminal app, or Python for the login
+the app that runs Hyperfurion VK (your terminal app, or Python for the login
 agent): **Accessibility** (typing, the focused field, the hotkey), **Input
 Monitoring** (the hotkey) and **Microphone**. `voice-keyboard doctor` checks
 all three and names the switch. There is no overlay yet: a rising tone marks
@@ -403,10 +403,10 @@ or 11.
 In PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
+irm https://raw.githubusercontent.com/liamghennigan/Hyperfurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex
 ```
 
-(From cmd: `powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/liamghennigan/HyperFurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex"`.)
+(From cmd: `powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/liamghennigan/Hyperfurion-VK/main/packaging/windows/install-hyperfurion-vk.ps1 | iex"`.)
 From a checkout, `powershell -ExecutionPolicy Bypass -File
 packaging\windows\install-hyperfurion-vk.ps1 -Source .` installs that checkout
 (without `-Source` it installs the latest release). The installer:
@@ -415,7 +415,7 @@ packaging\windows\install-hyperfurion-vk.ps1 -Source .` installs that checkout
   (winget, falling back to the python.org installer);
 - installs into `%LOCALAPPDATA%\HyperFurion-VK` and puts a `voice-keyboard`
   command on your PATH (open a **new** terminal to use it);
-- adds **HyperFurion VK** to the Start menu, to startup, and to
+- adds **Hyperfurion VK** to the Start menu, to startup, and to
   **Settings › Apps** (where you can uninstall it);
 - walks you through the settings (`voice-keyboard setup`): a running
   llama.cpp model offered as your default language model (otherwise xAI's
@@ -506,7 +506,7 @@ same app, with the log streaming in that terminal.
 
 ### Uninstall
 
-**Settings › Apps › HyperFurion VK › Uninstall**, or:
+**Settings › Apps › Hyperfurion VK › Uninstall**, or:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\HyperFurion-VK\uninstall.ps1"
@@ -519,7 +519,7 @@ memory.
 
 - **Nothing types into an admin window.** Windows blocks input from normal
   apps into elevated (administrator) windows, and hides their keystrokes from
-  the hotkey too. Use a normal window, or run HyperFurion VK as administrator
+  the hotkey too. Use a normal window, or run Hyperfurion VK as administrator
   for that session. The same goes for the UAC prompt and the lock screen.
 - **NO SIGNAL every time.** If the pill says the mic sent pure silence, turn on
   *Settings › Privacy & security › Microphone › Let desktop apps access your
@@ -823,7 +823,7 @@ other commands, and numbers, dates and units, stay English.
 The commands (`scratch that`, `new line`, `cap that`, `new bullet`, …)
 and the punctuation words are remappable and removable in config
 (`[flow.commands]`, `[flow.punctuation]`), `[flow.vocabulary]` expands your
-own phrases ("hyper furion" → "HyperFurion"), and the wake word is
+own phrases ("hyper furion" → "Hyperfurion"), and the wake word is
 configurable.
 Each `spell that …` fix is offered under `voice-keyboard learned` as a
 correction (and hotword) candidate. It is never applied on its own: one
@@ -1307,9 +1307,9 @@ systemctl --user restart voice-keyboard-daemon
 ## Providers
 
 **xAI is the default provider** for speech-to-text, text-to-speech and the
-`[llm]` language model (Grok, on the same key) — it is what HyperFurion VK is
+`[llm]` language model (Grok, on the same key) — it is what Hyperfurion VK is
 built and daily-driven on. Any provider below
-works: HyperFurion VK is provider-selectable and model-configurable, and model
+works: Hyperfurion VK is provider-selectable and model-configurable, and model
 IDs are plain config values, so a compatible provider model can be changed
 without code changes.
 
@@ -1318,7 +1318,7 @@ without code changes.
 | Provider | Config value | Default model |
 | --- | --- | --- |
 | xAI (default) | `xai` | Provider default. |
-| HyperFurion (hosted; existing subscribers) | `hyperfurion` | Provider default. |
+| Hyperfurion (hosted; existing subscribers) | `hyperfurion` | Provider default. |
 | OpenAI | `openai` | `gpt-4o-transcribe` |
 | Groq | `groq` | `whisper-large-v3-turbo` |
 | Deepgram | `deepgram` | `nova-3` |
@@ -1338,7 +1338,7 @@ re-transcribe while you speak too, and every pass is billed.
 | Provider | Config value | Default model | Default voice |
 | --- | --- | --- | --- |
 | xAI (default) | `xai` | Provider default. | `eve` |
-| HyperFurion (hosted; existing subscribers) | `hyperfurion` | Provider default. | `eve` |
+| Hyperfurion (hosted; existing subscribers) | `hyperfurion` | Provider default. | `eve` |
 | OpenAI | `openai` | `gpt-4o-mini-tts` | `coral` |
 | ElevenLabs | `elevenlabs` | `eleven_multilingual_v2` | `JBFqnCBsd6RMkjVDRZzb` |
 
@@ -1402,7 +1402,7 @@ directly too (a keyless server still needs a local address). Kai goes by
 address and trusts a local server to run the model itself: one that
 forwards your request to an online service (a proxy to a cloud API) is
 online in fact, whatever its address. An Ollama model tag ending in
-`-cloud` or `:cloud` already counts as online, and so does the HyperFurion
+`-cloud` or `:cloud` already counts as online, and so does the Hyperfurion
 relay, even on `localhost` (it forwards to xAI).
 
 Open models and servers that work well locally:
@@ -1416,11 +1416,11 @@ Open models and servers that work well locally:
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | CPU-only and edge boxes; no GPU required. Start `whisper-server` with `--inference-path /v1/audio/transcriptions` so it answers at the path OpenAI's API uses. |
 | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) | Small, high-quality open TTS voice (what Speaches serves). |
 
-### The HyperFurion Subscription Provider
+### The Hyperfurion Subscription Provider
 
 `hyperfurion` is the hosted subscription, and it isn't on sale right now:
 this provider is for existing subscribers, and for anyone who runs their own
-relay. It buys convenience, not capability. Every feature of HyperFurion VK
+relay. It buys convenience, not capability. Every feature of Hyperfurion VK
 is open source and free forever — with your own provider API key or a local
 server you have all of it, and paying unlocks nothing. A subscription is a
 single `hfk_` key instead of a provider account (`voice-keyboard login
@@ -1495,7 +1495,7 @@ daemon restarts.
 The anchor comes from AT-SPI focus/caret coordinates, collected with
 `/usr/bin/python3` so it can use the system `gi` and `Atspi` packages. If AT-SPI
 cannot expose a useful focused field, the extension falls back to the focused
-window or monitor. If the extension is unavailable, HyperFurion VK falls back to
+window or monitor. If the extension is unavailable, Hyperfurion VK falls back to
 `notify-send`.
 
 Newly installed GNOME Shell extensions may not load in the current Wayland
@@ -1649,7 +1649,7 @@ journalctl --user -u voice-keyboard-daemon -n 100 --no-pager
 
 ### `voice-keyboard tts` Says No Selected Text
 
-On Linux, HyperFurion VK reads the primary selection, not the clipboard
+On Linux, Hyperfurion VK reads the primary selection, not the clipboard
 (on macOS and Windows `voice-keyboard tts` reads the clipboard, so copy
 first; Windows' `Ctrl+Alt+R` copies the selection for you). Select the
 text you want spoken and run `voice-keyboard tts` while it remains selected.
@@ -1674,7 +1674,7 @@ fails, the app tries `pygame` if installed:
 systemctl --user restart voice-keyboard-daemon
 ```
 
-Also confirm your system audio output works outside HyperFurion VK.
+Also confirm your system audio output works outside Hyperfurion VK.
 
 ### The Overlay Does Not Appear Or Is Not Near The Text Field
 
@@ -1844,7 +1844,7 @@ status UI, IPC, playback, and keyboard injection are already local.
 ## Architecture
 
 ```text
-HyperFurion-VK/
+Hyperfurion-VK/
 |-- voice_keyboard/
 |   |-- daemon.py          # Main daemon, recording state, IPC handling, hotkeys
 |   |-- client.py          # CLI, selection reading, overlay calls
@@ -1949,13 +1949,13 @@ desktop).
 
 ## Uninstall
 
-Windows: **Settings › Apps › HyperFurion VK › Uninstall** (see
+Windows: **Settings › Apps › Hyperfurion VK › Uninstall** (see
 [Windows](#windows)).
 
 Linux:
 
 ```bash
-curl -fsSL https://github.com/liamghennigan/HyperFurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash -s -- --uninstall
+curl -fsSL https://github.com/liamghennigan/Hyperfurion-VK/releases/latest/download/install-hyperfurion-vk.sh | bash -s -- --uninstall
 # or, from a checkout:
 ./install.sh --uninstall
 ```

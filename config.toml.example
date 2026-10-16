@@ -20,7 +20,7 @@ api_key = "assemblyai-your-api-key-here"
 [providers.elevenlabs]
 api_key = "elevenlabs-your-api-key-here"
 
-# HyperFurion hosted service: not on sale right now (existing subscribers
+# Hyperfurion hosted service: not on sale right now (existing subscribers
 # only), so it comes last. See relay/README.md. A subscriber runs
 # `voice-keyboard login <email>`, which emails a sign-in code, fills in this
 # key and switches stt/tts here; logging in again replaces a lost key.
@@ -195,7 +195,7 @@ wake_word = "vk"
 
 [flow.vocabulary]
 # Spoken phrase -> replacement (multi-word keys fine).
-# "hyper furion" = "HyperFurion"
+# "hyper furion" = "Hyperfurion"
 
 [flow.commands]
 # Remap command phrases. Actions: scratch_that, new_line, new_paragraph,
@@ -480,7 +480,7 @@ enabled = false
 # the ONE summon path that keeps the mic warm, so the hotkey stays the hard
 # mute unless you arm this.
 # It needs openWakeWord (the optional [wake] extra of the voice-keyboard
-# package) in HyperFurion VK's own environment, and openWakeWord's shared
+# package) in Hyperfurion VK's own environment, and openWakeWord's shared
 # models, downloaded once. After the Linux installer, with
 # VENV=~/.local/share/voice-keyboard-venv:
 #   $VENV/bin/pip install "voice-keyboard[wake]"

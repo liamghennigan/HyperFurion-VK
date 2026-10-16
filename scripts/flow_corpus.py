@@ -469,7 +469,7 @@ def make_engine(register_name: str, opts: dict) -> FlowEngine:
     grammar = Grammar(
         enabled=register.grammar_enabled,
         # [flow.vocabulary]'s documented example, which the page ships live
-        vocabulary={"hyper furion": "HyperFurion"},
+        vocabulary={"hyper furion": "Hyperfurion"},
         wake_word="vk",
         numbers=opts.get("numbers", "auto"),
         numbers_on=register.numbers_on,
