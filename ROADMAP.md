@@ -2,6 +2,12 @@
 
 Where HyperFurion VK goes from here. This is direction, not a schedule —
 items land when they are ready, and each one is shippable on its own.
+A proposal for version 3 is in [V3.md](V3.md). It is a proposal.
+The version is three things that ship together: the app receives
+finished words only, the unfinished sentence stays visible on every
+Linux desktop, and a command with no known destination stays a draft.
+An opt-in underline is how that sentence moves into the field. It is
+not the version by itself.
 
 > **Status 2026-10 (2.4.0):** the spoken grammar grew into an editor —
 > "correct monday to friday", "select that", "cap that", "undo/redo/paste
