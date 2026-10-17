@@ -1423,6 +1423,12 @@ class Daemon:
             stability_updates=_int("stability_updates", defaults.stability_updates),
             max_molten_chars=_int("max_molten_chars", defaults.max_molten_chars),
             adaptive=bool(flow_cfg.get("adaptive", True)),
+            # A local REST server re-transcribes the whole clip on each
+            # pass. Those passes must not freeze words: the next one, and
+            # the transcription at stop, still rewrite the beginning.
+            hold_commits=bool(
+                getattr(self._stt_client, "revises_whole_utterance", False)
+            ),
             pause_review=pause_review,
         )
 

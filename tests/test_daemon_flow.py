@@ -93,6 +93,39 @@ class TestLiveFlow:
 
         asyncio.run(run())
 
+    def test_local_server_revision_replaces_a_frozen_mishear(self) -> None:
+        """Parakeet re-hears the whole clip. An early wrong word must not
+        stick just because the sentence got long."""
+
+        async def run() -> None:
+            misheard = (
+                "misheard purple lanterns drift over the quiet harbor tonight"
+            )
+            corrected = (
+                "corrected purple lanterns drift over the quiet harbor tonight"
+            )
+            events = [
+                {"type": "transcript.partial", "text": misheard, "is_final": False},
+                {"type": "transcript.partial", "text": corrected, "is_final": False},
+            ]
+            injector = RecordingInjector()
+            stt = FakeStreamingSTT(events)
+            stt.revises_whole_utterance = True
+            daemon = _make_daemon(stt, injector)
+            daemon._config["flow"]["max_molten_chars"] = 20
+            with daemon._audio_patch, daemon._stt_patch, daemon._probe_patch:
+                await daemon._start_recording()
+                assert daemon._flow_engine._cfg.hold_commits
+                assert await wait_until(
+                    lambda: injector.screen.startswith("Corrected")
+                ), injector.screen
+                final = await daemon._stop_recording()
+                assert final.startswith("Corrected")
+                assert "Misheard" not in final
+                assert injector.screen == final
+
+        asyncio.run(run())
+
     def test_terminal_register_resolved_from_probe(self) -> None:
         async def run() -> None:
             events = [

@@ -17,6 +17,7 @@ from urllib3.util.retry import Retry
 
 from voice_keyboard.providers import DEFAULT_STT_MODELS, SUPPORTED_STT_PROVIDERS  # noqa: F401
 from voice_keyboard.netpolicy import refuse_redirect, request_kwargs
+from voice_keyboard.transcript import _merge_transcript_text
 
 logger = logging.getLogger(__name__)
 
@@ -299,6 +300,16 @@ class STTClient:
             logger.info("STT WebSocket closed")
 
 
+def _pcm_to_wav(pcm: bytes, sample_rate: int) -> bytes:
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm)
+    return output.getvalue()
+
+
 class BufferedRESTSTTClient:
     """Record PCM chunks locally, then submit a WAV file to an STT REST API."""
 
@@ -432,14 +443,7 @@ class BufferedRESTSTTClient:
             self._events.clear()
 
     def _wav_bytes(self) -> bytes:
-        raw_audio = b"".join(self._chunks)
-        output = io.BytesIO()
-        with wave.open(output, "wb") as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(self._sample_rate)
-            wav.writeframes(raw_audio)
-        return output.getvalue()
+        return _pcm_to_wav(b"".join(self._chunks), self._sample_rate)
 
     def _transcribe_wav(self, wav_data: bytes) -> str:
         if self._provider == "openai":
@@ -566,6 +570,15 @@ class BufferedRESTSTTClient:
         raise RuntimeError("Timed out waiting for AssemblyAI transcription")
 
 
+# While the clip is still this short, each live pass re-transcribes all
+# of it, so the model can change its mind about the beginning and the
+# screen can follow. Past this, a pass that has already proven slow sends
+# only the audio added since the last one: a growing full-clip decode
+# would pin the machine and the microphone would start dropping samples.
+# The transcription at stop is always the whole clip.
+_FULL_PROBE_MAX_S = 12.0
+
+
 class ChunkedRESTAdapter:
     """Pseudo-streaming on top of a buffered REST client.
 
@@ -576,12 +589,19 @@ class ChunkedRESTAdapter:
     plain REST endpoints. The wrapped client still produces the single
     authoritative transcript.done at stop.
 
+    Each partial is a fresh guess at the whole clip so far, not a
+    streaming prefix. `revises_whole_utterance` tells the flow engine to
+    keep every word revisable until that final transcription: freezing
+    an early guess is how a local Parakeet or Whisper server "mishears"
+    a word it would have corrected on the next pass.
+
     "auto" mode only enables this against local endpoints: each interim
     probe re-sends the whole buffer, which is free on localhost Whisper
     but would re-bill on metered cloud REST providers ("always" opts in).
     """
 
     supports_streaming = True
+    revises_whole_utterance = True
 
     def __init__(
         self,
@@ -599,6 +619,11 @@ class ChunkedRESTAdapter:
         self._stopping = asyncio.Event()
         self._audio_since_probe = False
         self._last_partial = ""
+        # PCM bytes already covered by a probe. Once probes are slow and
+        # the clip is long, the next one sends only what was added.
+        self._probed_bytes = 0
+        self._probe_slow = False
+        self._tail_probes = False
 
     @property
     def completion_timeout(self) -> float:
@@ -619,6 +644,9 @@ class ChunkedRESTAdapter:
         self._stopping.clear()
         self._audio_since_probe = False
         self._last_partial = ""
+        self._probed_bytes = 0
+        self._probe_slow = False
+        self._tail_probes = False
         self._interim_task = asyncio.create_task(
             self._interim_loop(), name="stt-interim-probe"
         )
@@ -675,7 +703,10 @@ class ChunkedRESTAdapter:
             if not self._audio_since_probe or self._stopping.is_set():
                 continue
             self._audio_since_probe = False
-            wav_data = self._inner._wav_bytes()
+            wav_data, append = self._next_probe()
+            if not wav_data or self._stopping.is_set():
+                continue
+            started = time.monotonic()
             try:
                 text = await asyncio.to_thread(
                     self._interim._transcribe_wav, wav_data
@@ -683,11 +714,67 @@ class ChunkedRESTAdapter:
             except Exception as exc:
                 # Interim probes are best-effort; the final POST decides.
                 logger.debug("Interim REST transcription failed: %s", exc)
-                continue
+                text = ""
+            elapsed = time.monotonic() - started
+            if elapsed > self._interval:
+                # The next long clip sends only its new audio. This pass
+                # already ran long; backing off below gives the mic a turn.
+                self._probe_slow = True
             if self._stopping.is_set():
                 return
+            text = (text or "").strip()
+            if append:
+                if not self._tail_probes:
+                    self._tail_probes = True
+                    logger.info(
+                        "Local speech server is taking longer than the live "
+                        "interval; further live passes send only the new audio. "
+                        "The whole clip is transcribed when you stop."
+                    )
+                text = _merge_transcript_text(self._last_partial, text).strip()
             if text and text != self._last_partial:
                 self._last_partial = text
                 await self._events.put(
                     {"type": "transcript.partial", "text": text, "is_final": False}
                 )
+            # A pass that ran longer than the interval had the speech server
+            # busy that whole time. Match it with idle time before the next
+            # one, or the microphone's process gets starved and the audio
+            # the final transcription hears is already missing samples.
+            pause = self._probe_backoff(elapsed)
+            if pause:
+                try:
+                    await asyncio.wait_for(self._stopping.wait(), timeout=pause)
+                    return
+                except (TimeoutError, asyncio.TimeoutError):
+                    pass
+
+    def _probe_backoff(self, elapsed: float) -> float:
+        """Idle time after a probe that overran the live interval. 0 when
+        the server kept up."""
+        if elapsed > self._interval:
+            return elapsed
+        return 0.0
+
+    def _next_probe(self) -> tuple[bytes, bool]:
+        """WAV for the next live pass, and whether its text extends the
+        previous hypothesis instead of replacing it.
+
+        The whole clip, while the server is keeping up or the clip is
+        still short. Only the audio added since the last pass, once a
+        pass has overrun and the clip is longer than `_FULL_PROBE_MAX_S`.
+        """
+        pcm = b"".join(self._inner._chunks)
+        rate = max(1, int(self._inner._sample_rate or 16000))
+        seconds = len(pcm) / (rate * 2)
+        start = self._probed_bytes
+        tail = (
+            self._probe_slow
+            and seconds > _FULL_PROBE_MAX_S
+            and 0 < start < len(pcm)
+        )
+        piece = pcm[start:] if tail else pcm
+        if len(piece) < rate * 2 // 5:  # under ~0.2s: wait for more speech
+            return b"", False
+        self._probed_bytes = len(pcm)
+        return _pcm_to_wav(piece, rate), tail
