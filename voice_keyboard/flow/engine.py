@@ -10,9 +10,12 @@ single source of truth for what should be on screen:
 
 A molten item commits when the provider finalizes it, when it survives the
 stability horizon, or eagerly when it contains non-ASCII (never repair
-across a clipboard-pasted run). Commits are monotonic: the only way
-committed text shrinks is the user's own "scratch that", which rewinds to
-a segment snapshot.
+across a clipboard-pasted run). A full-utterance re-decode
+(`hold_commits`) does not use that horizon: a local server transcribes
+the whole clip again on every pass and still changes its mind about the
+beginning, so nothing freezes until the final transcript. Commits are
+monotonic: the only way committed text shrinks is the user's own "scratch
+that", which rewinds to a segment snapshot.
 
 A navigation command ("select previous word") is a barrier: it fires only
 when it is a whole final segment of its own — said with a pause before
@@ -68,6 +71,10 @@ class FlowConfig:
     stability_updates: int = 2
     max_molten_chars: int = 160
     adaptive: bool = True
+    # The hypothesis is a fresh transcription of the whole clip (a local
+    # REST server), not a streaming prefix. Stability and the molten-length
+    # valve would freeze words the next pass is still free to change.
+    hold_commits: bool = False
     # Punctuation where the speaker paused: "off" keeps the provider's,
     # "rules" settles the clear cases, "llm" also asks the daemon's
     # reviewer about the rest (review_requests / resolve_pause).
@@ -609,6 +616,12 @@ class FlowEngine:
         return max(self._cfg.stability_updates, min(6, math.ceil(self._rev_depth)))
 
     def _commit_ready(self, now: float) -> None:
+        if self._cfg.hold_commits:
+            # Only the final transcript of a full-clip re-decode may freeze
+            # words. An earlier pass is a guess the next pass rewrites,
+            # including words at the start of the sentence.
+            self._commit_finalized()
+            return
         horizon_s = self._cfg.stability_ms / 1000.0
         required = self._effective_required_stability()
 
@@ -655,6 +668,18 @@ class FlowEngine:
             if len(preview) <= self._cfg.max_molten_chars:
                 break
             self._commit_item(self._items[self._committed_items])
+
+    def _commit_finalized(self) -> None:
+        """Commit words the provider has finalized, and nothing the
+        stability horizon or the molten-length valve would have frozen."""
+        while self._barrier is None and self._committed_items < len(self._items):
+            item = self._items[self._committed_items]
+            start, end = item.span
+            if item.kind == "instruction" or end > self._final_tokens:
+                break
+            if self._holds_pause(start, end):
+                break
+            self._commit_item(item)
 
     def _commit_item(self, item: Item) -> None:
         start, end = item.span

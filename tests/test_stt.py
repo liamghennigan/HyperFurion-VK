@@ -371,3 +371,83 @@ class TestOpenAICompatibleBaseURL:
         }
         client = stt.create_stt_client(cfg)
         assert client._base_url == ""
+
+
+def _wav_seconds(wav_bytes: bytes) -> float:
+    import io
+    import wave
+
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wav:
+        return wav.getnframes() / wav.getframerate()
+
+
+class TestChunkedRESTProbes:
+    def _adapter(self) -> stt.ChunkedRESTAdapter:
+        inner = stt.BufferedRESTSTTClient(
+            provider="openai", api_key="", base_url="http://127.0.0.1:9/v1"
+        )
+        interim = stt.BufferedRESTSTTClient(
+            provider="openai", api_key="", base_url="http://127.0.0.1:9/v1"
+        )
+        adapter = stt.ChunkedRESTAdapter(inner, interim, interval_ms=2500)
+        adapter._inner._sample_rate = 16000
+        return adapter
+
+    def test_local_adapter_revises_the_whole_utterance(self) -> None:
+        cfg = {
+            "providers": {"openai": {"api_key": "", "base_url": "http://127.0.0.1:9/v1"}},
+            "stt": {"provider": "openai", "language": "en"},
+            "flow": {"live_rest": "auto"},
+        }
+        client = stt.create_stt_client(cfg)
+        assert isinstance(client, stt.ChunkedRESTAdapter)
+        assert client.revises_whole_utterance is True
+
+    def test_short_clip_is_reheard_in_full(self) -> None:
+        adapter = self._adapter()
+        adapter._inner._chunks = [b"\x00\x01" * 16000]  # 1 second
+        wav, append = adapter._next_probe()
+        assert append is False
+        assert _wav_seconds(wav) == pytest.approx(1.0, abs=0.02)
+
+    def test_slow_server_sends_only_new_audio_once_the_clip_is_long(self) -> None:
+        adapter = self._adapter()
+        adapter._probe_slow = True
+        adapter._inner._chunks = [b"\x00\x01" * (16000 * 6)]
+        wav, append = adapter._next_probe()
+        assert append is False  # still under the full-clip cap
+        assert _wav_seconds(wav) == pytest.approx(6.0, abs=0.05)
+
+        adapter._inner._chunks.append(b"\x00\x01" * (16000 * 10))
+        wav, append = adapter._next_probe()
+        assert append is True
+        assert _wav_seconds(wav) == pytest.approx(10.0, abs=0.05)
+
+    def test_a_fast_server_keeps_rehearing_the_whole_clip(self) -> None:
+        adapter = self._adapter()
+        adapter._inner._chunks = [b"\x00\x01" * (16000 * 20)]
+        wav, append = adapter._next_probe()
+        assert append is False
+        assert _wav_seconds(wav) == pytest.approx(20.0, abs=0.05)
+
+    def test_probe_backoff_matches_an_overrun(self) -> None:
+        adapter = self._adapter()
+        assert adapter._probe_backoff(1.0) == 0.0
+        assert adapter._probe_backoff(4.0) == 4.0
+
+    def test_interim_pass_emits_the_hypothesis(self) -> None:
+        async def run() -> None:
+            adapter = self._adapter()
+            adapter._interval = 0.05
+            adapter._interim._transcribe_wav = lambda wav: "hello there"
+            await adapter.connect(16000)
+            await adapter.send_audio(b"\x01\x00" * 8000)
+            event = await asyncio.wait_for(adapter._events.get(), 2)
+            await adapter.close()
+            assert event == {
+                "type": "transcript.partial",
+                "text": "hello there",
+                "is_final": False,
+            }
+
+        asyncio.run(run())

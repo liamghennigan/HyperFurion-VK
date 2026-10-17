@@ -97,6 +97,41 @@ class TestCommitPolicy:
         # The tail is capped: older words must have committed.
         assert len(engine.desired_text()) - len(engine._committed_render) <= 20
 
+    def test_full_clip_redecode_does_not_freeze_a_revised_prefix(self) -> None:
+        """A local server transcribes the whole clip again on every pass.
+        The early guess must stay molten, or the correction never lands."""
+        engine = make_engine(
+            stability_ms=100,
+            stability_updates=1,
+            adaptive=False,
+            max_molten_chars=20,
+            hold_commits=True,
+        )
+        said = "hello wrld this sentence is long enough to pass the molten cap"
+        engine.on_transcript(said, is_final=False, now=0.0)
+        engine.on_transcript(said, is_final=False, now=0.2)
+        engine.on_tick(now=5.0)
+        assert engine._committed_render == ""
+        corrected = "yellow world this sentence is long enough to pass the molten cap"
+        engine.on_transcript(corrected, is_final=False, now=5.1)
+        assert engine.desired_text().startswith("Yellow world")
+        assert "wrld" not in engine.desired_text()
+        result = engine.finalize(corrected, now=6.0)
+        assert result.text.startswith("Yellow world")
+        assert "wrld" not in result.text
+
+    def test_full_clip_redecode_still_freezes_once_final(self) -> None:
+        engine = make_engine(hold_commits=True, max_molten_chars=20)
+        engine.on_transcript("hello world", is_final=True, now=0.0)
+        engine.on_transcript("yellow whirled", is_final=False, now=1.0)
+        assert engine.desired_text() == "Hello world"
+
+    def test_full_clip_redecode_still_scratches_at_stop(self) -> None:
+        engine = make_engine(hold_commits=True)
+        result = engine.finalize("wrong thing scratch that", now=0.0)
+        assert result.text == ""
+        assert result.scratches == 1
+
 
 class TestScratch:
     def test_scratch_that_removes_last_segment(self) -> None:

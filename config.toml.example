@@ -118,6 +118,11 @@ adaptive = true
 # growing recording on an interval. "auto" enables it only against a
 # LOCAL openai-compatible base_url (re-transcribing is free there);
 # "always" opts in cloud REST providers too (each probe re-bills!).
+# Each pass re-hears the clip and may change earlier words, so those
+# words stay revisable until you stop. A pass that runs long waits
+# before the next one; once the clip is long, later passes send only
+# the new audio so the microphone is not crowded out. Stopping
+# transcribes the whole clip.
 live_rest = "auto"
 live_rest_interval_ms = 2500
 # Stop recording automatically after this much silence (0 = off).

@@ -1388,7 +1388,12 @@ The ids above are [Speaches](https://github.com/speaches-ai/speaches)'
 Whisper and Kokoro. Leave `model` or `voice_id` unset and OpenAI's own names
 (`gpt-4o-transcribe`, `gpt-4o-mini-tts`, `coral`) are sent, which a local
 server may not serve. Words still land while you speak: the recording is
-re-transcribed every 2.5 seconds (`[flow] live_rest = "auto"`).
+re-transcribed every 2.5 seconds (`[flow] live_rest = "auto"`). A local
+model often changes its mind about the start of the sentence on a later
+pass, so those words stay revisable until you stop — a Parakeet or Whisper
+server cannot freeze an early mishear in place. A pass that runs long
+waits before the next one, and once the clip is long only the new audio
+is sent, so the microphone keeps the samples the final transcription needs.
 `voice-keyboard setup` can write the speech-server part for you, model ids
 included, and sets `[llm]` to a running llama-server's model, or to a local
 server you name.
